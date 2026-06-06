@@ -100,6 +100,7 @@ TOOLTIPS = {
     "P/Book":            "Precio sobre valor en libros: compara el precio de mercado con el valor contable de los activos netos. Por debajo de 1 puede indicar infravaloración.",
     "EV/EBITDA":         "Enterprise Value sobre EBITDA: medida de valoración independiente de la estructura financiera. Permite comparar empresas con distintos niveles de deuda.",
     "BPA":               "Beneficio Por Acción (últimos 12 meses): beneficio neto dividido entre el número de acciones. Es la base del cálculo del PER.",
+    "BPA (TTM)":         "Beneficio Por Acción (Trailing Twelve Months — últimos 12 meses reales): beneficio neto dividido entre el número de acciones en circulación. Es la base del cálculo del PER.",
     "BPA forward":       "Beneficio Por Acción estimado para los próximos 12 meses según el consenso de analistas.",
     "Dividendo":         "Importe del dividendo anual por acción en la moneda del activo. Es la parte del beneficio que la empresa reparte a sus accionistas.",
     "Rentab. dividendo": "Dividendo anual dividido entre el precio actual, en porcentaje. Indica el 'rendimiento por cupón' que ofrece el activo vía dividendos.",
@@ -107,6 +108,7 @@ TOOLTIPS = {
     "52W Max":           "Precio máximo registrado en los últimos 52 semanas (1 año).",
     "52W Min":           "Precio mínimo registrado en los últimos 52 semanas (1 año).",
     "Obj. analistas":    "Precio objetivo medio fijado por los analistas que cubren el valor. Indica dónde esperan que cotice en los próximos 12 meses.",
+    "Objetivo analistas":"Precio objetivo medio fijado por los analistas que cubren el valor. Indica dónde esperan que cotice en los próximos 12 meses.",
     "Nº analistas":      "Número de analistas que siguen el valor y han publicado una estimación de precio objetivo.",
     "AUM":               "Assets Under Management: patrimonio total gestionado por el ETF. Mayor AUM implica mayor liquidez y menor riesgo de cierre del fondo.",
     "TER":               "Total Expense Ratio: coste anual total del ETF expresado en porcentaje. Se descuenta automáticamente del rendimiento del fondo.",
@@ -1441,15 +1443,31 @@ def pantalla_analisis():
         # Controles superiores
         col1, col2, col3, col4 = st.columns([2.5, 2, 1.5, 1])
         with col1:
-            ticker_input = st.text_input("Ticker", value="NTGY.MC", placeholder="NTGY.MC, AAPL, SPY...",
-                                          label_visibility="collapsed").upper().strip()
+            ticker_input = st.text_input(
+                "🔎 Ticker", value="NTGY.MC", placeholder="NTGY.MC, AAPL, SPY...",
+                help="Símbolo del activo en Yahoo Finance. Ejemplos: NTGY.MC (Naturgy, bolsa española), "
+                     "IBE.MC (Iberdrola), AAPL (Apple en Nasdaq), SPY (ETF S&P 500). "
+                     "Sufijos: .MC = Madrid · .DE = Xetra · .PA = París · .L = Londres"
+            ).upper().strip()
         with col2:
-            sistema_sel = st.selectbox("Sistema Pivot", list(SISTEMAS_PIVOT.keys()),
-                                        label_visibility="collapsed")
+            sistema_sel = st.selectbox(
+                "📐 Sistema Pivot", list(SISTEMAS_PIVOT.keys()),
+                help="Método de cálculo de los Pivot Points. Clásico: el más universal y usado. "
+                     "Woodie: doble peso al cierre, mejor en días con gap. "
+                     "Camarilla: 8 niveles muy próximos al precio, ideal para intradía. "
+                     "DeMark: condicional según dirección del día anterior. "
+                     "Fibonacci: usa ratios 0.382, 0.618, 1.000. "
+                     "Mid-Points: niveles intermedios entre los Clásicos."
+            )
         with col3:
-            tolerancia = st.number_input("Tolerancia confluencia (€/$)", value=0.20, step=0.05,
-                                          min_value=0.01, max_value=2.0, format="%.2f",
-                                          label_visibility="collapsed")
+            tolerancia = st.number_input(
+                "⚡ Tolerancia confluencia (€/$)", value=0.20, step=0.05,
+                min_value=0.01, max_value=2.0, format="%.2f",
+                help="Distancia máxima en precio para considerar que dos niveles de distintos timeframes "
+                     "confluyen en la misma zona. Un valor más bajo (ej. 0.05€) detecta solo confluencias "
+                     "muy precisas; uno más alto (ej. 0.50€) agrupa zonas más amplias. "
+                     "Ajusta según la volatilidad y precio del activo analizado."
+            )
         with col4:
             analizar = st.button("🔍 Analizar", type="primary")
 
