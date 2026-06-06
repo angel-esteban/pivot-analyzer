@@ -1715,15 +1715,27 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     # ── CABECERA ──────────────────────────────────────────────────────────
     h52_str = f"52W:  {l52:.2f} – {h52:.2f}" if h52 and l52 else ""
+    # Celda derecha: tabla anidada para garantizar apilado correcto (lista de flowables
+    # con ALIGN=RIGHT en la celda exterior causa solapamiento en ReportLab)
+    _right = Table(
+        [[Paragraph(f"{precio:.4f}", S_PRE)],
+         [Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_CAM)],
+         [Paragraph(h52_str, S_H52)]],
+        colWidths=[7.8*cm]
+    )
+    _right.setStyle(TableStyle([
+        ("LEFTPADDING",   (0,0),(-1,-1), 0),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+        ("TOPPADDING",    (0,0),(-1,-1), 2),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 2),
+    ]))
     cab_t = Table(
         [[
             [Paragraph(ticker.upper(), S_TICK),
              Paragraph(nombre or ticker, S_EMP),
              Spacer(1, 4),
              Paragraph(f"{tipo_activo}  ·  {currency}  ·  Sistema: {sistema}", S_CHIP)],
-            [Paragraph(f"{precio:.4f}", S_PRE),
-             Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_CAM),
-             Paragraph(h52_str, S_H52)],
+            _right,
         ]],
         colWidths=[9.5*cm, 8.5*cm]
     )
@@ -1734,7 +1746,6 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("RIGHTPADDING",  (0,0),(-1,-1), 10),
         ("TOPPADDING",    (0,0),(-1,-1), 10),
         ("BOTTOMPADDING", (0,0),(-1,-1), 12),
-        ("ALIGN",         (1,0),(1,0), "RIGHT"),
     ]))
     historia.append(cab_t)
     chips_t = Table(
