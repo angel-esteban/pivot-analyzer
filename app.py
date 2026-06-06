@@ -1714,38 +1714,44 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
-    h52_str = f"52W:  {l52:.2f} – {h52:.2f}" if h52 and l52 else ""
-    # Celda derecha: tabla anidada para garantizar apilado correcto (lista de flowables
-    # con ALIGN=RIGHT en la celda exterior causa solapamiento en ReportLab)
-    _right = Table(
-        [[Paragraph(f"{precio:.4f}", S_PRE)],
-         [Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_CAM)],
-         [Paragraph(h52_str, S_H52)]],
-        colWidths=[7.8*cm]
-    )
-    _right.setStyle(TableStyle([
-        ("LEFTPADDING",   (0,0),(-1,-1), 0),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 0),
-        ("TOPPADDING",    (0,0),(-1,-1), 2),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 2),
-    ]))
+    h52_str = f"{l52:.2f} – {h52:.2f}" if h52 and l52 else "—"
+    # Estilos exclusivos para la banda de datos (fila inferior de la cabecera)
+    S_DLBL = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#93c5fd"))
+    S_DVAL = _p(fontName="Helvetica-Bold", fontSize=20, textColor=BL)
+    S_DCHG = _p(fontName="Helvetica-Bold", fontSize=10, textColor=BL)
+    S_D52  = _p(fontName="Helvetica",      fontSize=9,  textColor=BL)
+    S_TINF = _p(fontName="Helvetica",      fontSize=7,  textColor=colors.HexColor("#93c5fd"))
+
+    # Cabecera: 2 filas × 3 columnas (fila 0 usa SPAN para info, fila 1 = datos)
+    info_cell = [
+        Paragraph(ticker.upper(), S_TICK),
+        Paragraph(nombre or ticker, S_EMP),
+        Spacer(1, 4),
+        Paragraph(f"{tipo_activo}  ·  {currency}  ·  Sistema: {sistema}", S_TINF),
+    ]
+    precio_cell = [Paragraph("PRECIO", S_DLBL),
+                   Paragraph(f"{precio:.4f}", S_DVAL)]
+    cambio_cell = [Paragraph("VARIACIÓN", S_DLBL),
+                   Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_DCHG)]
+    h52_cell    = [Paragraph("52 SEMANAS", S_DLBL),
+                   Paragraph(h52_str, S_D52)]
+
     cab_t = Table(
-        [[
-            [Paragraph(ticker.upper(), S_TICK),
-             Paragraph(nombre or ticker, S_EMP),
-             Spacer(1, 4),
-             Paragraph(f"{tipo_activo}  ·  {currency}  ·  Sistema: {sistema}", S_CHIP)],
-            _right,
-        ]],
-        colWidths=[9.5*cm, 8.5*cm]
+        [[info_cell, "", ""],
+         [precio_cell, cambio_cell, h52_cell]],
+        colWidths=[6*cm, 6*cm, 6*cm]
     )
     cab_t.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),(-1,-1), CA),
-        ("VALIGN",        (0,0),(-1,-1), "TOP"),
-        ("LEFTPADDING",   (0,0),(-1,-1), 10),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 10),
-        ("TOPPADDING",    (0,0),(-1,-1), 10),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 12),
+        ("SPAN",          (0,0),  (2,0)),
+        ("BACKGROUND",    (0,0),  (-1,-1), CA),
+        ("VALIGN",        (0,0),  (-1,-1), "TOP"),
+        ("LEFTPADDING",   (0,0),  (-1,-1), 10),
+        ("RIGHTPADDING",  (0,0),  (-1,-1), 10),
+        ("TOPPADDING",    (0,0),  (-1,-1), 8),
+        ("BOTTOMPADDING", (0,0),  (-1,-1), 8),
+        ("LINEABOVE",     (0,1),  (-1,1),  0.5, colors.HexColor("#2563eb")),
+        ("TOPPADDING",    (0,1),  (-1,1),  6),
+        ("BOTTOMPADDING", (0,1),  (-1,1),  10),
     ]))
     historia.append(cab_t)
     chips_t = Table(
