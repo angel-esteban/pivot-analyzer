@@ -1894,36 +1894,69 @@ def pantalla_analisis():
 
         # ======== LAYOUT PRINCIPAL ========
 
-        col_izq, col_der = st.columns([3, 2])
+        # ── Bloque 1: Semáforo horizontal (ancho completo) ───────────────
+        st.markdown("### Semáforo Global")
+        emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
+        css_class = f"semaforo-{color_sem}"
+        col_badge, col_f1, col_f2, col_f3 = st.columns([1, 2, 2, 2])
+        with col_badge:
+            st.markdown(
+                f'<span class="{css_class}" style="font-size:1.3rem">'
+                f'{emoji_color} {color_sem.upper()}<br>'
+                f'<span style="font-size:1rem">{pct_sem:.0f}%</span></span>',
+                unsafe_allow_html=True
+            )
+        factor_cols = [col_f1, col_f2, col_f3]
+        for i, (factor, descripcion, _) in enumerate(factores_sem):
+            with factor_cols[i % 3]:
+                st.caption(f"• **{factor}**: {descripcion}")
 
-        with col_izq:
+        st.divider()
+
+        # ── Bloque 2: Pivot Points (izq) | Confluencias (der) ────────────
+        col_piv, col_conf = st.columns([3, 2])
+
+        with col_piv:
             st.markdown("### Pivot Points — " + sistema_activo)
             for tf in TIMEFRAMES:
                 render_tabla_pivots(tf, resultados_pivots.get(tf), precio)
 
-        with col_der:
-            # Semáforo
-            st.markdown("### Semáforo Global")
-            emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
-            css_class = f"semaforo-{color_sem}"
-            st.markdown(f'<span class="{css_class}">{emoji_color} {color_sem.upper()} — {pct_sem:.0f}%</span>',
-                        unsafe_allow_html=True)
-            for factor, descripcion, _ in factores_sem:
-                st.caption(f"• **{factor}**: {descripcion}")
+        with col_conf:
+            if confluencias:
+                st.markdown("### Confluencias Multi-Timeframe")
+                for c in confluencias:
+                    dist = ((c["precio"] - precio) / precio * 100) if precio else 0
+                    dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
+                    niveles_str = " | ".join(
+                        f"{n['timeframe'][:3]} {n['nivel']}" for n in c["niveles"][:4])
+                    st.markdown(
+                        f"**{c['precio']:.4f}** {c['estrellas']} &nbsp; `{dist_str}` "
+                        f"<small>{niveles_str}</small>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.markdown("### Confluencias")
+                st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
 
-            st.divider()
+        st.divider()
 
-            # Indicadores compactos
+        # ── Bloque 3: Indicadores Técnicos (izq) | Volumen (der) ─────────
+        col_ind, col_vol = st.columns([3, 2])
+
+        with col_ind:
             st.markdown("### Indicadores Técnicos")
-            col_i1, col_i2 = st.columns(2)
+            col_i1, col_i2, col_i3 = st.columns(3)
             with col_i1:
                 st.metric("RSI 14", rsi_val,
-                          delta="Sobrecomprado" if rsi_val > 70 else ("Sobrevendido" if rsi_val < 30 else "Neutro"),
+                          delta="Sobrecomprado" if rsi_val > 70 else (
+                              "Sobrevendido" if rsi_val < 30 else "Neutro"),
                           help=TOOLTIPS["RSI 14"])
-                st.metric("MACD", f"{macd_val:.4f}", delta=f"Hist: {macd_hist_val:.4f}", help=TOOLTIPS["MACD"])
-                st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
+                st.metric("MACD", f"{macd_val:.4f}",
+                          delta=f"Hist: {macd_hist_val:.4f}", help=TOOLTIPS["MACD"])
             with col_i2:
+                st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
                 st.metric("Bollinger %B", f"{pct_b:.1f}%", help=TOOLTIPS["Bollinger %B"])
+            with col_i3:
                 for p_m in [20, 50]:
                     if p_m in medias:
                         sma, ema = medias[p_m]
@@ -1932,9 +1965,7 @@ def pantalla_analisis():
                                   delta=f"{diff:+.4f} ({diff/sma*100:+.1f}%)",
                                   help=TOOLTIPS.get(f"SMA {p_m}"))
 
-            st.divider()
-
-            # Volumen
+        with col_vol:
             if vol_data:
                 st.markdown("### Volumen")
                 col_v1, col_v2 = st.columns(2)
@@ -1948,27 +1979,10 @@ def pantalla_analisis():
                               f"{vol_data['ratio_3m']:.0f}%",
                               delta=vol_data['clasificacion_3m'],
                               help=TOOLTIPS["Ratio vs 3m"])
-                st.caption(f"Vol. hoy: {_fmt_numero(vol_data['volumen'])} | "
-                           f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
-                           f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
-
-            st.divider()
-
-            # Confluencias
-            if confluencias:
-                st.markdown("### Confluencias Multi-Timeframe")
-                for c in confluencias:
-                    dist = ((c["precio"] - precio) / precio * 100) if precio else 0
-                    dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
-                    niveles_str = " | ".join(f"{n['timeframe'][:3]} {n['nivel']}" for n in c["niveles"][:4])
-                    st.markdown(
-                        f"**{c['precio']:.4f}** {c['estrellas']} &nbsp; `{dist_str}` "
-                        f"<small>{niveles_str}</small>",
-                        unsafe_allow_html=True
-                    )
-            else:
-                st.markdown("### Confluencias")
-                st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
+                st.caption(
+                    f"Vol. hoy: {_fmt_numero(vol_data['volumen'])} | "
+                    f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
+                    f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
 
         # Imagen adjunta
         if img_upload:
@@ -1978,7 +1992,7 @@ def pantalla_analisis():
 
         st.divider()
 
-        # Fundamentales
+        # ── Bloque 4: Datos Fundamentales ────────────────────────────────
         if fundamentales:
             st.markdown("### Datos Fundamentales")
             fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
