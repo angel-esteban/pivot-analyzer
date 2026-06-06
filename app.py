@@ -1031,7 +1031,9 @@ def panel_admin():
         with col1:
             st.markdown(f"**{u['username']}**  \n{u.get('nombre','')}")
         with col2:
-            st.markdown(f"`{u.get('rol','usuario')}`  \n{u.get('ultimo_acceso','—')[:16] if u.get('ultimo_acceso') else '—'}")
+            ultimo = u.get('ultimo_acceso')
+            ultimo_str = str(ultimo)[:16] if ultimo else '—'
+            st.markdown(f"`{u.get('rol','usuario')}`  \n{ultimo_str}")
         with col3:
             estado = "✅ Activo" if u.get("activo") else "⛔ Inactivo"
             st.markdown(estado)
