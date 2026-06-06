@@ -1717,24 +1717,29 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     h52_str = f"{l52:.2f} – {h52:.2f}" if h52 and l52 else "—"
     # Estilos exclusivos para la banda de datos (fila inferior de la cabecera)
     S_DLBL = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#93c5fd"))
-    S_DVAL = _p(fontName="Helvetica-Bold", fontSize=20, textColor=BL)
-    S_DCHG = _p(fontName="Helvetica-Bold", fontSize=10, textColor=BL)
-    S_D52  = _p(fontName="Helvetica",      fontSize=9,  textColor=BL)
+    S_DVAL = _p(fontName="Helvetica-Bold", fontSize=13, textColor=BL)  # igual para los 3
     S_TINF = _p(fontName="Helvetica",      fontSize=7,  textColor=colors.HexColor("#93c5fd"))
 
-    # Cabecera: 2 filas × 3 columnas (fila 0 usa SPAN para info, fila 1 = datos)
+    # Fila 1: ticker + empresa en la misma línea (XML inline), tipo · moneda
+    _nom = (nombre or ticker).replace("&", "&amp;")
+    _tkr = ticker.upper().replace("&", "&amp;")
+    S_HDR_LINE = _p(fontName="Helvetica-Bold", fontSize=18, textColor=BL, leading=22)
+    header_line = Paragraph(
+        f'<font name="Helvetica-Bold" size="18">{_tkr}</font>'
+        f'<font name="Helvetica" size="9" color="#93c5fd">   {_nom}</font>',
+        S_HDR_LINE
+    )
     info_cell = [
-        Paragraph(ticker.upper(), S_TICK),
-        Paragraph(nombre or ticker, S_EMP),
-        Spacer(1, 4),
-        Paragraph(f"{tipo_activo}  ·  {currency}  ·  Sistema: {sistema}", S_TINF),
+        header_line,
+        Spacer(1, 3),
+        Paragraph(f"{tipo_activo}  ·  {currency}", S_TINF),
     ]
     precio_cell = [Paragraph("PRECIO", S_DLBL),
                    Paragraph(f"{precio:.4f}", S_DVAL)]
     cambio_cell = [Paragraph("VARIACIÓN", S_DLBL),
-                   Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_DCHG)]
+                   Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_DVAL)]
     h52_cell    = [Paragraph("52 SEMANAS", S_DLBL),
-                   Paragraph(h52_str, S_D52)]
+                   Paragraph(h52_str, S_DVAL)]
 
     cab_t = Table(
         [[info_cell, "", ""],
