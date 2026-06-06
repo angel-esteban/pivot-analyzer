@@ -515,6 +515,39 @@ def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
     return None
 
 
+@st.cache_data(ttl=3600)
+def obtener_euribor_12m() -> float | None:
+    """Euribor 12M — prueba varias claves de serie ECB hasta obtener un valor."""
+    candidatos = [
+        ("FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # clave estándar (diaria)
+        ("FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # frecuencia D (diaria alt.)
+        ("FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # mensual
+        ("FM", "B.U2.EUR.RT.MM.EURIBOR12MD.HSTA"),    # sin underscore final
+        ("FM", "B.U2.EUR.4F.KR.EURIBOR12MD_.HSTA"),   # distinta clasificación
+    ]
+    for flow, key in candidatos:
+        try:
+            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{key}"
+            r = requests.get(url,
+                             params={"lastNObservations": 1, "format": "jsondata"},
+                             timeout=15)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            ds = data["dataSets"][0]
+            obs = (list(ds["series"].values())[0]["observations"]
+                   if "series" in ds else ds["observations"])
+            if not obs:
+                continue
+            last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
+            val = obs[last_key][0]
+            if val is not None:
+                return float(val)
+        except Exception:
+            continue
+    return None
+
+
 @st.cache_data(ttl=900)  # 15 min — datos de mercado
 def obtener_precio_macro(ticker: str):
     """Precio actual y variación diaria (%) de un ticker via yfinance."""
@@ -543,7 +576,7 @@ def pestaña_macro():
 
     with st.spinner("Cargando tipos BCE..."):
         dfr        = obtener_dato_ecb("B.U2.EUR.4F.KR.DFR.LEV")
-        euribor12m = obtener_dato_ecb("B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA")
+        euribor12m = obtener_euribor_12m()
     us10y, us10y_d = obtener_precio_macro("^TNX")
 
     with col1:
