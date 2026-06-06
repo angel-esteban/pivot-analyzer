@@ -1912,40 +1912,72 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(t1)
     historia.append(Spacer(1, 0.3*cm))
 
-    # ── INDICADORES + VOLUMEN (dos columnas) ──────────────────────────────
+    # ── INDICADORES | MEDIAS | VOLUMEN (tres columnas) ────────────────────
     historia.append(Paragraph("Indicadores Técnicos y Volumen", S_H2))
-    ind_rows = [[Paragraph(k, _p(fontSize=7.5)),
-                 Paragraph(str(v), _p(fontSize=7.5))]
-                for k, v in indicadores.items()]
-    t_ind = Table(ind_rows, colWidths=[5.5*cm, 5*cm])
-    t_ind.setStyle(TableStyle([
-        ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
-        ("GRID",         (0,0),(-1,-1), 0.2, GB),
-        ("TOPPADDING",   (0,0),(-1,-1), 2),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 2),
-        ("LEFTPADDING",  (0,0),(-1,-1), 4),
-    ]))
-    if vol_data:
-        vr = [
-            [Paragraph("Volumen sesión",    _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["volumen"]),    _p(fontSize=7.5))],
-            [Paragraph("Media 10 sesiones", _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["media_10d"]),  _p(fontSize=7.5))],
-            [Paragraph("Media 3 meses",     _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["media_3m"]),   _p(fontSize=7.5))],
-            [Paragraph("Ratio vs 10d",      _p(fontSize=7.5)), Paragraph(f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}", _p(fontSize=7.5))],
-            [Paragraph("Ratio vs 3m",       _p(fontSize=7.5)), Paragraph(f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}",  _p(fontSize=7.5))],
-        ]
-        t_vol = Table(vr, colWidths=[3.8*cm, 3.7*cm])
-        t_vol.setStyle(TableStyle([
+
+    def _kv_ts(cws):
+        """Tabla etiqueta-valor con estilo uniforme."""
+        return TableStyle([
             ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
             ("GRID",         (0,0),(-1,-1), 0.2, GB),
             ("TOPPADDING",   (0,0),(-1,-1), 2),
             ("BOTTOMPADDING",(0,0),(-1,-1), 2),
             ("LEFTPADDING",  (0,0),(-1,-1), 4),
-        ]))
-        iv_t = Table([[t_ind, t_vol]], colWidths=[10.5*cm, 7.5*cm])
-        iv_t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(1,0),(1,0),12)]))
-        historia.append(iv_t)
+            ("RIGHTPADDING", (0,0),(-1,-1), 4),
+        ])
+
+    _lbl = lambda t: _p(fontSize=7.5)
+    _val = lambda t: _p(fontSize=7.5)
+
+    # Separar indicadores base vs medias móviles
+    ind_base, ind_medias = [], []
+    for k, v in indicadores.items():
+        row = [Paragraph(k, _lbl(k)), Paragraph(str(v), _val(v))]
+        if k.startswith("SMA") or k.startswith("EMA"):
+            ind_medias.append(row)
+        else:
+            ind_base.append(row)
+
+    S_COL_H = _p(fontName="Helvetica-Bold", fontSize=7, textColor=CA, spaceAfter=2)
+
+    # Col 0 — Indicadores técnicos  (3.5 + 3.0 = 6.5 cm)
+    t_ind = Table(ind_base, colWidths=[3.5*cm, 3.0*cm])
+    t_ind.setStyle(_kv_ts([3.5*cm, 3.0*cm]))
+    ind_cell = [Paragraph("Indicadores", S_COL_H), t_ind]
+
+    # Col 1 — Medias móviles  (2.2 + 3.0 = 5.2 cm; inner fit: 5.5 cm col − 8 pt pad)
+    t_med = Table(ind_medias, colWidths=[2.2*cm, 3.0*cm]) if ind_medias else Table(
+        [[Paragraph("—", _lbl(""))]], colWidths=[5.2*cm])
+    t_med.setStyle(_kv_ts([2.2*cm, 3.0*cm]))
+    med_cell = [Paragraph("Medias Móviles", S_COL_H), t_med]
+
+    # Col 2 — Volumen  (3.0 + 2.7 = 5.7 cm; inner fit: 6.0 cm col − 8 pt pad)
+    if vol_data:
+        vr = [
+            [Paragraph("Volumen sesión",    _lbl("")), Paragraph(_fmt_numero(vol_data["volumen"]),    _val(""))],
+            [Paragraph("Media 10 sesiones", _lbl("")), Paragraph(_fmt_numero(vol_data["media_10d"]),  _val(""))],
+            [Paragraph("Media 3 meses",     _lbl("")), Paragraph(_fmt_numero(vol_data["media_3m"]),   _val(""))],
+            [Paragraph("Ratio vs 10d",      _lbl("")), Paragraph(f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}", _val(""))],
+            [Paragraph("Ratio vs 3m",       _lbl("")), Paragraph(f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}",   _val(""))],
+        ]
+        t_vol = Table(vr, colWidths=[3.0*cm, 2.7*cm])
+        t_vol.setStyle(_kv_ts([3.0*cm, 2.7*cm]))
+        vol_cell = [Paragraph("Volumen", S_COL_H), t_vol]
     else:
-        historia.append(t_ind)
+        vol_cell = [Paragraph("Volumen", S_COL_H), Paragraph("Sin datos.", S_NRM)]
+
+    # Tabla exterior 3 columnas: 6.5 + 5.5 + 6.0 = 18 cm
+    iv_t = Table([[ind_cell, med_cell, vol_cell]], colWidths=[6.5*cm, 5.5*cm, 6.0*cm])
+    iv_t.setStyle(TableStyle([
+        ("VALIGN",       (0,0),(-1,-1), "TOP"),
+        ("LEFTPADDING",  (0,0),(-1,-1), 0),
+        ("RIGHTPADDING", (0,0),(-1,-1), 0),
+        ("TOPPADDING",   (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 0),
+        ("LINEBEFORE",   (1,0),(2,0),   0.5, GB),
+        ("LEFTPADDING",  (1,0),(2,0),   8),
+    ]))
+    historia.append(iv_t)
 
     # ── FUNDAMENTALES (4 columnas: etiqueta-valor-etiqueta-valor) ─────────
     if fundamentales:
