@@ -26,6 +26,9 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import psycopg2
 import psycopg2.extras
 
+# HTTP para ECB Statistical Data Warehouse (sin API key)
+import requests
+
 # Technical indicators — pandas_ta con fallback manual
 try:
     import pandas_ta as ta
@@ -241,6 +244,197 @@ def obtener_datos(ticker: str):
         return hist, info
     except Exception as e:
         return None, {}
+
+
+# =============================================================================
+# DATOS MACRO — ECB API (sin clave) + yfinance
+# =============================================================================
+
+@st.cache_data(ttl=3600)  # 1 hora — tipos e inflación cambian poco
+def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
+    """Último valor de una serie del BCE Statistical Data Warehouse (JSON)."""
+    url = f"https://data-api.ecb.europa.eu/service/data/{flow_ref}/{series_key}"
+    try:
+        r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            obs = data["dataSets"][0]["observations"]
+            val = list(obs.values())[0][0]
+            return float(val) if val is not None else None
+    except Exception:
+        pass
+    return None
+
+
+@st.cache_data(ttl=900)  # 15 min — datos de mercado
+def obtener_precio_macro(ticker: str):
+    """Precio actual y variación diaria (%) de un ticker via yfinance."""
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.history(period="5d", auto_adjust=True)
+        if hist is None or hist.empty:
+            return None, None
+        precio = float(hist["Close"].iloc[-1])
+        prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else precio
+        delta = (precio - prev) / prev * 100 if prev else 0
+        return precio, delta
+    except Exception:
+        return None, None
+
+
+def pestaña_macro():
+    """Pestaña de contexto macroeconómico global."""
+    st.markdown("### 🌍 Contexto Macroeconómico Global")
+    st.caption("Tipos e inflación: BCE Statistical Data Warehouse (actualización horaria) · "
+               "Mercados: Yahoo Finance (~15 min de retraso)")
+
+    # ── TIPOS DE INTERÉS ─────────────────────────────────────────────────────
+    st.markdown("#### 📊 Tipos de Interés")
+    col1, col2, col3, col4 = st.columns(4)
+
+    with st.spinner("Cargando tipos BCE..."):
+        dfr        = obtener_dato_ecb("B.U2.EUR.4F.KR.DFR.LEV")
+        euribor12m = obtener_dato_ecb("B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA")
+    us10y, us10y_d = obtener_precio_macro("^TNX")
+
+    with col1:
+        st.metric("BCE — DFR", f"{dfr:.2f}%" if dfr is not None else "—",
+                  help="Tipo de la Facilidad de Depósito del BCE. Es el tipo de referencia de la zona euro: "
+                       "condiciona el coste del dinero para bancos y, en cascada, hipotecas, bonos y valoraciones de activos.")
+    with col2:
+        st.metric("Euribor 12M", f"{euribor12m:.3f}%" if euribor12m is not None else "—",
+                  help="Tipo al que los bancos europeos se prestan dinero a 12 meses. "
+                       "Referencia directa para hipotecas variables en España.")
+    with col3:
+        if us10y is not None:
+            st.metric("US Treasury 10Y", f"{us10y:.2f}%", delta=f"{us10y_d:+.2f}% (día)",
+                      help="Rendimiento del bono soberano estadounidense a 10 años. "
+                           "Tasa libre de riesgo de referencia global: cuando sube, "
+                           "presiona a la baja las valoraciones de todos los activos de riesgo.")
+        else:
+            st.metric("US Treasury 10Y", "—")
+    with col4:
+        st.metric("Fed Funds", "→ fed.gov",
+                  help="Tipo objetivo de la Reserva Federal. Dato actualizado en: "
+                       "federalreserve.gov/releases/h15 · Se puede activar via FRED API Key.")
+
+    # ── INFLACIÓN ────────────────────────────────────────────────────────────
+    st.markdown("#### 📈 Inflación (IPC interanual — último dato disponible)")
+    col5, col6, col7 = st.columns(3)
+
+    with st.spinner("Cargando inflación BCE..."):
+        hicp_eu = obtener_dato_ecb("M.U2.N.000000.4.ANR", "ICP")
+        hicp_es = obtener_dato_ecb("M.ES.N.000000.4.ANR", "ICP")
+
+    with col5:
+        if hicp_eu is not None:
+            semaforo = "🔴" if hicp_eu > 3 else ("🟡" if hicp_eu > 2 else "🟢")
+            st.metric(f"IPC Eurozona {semaforo}", f"{hicp_eu:.1f}%",
+                      help="HICP (Índice Armonizado de Precios al Consumo) de la zona euro en tasa interanual. "
+                           "Objetivo BCE: ~2%. 🟢 ≤2% | 🟡 2-3% | 🔴 >3%")
+        else:
+            st.metric("IPC Eurozona", "—")
+    with col6:
+        if hicp_es is not None:
+            semaforo = "🔴" if hicp_es > 3 else ("🟡" if hicp_es > 2 else "🟢")
+            st.metric(f"IPC España {semaforo}", f"{hicp_es:.1f}%",
+                      help="HICP de España en tasa interanual (INE/BCE). "
+                           "Divergencias respecto a la media europea afectan la competitividad real española.")
+        else:
+            st.metric("IPC España", "—")
+    with col7:
+        st.metric("IPC EEUU", "→ FRED",
+                  help="CPI EEUU actualizado en: fred.stlouisfed.org/series/CPIAUCSL "
+                       "Se puede activar via FRED API Key en la configuración.")
+
+    st.divider()
+
+    # ── DIVISAS ──────────────────────────────────────────────────────────────
+    st.markdown("#### 💱 Divisas (base EUR)")
+    tickers_fx = {
+        "EUR/USD": ("EURUSD=X",
+                    "Cruce euro/dólar. Para el inversor español: afecta el retorno de activos en USD "
+                    "sin cobertura de divisa. Por encima de 1.10 el USD está débil; por debajo de 1.05, fuerte."),
+        "EUR/GBP": ("EURGBP=X",
+                    "Cruce euro/libra esterlina. Referencia para exposición al mercado británico (FTSE 100, gilts)."),
+        "EUR/JPY": ("EURJPY=X",
+                    "Cruce euro/yen. El yen es divisa refugio: su debilidad sostenida indica apetito por el riesgo global."),
+        "EUR/CHF": ("EURCHF=X",
+                    "Cruce euro/franco suizo. El CHF también es refugio: cercano a 1.0 indica tensión en Europa."),
+    }
+    cols_fx = st.columns(4)
+    for i, (nombre, (tkr, tooltip)) in enumerate(tickers_fx.items()):
+        precio, delta = obtener_precio_macro(tkr)
+        with cols_fx[i]:
+            if precio is not None:
+                st.metric(nombre, f"{precio:.4f}", delta=f"{delta:+.2f}%", help=tooltip)
+            else:
+                st.metric(nombre, "—", help=tooltip)
+
+    # ── COMMODITIES ──────────────────────────────────────────────────────────
+    st.markdown("#### 🛢️ Commodities")
+    tickers_comm = {
+        "Oro (USD/oz)":      ("GC=F",
+                              "Precio del oro en futuros continuos (USD por onza troy). "
+                              "Activo refugio por excelencia: sube en entornos de incertidumbre, "
+                              "dólar débil e inflación elevada."),
+        "Brent (USD/b)":     ("BZ=F",
+                              "Petróleo Brent en futuros (USD por barril). Referencia europea del crudo: "
+                              "componente directo de la inflación via energía y transporte."),
+        "WTI (USD/b)":       ("CL=F",
+                              "West Texas Intermediate, referencia estadounidense del crudo. "
+                              "Normalmente cotiza con ligero descuento frente al Brent."),
+        "Gas Natural (USD)": ("NG=F",
+                              "Gas Natural Henry Hub (USD/MMBTU). Correlación con precios energéticos "
+                              "europeos especialmente alta desde el shock 2021-22."),
+    }
+    cols_comm = st.columns(4)
+    for i, (nombre, (tkr, tooltip)) in enumerate(tickers_comm.items()):
+        precio, delta = obtener_precio_macro(tkr)
+        with cols_comm[i]:
+            if precio is not None:
+                st.metric(nombre, f"{precio:.2f}", delta=f"{delta:+.2f}%", help=tooltip)
+            else:
+                st.metric(nombre, "—", help=tooltip)
+
+    st.divider()
+
+    # ── ÍNDICES Y VOLATILIDAD ────────────────────────────────────────────────
+    st.markdown("#### 📉 Índices Bursátiles y Volatilidad")
+    tickers_idx = [
+        ("VIX",          "^VIX",
+         "Volatilidad implícita del S&P 500 (CBOE). >30: pánico. 15-30: cautela. <15: complacencia. "
+         "El VIX por encima de 25 históricamente coincide con correcciones del 10%+ en S&P 500."),
+        ("S&P 500",      "^GSPC",
+         "Índice de las 500 mayores empresas de EEUU. Referencia global de renta variable. "
+         "Concentración actual en tecnología megacap sin precedente histórico cercano al Nifty Fifty de 1972."),
+        ("Nasdaq 100",   "^NDX",
+         "Las 100 mayores no-financieras del Nasdaq. Domina tecnología y growth: "
+         "muy sensible a variaciones en tipos de interés reales (duración larga implícita)."),
+        ("IBEX 35",      "^IBEX",
+         "Índice de referencia de la bolsa española. Fuerte peso bancario (~30%) y utilities. "
+         "Correlaciona con ciclo europeo y con la prima de riesgo periférica España-Alemania."),
+        ("DAX 40",       "^GDAXI",
+         "Índice de referencia alemán. Exportador puro: muy sensible al ciclo global, "
+         "especialmente a China y la demanda manufacturera mundial."),
+        ("Eurostoxx 50", "^STOXX50E",
+         "Las 50 mayores empresas de la eurozona. Referencia de renta variable europea: "
+         "base de la mayoría de ETFs UCITS de RV Europa accesibles desde España."),
+    ]
+    cols_idx = st.columns(3)
+    for i, (nombre, tkr, tooltip) in enumerate(tickers_idx):
+        precio, delta = obtener_precio_macro(tkr)
+        with cols_idx[i % 3]:
+            if precio is not None:
+                fmt = f"{precio:,.2f}"
+                st.metric(nombre, fmt, delta=f"{delta:+.2f}%", help=tooltip)
+            else:
+                st.metric(nombre, "—", help=tooltip)
+
+    st.markdown("---")
+    st.caption("**Fuentes:** BCE Statistical Data Warehouse (tipos e inflación, sin API key) · "
+               "Yahoo Finance (mercados, FX, commodities, índices) · "
+               "Análisis educativo — no constituye asesoramiento de inversión (MiFID II).")
 
 
 def precio_actual(hist: pd.DataFrame):
@@ -1213,17 +1407,18 @@ def pantalla_analisis():
             st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis"]
+    tabs_list = ["📈 Análisis", "🌍 Macro"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
 
     tab_objs = st.tabs(tabs_list)
     tab_analisis = tab_objs[0]
+    tab_macro    = tab_objs[1]
 
-    if es_superadmin and len(tab_objs) >= 2:
-        tab_admin = tab_objs[1]
-        tab_ayuda = tab_objs[2]
+    if es_superadmin and len(tab_objs) >= 4:
+        tab_admin = tab_objs[2]
+        tab_ayuda = tab_objs[3]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -1470,6 +1665,10 @@ def pantalla_analisis():
                     file_name=nombre_pdf,
                     mime="application/pdf",
                 )
+
+    # ---- TAB MACRO ----
+    with tab_macro:
+        pestaña_macro()
 
     # ---- TAB ADMIN ----
     if es_superadmin and tab_admin:
