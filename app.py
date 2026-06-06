@@ -1898,18 +1898,25 @@ def pantalla_analisis():
         st.markdown("### Semáforo Global")
         emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
         css_class = f"semaforo-{color_sem}"
-        col_badge, col_f1, col_f2, col_f3 = st.columns([1, 2, 2, 2])
+
+        col_badge, col_factores = st.columns([1, 5])
         with col_badge:
             st.markdown(
-                f'<span class="{css_class}" style="font-size:1.3rem">'
-                f'{emoji_color} {color_sem.upper()}<br>'
-                f'<span style="font-size:1rem">{pct_sem:.0f}%</span></span>',
+                f'<div class="{css_class}" style="text-align:center;padding:0.4rem 0">'
+                f'<div style="font-size:2rem;line-height:1">{emoji_color}</div>'
+                f'<div style="font-size:1rem;font-weight:bold;margin-top:0.2rem">'
+                f'{color_sem.upper()}</div>'
+                f'<div style="font-size:1.3rem;font-weight:bold">{pct_sem:.0f}%</div>'
+                f'</div>',
                 unsafe_allow_html=True
             )
-        factor_cols = [col_f1, col_f2, col_f3]
-        for i, (factor, descripcion, _) in enumerate(factores_sem):
-            with factor_cols[i % 3]:
-                st.caption(f"• **{factor}**: {descripcion}")
+        with col_factores:
+            fila1 = st.columns(3)
+            fila2 = st.columns(3)
+            for i, (factor, descripcion, _) in enumerate(factores_sem):
+                destino = fila1 if i < 3 else fila2
+                with destino[i % 3]:
+                    st.metric(label=factor, value=descripcion)
 
         st.divider()
 
