@@ -22,12 +22,8 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-# Supabase
-try:
-    from supabase import create_client, Client
-    SUPABASE_AVAILABLE = True
-except ImportError:
-    SUPABASE_AVAILABLE = False
+# Supabase via httpx directo (compatible con todos los formatos de API key)
+import httpx
 
 # Technical indicators — pandas_ta con fallback manual
 try:
@@ -73,19 +69,50 @@ st.markdown("""
 
 
 # =============================================================================
-# CONEXIÓN SUPABASE
+# CONEXIÓN SUPABASE — via httpx directo
 # =============================================================================
 
-@st.cache_resource
-def get_supabase_client():
-    if not SUPABASE_AVAILABLE:
-        return None
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception:
-        return None
+def get_supabase_headers():
+    key = st.secrets["SUPABASE_KEY"]
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+def supabase_select(tabla: str, filtros: dict = None):
+    url = st.secrets["SUPABASE_URL"]
+    endpoint = f"{url}/rest/v1/{tabla}"
+    params = {"select": "*"}
+    if filtros:
+        params.update(filtros)
+    r = httpx.get(endpoint, headers=get_supabase_headers(), params=params)
+    r.raise_for_status()
+    return r.json()
+
+def supabase_insert(tabla: str, datos: dict):
+    url = st.secrets["SUPABASE_URL"]
+    endpoint = f"{url}/rest/v1/{tabla}"
+    r = httpx.post(endpoint, headers=get_supabase_headers(), json=datos)
+    r.raise_for_status()
+    return r.json()
+
+def supabase_update(tabla: str, datos: dict, filtro_col: str, filtro_val):
+    url = st.secrets["SUPABASE_URL"]
+    endpoint = f"{url}/rest/v1/{tabla}"
+    params = {filtro_col: f"eq.{filtro_val}"}
+    r = httpx.patch(endpoint, headers=get_supabase_headers(), params=params, json=datos)
+    r.raise_for_status()
+    return r.json()
+
+def supabase_delete(tabla: str, filtro_col: str, filtro_val):
+    url = st.secrets["SUPABASE_URL"]
+    endpoint = f"{url}/rest/v1/{tabla}"
+    params = {filtro_col: f"eq.{filtro_val}"}
+    r = httpx.delete(endpoint, headers=get_supabase_headers(), params=params)
+    r.raise_for_status()
+    return r.json()
 
 
 # =============================================================================
@@ -105,18 +132,13 @@ def hash_password(password: str) -> str:
 
 def login_usuario(username: str, password: str):
     """Retorna dict del usuario si login correcto, None si falla."""
-    sb = get_supabase_client()
-    if sb is None:
-        st.error("⚠️ Sin conexión a base de datos. Configura SUPABASE_URL y SUPABASE_KEY en Secrets.")
-        return None
     try:
-        res = sb.table("usuarios").select("*").eq("username", username).eq("activo", True).execute()
-        if not res.data:
+        datos = supabase_select("usuarios", {"username": f"eq.{username}", "activo": "eq.true"})
+        if not datos:
             return None
-        user = res.data[0]
+        user = datos[0]
         if verificar_password(password, user["password_hash"]):
-            # Actualizar último acceso
-            sb.table("usuarios").update({"ultimo_acceso": datetime.utcnow().isoformat()}).eq("id", user["id"]).execute()
+            supabase_update("usuarios", {"ultimo_acceso": datetime.utcnow().isoformat()}, "id", user["id"])
             return user
         return None
     except Exception as e:
@@ -981,15 +1003,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
 def panel_admin():
     st.markdown("## ⚙️ Gestión de Usuarios")
-    sb = get_supabase_client()
-    if sb is None:
-        st.error("Sin conexión a Supabase.")
-        return
 
-    # Listar usuarios
     try:
-        res = sb.table("usuarios").select("*").order("creado_en").execute()
-        usuarios = res.data
+        usuarios = supabase_select("usuarios")
+        usuarios.sort(key=lambda x: x.get("creado_en", ""))
     except Exception as e:
         st.error(f"Error al obtener usuarios: {e}")
         return
@@ -1009,16 +1026,16 @@ def panel_admin():
             if u.get("rol") != "superadmin":
                 if u.get("activo"):
                     if st.button("Desactivar", key=f"des_{u['id']}"):
-                        sb.table("usuarios").update({"activo": False}).eq("id", u["id"]).execute()
+                        supabase_update("usuarios", {"activo": False}, "id", u["id"])
                         st.rerun()
                 else:
                     if st.button("Activar", key=f"act_{u['id']}"):
-                        sb.table("usuarios").update({"activo": True}).eq("id", u["id"]).execute()
+                        supabase_update("usuarios", {"activo": True}, "id", u["id"])
                         st.rerun()
         with col5:
             if u.get("rol") != "superadmin":
                 if st.button("🗑️", key=f"del_{u['id']}", help="Eliminar usuario"):
-                    sb.table("usuarios").delete().eq("id", u["id"]).execute()
+                    supabase_delete("usuarios", "id", u["id"])
                     st.rerun()
 
     st.divider()
@@ -1038,13 +1055,13 @@ def panel_admin():
             if nuevo_user and nuevo_pass and nuevo_nombre:
                 try:
                     ph = hash_password(nuevo_pass)
-                    sb.table("usuarios").insert({
+                    supabase_insert("usuarios", {
                         "username": nuevo_user,
                         "nombre": nuevo_nombre,
                         "password_hash": ph,
                         "rol": nuevo_rol,
                         "activo": True,
-                    }).execute()
+                    })
                     st.success(f"✅ Usuario '{nuevo_user}' creado.")
                     st.rerun()
                 except Exception as e:
@@ -1066,7 +1083,7 @@ def panel_admin():
             if nueva_pass and nueva_pass == confirmar:
                 try:
                     ph = hash_password(nueva_pass)
-                    sb.table("usuarios").update({"password_hash": ph}).eq("username", sel_user).execute()
+                    supabase_update("usuarios", {"password_hash": ph}, "username", sel_user)
                     st.success(f"✅ Contraseña de '{sel_user}' actualizada.")
                 except Exception as e:
                     st.error(f"Error: {e}")
