@@ -904,7 +904,7 @@ SISTEMAS_PIVOT = {
     "Mid-Points": pivot_midpoints,
 }
 
-TIMEFRAMES = ["Intradía", "Diario", "Semanal", "Trimestral", "Anual"]
+TIMEFRAMES = ["Diario", "Semanal", "Trimestral", "Anual"]
 
 
 def calcular_todos_pivots(hist: pd.DataFrame, sistema: str):
@@ -1653,175 +1653,311 @@ tr:nth-child(even) td { background:#f8fafc; }
 
 def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dict,
                 confluencias: list, semaforo: str, factores_semaforo: list,
-                vol_data: dict, indicadores: dict, fundamentales: dict):
-    """Genera un PDF con el análisis completo y retorna bytes."""
+                vol_data: dict, indicadores: dict, fundamentales: dict,
+                nombre: str = "", tipo_activo: str = "", cambio: float = 0.0,
+                cambio_pct: float = 0.0, h52=None, l52=None, currency: str = "",
+                pct_semaforo: float = 0.0):
+    """PDF con precio prominente + pivots multi-columna en paralelo."""
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=1.5*cm, rightMargin=1.5*cm,
-        topMargin=1.5*cm, bottomMargin=1.5*cm
-    )
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
 
-    styles = getSampleStyleSheet()
-    azul = colors.HexColor("#1F4E79")
-    azul_med = colors.HexColor("#2E75B6")
-    azul_clar = colors.HexColor("#D5E8F0")
-    verde = colors.HexColor("#2E7D32")
-    rojo = colors.HexColor("#C62828")
+    # ── Colores ──────────────────────────────────────────────────────────
+    CA  = colors.HexColor("#1e3a5f")   # azul oscuro
+    CM  = colors.HexColor("#2563eb")   # azul medio
+    CCL = colors.HexColor("#dbeafe")   # azul claro
+    GF  = colors.HexColor("#f1f5f9")   # gris fondo
+    GB  = colors.HexColor("#e2e8f0")   # gris borde
+    VE  = colors.HexColor("#16a34a")   # verde
+    RO  = colors.HexColor("#dc2626")   # rojo
+    AM  = colors.HexColor("#f59e0b")   # amarillo
+    ACL = colors.HexColor("#fffbeb")   # amarillo claro
+    BL  = colors.white
 
-    estilo_titulo = ParagraphStyle("titulo", parent=styles["Title"],
-                                   fontSize=16, textColor=azul, spaceAfter=6)
-    estilo_h2 = ParagraphStyle("h2", parent=styles["Heading2"],
-                                fontSize=11, textColor=azul_med, spaceAfter=4, spaceBefore=8)
-    estilo_normal = ParagraphStyle("norm", parent=styles["Normal"],
-                                   fontSize=8.5, spaceAfter=2)
-    estilo_pie = ParagraphStyle("pie", parent=styles["Normal"],
-                                fontSize=7, textColor=colors.grey,
-                                alignment=TA_CENTER)
+    SC = {"verde": VE, "amarillo": AM, "rojo": RO}.get(semaforo, colors.grey)
+    ST = {"verde": "VERDE", "amarillo": "AMARILLO", "rojo": "ROJO"}.get(semaforo, "—")
+    SE = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
 
+    # ── Estilos (helper con contador para nombres únicos) ─────────────────
+    _SS = getSampleStyleSheet()
+    _n  = [0]
+    def _p(**kw):
+        _n[0] += 1
+        return ParagraphStyle(f"_p{_n[0]}", parent=_SS["Normal"], **kw)
+
+    S_TICK = _p(fontName="Helvetica-Bold", fontSize=18, textColor=BL)
+    S_EMP  = _p(fontName="Helvetica",      fontSize=8,  textColor=BL)
+    S_PRE  = _p(fontName="Helvetica-Bold", fontSize=28, textColor=BL)
+    S_CAM  = _p(fontName="Helvetica-Bold", fontSize=10, textColor=BL)
+    S_H52  = _p(fontName="Helvetica",      fontSize=7.5,textColor=BL)
+    S_CHIP = _p(fontName="Helvetica",      fontSize=7,  textColor=colors.HexColor("#475569"))
+    S_H2   = _p(fontName="Helvetica-Bold", fontSize=9,  textColor=CA, spaceBefore=6, spaceAfter=3)
+    S_MH   = _p(fontName="Helvetica-Bold", fontSize=6.5,textColor=colors.HexColor("#374151"), spaceAfter=2)
+    S_NRM  = _p(fontName="Helvetica",      fontSize=7.5,spaceAfter=1)
+    S_PIE  = _p(fontName="Helvetica",      fontSize=6.5,textColor=colors.grey, alignment=TA_CENTER)
+    S_CP   = _p(fontName="Helvetica-Bold", fontSize=7.5,textColor=CA)
+    S_CN   = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#64748b"))
+
+    ahora   = datetime.now().strftime("%d/%m/%Y %H:%M")
     historia = []
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Cabecera
-    historia.append(Paragraph(f"📊 PivotAnalyzer — {ticker.upper()}", estilo_titulo))
-    historia.append(Paragraph(
-        f"Precio: <b>{precio:.4f}</b> | Sistema: {sistema} | Generado: {ahora}",
-        estilo_normal
-    ))
-    historia.append(HRFlowable(width="100%", thickness=1, color=azul_med))
-    historia.append(Spacer(1, 0.3*cm))
-
-    # Semáforo
-    historia.append(Paragraph("Semáforo Global", estilo_h2))
-    color_texto = {"verde": "green", "amarillo": "orange", "rojo": "red"}.get(semaforo, "grey")
-    emoji_sem = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
-    historia.append(Paragraph(
-        f'<font color="{color_texto}"><b>{emoji_sem} {semaforo.upper()}</b></font>',
-        estilo_normal
-    ))
-    for factor, descripcion, _ in factores_semaforo:
-        historia.append(Paragraph(f"  • {factor}: {descripcion}", estilo_normal))
-    historia.append(Spacer(1, 0.3*cm))
-
-    # Pivot Points por timeframe
-    historia.append(Paragraph(f"Pivot Points — Sistema {sistema}", estilo_h2))
-
-    for tf in TIMEFRAMES:
-        datos_tf = resultados_pivots.get(tf)
-        if datos_tf is None:
-            continue
-
-        historia.append(Paragraph(f"<b>{tf}</b>", estilo_normal))
-
-        tabla_datos = []
-        niveles_orden = ["R3","R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
-        for nv in niveles_orden:
-            if nv in datos_tf and not nv.startswith("_"):
-                val = datos_tf[nv]
-                dist = ((val - precio) / precio * 100) if precio else 0
-                dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
-                color_nv = "red" if nv.startswith("R") else ("blue" if nv == "PP" else "green")
-                tabla_datos.append([
-                    Paragraph(f'<font color="{color_nv}"><b>{nv}</b></font>', estilo_normal),
-                    Paragraph(f"{val:.4f}", estilo_normal),
-                    Paragraph(dist_str, estilo_normal),
-                ])
-
-        if tabla_datos:
-            t = Table(tabla_datos, colWidths=[1.5*cm, 3*cm, 2.5*cm])
-            t.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), azul_clar),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor("#F5F8FF")]),
-                ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ]))
-            historia.append(t)
-        historia.append(Spacer(1, 0.15*cm))
-
-    # Confluencias
-    if confluencias:
-        historia.append(Paragraph("Confluencias Multi-Timeframe", estilo_h2))
-        conf_data = [["Precio", "Fiabilidad", "Niveles"]]
-        for c in confluencias[:8]:
-            niveles_str = ", ".join(f"{n['timeframe'][:3]} {n['nivel']}" for n in c["niveles"])
-            conf_data.append([
-                f"{c['precio']:.4f}",
-                c["estrellas"],
-                niveles_str[:60],
-            ])
-        t_conf = Table(conf_data, colWidths=[2.5*cm, 2*cm, 9*cm])
-        t_conf.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), azul_med),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FFF9C4")]),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        historia.append(t_conf)
-        historia.append(Spacer(1, 0.3*cm))
-
-    # Indicadores técnicos
-    historia.append(Paragraph("Indicadores Técnicos", estilo_h2))
-    ind_data = []
-    for k, v in indicadores.items():
-        ind_data.append([k, str(v)])
-    t_ind = Table(ind_data, colWidths=[5*cm, 8*cm])
-    t_ind.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor("#F5F8FF")]),
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
+    # ── CABECERA ──────────────────────────────────────────────────────────
+    h52_str = f"52W:  {l52:.2f} – {h52:.2f}" if h52 and l52 else ""
+    cab_t = Table(
+        [[
+            [Paragraph(ticker.upper(), S_TICK),
+             Paragraph(nombre or ticker, S_EMP),
+             Spacer(1, 4),
+             Paragraph(f"{tipo_activo}  ·  {currency}  ·  Sistema: {sistema}", S_CHIP)],
+            [Paragraph(f"{precio:.4f}", S_PRE),
+             Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_CAM),
+             Paragraph(h52_str, S_H52)],
+        ]],
+        colWidths=[9.5*cm, 8.5*cm]
+    )
+    cab_t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), CA),
+        ("VALIGN",        (0,0),(-1,-1), "TOP"),
+        ("LEFTPADDING",   (0,0),(-1,-1), 10),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 10),
+        ("TOPPADDING",    (0,0),(-1,-1), 10),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 12),
+        ("ALIGN",         (1,0),(1,0), "RIGHT"),
     ]))
-    historia.append(t_ind)
+    historia.append(cab_t)
+    chips_t = Table(
+        [[Paragraph(f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
+        colWidths=[18*cm]
+    )
+    chips_t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), GF),
+        ("LEFTPADDING",   (0,0),(-1,-1), 10),
+        ("TOPPADDING",    (0,0),(-1,-1), 4),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+    ]))
+    historia.append(chips_t)
+    historia.append(Spacer(1, 0.3*cm))
 
-    # Fundamentales
+    # ── SEMÁFORO ──────────────────────────────────────────────────────────
+    historia.append(Paragraph("Semáforo Global", S_H2))
+    badge_t = Table(
+        [[Paragraph(SE, _p(fontName="Helvetica-Bold", fontSize=18, alignment=TA_CENTER))],
+         [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
+         [Paragraph(f"{pct_semaforo:.0f}%", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))]],
+        colWidths=[2.8*cm]
+    )
+    badge_t.setStyle(TableStyle([
+        ("BOX",           (0,0),(-1,-1), 2, SC),
+        ("BACKGROUND",    (0,0),(-1,-1), GF),
+        ("TOPPADDING",    (0,0),(-1,-1), 5),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
+    ]))
+    # Factores: 2 filas × 3 columnas
+    fac_data, row_buf = [], []
+    for i, (fac, desc, _) in enumerate(factores_semaforo):
+        inner = Table(
+            [[Paragraph(fac,  _p(fontSize=5.5, textColor=colors.HexColor("#6b7280")))],
+             [Paragraph(desc, _p(fontSize=7,   fontName="Helvetica-Bold"))]],
+            colWidths=[4.9*cm]
+        )
+        inner.setStyle(TableStyle([
+            ("TOPPADDING",    (0,0),(-1,-1), 3),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+            ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ]))
+        row_buf.append(inner)
+        if len(row_buf) == 3:
+            fac_data.append(row_buf); row_buf = []
+    if row_buf:
+        while len(row_buf) < 3:
+            row_buf.append(Paragraph("", S_NRM))
+        fac_data.append(row_buf)
+    fac_t = Table(fac_data, colWidths=[4.9*cm]*3)
+    fac_t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0),(-1,-1), GF),
+        ("GRID",       (0,0),(-1,-1), 0.3, GB),
+        ("VALIGN",     (0,0),(-1,-1), "TOP"),
+    ]))
+    sem_t = Table([[badge_t, fac_t]], colWidths=[3*cm, 15*cm])
+    sem_t.setStyle(TableStyle([
+        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+        ("LEFTPADDING",  (0,0),(0,0), 0),
+        ("RIGHTPADDING", (0,0),(0,0), 8),
+        ("TOPPADDING",   (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 0),
+    ]))
+    historia.append(sem_t)
+    historia.append(Spacer(1, 0.35*cm))
+
+    # ── PIVOT POINTS MULTI-COLUMNA ────────────────────────────────────────
+    historia.append(Paragraph(f"Pivot Points — Sistema {sistema}", S_H2))
+
+    NIV = ["R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
+    PW  = 100   # ancho por columna pivot (pt)  — 3×100 + 210 = 510 pt = 18 cm
+    CW  = 210   # ancho columna confluencias (pt)
+
+    def _mini_pivot(tf, datos_tf):
+        """Retorna lista de Flowables para una celda de timeframe."""
+        hdr = [Paragraph(tf, S_MH)]
+        if not datos_tf:
+            return hdr + [Paragraph("Sin datos", S_NRM)]
+        filas = [["Nv", "Precio", "Dist."]]
+        tipos = []
+        for nv in NIV:
+            if nv not in datos_tf or nv.startswith("_"):
+                continue
+            val  = datos_tf[nv]
+            dist = ((val - precio) / precio * 100) if precio else 0
+            ds   = (f"+{dist:.1f}%" if dist > 0.005
+                    else (f"{dist:.1f}%" if dist < -0.005 else "—"))
+            filas.append([nv, f"{val:.3f}", ds])
+            tipos.append(nv)
+        mini = Table(filas, colWidths=[16, 37, 27])
+        ts = [
+            ("FONTSIZE",      (0,0),(-1,-1), 6),
+            ("FONTNAME",      (0,0),(-1, 0), "Helvetica-Bold"),
+            ("BACKGROUND",    (0,0),(-1, 0), CA),
+            ("TEXTCOLOR",     (0,0),(-1, 0), BL),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+            ("GRID",          (0,0),(-1,-1), 0.2, GB),
+            ("TOPPADDING",    (0,0),(-1,-1), 1),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 1),
+            ("LEFTPADDING",   (0,0),(-1,-1), 2),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 2),
+        ]
+        for i, nv in enumerate(tipos, 1):
+            if   nv.startswith("R"): ts += [("TEXTCOLOR",(0,i),(0,i),RO),("TEXTCOLOR",(2,i),(2,i),RO),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            elif nv == "PP":         ts += [("BACKGROUND",(0,i),(-1,i),CCL),("TEXTCOLOR",(0,i),(0,i),CM),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            elif nv.startswith("S"): ts += [("TEXTCOLOR",(0,i),(0,i),VE),("TEXTCOLOR",(2,i),(2,i),VE),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+        mini.setStyle(TableStyle(ts))
+        return hdr + [mini]
+
+    def _conf_cell():
+        hdr = [Paragraph("Confluencias", S_MH)]
+        if not confluencias:
+            return hdr + [Paragraph("Sin confluencias.", S_CN)]
+        items = []
+        for c in confluencias[:12]:
+            niv_s = "  ".join(f"{n['timeframe'][:3]}{n['nivel']}" for n in c["niveles"])
+            dist  = ((c["precio"] - precio) / precio * 100) if precio else 0
+            ds    = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
+            items += [
+                Paragraph(f"<b>{c['precio']:.4f}</b>  {c['estrellas']}  "
+                          f"<font color='#64748b'>{ds}</font>", S_CP),
+                Paragraph(niv_s, S_CN),
+                Spacer(1, 2),
+            ]
+        return hdr + items
+
+    # Fila 1: primeros 3 timeframes (Diario/Semanal/Trimestral) + confluencias
+    TF1 = TIMEFRAMES[:3]
+    TF2 = TIMEFRAMES[3:]
+    row1 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TF1] + [_conf_cell()]
+    t1 = Table([row1], colWidths=[PW]*3 + [CW])
+    t1.setStyle(TableStyle([
+        ("VALIGN",        (0,0),(-1,-1), "TOP"),
+        ("LEFTPADDING",   (0,0),(-1,-1), 4),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 4),
+        ("TOPPADDING",    (0,0),(-1,-1), 4),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+        ("BOX",           (0,0),(-1,-1), 0.5, GB),
+        ("LINEBEFORE",    (1,0),(3,0), 0.3, GB),
+        ("LINEAFTER",     (2,0),(2,0), 1.2, CM),   # separador antes de confluencias
+        ("BACKGROUND",    (3,0),(3,0), ACL),        # fondo amarillo confluencias
+    ]))
+    historia.append(t1)
+
+    # Fila 2: timeframes restantes (Anual) + espacio en blanco
+    if TF2:
+        historia.append(Spacer(1, 0.2*cm))
+        row2 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TF2]
+        n2 = len(row2)
+        while len(row2) < 2: row2.append([Paragraph("", S_NRM)])
+        row2.append([Paragraph("", S_NRM)])  # columna vacía derecha
+        cw2 = [PW]*2 + [PW*2 + CW]
+        t2 = Table([row2], colWidths=cw2)
+        t2.setStyle(TableStyle([
+            ("VALIGN",       (0,0),(-1,-1), "TOP"),
+            ("LEFTPADDING",  (0,0),(-1,-1), 4),
+            ("RIGHTPADDING", (0,0),(-1,-1), 4),
+            ("TOPPADDING",   (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+            ("BOX",          (0,0),(n2-1,-1), 0.5, GB),
+            ("LINEBEFORE",   (1,0),(n2-1,0), 0.3, GB),
+        ]))
+        historia.append(t2)
+    historia.append(Spacer(1, 0.3*cm))
+
+    # ── INDICADORES + VOLUMEN (dos columnas) ──────────────────────────────
+    historia.append(Paragraph("Indicadores Técnicos y Volumen", S_H2))
+    ind_rows = [[Paragraph(k, _p(fontSize=7.5)),
+                 Paragraph(str(v), _p(fontSize=7.5))]
+                for k, v in indicadores.items()]
+    t_ind = Table(ind_rows, colWidths=[5.5*cm, 5*cm])
+    t_ind.setStyle(TableStyle([
+        ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
+        ("GRID",         (0,0),(-1,-1), 0.2, GB),
+        ("TOPPADDING",   (0,0),(-1,-1), 2),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+        ("LEFTPADDING",  (0,0),(-1,-1), 4),
+    ]))
+    if vol_data:
+        vr = [
+            [Paragraph("Volumen sesión",    _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["volumen"]),    _p(fontSize=7.5))],
+            [Paragraph("Media 10 sesiones", _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["media_10d"]),  _p(fontSize=7.5))],
+            [Paragraph("Media 3 meses",     _p(fontSize=7.5)), Paragraph(_fmt_numero(vol_data["media_3m"]),   _p(fontSize=7.5))],
+            [Paragraph("Ratio vs 10d",      _p(fontSize=7.5)), Paragraph(f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}", _p(fontSize=7.5))],
+            [Paragraph("Ratio vs 3m",       _p(fontSize=7.5)), Paragraph(f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}",  _p(fontSize=7.5))],
+        ]
+        t_vol = Table(vr, colWidths=[3.8*cm, 3.7*cm])
+        t_vol.setStyle(TableStyle([
+            ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
+            ("GRID",         (0,0),(-1,-1), 0.2, GB),
+            ("TOPPADDING",   (0,0),(-1,-1), 2),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+            ("LEFTPADDING",  (0,0),(-1,-1), 4),
+        ]))
+        iv_t = Table([[t_ind, t_vol]], colWidths=[10.5*cm, 7.5*cm])
+        iv_t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(1,0),(1,0),12)]))
+        historia.append(iv_t)
+    else:
+        historia.append(t_ind)
+
+    # ── FUNDAMENTALES (4 columnas: etiqueta-valor-etiqueta-valor) ─────────
     if fundamentales:
-        historia.append(Paragraph("Datos Fundamentales", estilo_h2))
-        fund_data = [[k, v] for k, v in fundamentales.items() if v != "—"]
-        if fund_data:
-            t_fund = Table(fund_data, colWidths=[5*cm, 8*cm])
+        fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+        if fund_items:
+            historia.append(Paragraph("Datos Fundamentales", S_H2))
+            fund_rows, buf_r = [], []
+            for k, v in fund_items:
+                buf_r += [Paragraph(k, _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
+                          Paragraph(str(v), _p(fontSize=7.5, fontName="Helvetica-Bold"))]
+                if len(buf_r) == 4:
+                    fund_rows.append(buf_r); buf_r = []
+            if buf_r:
+                while len(buf_r) < 4: buf_r.append(Paragraph("", S_NRM))
+                fund_rows.append(buf_r)
+            t_fund = Table(fund_rows, colWidths=[3.2*cm, 5.8*cm]*2)
             t_fund.setStyle(TableStyle([
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor("#F5F8FF")]),
-                ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
+                ("GRID",         (0,0),(-1,-1), 0.2, GB),
+                ("TOPPADDING",   (0,0),(-1,-1), 2),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+                ("LEFTPADDING",  (0,0),(-1,-1), 4),
+                ("FONTSIZE",     (0,0),(-1,-1), 7.5),
             ]))
             historia.append(t_fund)
 
-    # Volumen
-    if vol_data:
-        historia.append(Paragraph("Análisis de Volumen", estilo_h2))
-        vol_tabla = [
-            ["Volumen sesión", _fmt_numero(vol_data["volumen"])],
-            ["Media 10 sesiones", _fmt_numero(vol_data["media_10d"])],
-            ["Media 3 meses", _fmt_numero(vol_data["media_3m"])],
-            ["Ratio vs 10d", f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}"],
-            ["Ratio vs 3m", f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}"],
-        ]
-        t_vol = Table(vol_tabla, colWidths=[5*cm, 8*cm])
-        t_vol.setStyle(TableStyle([
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor("#F5F8FF")]),
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        historia.append(t_vol)
-
-    # Pie de página
+    # ── PIE ───────────────────────────────────────────────────────────────
     historia.append(Spacer(1, 0.5*cm))
-    historia.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    historia.append(HRFlowable(width="100%", thickness=0.5, color=GB))
     historia.append(Paragraph(
-        "Análisis educativo. No constituye asesoramiento de inversión regulado bajo MiFID II. "
-        "Datos con retraso ~15 min vía Yahoo Finance. PivotAnalyzer v1.0 — Scriptum",
-        estilo_pie
+        "Análisis educativo · No constituye asesoramiento de inversión regulado bajo MiFID II "
+        "(Directiva 2014/65/UE) · Datos con retraso ~15 min vía Yahoo Finance · PivotAnalyzer — Scriptum",
+        S_PIE
     ))
 
     doc.build(historia)
@@ -2380,6 +2516,14 @@ def pantalla_analisis():
                             vol_data=vol_data,
                             indicadores=indicadores_dict,
                             fundamentales=fundamentales,
+                            nombre=nombre,
+                            tipo_activo=tipo_activo,
+                            cambio=cambio,
+                            cambio_pct=cambio_pct,
+                            h52=info.get("fiftyTwoWeekHigh"),
+                            l52=info.get("fiftyTwoWeekLow"),
+                            currency=info.get("currency", ""),
+                            pct_semaforo=pct_sem,
                         )
                     st.download_button(
                         label="📄 Descargar PDF",
