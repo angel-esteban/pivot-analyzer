@@ -70,6 +70,48 @@ st.markdown("""
 
 
 # =============================================================================
+# TOOLTIPS — Explicaciones para no financieros
+# =============================================================================
+
+TOOLTIPS = {
+    "Precio":            "Último precio de cierre (~15 min de retraso). Refleja el valor al que cerró el activo en la última sesión.",
+    "52W Máx / Mín":     "Precio máximo y mínimo registrados en los últimos 52 semanas (1 año). Indica el rango de fluctuación anual.",
+    "Volumen hoy":       "Número de acciones o participaciones negociadas en la sesión actual. Un volumen alto indica mayor interés del mercado.",
+    "Moneda":            "Divisa en la que cotiza el activo en su mercado de origen.",
+    "RSI 14":            "Relative Strength Index (14 sesiones): mide si el activo está sobrecomprado (>70) o sobrevendido (<30). Entre 30-70 es zona neutra.",
+    "MACD":              "Moving Average Convergence Divergence: diferencia entre dos medias móviles. Si supera su señal, la tendencia es alcista; si está por debajo, bajista.",
+    "SAR":               "Parabolic Stop And Reverse: señal de reversión de tendencia. 'Alcista' = precio por encima del SAR. 'Bajista' = precio por debajo.",
+    "Bollinger %B":      "Posición del precio dentro de las Bandas de Bollinger. 0% = banda inferior (sobrevendido). 50% = zona central. 100% = banda superior (sobrecomprado).",
+    "SMA 20":            "Media Móvil Simple de 20 sesiones (~1 mes). Filtra el ruido a corto plazo y muestra la tendencia reciente.",
+    "SMA 50":            "Media Móvil Simple de 50 sesiones (~2,5 meses). Indicador de tendencia de medio plazo ampliamente seguido por analistas.",
+    "Ratio vs 10d":      "Volumen de hoy comparado con la media de las últimas 10 sesiones. Por encima del 100% indica actividad superior a la media reciente.",
+    "Ratio vs 3m":       "Volumen de hoy comparado con la media de los últimos 3 meses. Útil para detectar movimientos inusuales respecto al comportamiento habitual.",
+    "Nombre":            "Nombre completo de la empresa o fondo cotizado.",
+    "Sector":            "Sector económico al que pertenece la empresa según la clasificación estándar de mercado.",
+    "Industria":         "Industria específica dentro del sector. Permite comparar empresas con actividades similares.",
+    "País":              "País donde está domiciliada legalmente la empresa y donde cotiza principalmente.",
+    "Capitalización":    "Valor total de mercado = precio × número de acciones en circulación. Indica el tamaño de la compañía.",
+    "PER":               "Price-to-Earnings (precio/beneficio): años que tardarías en recuperar la inversión si el beneficio fuera constante. Un PER más bajo puede indicar que la acción está más barata.",
+    "PER forward":       "PER calculado con el beneficio estimado para los próximos 12 meses. Refleja las expectativas del mercado sobre el crecimiento futuro.",
+    "P/Ventas":          "Precio sobre ventas: compara la capitalización de mercado con los ingresos anuales. Útil cuando la empresa no tiene beneficios todavía.",
+    "P/Book":            "Precio sobre valor en libros: compara el precio de mercado con el valor contable de los activos netos. Por debajo de 1 puede indicar infravaloración.",
+    "EV/EBITDA":         "Enterprise Value sobre EBITDA: medida de valoración independiente de la estructura financiera. Permite comparar empresas con distintos niveles de deuda.",
+    "BPA":               "Beneficio Por Acción (últimos 12 meses): beneficio neto dividido entre el número de acciones. Es la base del cálculo del PER.",
+    "BPA forward":       "Beneficio Por Acción estimado para los próximos 12 meses según el consenso de analistas.",
+    "Dividendo":         "Importe del dividendo anual por acción en la moneda del activo. Es la parte del beneficio que la empresa reparte a sus accionistas.",
+    "Rentab. dividendo": "Dividendo anual dividido entre el precio actual, en porcentaje. Indica el 'rendimiento por cupón' que ofrece el activo vía dividendos.",
+    "Beta":              "Medida de volatilidad respecto al mercado. Beta=1 → se mueve igual que el índice. Beta>1 → más volátil que el mercado. Beta<1 → más estable.",
+    "52W Max":           "Precio máximo registrado en los últimos 52 semanas (1 año).",
+    "52W Min":           "Precio mínimo registrado en los últimos 52 semanas (1 año).",
+    "Obj. analistas":    "Precio objetivo medio fijado por los analistas que cubren el valor. Indica dónde esperan que cotice en los próximos 12 meses.",
+    "Nº analistas":      "Número de analistas que siguen el valor y han publicado una estimación de precio objetivo.",
+    "AUM":               "Assets Under Management: patrimonio total gestionado por el ETF. Mayor AUM implica mayor liquidez y menor riesgo de cierre del fondo.",
+    "TER":               "Total Expense Ratio: coste anual total del ETF expresado en porcentaje. Se descuenta automáticamente del rendimiento del fondo.",
+    "Índice replicado":  "Índice de referencia que el ETF intenta replicar. Define qué activos componen el fondo y en qué proporción.",
+}
+
+
+# =============================================================================
 # CONEXIÓN NEON (PostgreSQL) — via psycopg2
 # =============================================================================
 
@@ -1246,17 +1288,17 @@ def pantalla_analisis():
         var_str = f"{cambio:+.4f} ({cambio_pct:+.2f}%)"
 
         with col_p1:
-            st.metric("Precio", f"{precio:.4f}", delta=var_str)
+            st.metric("Precio", f"{precio:.4f}", delta=var_str, help=TOOLTIPS["Precio"])
         with col_p2:
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
-            st.metric("52W Máx / Mín", f"{h52:.2f} / {l52:.2f}" if h52 and l52 else "—")
+            st.metric("52W Máx / Mín", f"{h52:.2f} / {l52:.2f}" if h52 and l52 else "—", help=TOOLTIPS["52W Máx / Mín"])
         with col_p3:
             vol_hoy = float(hist["Volume"].iloc[-1])
-            st.metric("Volumen hoy", _fmt_numero(vol_hoy))
+            st.metric("Volumen hoy", _fmt_numero(vol_hoy), help=TOOLTIPS["Volumen hoy"])
         with col_p4:
             currency = info.get("currency", "")
-            st.metric("Moneda", currency if currency else "—")
+            st.metric("Moneda", currency if currency else "—", help=TOOLTIPS["Moneda"])
 
         st.caption(f"**{nombre}** · {tipo_activo.upper()} · Datos: ~15 min de retraso")
 
@@ -1332,17 +1374,19 @@ def pantalla_analisis():
             col_i1, col_i2 = st.columns(2)
             with col_i1:
                 st.metric("RSI 14", rsi_val,
-                          delta="Sobrecomprado" if rsi_val > 70 else ("Sobrevendido" if rsi_val < 30 else "Neutro"))
-                st.metric("MACD", f"{macd_val:.4f}", delta=f"Hist: {macd_hist_val:.4f}")
-                st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}")
+                          delta="Sobrecomprado" if rsi_val > 70 else ("Sobrevendido" if rsi_val < 30 else "Neutro"),
+                          help=TOOLTIPS["RSI 14"])
+                st.metric("MACD", f"{macd_val:.4f}", delta=f"Hist: {macd_hist_val:.4f}", help=TOOLTIPS["MACD"])
+                st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
             with col_i2:
-                st.metric("Bollinger %B", f"{pct_b:.1f}%")
+                st.metric("Bollinger %B", f"{pct_b:.1f}%", help=TOOLTIPS["Bollinger %B"])
                 for p_m in [20, 50]:
                     if p_m in medias:
                         sma, ema = medias[p_m]
                         diff = precio - sma
                         st.metric(f"SMA {p_m}", f"{sma:.4f}",
-                                  delta=f"{diff:+.4f} ({diff/sma*100:+.1f}%)")
+                                  delta=f"{diff:+.4f} ({diff/sma*100:+.1f}%)",
+                                  help=TOOLTIPS.get(f"SMA {p_m}"))
 
             st.divider()
 
@@ -1353,11 +1397,13 @@ def pantalla_analisis():
                 with col_v1:
                     st.metric("Ratio vs 10d",
                               f"{vol_data['ratio_10d']:.0f}%",
-                              delta=vol_data['clasificacion_10d'])
+                              delta=vol_data['clasificacion_10d'],
+                              help=TOOLTIPS["Ratio vs 10d"])
                 with col_v2:
                     st.metric("Ratio vs 3m",
                               f"{vol_data['ratio_3m']:.0f}%",
-                              delta=vol_data['clasificacion_3m'])
+                              delta=vol_data['clasificacion_3m'],
+                              help=TOOLTIPS["Ratio vs 3m"])
                 st.caption(f"Vol. hoy: {_fmt_numero(vol_data['volumen'])} | "
                            f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
                            f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
@@ -1395,7 +1441,7 @@ def pantalla_analisis():
             cols_f = st.columns(3)
             for i, (k, v) in enumerate(fund_items):
                 with cols_f[i % 3]:
-                    st.metric(k, v)
+                    st.metric(k, v, help=TOOLTIPS.get(k))
 
         st.divider()
 
