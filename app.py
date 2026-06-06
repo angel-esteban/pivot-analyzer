@@ -1386,7 +1386,10 @@ h2 { font-size:12px; font-weight:700; color:#1e3a5f; text-transform:uppercase;
      letter-spacing:.8px; margin-bottom:12px; padding-bottom:5px; border-bottom:2px solid #2563eb; }
 .card { background:white; border-radius:10px; padding:18px 20px; margin-bottom:14px;
         box-shadow:0 1px 4px rgba(0,0,0,.07); }
-.two-col  { display:grid; grid-template-columns:3fr 2fr; gap:20px; }
+.pivot-row { display:grid; grid-template-columns:repeat(4,1fr) 1.6fr; gap:10px; align-items:start; }
+.three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+.col-title { font-size:11px; font-weight:700; color:#1e3a5f; text-transform:uppercase;
+             letter-spacing:.5px; margin-bottom:6px; padding-bottom:3px; border-bottom:1px solid #e2e8f0; }
 .sem-row  { display:flex; gap:20px; align-items:flex-start; }
 .sem-badge { min-width:88px; text-align:center; border:3px solid; border-radius:12px; padding:12px 8px; }
 .sem-emoji { font-size:30px; line-height:1; }
@@ -1428,7 +1431,7 @@ tr:nth-child(even) td { background:#f8fafc; }
 .vol-val  { font-size:18px; font-weight:700; }
 .vol-sub  { font-size:11px; color:#64748b; }
 .vol-det  { font-size:12px; color:#64748b; padding:8px 0; }
-.fund-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.fund-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .fund-card { background:#f8fafc; border-radius:6px; padding:9px 11px; border:1px solid #e2e8f0; }
 .fund-lbl  { font-size:11px; color:#64748b; margin-bottom:2px; }
 .fund-val  { font-size:13px; font-weight:700; }
@@ -1521,17 +1524,18 @@ tr:nth-child(even) td { background:#f8fafc; }
 
     rsi_sub = ("Sobrecomprado 🔴" if rsi_val > 70
                else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪"))
-    ind_html = (
+    ind_base_html = (
         _ind("RSI 14", f"{rsi_val:.1f}", rsi_sub) +
         _ind("MACD", f"{macd_val:.4f}", f"Hist: {macd_hist_val:+.4f}") +
         _ind("SAR", sar_tend, f"{sar_val:.4f}") +
         _ind("Bollinger %B", f"{pct_b:.1f}%")
     )
+    ind_med_html = ""
     for p_m in [20, 50, 200]:
         if p_m in medias:
             sma, ema = medias[p_m]
             diff = precio - sma
-            ind_html += (
+            ind_med_html += (
                 _ind(f"SMA {p_m}", f"{sma:.4f}",
                      f"Dist: {diff:+.4f} ({diff/sma*100:+.1f}%)") +
                 _ind(f"EMA {p_m}", f"{ema:.4f}")
@@ -1619,17 +1623,21 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div class="fac-grid">{fac_cards}</div>\n'
         f'</div>\n</div>\n'
 
-        # Pivots + Confluencias
-        f'<div class="card two-col">\n'
-        f'<div>\n<h2>&#128208; Pivot Points &#8212; {sistema}</h2>\n{pivot_blocks}</div>\n'
-        f'<div>\n<h2>&#127919; Confluencias Multi-Timeframe</h2>\n{conf_html}</div>\n'
-        f'</div>\n'
+        # Pivots: 4 columnas paralelas + confluencias
+        f'<div class="card">\n'
+        f'<h2>&#128208; Pivot Points &#8212; {sistema}</h2>\n'
+        f'<div class="pivot-row">\n'
+        f'{pivot_blocks}'
+        f'<div>\n<div class="col-title">Confluencias</div>\n{conf_html}</div>\n'
+        f'</div>\n</div>\n'
 
-        # Indicadores + Volumen
-        f'<div class="card two-col">\n'
-        f'<div>\n<h2>&#128200; Indicadores T&#233;cnicos</h2>\n'
-        f'<div class="ind-grid">{ind_html}</div>\n</div>\n'
-        f'<div>\n<h2>&#128202; Volumen</h2>\n{vol_html}\n</div>\n'
+        # Indicadores | Medias | Volumen — 3 columnas
+        f'<div class="card three-col">\n'
+        f'<div>\n<div class="col-title">Indicadores T&#233;cnicos</div>\n'
+        f'<div class="ind-grid">{ind_base_html}</div>\n</div>\n'
+        f'<div>\n<div class="col-title">Medias M&#243;viles</div>\n'
+        f'<div class="ind-grid">{ind_med_html}</div>\n</div>\n'
+        f'<div>\n<div class="col-title">Volumen</div>\n{vol_html}\n</div>\n'
         f'</div>\n'
 
         # Fundamentales
