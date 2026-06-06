@@ -117,6 +117,240 @@ TOOLTIPS = {
 
 
 # =============================================================================
+# DATOS PARA DESPLEGABLE DE TICKERS
+# =============================================================================
+
+# IBEX 35 — Composición aproximada (revisiones semestrales del índice)
+IBEX_35 = {
+    "Acciona":                      "ANA.MC",
+    "Acciona Energías Renovables":  "ANE.MC",
+    "Acerinox":                     "ACX.MC",
+    "ACS":                          "ACS.MC",
+    "Aena":                         "AENA.MC",
+    "Amadeus IT":                   "AMS.MC",
+    "ArcelorMittal":                "MTS.MC",
+    "Banco Santander":              "SAN.MC",
+    "BBVA":                         "BBVA.MC",
+    "CaixaBank":                    "CABK.MC",
+    "Cellnex Telecom":              "CLNX.MC",
+    "Colonial (Inmob.)":            "COL.MC",
+    "Enagás":                       "ENG.MC",
+    "Endesa":                       "ELE.MC",
+    "Ferrovial":                    "FER.MC",
+    "Fluidra":                      "FDR.MC",
+    "Grifols":                      "GRF.MC",
+    "IAG":                          "IAG.MC",
+    "Iberdrola":                    "IBE.MC",
+    "Inditex":                      "ITX.MC",
+    "Indra":                        "IDR.MC",
+    "Laboratorios Rovi":            "ROVI.MC",
+    "Logista":                      "LOG.MC",
+    "MAPFRE":                       "MAP.MC",
+    "Meliá Hotels":                 "MEL.MC",
+    "Merlin Properties":            "MRL.MC",
+    "Naturgy":                      "NTGY.MC",
+    "Puig Brands":                  "PUIG.MC",
+    "Redeia (REE)":                 "REE.MC",
+    "Repsol":                       "REP.MC",
+    "Sacyr":                        "SCYR.MC",
+    "Solaria":                      "SLR.MC",
+    "Telefónica":                   "TEF.MC",
+    "Unicaja Banco":                "UNI.MC",
+    "Vidrala":                      "VID.MC",
+}
+
+# Eurostoxx 50 — Principales componentes (sufijos por país de cotización)
+EUROSTOXX_50 = {
+    "ASML Holding":         "ASML.AS",
+    "SAP":                  "SAP.DE",
+    "LVMH":                 "MC.PA",
+    "Siemens":              "SIE.DE",
+    "Allianz":              "ALV.DE",
+    "TotalEnergies":        "TTE.PA",
+    "Sanofi":               "SAN.PA",
+    "L'Oréal":              "OR.PA",
+    "Schneider Electric":   "SU.PA",
+    "Airbus":               "AIR.PA",
+    "Iberdrola":            "IBE.MC",
+    "Deutsche Telekom":     "DTE.DE",
+    "Inditex":              "ITX.MC",
+    "Enel":                 "ENEL.MI",
+    "AXA":                  "CS.PA",
+    "BNP Paribas":          "BNP.PA",
+    "Intesa Sanpaolo":      "ISP.MI",
+    "Munich Re":            "MUV2.DE",
+    "BBVA":                 "BBVA.MC",
+    "Volkswagen (pref.)":   "VOW3.DE",
+    "Infineon":             "IFX.DE",
+    "Ferrari":              "RACE.MI",
+    "Air Liquide":          "AI.PA",
+    "Siemens Energy":       "ENR.DE",
+    "Adyen":                "ADYEN.AS",
+    "ING Group":            "INGA.AS",
+    "Hermès":               "RMS.PA",
+    "EssilorLuxottica":     "EL.PA",
+    "Vinci":                "DG.PA",
+    "UniCredit":            "UCG.MI",
+    "Deutsche Börse":       "DB1.DE",
+    "Safran":               "SAF.PA",
+    "Engie":                "ENGI.PA",
+    "Banco Santander":      "SAN.MC",
+    "Kering":               "KER.PA",
+    "Pernod Ricard":        "RI.PA",
+    "Bayer":                "BAYN.DE",
+    "Vonovia":              "VNA.DE",
+    "Dassault Systèmes":    "DSY.PA",
+    "Nokia":                "NOKIA.HE",
+    "ENI":                  "ENI.MI",
+    "BASF":                 "BAS.DE",
+    "Stellantis":           "STLAM.MI",
+    "Mercedes-Benz":        "MBG.DE",
+    "Münchener Rück":       "MUV2.DE",
+    "Amadeus IT":           "AMS.MC",
+    "STMicroelectronics":   "STMPA.PA",
+    "CRH":                  "CRH.L",
+    "Koninklijke Philips":  "PHIA.AS",
+}
+
+# ETFs UCITS — Selección curada accesible desde España (via DeGiro, IB, Trade Republic)
+# Nota: tickers en Euronext Amsterdam (.AS), Xetra (.DE) o Londres (.L)
+ETFS_UCITS = {
+    "🌐 Renta Variable Global": {
+        "iShares Core MSCI World (Acc) — IWDA":    "IWDA.AS",
+        "Vanguard FTSE All-World (Dist) — VWRL":   "VWRL.AS",
+        "Vanguard FTSE All-World (Acc) — VWCE":    "VWCE.DE",
+        "Xtrackers MSCI World (Acc) — XDWD":       "XDWD.DE",
+        "Amundi Prime All Country World — PRNA":   "PRNA.PA",
+        "iShares MSCI ACWI (Acc) — IUSQ":          "IUSQ.DE",
+    },
+    "🇺🇸 Renta Variable EEUU": {
+        "iShares Core S&P 500 (Acc) — SXR8":       "SXR8.DE",
+        "Vanguard S&P 500 (Dist) — VUSA":          "VUSA.AS",
+        "iShares S&P 500 (Dist) — IUSA":           "IUSA.AS",
+        "Invesco S&P 500 (Acc) — SPYL":            "SPYL.DE",
+        "iShares Nasdaq 100 (Acc) — CNDX":         "CNDX.L",
+        "Xtrackers Nasdaq 100 (Acc) — XNAS":       "XNAS.DE",
+    },
+    "🇪🇺 Renta Variable Europa": {
+        "iShares Core Eurostoxx 50 (Acc) — CS51":  "CS51.DE",
+        "iShares STOXX Europe 600 (Acc) — EXSA":   "EXSA.DE",
+        "Vanguard FTSE Dev. Europe (Acc) — VEUR":  "VEUR.AS",
+        "SPDR MSCI Europe (Acc) — SPEU":           "SPEU.DE",
+        "Amundi MSCI Europe (Acc) — CE9":          "CE9.PA",
+    },
+    "🌏 Renta Variable Emergentes": {
+        "iShares Core MSCI EM IMI (Acc) — IS3N":   "IS3N.DE",
+        "Vanguard FTSE Emerging Mkts (Acc) — VFEM":"VFEM.AS",
+        "Amundi MSCI EM (Acc) — PAEM":             "PAEM.PA",
+        "iShares MSCI China (Acc) — CNYA":         "CNYA.L",
+    },
+    "📉 Renta Fija": {
+        "iShares Core Euro Govt Bond (Acc) — IEGA":"IEGA.AS",
+        "iShares € Corp Bond (Acc) — IEAC":        "IEAC.AS",
+        "Vanguard EUR Eurozone Govt Bond — VETY":  "VETY.AS",
+        "Amundi € Aggregate Bond (Acc) — EAGA":    "EAGA.PA",
+        "iShares $ Treasury 7-10y EUR Hdg — IBTM": "IBTM.L",
+        "iShares Global HY Bond EUR Hdg — GHYS":   "GHYS.L",
+    },
+    "🔬 Sectoriales / Temáticos": {
+        "iShares Global Clean Energy — IQQH":      "IQQH.DE",
+        "iShares Automation & Robotics — 2B76":    "2B76.DE",
+        "Global X Semiconductor — SEMI":           "SEMI.L",
+        "iShares Healthcare Innovation — HEAL":    "HEAL.L",
+        "iShares MSCI World ESG Enhanced — IESW":  "IESW.DE",
+        "Invesco EQQQ Nasdaq-100 (Dist) — EQQQ":  "EQQQ.L",
+        "WisdomTree Battery Solutions — WBAT":     "WBAT.L",
+        "iShares Physical Gold ETC — IGLN":        "IGLN.L",
+    },
+}
+
+# Fallbacks estáticos para índices vía Wikipedia (por si falla la carga dinámica)
+_FALLBACK_SP500 = {"Apple": "AAPL", "Microsoft": "MSFT", "NVIDIA": "NVDA",
+                   "Amazon": "AMZN", "Alphabet A": "GOOGL", "Meta": "META",
+                   "Tesla": "TSLA", "JPMorgan Chase": "JPM", "Berkshire B": "BRK-B"}
+_FALLBACK_NDX   = {"Apple": "AAPL", "Microsoft": "MSFT", "NVIDIA": "NVDA",
+                   "Amazon": "AMZN", "Meta": "META", "Tesla": "TSLA",
+                   "Alphabet A": "GOOGL", "Broadcom": "AVGO", "Netflix": "NFLX"}
+_FALLBACK_DOW   = {"Apple": "AAPL", "Microsoft": "MSFT", "UnitedHealth": "UNH",
+                   "Goldman Sachs": "GS", "Home Depot": "HD", "Boeing": "BA",
+                   "American Express": "AXP", "McDonald's": "MCD", "JPMorgan": "JPM"}
+_FALLBACK_DAX   = {"SAP": "SAP.DE", "Siemens": "SIE.DE", "Allianz": "ALV.DE",
+                   "Deutsche Telekom": "DTE.DE", "BMW": "BMW.DE", "BASF": "BAS.DE",
+                   "Bayer": "BAYN.DE", "Mercedes-Benz": "MBG.DE", "Infineon": "IFX.DE",
+                   "Adidas": "ADS.DE", "Münchener Rück": "MUV2.DE", "Volkswagen": "VOW3.DE"}
+_FALLBACK_CAC   = {"LVMH": "MC.PA", "L'Oréal": "OR.PA", "TotalEnergies": "TTE.PA",
+                   "Hermès": "RMS.PA", "Airbus": "AIR.PA", "Sanofi": "SAN.PA",
+                   "Schneider Electric": "SU.PA", "Air Liquide": "AI.PA", "Vinci": "DG.PA"}
+_FALLBACK_FTSE  = {"AstraZeneca": "AZN.L", "Shell": "SHEL.L", "HSBC": "HSBA.L",
+                   "Unilever": "ULVR.L", "BP": "BP.L", "Rio Tinto": "RIO.L",
+                   "GSK": "GSK.L", "Diageo": "DGE.L", "BAE Systems": "BA.L",
+                   "Rolls-Royce": "RR.L", "Vodafone": "VOD.L", "Barclays": "BARC.L"}
+
+
+@st.cache_data(ttl=86400)  # 24 horas — composición de índices cambia poco
+def _cargar_wikipedia_index(url: str, sufijo: str = "") -> dict:
+    """Extrae {nombre: ticker} de la tabla más relevante de una página Wikipedia."""
+    try:
+        tablas = pd.read_html(url)
+        for t in tablas:
+            cols = [c for c in t.columns if isinstance(c, str)]
+            # Detectar columna de ticker y de nombre
+            t_col = next((c for c in cols if any(k in c.lower()
+                          for k in ["ticker", "symbol", "code", "abbreviation"])), None)
+            n_col = next((c for c in cols if any(k in c.lower()
+                          for k in ["company", "security", "name", "stock"])), None)
+            if t_col and n_col:
+                df = t[[n_col, t_col]].dropna()
+                result = {}
+                for _, row in df.iterrows():
+                    nombre = str(row[n_col]).strip()
+                    ticker = str(row[t_col]).strip()
+                    if ":" in ticker:           # formato EXCHANGE:TICKER
+                        ticker = ticker.split(":")[-1]
+                    if sufijo and "." not in ticker:
+                        ticker = ticker + sufijo
+                    result[nombre] = ticker
+                if len(result) > 5:
+                    return dict(sorted(result.items()))
+    except Exception:
+        pass
+    return {}
+
+
+def obtener_tickers_mercado(mercado: str) -> dict:
+    """Retorna {nombre: ticker_yfinance} para el mercado seleccionado."""
+    if mercado == "🇪🇸 IBEX 35":
+        return IBEX_35
+    if mercado == "🌍 Eurostoxx 50":
+        return EUROSTOXX_50
+    if mercado == "🇺🇸 S&P 500":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
+        return datos or _FALLBACK_SP500
+    if mercado == "🇺🇸 Nasdaq 100":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/Nasdaq-100")
+        return datos or _FALLBACK_NDX
+    if mercado == "🇺🇸 Dow Jones 30":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average")
+        return datos or _FALLBACK_DOW
+    if mercado == "🇩🇪 DAX 40":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/DAX", sufijo=".DE")
+        return datos or _FALLBACK_DAX
+    if mercado == "🇫🇷 CAC 40":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/CAC_40", sufijo=".PA")
+        return datos or _FALLBACK_CAC
+    if mercado == "🇬🇧 FTSE 100":
+        datos = _cargar_wikipedia_index(
+            "https://en.wikipedia.org/wiki/FTSE_100_Index", sufijo=".L")
+        return datos or _FALLBACK_FTSE
+    return {}
+
+
+# =============================================================================
 # CONEXIÓN NEON (PostgreSQL) — via psycopg2
 # =============================================================================
 
@@ -1440,15 +1674,21 @@ def pantalla_analisis():
 
     # ---- TAB ANÁLISIS ----
     with tab_analisis:
-        # Controles superiores
-        col1, col2, col3, col4 = st.columns([2.5, 2, 1.5, 1])
+        # ── Fila 1: Mercado / Sistema / Tolerancia / Analizar ──────────────
+        col1, col2, col3, col4 = st.columns([2.5, 2, 1.8, 1])
         with col1:
-            ticker_input = st.text_input(
-                "🔎 Ticker", value="NTGY.MC", placeholder="NTGY.MC, AAPL, SPY...",
-                help="Símbolo del activo en Yahoo Finance. Ejemplos: NTGY.MC (Naturgy, bolsa española), "
-                     "IBE.MC (Iberdrola), AAPL (Apple en Nasdaq), SPY (ETF S&P 500). "
-                     "Sufijos: .MC = Madrid · .DE = Xetra · .PA = París · .L = Londres"
-            ).upper().strip()
+            mercado_sel = st.selectbox(
+                "🗂️ Índice / Mercado",
+                ["✏️ Escribir manualmente",
+                 "🇪🇸 IBEX 35", "🌍 Eurostoxx 50",
+                 "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+                 "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+                 "📊 ETFs UCITS"],
+                key="mercado_sel",
+                help="Selecciona un índice para elegir el valor de una lista desplegable, "
+                     "o 'Escribir manualmente' para introducir cualquier ticker de Yahoo Finance. "
+                     "Sufijos de referencia: .MC (Madrid) · .DE (Xetra) · .PA (París) · .L (Londres) · .AS (Ámsterdam)"
+            )
         with col2:
             sistema_sel = st.selectbox(
                 "📐 Sistema Pivot", list(SISTEMAS_PIVOT.keys()),
@@ -1461,7 +1701,7 @@ def pantalla_analisis():
             )
         with col3:
             tolerancia = st.number_input(
-                "⚡ Tolerancia confluencia (€/$)", value=0.20, step=0.05,
+                "⚡ Tolerancia (€/$)", value=0.20, step=0.05,
                 min_value=0.01, max_value=2.0, format="%.2f",
                 help="Distancia máxima en precio para considerar que dos niveles de distintos timeframes "
                      "confluyen en la misma zona. Un valor más bajo (ej. 0.05€) detecta solo confluencias "
@@ -1470,6 +1710,51 @@ def pantalla_analisis():
             )
         with col4:
             analizar = st.button("🔍 Analizar", type="primary")
+
+        # ── Fila 2: Ticker (depende del mercado seleccionado) ──────────────
+        if mercado_sel == "✏️ Escribir manualmente":
+            ticker_input = st.text_input(
+                "🔎 Ticker", value="NTGY.MC", placeholder="NTGY.MC, AAPL, SXR8.DE...",
+                help="Símbolo del activo en Yahoo Finance. Ejemplos: NTGY.MC (Naturgy), "
+                     "IBE.MC (Iberdrola), AAPL (Apple), SXR8.DE (ETF S&P 500 iShares). "
+                     "Sufijos: .MC = Madrid · .DE = Xetra · .PA = París · .L = Londres · .AS = Ámsterdam"
+            ).upper().strip()
+
+        elif mercado_sel == "📊 ETFs UCITS":
+            col_cat, col_etf = st.columns([1, 2])
+            with col_cat:
+                cat_etf = st.selectbox(
+                    "📂 Categoría ETF", list(ETFS_UCITS.keys()),
+                    help="Los ETFs UCITS son los únicos legalmente accesibles al minorista español "
+                         "bajo la regulación PRIIPs/MiFID II. Los ETFs estadounidenses (SPY, QQQ...) "
+                         "no están disponibles para residentes en España."
+                )
+            with col_etf:
+                etfs_cat = ETFS_UCITS[cat_etf]
+                etf_nombre = st.selectbox(
+                    "🔎 ETF", list(etfs_cat.keys()),
+                    help="Ticker en bolsa europea. .AS = Euronext Ámsterdam · "
+                         ".DE = Xetra · .L = Londres. Elige el disponible en tu broker."
+                )
+                ticker_input = etfs_cat[etf_nombre]
+            st.caption(f"Ticker seleccionado: `{ticker_input}` · Pulsa **Analizar** para consultar")
+
+        else:
+            # Índices bursátiles — carga dinámica Wikipedia + fallback estático
+            with st.spinner(f"Cargando valores de {mercado_sel}..."):
+                tickers_mercado = obtener_tickers_mercado(mercado_sel)
+            if tickers_mercado:
+                nombre_sel = st.selectbox(
+                    f"🔎 Valor — {mercado_sel}",
+                    list(tickers_mercado.keys()),
+                    help=f"Valores del {mercado_sel}. El ticker de Yahoo Finance se asigna automáticamente. "
+                         "Si el análisis falla, el ticker puede haber cambiado de símbolo — usa 'Escribir manualmente'."
+                )
+                ticker_input = tickers_mercado[nombre_sel]
+                st.caption(f"Ticker: `{ticker_input}` · Pulsa **Analizar** para consultar")
+            else:
+                st.warning(f"No se pudieron cargar los tickers de {mercado_sel}. Introduce el ticker manualmente.")
+                ticker_input = st.text_input("🔎 Ticker", value="", placeholder="Ej: AAPL, ITX.MC").upper().strip()
 
         # Upload de imagen
         img_upload = st.file_uploader("📷 Adjuntar captura (opcional)", type=["png","jpg","jpeg"],
