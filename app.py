@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, date
 import bcrypt
 import io
 import traceback
-from PIL import Image
 
 # PDF generation
 from reportlab.lib.pagesizes import A4
@@ -37,14 +36,9 @@ except ImportError:
 # CONFIGURACIÓN DE PÁGINA
 # =============================================================================
 
-try:
-    _favicon = Image.open("favicon.png")
-except Exception:
-    _favicon = "📊"
-
 st.set_page_config(
     page_title="PivotAnalyzer",
-    page_icon=_favicon,
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
