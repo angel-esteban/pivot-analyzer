@@ -1911,12 +1911,23 @@ def pantalla_analisis():
                 unsafe_allow_html=True
             )
         with col_factores:
-            fila1 = st.columns(3)
-            fila2 = st.columns(3)
-            for i, (factor, descripcion, _) in enumerate(factores_sem):
-                destino = fila1 if i < 3 else fila2
-                with destino[i % 3]:
-                    st.metric(label=factor, value=descripcion)
+            # Tarjetas HTML: evita truncado de st.metric en valores largos
+            tarjetas_html = ""
+            for factor, descripcion, _ in factores_sem:
+                tarjetas_html += (
+                    f'<div style="background:var(--secondary-background-color,#f0f2f6);'
+                    f'border-radius:0.5rem;padding:0.55rem 0.75rem;flex:1;min-width:0">'
+                    f'<div style="font-size:0.75rem;color:var(--text-color,#888);'
+                    f'margin-bottom:0.25rem;font-weight:500">{factor}</div>'
+                    f'<div style="font-size:0.95rem;font-weight:700;'
+                    f'word-break:break-word;white-space:normal">{descripcion}</div>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">'
+                f'{tarjetas_html}</div>',
+                unsafe_allow_html=True
+            )
 
         st.divider()
 
