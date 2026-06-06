@@ -1838,8 +1838,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Paragraph(f"Pivot Points — Sistema {sistema}", S_H2))
 
     NIV = ["R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
-    PW  = 100   # ancho por columna pivot (pt)  — 3×100 + 210 = 510 pt = 18 cm
-    CW  = 210   # ancho columna confluencias (pt)
+    PW  = 90    # ancho por columna pivot (pt)  — 4×90 + 150 = 510 pt = 18 cm
+    CW  = 150   # ancho columna confluencias (pt)
 
     def _mini_pivot(tf, datos_tf):
         """Retorna lista de Flowables para una celda de timeframe."""
@@ -1894,11 +1894,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             ]
         return hdr + items
 
-    # Fila 1: primeros 3 timeframes (Diario/Semanal/Trimestral) + confluencias
-    TF1 = TIMEFRAMES[:3]
-    TF2 = TIMEFRAMES[3:]
-    row1 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TF1] + [_conf_cell()]
-    t1 = Table([row1], colWidths=[PW]*3 + [CW])
+    # Fila única: los 4 timeframes en paralelo + confluencias  (4×90 + 150 = 510pt)
+    n_tf = len(TIMEFRAMES)
+    row1 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TIMEFRAMES] + [_conf_cell()]
+    t1 = Table([row1], colWidths=[PW]*n_tf + [CW])
     t1.setStyle(TableStyle([
         ("VALIGN",        (0,0),(-1,-1), "TOP"),
         ("LEFTPADDING",   (0,0),(-1,-1), 4),
@@ -1906,30 +1905,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("TOPPADDING",    (0,0),(-1,-1), 4),
         ("BOTTOMPADDING", (0,0),(-1,-1), 4),
         ("BOX",           (0,0),(-1,-1), 0.5, GB),
-        ("LINEBEFORE",    (1,0),(3,0), 0.3, GB),
-        ("LINEAFTER",     (2,0),(2,0), 1.2, CM),   # separador antes de confluencias
-        ("BACKGROUND",    (3,0),(3,0), ACL),        # fondo amarillo confluencias
+        ("LINEBEFORE",    (1,0),(n_tf-1,0), 0.3, GB),
+        ("LINEAFTER",     (n_tf-1,0),(n_tf-1,0), 1.2, CM),  # separador antes confluencias
+        ("BACKGROUND",    (n_tf,0),(n_tf,0), ACL),           # fondo confluencias
     ]))
     historia.append(t1)
-
-    # Fila 2: timeframes restantes (Anual) + espacio en blanco
-    if TF2:
-        historia.append(Spacer(1, 0.2*cm))
-        row2 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TF2]
-        n2 = len(row2)
-        row2.append([Paragraph("", S_NRM)])  # columna espaciadora
-        cw2 = [PW] * n2 + [510 - PW * n2]   # siempre suma 510pt = ancho A4 – márgenes
-        t2 = Table([row2], colWidths=cw2)
-        t2.setStyle(TableStyle([
-            ("VALIGN",       (0,0),(-1,-1), "TOP"),
-            ("LEFTPADDING",  (0,0),(-1,-1), 4),
-            ("RIGHTPADDING", (0,0),(-1,-1), 4),
-            ("TOPPADDING",   (0,0),(-1,-1), 4),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
-            ("BOX",          (0,0),(n2-1,-1), 0.5, GB),
-            ("LINEBEFORE",   (1,0),(n2-1,0), 0.3, GB),
-        ]))
-        historia.append(t2)
     historia.append(Spacer(1, 0.3*cm))
 
     # ── INDICADORES + VOLUMEN (dos columnas) ──────────────────────────────
