@@ -1979,7 +1979,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     ]))
     historia.append(iv_t)
 
-    # ── FUNDAMENTALES (4 columnas: etiqueta-valor-etiqueta-valor) ─────────
+    # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
     if fundamentales:
         fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
         if fund_items:
@@ -1987,20 +1987,20 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             fund_rows, buf_r = [], []
             for k, v in fund_items:
                 buf_r += [Paragraph(k, _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
-                          Paragraph(str(v), _p(fontSize=7.5, fontName="Helvetica-Bold"))]
-                if len(buf_r) == 4:
+                          Paragraph(str(v), _p(fontSize=7, fontName="Helvetica-Bold"))]
+                if len(buf_r) == 6:          # 3 pares por fila
                     fund_rows.append(buf_r); buf_r = []
             if buf_r:
-                while len(buf_r) < 4: buf_r.append(Paragraph("", S_NRM))
+                while len(buf_r) < 6: buf_r.append(Paragraph("", S_NRM))
                 fund_rows.append(buf_r)
-            t_fund = Table(fund_rows, colWidths=[3.2*cm, 5.8*cm]*2)
+            # 3 pares × (2.2 cm label + 3.8 cm value) = 18 cm
+            t_fund = Table(fund_rows, colWidths=[2.2*cm, 3.8*cm]*3)
             t_fund.setStyle(TableStyle([
                 ("ROWBACKGROUNDS",(0,0),(-1,-1), [BL, GF]),
                 ("GRID",         (0,0),(-1,-1), 0.2, GB),
                 ("TOPPADDING",   (0,0),(-1,-1), 2),
                 ("BOTTOMPADDING",(0,0),(-1,-1), 2),
                 ("LEFTPADDING",  (0,0),(-1,-1), 4),
-                ("FONTSIZE",     (0,0),(-1,-1), 7.5),
             ]))
             historia.append(t_fund)
 
