@@ -1801,8 +1801,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     fac_data, row_buf = [], []
     for i, (fac, desc, _) in enumerate(factores_semaforo):
         inner = Table(
-            [[Paragraph(_strip(fac),  _p(fontSize=5.5, textColor=colors.HexColor("#6b7280")))],
-             [Paragraph(_strip(desc), _p(fontSize=7,   fontName="Helvetica-Bold"))]],
+            [[Paragraph(_strip(fac),  _p(fontSize=7.5, textColor=colors.HexColor("#6b7280")))],
+             [Paragraph(_strip(desc), _p(fontSize=9,   fontName="Helvetica-Bold"))]],
             colWidths=[4.9*cm]
         )
         inner.setStyle(TableStyle([
