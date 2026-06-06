@@ -1678,7 +1678,17 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     SC = {"verde": VE, "amarillo": AM, "rojo": RO}.get(semaforo, colors.grey)
     ST = {"verde": "VERDE", "amarillo": "AMARILLO", "rojo": "ROJO"}.get(semaforo, "—")
-    SE = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
+    # ● (U+25CF) con color — sustituye emoji (Helvetica no soporta Unicode > U+00FF)
+    sem_hex = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}.get(semaforo, "#94a3b8")
+    SEM_DOT = f'<font color="{sem_hex}">&#9679;</font>'
+
+    # Elimina emoji fuera de cp1252 (✅⚠️❌🟢🔴…) preservando texto en español
+    def _strip(s: str) -> str:
+        replacements = [("✅", "+"), ("⚠️", "~"), ("❌", "-"),
+                        ("🟢", ""), ("🟡", ""), ("🔴", ""), ("⚪", "")]
+        for em, rep in replacements:
+            s = s.replace(em, rep)
+        return s.strip()
 
     # ── Estilos (helper con contador para nombres únicos) ─────────────────
     _SS = getSampleStyleSheet()
@@ -1689,9 +1699,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     S_TICK = _p(fontName="Helvetica-Bold", fontSize=18, textColor=BL)
     S_EMP  = _p(fontName="Helvetica",      fontSize=8,  textColor=BL)
-    S_PRE  = _p(fontName="Helvetica-Bold", fontSize=28, textColor=BL)
-    S_CAM  = _p(fontName="Helvetica-Bold", fontSize=10, textColor=BL)
-    S_H52  = _p(fontName="Helvetica",      fontSize=7.5,textColor=BL)
+    S_PRE  = _p(fontName="Helvetica-Bold", fontSize=28, textColor=BL, alignment=TA_RIGHT)
+    S_CAM  = _p(fontName="Helvetica-Bold", fontSize=10, textColor=BL, alignment=TA_RIGHT)
+    S_H52  = _p(fontName="Helvetica",      fontSize=7.5,textColor=BL, alignment=TA_RIGHT)
     S_CHIP = _p(fontName="Helvetica",      fontSize=7,  textColor=colors.HexColor("#475569"))
     S_H2   = _p(fontName="Helvetica-Bold", fontSize=9,  textColor=CA, spaceBefore=6, spaceAfter=3)
     S_MH   = _p(fontName="Helvetica-Bold", fontSize=6.5,textColor=colors.HexColor("#374151"), spaceAfter=2)
@@ -1743,7 +1753,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     # ── SEMÁFORO ──────────────────────────────────────────────────────────
     historia.append(Paragraph("Semáforo Global", S_H2))
     badge_t = Table(
-        [[Paragraph(SE, _p(fontName="Helvetica-Bold", fontSize=18, alignment=TA_CENTER))],
+        [[Paragraph(SEM_DOT, _p(fontName="Helvetica-Bold", fontSize=24, alignment=TA_CENTER))],
          [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
          [Paragraph(f"{pct_semaforo:.0f}%", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))]],
         colWidths=[2.8*cm]
@@ -1759,8 +1769,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     fac_data, row_buf = [], []
     for i, (fac, desc, _) in enumerate(factores_semaforo):
         inner = Table(
-            [[Paragraph(fac,  _p(fontSize=5.5, textColor=colors.HexColor("#6b7280")))],
-             [Paragraph(desc, _p(fontSize=7,   fontName="Helvetica-Bold"))]],
+            [[Paragraph(_strip(fac),  _p(fontSize=5.5, textColor=colors.HexColor("#6b7280")))],
+             [Paragraph(_strip(desc), _p(fontSize=7,   fontName="Helvetica-Bold"))]],
             colWidths=[4.9*cm]
         )
         inner.setStyle(TableStyle([
@@ -1875,9 +1885,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Spacer(1, 0.2*cm))
         row2 = [_mini_pivot(tf, resultados_pivots.get(tf)) for tf in TF2]
         n2 = len(row2)
-        while len(row2) < 2: row2.append([Paragraph("", S_NRM)])
-        row2.append([Paragraph("", S_NRM)])  # columna vacía derecha
-        cw2 = [PW]*2 + [PW*2 + CW]
+        row2.append([Paragraph("", S_NRM)])  # columna espaciadora
+        cw2 = [PW] * n2 + [510 - PW * n2]   # siempre suma 510pt = ancho A4 – márgenes
         t2 = Table([row2], colWidths=cw2)
         t2.setStyle(TableStyle([
             ("VALIGN",       (0,0),(-1,-1), "TOP"),
