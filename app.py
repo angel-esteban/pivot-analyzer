@@ -1715,26 +1715,31 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     # ── CABECERA ──────────────────────────────────────────────────────────
     h52_str = f"{l52:.2f} – {h52:.2f}" if h52 and l52 else "—"
-    # Estilos exclusivos para la banda de datos (fila inferior de la cabecera)
+    # Estilos exclusivos para la cabecera
     S_DLBL = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#93c5fd"))
-    S_DVAL = _p(fontName="Helvetica-Bold", fontSize=13, textColor=BL)  # igual para los 3
-    S_TINF = _p(fontName="Helvetica",      fontSize=7,  textColor=colors.HexColor("#93c5fd"))
+    S_DVAL = _p(fontName="Helvetica-Bold", fontSize=13, textColor=BL)
+    S_NOM  = _p(fontName="Helvetica-Bold", fontSize=12, textColor=BL, alignment=TA_CENTER)
+    S_TIP  = _p(fontName="Helvetica",      fontSize=9,  textColor=colors.HexColor("#93c5fd"),
+                alignment=TA_RIGHT)
 
-    # Fila 1: ticker + empresa en la misma línea (XML inline), tipo · moneda
+    # Fila superior: tabla interna 3 cols → ticker | empresa centrada | tipo derecha
     _nom = (nombre or ticker).replace("&", "&amp;")
     _tkr = ticker.upper().replace("&", "&amp;")
-    S_HDR_LINE = _p(fontName="Helvetica-Bold", fontSize=18, textColor=BL, leading=22)
-    header_line = Paragraph(
-        f'<font name="Helvetica-Bold" size="18">{_tkr}</font>'
-        f'<font name="Helvetica" size="9" color="#93c5fd">   {_nom}</font>',
-        S_HDR_LINE
+    _tip = tipo_activo.replace("&", "&amp;")
+    # ancho disponible: 18cm - padding izq/der (10pt+10pt ≈ 0.71cm) = 17.29cm
+    info_inner = Table(
+        [[Paragraph(_tkr, S_TICK), Paragraph(_nom, S_NOM), Paragraph(_tip, S_TIP)]],
+        colWidths=[4.5*cm, 8.29*cm, 4.5*cm]
     )
-    info_cell = [
-        header_line,
-        Spacer(1, 3),
-        Paragraph(f"{tipo_activo}  ·  {currency}", S_TINF),
-    ]
-    precio_cell = [Paragraph("PRECIO", S_DLBL),
+    info_inner.setStyle(TableStyle([
+        ("LEFTPADDING",   (0,0),(-1,-1), 0),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+    ]))
+
+    precio_cell = [Paragraph(f"PRECIO  {currency}", S_DLBL),
                    Paragraph(f"{precio:.4f}", S_DVAL)]
     cambio_cell = [Paragraph("VARIACIÓN", S_DLBL),
                    Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_DVAL)]
@@ -1742,7 +1747,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                    Paragraph(h52_str, S_DVAL)]
 
     cab_t = Table(
-        [[info_cell, "", ""],
+        [[info_inner, "", ""],
          [precio_cell, cambio_cell, h52_cell]],
         colWidths=[6*cm, 6*cm, 6*cm]
     )
