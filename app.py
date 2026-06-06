@@ -252,15 +252,28 @@ def obtener_datos(ticker: str):
 
 @st.cache_data(ttl=3600)  # 1 hora — tipos e inflación cambian poco
 def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
-    """Último valor de una serie del BCE Statistical Data Warehouse (JSON)."""
+    """Último valor de una serie del BCE Statistical Data Warehouse (JSON).
+    La API puede devolver dos estructuras distintas según la serie:
+      - dataSets[0]["series"]["0:0:..."]["observations"]   ← formato habitual
+      - dataSets[0]["observations"]                        ← formato compacto
+    """
     url = f"https://data-api.ecb.europa.eu/service/data/{flow_ref}/{series_key}"
     try:
-        r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            obs = data["dataSets"][0]["observations"]
-            val = list(obs.values())[0][0]
-            return float(val) if val is not None else None
+        r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=15)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        ds = data["dataSets"][0]
+        # Intenta estructura con "series" primero (formato más común)
+        if "series" in ds:
+            first_series = list(ds["series"].values())[0]
+            obs = first_series["observations"]
+        else:
+            obs = ds["observations"]
+        # Toma la última observación disponible
+        last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
+        val = obs[last_key][0]
+        return float(val) if val is not None else None
     except Exception:
         pass
     return None
