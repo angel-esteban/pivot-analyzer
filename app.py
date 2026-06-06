@@ -22,8 +22,9 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-# Supabase via httpx directo (compatible con todos los formatos de API key)
-import httpx
+# Neon (PostgreSQL) via psycopg2
+import psycopg2
+import psycopg2.extras
 
 # Technical indicators — pandas_ta con fallback manual
 try:
@@ -69,50 +70,62 @@ st.markdown("""
 
 
 # =============================================================================
-# CONEXIÓN SUPABASE — via httpx directo
+# CONEXIÓN NEON (PostgreSQL) — via psycopg2
 # =============================================================================
 
-def get_supabase_headers():
-    key = st.secrets["SUPABASE_KEY"]
-    return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=representation",
-    }
+def get_db_connection():
+    return psycopg2.connect(st.secrets["DATABASE_URL"])
 
-def supabase_select(tabla: str, filtros: dict = None):
-    url = st.secrets["SUPABASE_URL"]
-    endpoint = f"{url}/rest/v1/{tabla}"
-    params = {"select": "*"}
-    if filtros:
-        params.update(filtros)
-    r = httpx.get(endpoint, headers=get_supabase_headers(), params=params)
-    r.raise_for_status()
-    return r.json()
+def db_select(tabla: str, filtros: dict = None):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            query = f"SELECT * FROM {tabla}"
+            params = []
+            if filtros:
+                conds = [f"{col} = %s" for col in filtros]
+                query += " WHERE " + " AND ".join(conds)
+                params = list(filtros.values())
+            cur.execute(query, params)
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
 
-def supabase_insert(tabla: str, datos: dict):
-    url = st.secrets["SUPABASE_URL"]
-    endpoint = f"{url}/rest/v1/{tabla}"
-    r = httpx.post(endpoint, headers=get_supabase_headers(), json=datos)
-    r.raise_for_status()
-    return r.json()
+def db_insert(tabla: str, datos: dict):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cols = ", ".join(datos.keys())
+            vals = ", ".join(["%s"] * len(datos))
+            query = f"INSERT INTO {tabla} ({cols}) VALUES ({vals}) RETURNING *"
+            cur.execute(query, list(datos.values()))
+            conn.commit()
+            return [dict(cur.fetchone())]
+    finally:
+        conn.close()
 
-def supabase_update(tabla: str, datos: dict, filtro_col: str, filtro_val):
-    url = st.secrets["SUPABASE_URL"]
-    endpoint = f"{url}/rest/v1/{tabla}"
-    params = {filtro_col: f"eq.{filtro_val}"}
-    r = httpx.patch(endpoint, headers=get_supabase_headers(), params=params, json=datos)
-    r.raise_for_status()
-    return r.json()
+def db_update(tabla: str, datos: dict, filtro_col: str, filtro_val):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sets = ", ".join([f"{k} = %s" for k in datos])
+            query = f"UPDATE {tabla} SET {sets} WHERE {filtro_col} = %s RETURNING *"
+            cur.execute(query, list(datos.values()) + [filtro_val])
+            conn.commit()
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
 
-def supabase_delete(tabla: str, filtro_col: str, filtro_val):
-    url = st.secrets["SUPABASE_URL"]
-    endpoint = f"{url}/rest/v1/{tabla}"
-    params = {filtro_col: f"eq.{filtro_val}"}
-    r = httpx.delete(endpoint, headers=get_supabase_headers(), params=params)
-    r.raise_for_status()
-    return r.json()
+def db_delete(tabla: str, filtro_col: str, filtro_val):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            query = f"DELETE FROM {tabla} WHERE {filtro_col} = %s RETURNING *"
+            cur.execute(query, [filtro_val])
+            conn.commit()
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 # =============================================================================
@@ -133,12 +146,12 @@ def hash_password(password: str) -> str:
 def login_usuario(username: str, password: str):
     """Retorna dict del usuario si login correcto, None si falla."""
     try:
-        datos = supabase_select("usuarios", {"username": f"eq.{username}", "activo": "eq.true"})
+        datos = db_select("usuarios", {"username": username, "activo": True})
         if not datos:
             return None
         user = datos[0]
         if verificar_password(password, user["password_hash"]):
-            supabase_update("usuarios", {"ultimo_acceso": datetime.utcnow().isoformat()}, "id", user["id"])
+            db_update("usuarios", {"ultimo_acceso": datetime.now().isoformat()}, "id", user["id"])
             return user
         return None
     except Exception as e:
@@ -1005,7 +1018,7 @@ def panel_admin():
     st.markdown("## ⚙️ Gestión de Usuarios")
 
     try:
-        usuarios = supabase_select("usuarios")
+        usuarios = db_select("usuarios")
         usuarios.sort(key=lambda x: x.get("creado_en", ""))
     except Exception as e:
         st.error(f"Error al obtener usuarios: {e}")
@@ -1026,16 +1039,16 @@ def panel_admin():
             if u.get("rol") != "superadmin":
                 if u.get("activo"):
                     if st.button("Desactivar", key=f"des_{u['id']}"):
-                        supabase_update("usuarios", {"activo": False}, "id", u["id"])
+                        db_update("usuarios", {"activo": False}, "id", u["id"])
                         st.rerun()
                 else:
                     if st.button("Activar", key=f"act_{u['id']}"):
-                        supabase_update("usuarios", {"activo": True}, "id", u["id"])
+                        db_update("usuarios", {"activo": True}, "id", u["id"])
                         st.rerun()
         with col5:
             if u.get("rol") != "superadmin":
                 if st.button("🗑️", key=f"del_{u['id']}", help="Eliminar usuario"):
-                    supabase_delete("usuarios", "id", u["id"])
+                    db_delete("usuarios", "id", u["id"])
                     st.rerun()
 
     st.divider()
@@ -1055,7 +1068,7 @@ def panel_admin():
             if nuevo_user and nuevo_pass and nuevo_nombre:
                 try:
                     ph = hash_password(nuevo_pass)
-                    supabase_insert("usuarios", {
+                    db_insert("usuarios", {
                         "username": nuevo_user,
                         "nombre": nuevo_nombre,
                         "password_hash": ph,
@@ -1083,7 +1096,7 @@ def panel_admin():
             if nueva_pass and nueva_pass == confirmar:
                 try:
                     ph = hash_password(nueva_pass)
-                    supabase_update("usuarios", {"password_hash": ph}, "username", sel_user)
+                    db_update("usuarios", {"password_hash": ph}, "username", sel_user)
                     st.success(f"✅ Contraseña de '{sel_user}' actualizada.")
                 except Exception as e:
                     st.error(f"Error: {e}")
