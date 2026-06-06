@@ -1348,6 +1348,306 @@ def detectar_tipo_activo(info: dict) -> str:
 
 
 # =============================================================================
+# GENERACIÓN DE INFORME HTML (multi-columna)
+# =============================================================================
+
+def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: float,
+                          cambio: float, cambio_pct: float, h52, l52, currency: str,
+                          sistema: str, resultados_pivots: dict, confluencias: list,
+                          semaforo: str, pct_semaforo: float, factores_semaforo: list,
+                          rsi_val, macd_val, macd_señal, macd_hist_val,
+                          sar_val: float, sar_tend: str, pct_b: float,
+                          medias: dict, vol_data: dict, fundamentales: dict,
+                          tolerancia: float = 0.20) -> str:
+    """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
+
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    sem_colors = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}
+    sem_color  = sem_colors.get(semaforo, "#94a3b8")
+    emoji_sem  = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
+    var_color  = "#22c55e" if cambio_pct >= 0 else "#ef4444"
+    h52_str = f"{h52:.2f}" if h52 else "—"
+    l52_str = f"{l52:.2f}" if l52 else "—"
+
+    # CSS como string plano (los {} son CSS, no f-string)
+    css = """
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px; color:#1e293b; background:#f1f5f9; }
+.header { background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%); color:white; padding:24px 32px; }
+.ticker-tag { font-size:13px; opacity:.75; margin-bottom:6px; letter-spacing:1px; text-transform:uppercase; }
+.precio-row { display:flex; align-items:baseline; gap:18px; margin-bottom:10px; }
+.precio-val { font-size:44px; font-weight:800; letter-spacing:-2px; }
+.variacion  { font-size:20px; font-weight:600; }
+.empresa    { font-size:14px; opacity:.9; margin-bottom:12px; }
+.chips { display:flex; gap:10px; flex-wrap:wrap; }
+.chip  { background:rgba(255,255,255,.18); border-radius:20px; padding:3px 12px; font-size:12px; }
+.body  { padding:20px 32px 32px; }
+h2 { font-size:12px; font-weight:700; color:#1e3a5f; text-transform:uppercase;
+     letter-spacing:.8px; margin-bottom:12px; padding-bottom:5px; border-bottom:2px solid #2563eb; }
+.card { background:white; border-radius:10px; padding:18px 20px; margin-bottom:14px;
+        box-shadow:0 1px 4px rgba(0,0,0,.07); }
+.two-col  { display:grid; grid-template-columns:3fr 2fr; gap:20px; }
+.sem-row  { display:flex; gap:20px; align-items:flex-start; }
+.sem-badge { min-width:88px; text-align:center; border:3px solid; border-radius:12px; padding:12px 8px; }
+.sem-emoji { font-size:30px; line-height:1; }
+.sem-label { font-size:15px; font-weight:800; margin-top:6px; }
+.sem-pct   { font-size:22px; font-weight:700; color:#1e293b; }
+.fac-grid  { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; flex:1; }
+.fac-card  { background:#f1f5f9; border-radius:8px; padding:9px 11px; }
+.fac-lbl   { font-size:11px; color:#64748b; font-weight:500; margin-bottom:3px; }
+.fac-val   { font-size:13px; font-weight:700; }
+.tf-block  { margin-bottom:16px; }
+.tf-title  { font-size:12px; font-weight:700; color:#475569; background:#f1f5f9;
+             padding:4px 10px; border-radius:4px; margin-bottom:6px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th { background:#1e3a5f; color:white; padding:5px 8px; text-align:left; font-weight:600; }
+td { padding:4px 8px; border-bottom:1px solid #e2e8f0; }
+tr:nth-child(even) td { background:#f8fafc; }
+.nR  { color:#dc2626; font-weight:700; }
+.nPP { color:#2563eb; font-weight:800; }
+.nS  { color:#16a34a; font-weight:700; }
+.dPos  { color:#dc2626; font-size:11px; }
+.dNeg  { color:#16a34a; font-size:11px; }
+.dZero { color:#2563eb; font-size:11px; font-weight:700; }
+.conf-item   { background:#fffbeb; border-left:3px solid #f59e0b; border-radius:4px;
+               padding:8px 12px; margin-bottom:8px; }
+.conf-row    { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
+.conf-precio { font-size:16px; font-weight:800; }
+.conf-stars  { color:#f59e0b; }
+.conf-dist   { font-size:11px; color:#64748b; }
+.conf-nivs   { font-size:11px; color:#64748b; }
+.empty { color:#94a3b8; font-style:italic; padding:16px 0; text-align:center; font-size:13px; }
+.ind-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.ind-card { background:#f8fafc; border-radius:6px; padding:9px 11px; border:1px solid #e2e8f0; }
+.ind-lbl  { font-size:11px; color:#64748b; margin-bottom:2px; }
+.ind-val  { font-size:14px; font-weight:700; }
+.ind-sub  { font-size:11px; color:#64748b; margin-top:2px; }
+.vol-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.vol-card { background:#f8fafc; border-radius:6px; padding:9px 11px; border:1px solid #e2e8f0; }
+.vol-lbl  { font-size:11px; color:#64748b; margin-bottom:2px; }
+.vol-val  { font-size:18px; font-weight:700; }
+.vol-sub  { font-size:11px; color:#64748b; }
+.vol-det  { font-size:12px; color:#64748b; padding:8px 0; }
+.fund-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.fund-card { background:#f8fafc; border-radius:6px; padding:9px 11px; border:1px solid #e2e8f0; }
+.fund-lbl  { font-size:11px; color:#64748b; margin-bottom:2px; }
+.fund-val  { font-size:13px; font-weight:700; }
+.footer { text-align:center; font-size:11px; color:#94a3b8; padding:16px 32px;
+          border-top:1px solid #e2e8f0; }
+@media print { body { background:white; } .card { box-shadow:none; border:1px solid #e2e8f0; } }
+"""
+
+    # ── Factores semáforo ────────────────────────────────────────────────
+    fac_cards = "".join(
+        f'<div class="fac-card">'
+        f'<div class="fac-lbl">{fac}</div>'
+        f'<div class="fac-val">{desc}</div>'
+        f'</div>'
+        for fac, desc, _ in factores_semaforo
+    )
+
+    # ── Pivot tables ─────────────────────────────────────────────────────
+    niv_orden = ["R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
+    pivot_blocks = ""
+    for tf in TIMEFRAMES:
+        datos_tf = resultados_pivots.get(tf)
+        if not datos_tf:
+            continue
+        filas = ""
+        for nv in niv_orden:
+            if nv not in datos_tf or nv.startswith("_"):
+                continue
+            val  = datos_tf[nv]
+            dist = ((val - precio) / precio * 100) if precio else 0
+            if abs(dist) < 0.001:
+                dist_str, dist_cls = "PP", "dZero"
+            elif dist > 0:
+                dist_str, dist_cls = f"+{dist:.2f}%", "dPos"
+            else:
+                dist_str, dist_cls = f"{dist:.2f}%", "dNeg"
+            nv_cls = ("nR" if nv.startswith("R") else
+                      ("nPP" if nv == "PP" else
+                       ("nS" if nv.startswith("S") else "")))
+            filas += (
+                f'<tr>'
+                f'<td class="{nv_cls}">{nv}</td>'
+                f'<td><b>{val:.4f}</b></td>'
+                f'<td class="{dist_cls}">{dist_str}</td>'
+                f'</tr>'
+            )
+        if filas:
+            pivot_blocks += (
+                f'<div class="tf-block">'
+                f'<div class="tf-title">&#9658; {tf}</div>'
+                f'<table>'
+                f'<thead><tr><th>Nivel</th><th>Precio</th><th>Dist.</th></tr></thead>'
+                f'<tbody>{filas}</tbody>'
+                f'</table>'
+                f'</div>'
+            )
+
+    # ── Confluencias ──────────────────────────────────────────────────────
+    if confluencias:
+        conf_items = ""
+        for c in confluencias[:10]:
+            niv_str = " · ".join(
+                f"{n['timeframe'][:3]} {n['nivel']}" for n in c["niveles"])
+            dist = ((c["precio"] - precio) / precio * 100) if precio else 0
+            dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
+            conf_items += (
+                f'<div class="conf-item">'
+                f'<div class="conf-row">'
+                f'<span class="conf-precio">{c["precio"]:.4f}</span>'
+                f'<span><span class="conf-stars">{c["estrellas"]}</span>'
+                f'<span class="conf-dist"> {dist_str}</span></span>'
+                f'</div>'
+                f'<div class="conf-nivs">{niv_str}</div>'
+                f'</div>'
+            )
+        conf_html = conf_items
+    else:
+        conf_html = f'<div class="empty">Sin confluencias &#177;{tolerancia:.2f}</div>'
+
+    # ── Indicadores ───────────────────────────────────────────────────────
+    def _ind(lbl, val, sub=""):
+        sub_h = f'<div class="ind-sub">{sub}</div>' if sub else ""
+        return (
+            f'<div class="ind-card">'
+            f'<div class="ind-lbl">{lbl}</div>'
+            f'<div class="ind-val">{val}</div>'
+            f'{sub_h}'
+            f'</div>'
+        )
+
+    rsi_sub = ("Sobrecomprado 🔴" if rsi_val > 70
+               else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪"))
+    ind_html = (
+        _ind("RSI 14", f"{rsi_val:.1f}", rsi_sub) +
+        _ind("MACD", f"{macd_val:.4f}", f"Hist: {macd_hist_val:+.4f}") +
+        _ind("SAR", sar_tend, f"{sar_val:.4f}") +
+        _ind("Bollinger %B", f"{pct_b:.1f}%")
+    )
+    for p_m in [20, 50, 200]:
+        if p_m in medias:
+            sma, ema = medias[p_m]
+            diff = precio - sma
+            ind_html += (
+                _ind(f"SMA {p_m}", f"{sma:.4f}",
+                     f"Dist: {diff:+.4f} ({diff/sma*100:+.1f}%)") +
+                _ind(f"EMA {p_m}", f"{ema:.4f}")
+            )
+
+    # ── Volumen ───────────────────────────────────────────────────────────
+    if vol_data:
+        vol_html = (
+            f'<div class="vol-grid">'
+            f'<div class="vol-card">'
+            f'<div class="vol-lbl">Ratio vs 10 sesiones</div>'
+            f'<div class="vol-val">{vol_data["ratio_10d"]:.0f}%</div>'
+            f'<div class="vol-sub">{vol_data["clasificacion_10d"]}</div>'
+            f'</div>'
+            f'<div class="vol-card">'
+            f'<div class="vol-lbl">Ratio vs 3 meses</div>'
+            f'<div class="vol-val">{vol_data["ratio_3m"]:.0f}%</div>'
+            f'<div class="vol-sub">{vol_data["clasificacion_3m"]}</div>'
+            f'</div>'
+            f'</div>'
+            f'<div class="vol-det">'
+            f'Sesi&#243;n: <b>{_fmt_numero(vol_data["volumen"])}</b> &nbsp;&#183;&nbsp; '
+            f'Media 10d: <b>{_fmt_numero(vol_data["media_10d"])}</b> &nbsp;&#183;&nbsp; '
+            f'Media 3m: <b>{_fmt_numero(vol_data["media_3m"])}</b>'
+            f'</div>'
+        )
+    else:
+        vol_html = '<div class="empty">Sin datos de volumen</div>'
+
+    # ── Fundamentales ─────────────────────────────────────────────────────
+    fund_section = ""
+    if fundamentales:
+        fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+        if fund_items:
+            fund_cards = "".join(
+                f'<div class="fund-card">'
+                f'<div class="fund-lbl">{k}</div>'
+                f'<div class="fund-val">{v}</div>'
+                f'</div>'
+                for k, v in fund_items
+            )
+            fund_section = (
+                f'<div class="card">'
+                f'<h2>&#128203; Datos Fundamentales</h2>'
+                f'<div class="fund-grid">{fund_cards}</div>'
+                f'</div>'
+            )
+
+    # ── Ensamblar ─────────────────────────────────────────────────────────
+    return (
+        f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
+        f'<meta charset="UTF-8">'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        f'<title>PivotAnalyzer &#8212; {ticker.upper()}</title>\n'
+        f'<style>{css}</style>\n</head>\n<body>\n'
+
+        f'<div class="header">\n'
+        f'<div class="ticker-tag">&#128202; PivotAnalyzer &middot; {ticker.upper()}</div>\n'
+        f'<div class="precio-row">\n'
+        f'<span class="precio-val">{precio:.4f}'
+        f'<span style="font-size:16px;opacity:.7;margin-left:8px">{currency}</span></span>\n'
+        f'<span class="variacion" style="color:{var_color}">'
+        f'{cambio:+.4f} ({cambio_pct:+.2f}%)</span>\n'
+        f'</div>\n'
+        f'<div class="empresa">{nombre}</div>\n'
+        f'<div class="chips">\n'
+        f'<span class="chip">52W m&#225;x: {h52_str}</span>\n'
+        f'<span class="chip">52W m&#237;n: {l52_str}</span>\n'
+        f'<span class="chip">{tipo_activo}</span>\n'
+        f'<span class="chip">Sistema: {sistema}</span>\n'
+        f'<span class="chip">Generado: {ahora}</span>\n'
+        f'</div>\n</div>\n'
+
+        f'<div class="body">\n'
+
+        # Semáforo
+        f'<div class="card">\n'
+        f'<h2>&#128680; Sem&#225;foro Global</h2>\n'
+        f'<div class="sem-row">\n'
+        f'<div class="sem-badge" style="border-color:{sem_color}">\n'
+        f'<div class="sem-emoji">{emoji_sem}</div>\n'
+        f'<div class="sem-label" style="color:{sem_color}">{semaforo.upper()}</div>\n'
+        f'<div class="sem-pct">{pct_semaforo:.0f}%</div>\n'
+        f'</div>\n'
+        f'<div class="fac-grid">{fac_cards}</div>\n'
+        f'</div>\n</div>\n'
+
+        # Pivots + Confluencias
+        f'<div class="card two-col">\n'
+        f'<div>\n<h2>&#128208; Pivot Points &#8212; {sistema}</h2>\n{pivot_blocks}</div>\n'
+        f'<div>\n<h2>&#127919; Confluencias Multi-Timeframe</h2>\n{conf_html}</div>\n'
+        f'</div>\n'
+
+        # Indicadores + Volumen
+        f'<div class="card two-col">\n'
+        f'<div>\n<h2>&#128200; Indicadores T&#233;cnicos</h2>\n'
+        f'<div class="ind-grid">{ind_html}</div>\n</div>\n'
+        f'<div>\n<h2>&#128202; Volumen</h2>\n{vol_html}\n</div>\n'
+        f'</div>\n'
+
+        # Fundamentales
+        f'{fund_section}\n'
+
+        f'</div>\n'  # end .body
+
+        f'<div class="footer">\n'
+        f'An&#225;lisis educativo &nbsp;&middot;&nbsp; '
+        f'No constituye asesoramiento de inversi&#243;n regulado bajo MiFID II '
+        f'(Directiva 2014/65/UE) &nbsp;&middot;&nbsp; '
+        f'Datos con retraso ~15 min v&#237;a Yahoo Finance &nbsp;&middot;&nbsp; '
+        f'PivotAnalyzer &mdash; Scriptum\n'
+        f'</div>\n</body>\n</html>'
+    )
+
+
+# =============================================================================
 # GENERACIÓN DE PDF
 # =============================================================================
 
@@ -2021,31 +2321,73 @@ def pantalla_analisis():
 
         st.divider()
 
-        # Descarga PDF
-        st.markdown("### 📥 Exportar")
-        col_pdf1, col_pdf2 = st.columns([1, 3])
-        with col_pdf1:
-            if st.button("Generar PDF"):
-                with st.spinner("Generando PDF..."):
-                    pdf_bytes = generar_pdf(
-                        ticker=ticker_activo,
-                        precio=precio,
-                        sistema=sistema_activo,
-                        resultados_pivots=resultados_pivots,
-                        confluencias=confluencias,
-                        semaforo=color_sem,
-                        factores_semaforo=factores_sem,
-                        vol_data=vol_data,
-                        indicadores=indicadores_dict,
-                        fundamentales=fundamentales,
+        # Descarga informe
+        st.markdown("### 📥 Exportar informe")
+        col_fmt, col_btn = st.columns([1, 3])
+        with col_fmt:
+            fmt_sel = st.radio("Formato", ["HTML", "PDF"],
+                               horizontal=True, key="fmt_export")
+        with col_btn:
+            if st.button("⬇️ Generar informe", type="primary", key="btn_export"):
+                ts = datetime.now().strftime("%Y%m%d_%H%M")
+                if fmt_sel == "HTML":
+                    with st.spinner("Generando HTML..."):
+                        html_str = generar_informe_html(
+                            ticker=ticker_activo,
+                            nombre=nombre,
+                            tipo_activo=tipo_activo,
+                            precio=precio,
+                            cambio=cambio,
+                            cambio_pct=cambio_pct,
+                            h52=info.get("fiftyTwoWeekHigh"),
+                            l52=info.get("fiftyTwoWeekLow"),
+                            currency=info.get("currency", ""),
+                            sistema=sistema_activo,
+                            resultados_pivots=resultados_pivots,
+                            confluencias=confluencias,
+                            semaforo=color_sem,
+                            pct_semaforo=pct_sem,
+                            factores_semaforo=factores_sem,
+                            rsi_val=rsi_val,
+                            macd_val=macd_val,
+                            macd_señal=macd_señal,
+                            macd_hist_val=macd_hist_val,
+                            sar_val=sar_val,
+                            sar_tend=sar_tend,
+                            pct_b=pct_b,
+                            medias=medias,
+                            vol_data=vol_data,
+                            fundamentales=fundamentales,
+                            tolerancia=tol_activa,
+                        )
+                    st.download_button(
+                        label="📄 Descargar HTML",
+                        data=html_str.encode("utf-8"),
+                        file_name=f"{ticker_activo}_{ts}.html",
+                        mime="text/html",
+                        key="dl_html",
                     )
-                nombre_pdf = f"{ticker_activo}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                st.download_button(
-                    label="📄 Descargar PDF",
-                    data=pdf_bytes,
-                    file_name=nombre_pdf,
-                    mime="application/pdf",
-                )
+                else:
+                    with st.spinner("Generando PDF..."):
+                        pdf_bytes = generar_pdf(
+                            ticker=ticker_activo,
+                            precio=precio,
+                            sistema=sistema_activo,
+                            resultados_pivots=resultados_pivots,
+                            confluencias=confluencias,
+                            semaforo=color_sem,
+                            factores_semaforo=factores_sem,
+                            vol_data=vol_data,
+                            indicadores=indicadores_dict,
+                            fundamentales=fundamentales,
+                        )
+                    st.download_button(
+                        label="📄 Descargar PDF",
+                        data=pdf_bytes,
+                        file_name=f"{ticker_activo}_{ts}.pdf",
+                        mime="application/pdf",
+                        key="dl_pdf",
+                    )
 
     # ---- TAB MACRO ----
     with tab_macro:
