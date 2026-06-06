@@ -1749,18 +1749,23 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     cab_t = Table(
         [[info_inner, "", ""],
          [precio_cell, cambio_cell, h52_cell]],
-        colWidths=[6*cm, 6*cm, 6*cm]
+        colWidths=[6*cm, 6*cm, 6*cm],
+        rowHeights=[1.8*cm, 1.8*cm]   # filas iguales en altura
     )
     cab_t.setStyle(TableStyle([
         ("SPAN",          (0,0),  (2,0)),
         ("BACKGROUND",    (0,0),  (-1,-1), CA),
-        ("VALIGN",        (0,0),  (-1,-1), "TOP"),
+        # fila superior: contenido centrado verticalmente
+        ("VALIGN",        (0,0),  (2,0),   "MIDDLE"),
+        # fila inferior: desde arriba
+        ("VALIGN",        (0,1),  (-1,1),  "TOP"),
         ("LEFTPADDING",   (0,0),  (-1,-1), 10),
         ("RIGHTPADDING",  (0,0),  (-1,-1), 10),
-        ("TOPPADDING",    (0,0),  (-1,-1), 8),
-        ("BOTTOMPADDING", (0,0),  (-1,-1), 8),
+        ("TOPPADDING",    (0,0),  (-1,-1), 10),
+        ("BOTTOMPADDING", (0,0),  (-1,-1), 10),
+        # línea separadora con más aire respecto al bloque superior
         ("LINEABOVE",     (0,1),  (-1,1),  0.5, colors.HexColor("#2563eb")),
-        ("TOPPADDING",    (0,1),  (-1,1),  6),
+        ("TOPPADDING",    (0,1),  (-1,1),  10),
         ("BOTTOMPADDING", (0,1),  (-1,1),  10),
     ]))
     historia.append(cab_t)
