@@ -81,6 +81,7 @@ TOOLTIPS = {
     "52W Máx / Mín":     "Precio máximo y mínimo registrados en los últimos 52 semanas (1 año). Indica el rango de fluctuación anual.",
     "Volumen hoy":       "Número de acciones o participaciones negociadas en la sesión actual. Un volumen alto indica mayor interés del mercado.",
     "Moneda":            "Divisa en la que cotiza el activo en su mercado de origen.",
+    "Beta":              "Sensibilidad del activo respecto al mercado de referencia. Beta > 1: más volátil que el índice. Beta < 1: menos volátil. Beta < 0: correlación inversa con el mercado.",
     "RSI 14":            "Relative Strength Index (14 sesiones): mide si el activo está sobrecomprado (>70) o sobrevendido (<30). Entre 30-70 es zona neutra.",
     "MACD":              "Moving Average Convergence Divergence: diferencia entre dos medias móviles. Si supera su señal, la tendencia es alcista; si está por debajo, bajista.",
     "SAR":               "Parabolic Stop And Reverse: señal de reversión de tendencia. 'Alcista' = precio por encima del SAR. 'Bajista' = precio por debajo.",
@@ -2279,23 +2280,30 @@ def pantalla_analisis():
         st.markdown("## 📊 PivotAnalyzer")
     with col_u:
         st.markdown(f"*{usuario.get('nombre', usuario.get('username'))}*")
-        if st.button("Salir", key="logout"):
-            del st.session_state["usuario"]
-            st.rerun()
+        bcol1, bcol2 = st.columns(2)
+        with bcol1:
+            if st.button("Salir", key="logout"):
+                del st.session_state["usuario"]
+                st.rerun()
+        with bcol2:
+            if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
+                st.cache_data.clear()
+                st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis", "🌍 Macro"]
+    tabs_list = ["📈 Análisis Técnico", "🤖 Análisis IA", "🌍 Macro"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
 
     tab_objs = st.tabs(tabs_list)
     tab_analisis = tab_objs[0]
-    tab_macro    = tab_objs[1]
+    tab_ia       = tab_objs[1]
+    tab_macro    = tab_objs[2]
 
-    if es_superadmin and len(tab_objs) >= 4:
-        tab_admin = tab_objs[2]
-        tab_ayuda = tab_objs[3]
+    if es_superadmin and len(tab_objs) >= 5:
+        tab_admin = tab_objs[3]
+        tab_ayuda = tab_objs[4]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -2384,10 +2392,6 @@ def pantalla_analisis():
                 st.warning(f"No se pudieron cargar los tickers de {mercado_sel}. Introduce el ticker manualmente.")
                 ticker_input = st.text_input("🔎 Ticker", value="", placeholder="Ej: AAPL, ITX.MC").upper().strip()
 
-        # Upload de imagen
-        img_upload = st.file_uploader("📷 Adjuntar captura (opcional)", type=["png","jpg","jpeg"],
-                                       label_visibility="collapsed")
-
         if not analizar and "ultimo_ticker" not in st.session_state:
             st.info("Introduce un ticker y pulsa **Analizar**. Ejemplos: `NTGY.MC`, `IBE.MC`, `AAPL`, `SPY`")
             st.caption("Los datos tienen un retraso aproximado de 15 minutos (Yahoo Finance).")
@@ -2426,8 +2430,22 @@ def pantalla_analisis():
         cambio_pct = (cambio / cierre_ant * 100) if cierre_ant else 0
         var_str = f"{cambio:+.4f} ({cambio_pct:+.2f}%)"
 
+        currency = info.get("currency", "")
+        curr_str = f" {currency}" if currency else ""
+
+        # Timestamp del último dato disponible
+        try:
+            last_ts = pd.Timestamp(hist.index[-1])
+            try:
+                last_ts = last_ts.tz_localize(None)
+            except Exception:
+                last_ts = last_ts.tz_convert(None)
+            ts_str = last_ts.strftime("%d/%m/%Y")
+        except Exception:
+            ts_str = "—"
+
         with col_p1:
-            st.metric("Precio", f"{precio:.4f}", delta=var_str, help=TOOLTIPS["Precio"])
+            st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
         with col_p2:
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
@@ -2436,10 +2454,14 @@ def pantalla_analisis():
             vol_hoy = float(hist["Volume"].iloc[-1])
             st.metric("Volumen hoy", _fmt_numero(vol_hoy), help=TOOLTIPS["Volumen hoy"])
         with col_p4:
-            currency = info.get("currency", "")
-            st.metric("Moneda", currency if currency else "—", help=TOOLTIPS["Moneda"])
+            beta = info.get("beta")
+            beta_str = f"{beta:.2f}" if beta is not None else "—"
+            st.metric("Beta", beta_str,
+                      help="Sensibilidad del activo respecto al mercado de referencia. "
+                           "Beta > 1: más volátil que el índice. "
+                           "Beta < 1: menos volátil. Beta < 0: correlación inversa.")
 
-        st.caption(f"**{nombre}** · {tipo_activo.upper()} · Datos: ~15 min de retraso")
+        st.caption(f"**{nombre}** · {tipo_activo.upper()} · Último dato: {ts_str} · Retraso ~15 min")
 
         st.divider()
 
@@ -2597,12 +2619,6 @@ def pantalla_analisis():
                     f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
                     f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
 
-        # Imagen adjunta
-        if img_upload:
-            st.divider()
-            st.markdown("### 📷 Captura adjunta")
-            st.image(img_upload, use_column_width=True)
-
         st.divider()
 
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
@@ -2691,6 +2707,33 @@ def pantalla_analisis():
                         mime="application/pdf",
                         key="dl_pdf",
                     )
+
+    # ---- TAB ANÁLISIS IA (próxima versión) ----
+    with tab_ia:
+        st.markdown("## 🤖 Análisis IA")
+        st.info("**Esta funcionalidad está en desarrollo y estará disponible en una versión próxima.**")
+        st.markdown("---")
+        st.markdown("""
+### ¿Qué incluirá el Análisis IA?
+
+**📷 Visión de gráficos**
+Sube una captura de cualquier gráfico (TradingView, Bloomberg, MetaTrader) y la IA identificará
+patrones técnicos, soportes y resistencias visuales, y los comparará con los pivots calculados.
+
+**🔍 Interpretación contextual**
+La IA leerá los indicadores técnicos calculados (RSI, MACD, Bollinger, SAR) en conjunto
+y generará un diagnóstico narrativo del estado del activo: tendencia, momentum, zonas clave.
+
+**📋 Informe de tesis**
+A partir del análisis técnico + macro + fundamentales disponibles, la IA redactará
+un resumen de tesis de inversión con nivel de convicción, factores clave y niveles de invalidación.
+
+**💬 Preguntas sobre el activo**
+Chat contextual: una vez analizado un ticker, podrás preguntar directamente sobre él
+(*"¿qué pasaría si rompe R2?"*, *"¿cómo se comportó este activo en 2022?"*).
+""")
+        st.markdown("---")
+        st.caption("Análisis IA · PivotAnalyzer v2.0 — En desarrollo · Scriptum")
 
     # ---- TAB MACRO ----
     with tab_macro:
