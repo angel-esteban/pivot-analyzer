@@ -1114,6 +1114,138 @@ def detectar_confluencias(resultados: dict, tolerancia: float = 0.20):
 
 
 # =============================================================================
+# CONVERGENCIA TÉCNICA — Pivots + Medias + Indicadores
+# =============================================================================
+
+def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
+                                   rsi_val, macd_val, macd_señal,
+                                   macd_hist_val, sar_tend, pct_b, tolerancia=0.30):
+    """
+    Detecta dos tipos de convergencia:
+    1. Niveles reforzados: zonas donde un pivot y una media móvil coinciden.
+    2. Señal direccional: acuerdo entre todos los indicadores sobre la dirección.
+    """
+    # ── 1. Niveles reforzados (precio pivot ≈ precio media) ──────────────────
+    niveles_pivot = []
+    for tf, nivs in resultados_pivots.items():
+        if not nivs:
+            continue
+        for clave, val in nivs.items():
+            if clave.startswith("_"):
+                continue
+            tipo = "R" if clave.startswith("R") else ("S" if clave.startswith("S") else "PP")
+            niveles_pivot.append({"tf": tf, "nivel": clave, "tipo": tipo, "precio": val})
+
+    niveles_reforzados = []
+    for piv in niveles_pivot:
+        for periodo, (sma, ema) in medias.items():
+            if abs(piv["precio"] - sma) <= tolerancia:
+                niveles_reforzados.append({
+                    "precio": round((piv["precio"] + sma) / 2, 4),
+                    "pivot": f"{piv['nivel']} {piv['tf'][:3]}",
+                    "media": f"SMA{periodo}",
+                    "tipo": piv["tipo"],
+                    "detalle": f"{piv['nivel']} {piv['tf']} + SMA{periodo}",
+                })
+            if abs(piv["precio"] - ema) <= tolerancia:
+                niveles_reforzados.append({
+                    "precio": round((piv["precio"] + ema) / 2, 4),
+                    "pivot": f"{piv['nivel']} {piv['tf'][:3]}",
+                    "media": f"EMA{periodo}",
+                    "tipo": piv["tipo"],
+                    "detalle": f"{piv['nivel']} {piv['tf']} + EMA{periodo}",
+                })
+
+    # Deduplicar zonas muy cercanas (±tolerancia/2)
+    niveles_reforzados.sort(key=lambda x: x["precio"], reverse=True)
+    dedup = []
+    for nr in niveles_reforzados:
+        if not dedup or abs(nr["precio"] - dedup[-1]["precio"]) > tolerancia / 2:
+            dedup.append(nr)
+
+    # ── 2. Señal direccional ─────────────────────────────────────────────────
+    señales = []
+
+    # RSI
+    if rsi_val is not None:
+        if rsi_val > 70:
+            señales.append(("RSI 14", "🔴 Sobrecomprado", "bajista", rsi_val))
+        elif rsi_val < 30:
+            señales.append(("RSI 14", "🟢 Sobrevendido", "alcista", rsi_val))
+        elif rsi_val >= 55:
+            señales.append(("RSI 14", "🔵 Zona alcista", "alcista", rsi_val))
+        elif rsi_val <= 45:
+            señales.append(("RSI 14", "🟠 Zona bajista", "bajista", rsi_val))
+        else:
+            señales.append(("RSI 14", "⚪ Neutro", "neutro", rsi_val))
+
+    # MACD
+    if macd_val is not None and macd_señal is not None:
+        if macd_val > macd_señal and macd_hist_val > 0:
+            señales.append(("MACD", "🟢 Alcista + acelerando", "alcista", macd_val))
+        elif macd_val > macd_señal:
+            señales.append(("MACD", "🔵 Alcista (histograma –)", "alcista", macd_val))
+        elif macd_val < macd_señal and macd_hist_val < 0:
+            señales.append(("MACD", "🔴 Bajista + acelerando", "bajista", macd_val))
+        else:
+            señales.append(("MACD", "🟠 Bajista (histograma +)", "bajista", macd_val))
+
+    # SAR
+    if sar_tend:
+        if sar_tend == "ALCISTA":
+            señales.append(("SAR Parabólico", "🟢 Tendencia alcista", "alcista", None))
+        else:
+            señales.append(("SAR Parabólico", "🔴 Tendencia bajista", "bajista", None))
+
+    # Bollinger %B
+    if pct_b is not None:
+        if pct_b > 80:
+            señales.append(("Bollinger %B", f"🔴 Sobrecomprado ({pct_b:.0f}%)", "bajista", pct_b))
+        elif pct_b < 20:
+            señales.append(("Bollinger %B", f"🟢 Sobrevendido ({pct_b:.0f}%)", "alcista", pct_b))
+        elif pct_b >= 50:
+            señales.append(("Bollinger %B", f"🔵 Mitad alta ({pct_b:.0f}%)", "alcista", pct_b))
+        else:
+            señales.append(("Bollinger %B", f"🟠 Mitad baja ({pct_b:.0f}%)", "bajista", pct_b))
+
+    # Precio vs medias
+    for periodo, (sma, ema) in sorted(medias.items()):
+        if precio and sma:
+            dir_sma = "alcista" if precio > sma else "bajista"
+            emoji = "🟢" if dir_sma == "alcista" else "🔴"
+            señales.append((f"SMA {periodo}", f"{emoji} Precio {'>' if dir_sma == 'alcista' else '<'} SMA{periodo}", dir_sma, sma))
+
+    # Conteo
+    alcistas = sum(1 for s in señales if s[2] == "alcista")
+    bajistas = sum(1 for s in señales if s[2] == "bajista")
+    total = len([s for s in señales if s[2] != "neutro"])
+
+    if total > 0:
+        pct_alcista = alcistas / total * 100
+    else:
+        pct_alcista = 50
+
+    if pct_alcista >= 70:
+        consenso = ("alcista", "🟢", f"{pct_alcista:.0f}% de indicadores alcistas")
+    elif pct_alcista <= 30:
+        consenso = ("bajista", "🔴", f"{100-pct_alcista:.0f}% de indicadores bajistas")
+    else:
+        consenso = ("mixto", "🟡", f"Sin consenso claro ({alcistas}↑ / {bajistas}↓)")
+
+    return dedup, señales, consenso
+
+
+def _url_google(query: str) -> str:
+    import urllib.parse
+    return "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+
+def _url_investopedia(termino: str) -> str:
+    import urllib.parse
+    return "https://www.investopedia.com/search?q=" + urllib.parse.quote(termino)
+
+
+# =============================================================================
 # INDICADORES TÉCNICOS
 # =============================================================================
 
@@ -2516,6 +2648,13 @@ def pantalla_analisis():
         # ---- CONFLUENCIAS ----
         confluencias = detectar_confluencias(resultados_pivots, tolerancia=tol_activa)
 
+        # ---- CONVERGENCIA TÉCNICA ----
+        niveles_reforzados, señales_dir, consenso_dir = calcular_convergencia_tecnica(
+            resultados_pivots, medias, precio,
+            rsi_val, macd_val, macd_señal, macd_hist_val, sar_tend, pct_b,
+            tolerancia=tol_activa
+        )
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
 
@@ -2709,6 +2848,88 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
 *Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
 """)
                 st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
+
+        st.divider()
+
+        # ── Bloque 2b: Convergencia Técnica ──────────────────────────────
+        _cv_h1, _cv_h2 = st.columns([6, 1])
+        with _cv_h1:
+            st.markdown("### 🔀 Convergencia Técnica")
+        with _cv_h2:
+            with st.popover("ℹ️", use_container_width=True):
+                st.markdown("""
+**¿Qué es la Convergencia Técnica?**
+
+Combina dos dimensiones de análisis que normalmente se ven por separado:
+
+**1. Niveles reforzados** — zonas de precio donde un nivel pivot y una media móvil (SMA o EMA) coinciden dentro de la tolerancia activa. Un soporte que además es la SMA50 tiene doble anclaje: memoria estadística del mercado (pivot) + referencia de tendencia seguida por institucionales (media).
+
+**2. Señal direccional** — acuerdo entre todos los indicadores activos (RSI, MACD, SAR, Bollinger, precio vs medias). Cuanto mayor el consenso, mayor la convicción de la señal.
+
+---
+
+**Cómo usarlo**
+
+- Un nivel reforzado próximo al precio actual es prioritario para gestión de stop o entrada.
+- Un consenso ≥ 70% alcista/bajista refuerza cualquier decisión tomada con base en los pivots.
+- Consenso mixto = mercado sin dirección clara → reducir tamaño de posición o esperar.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
+
+        col_conv_niv, col_conv_dir = st.columns([3, 2])
+
+        with col_conv_niv:
+            st.markdown("**Niveles reforzados** *(pivot + media móvil)*")
+            if niveles_reforzados:
+                for nr in niveles_reforzados:
+                    dist = ((nr["precio"] - precio) / precio * 100) if precio else 0
+                    dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
+                    tipo_emoji = "🔴" if nr["tipo"] == "R" else ("🟢" if nr["tipo"] == "S" else "🔵")
+                    tipo_label = "Resistencia" if nr["tipo"] == "R" else ("Soporte" if nr["tipo"] == "S" else "Pivot")
+
+                    with st.container():
+                        c1, c2, c3 = st.columns([3, 1, 2])
+                        with c1:
+                            st.markdown(
+                                f"{tipo_emoji} **{nr['precio']:.4f}** `{dist_str}`  \n"
+                                f"<small style='color:#555'>{nr['pivot']} · {nr['media']}</small>",
+                                unsafe_allow_html=True
+                            )
+                        with c2:
+                            q_google = f"{nr['pivot']} {nr['media']} {tipo_label} análisis técnico confluencia"
+                            st.link_button("🔍", _url_google(q_google), help="Buscar en Google")
+                        with c3:
+                            termino_inv = f"{nr['media']} support resistance pivot"
+                            st.link_button("📖 Investopedia", _url_investopedia(termino_inv), help="Buscar en Investopedia")
+            else:
+                st.caption(f"Sin niveles pivot+media dentro de ±{tol_activa:.2f}")
+
+        with col_conv_dir:
+            st.markdown("**Señal de consenso**")
+            emoji_cons, label_cons = consenso_dir[1], consenso_dir[2]
+            st.markdown(
+                f'<div style="background:var(--secondary-background-color,#f0f2f6);'
+                f'border-radius:0.5rem;padding:0.6rem 0.8rem;margin-bottom:0.6rem">'
+                f'<span style="font-size:1.5rem">{emoji_cons}</span>'
+                f'<span style="font-size:0.95rem;font-weight:700;margin-left:0.5rem">'
+                f'{label_cons}</span></div>',
+                unsafe_allow_html=True
+            )
+            for nombre_s, desc_s, dir_s, _ in señales_dir:
+                q_google_s = f"{nombre_s} {desc_s.split()[1] if len(desc_s.split()) > 1 else ''} análisis técnico trading"
+                q_inv_s = nombre_s.replace(" ", "+")
+                c_s1, c_s2, c_s3 = st.columns([4, 1, 1])
+                with c_s1:
+                    st.markdown(
+                        f"<small><b>{nombre_s}</b>: {desc_s}</small>",
+                        unsafe_allow_html=True
+                    )
+                with c_s2:
+                    st.link_button("🔍", _url_google(q_google_s), help=f"Google: {nombre_s}")
+                with c_s3:
+                    st.link_button("📖", _url_investopedia(nombre_s), help=f"Investopedia: {nombre_s}")
 
         st.divider()
 
