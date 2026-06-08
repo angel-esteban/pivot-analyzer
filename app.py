@@ -609,8 +609,12 @@ def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
     for i, (nombre, serie) in enumerate(series_dict.items()):
         if serie is None or (hasattr(serie, "empty") and serie.empty):
             continue
+        # Normalizar timezone: eliminar tz-info para comparación uniforme
+        if hasattr(serie.index, "tz") and serie.index.tz is not None:
+            serie.index = serie.index.tz_localize(None)
         if fecha_inicio is not None:
-            serie = serie[serie.index >= fecha_inicio]
+            fi = fecha_inicio.tz_localize(None) if hasattr(fecha_inicio, "tz") and fecha_inicio.tz else fecha_inicio
+            serie = serie[serie.index >= fi]
         if serie.empty:
             continue
         fig.add_trace(go.Scatter(
@@ -996,6 +1000,9 @@ def pestaña_macro():
     def _base100(s):
         if s is None or s.empty:
             return s
+        if hasattr(s.index, "tz") and s.index.tz is not None:
+            s = s.copy()
+            s.index = s.index.tz_localize(None)
         s = s[s.index >= _fecha_ini]
         if s.empty:
             return s
