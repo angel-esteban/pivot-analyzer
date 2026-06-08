@@ -50,6 +50,7 @@ st.set_page_config(
 # CSS personalizado — optimizado para móvil
 st.markdown("""
 <style>
+    .stApp { background-color: #EEF2F7 !important; }
     .main > div { padding: 0.5rem 0.5rem; }
     .block-container { padding: 0.5rem 0.5rem 2rem; max-width: 900px; }
     h1 { font-size: 1.4rem !important; color: #1F4E79; }
@@ -2915,66 +2916,86 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
 
         st.divider()
 
-        # ── Bloque 3a: Indicadores Técnicos ──────────────────────────────
-        st.markdown("### Indicadores Técnicos")
-        st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
-        col_i1, col_i2, col_i3, col_i4 = st.columns(4)
-        with col_i1:
-            st.metric("RSI 14", f"{rsi_val:.2f}",
-                      delta="Sobrecomprado" if rsi_val > 70 else (
-                          "Sobrevendido" if rsi_val < 30 else "Neutro"),
-                      help=TOOLTIPS["RSI 14"])
-        with col_i2:
-            st.metric("MACD", f"{macd_val:.4f}",
-                      delta=f"Hist: {macd_hist_val:+.4f}", help=TOOLTIPS["MACD"])
-        with col_i3:
-            st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
-        with col_i4:
-            st.metric("Bollinger %B", f"{pct_b:.1f}%", help=TOOLTIPS["Bollinger %B"])
-        st.markdown('</div>', unsafe_allow_html=True)
+        # ── Bloque 3: Indicadores Técnicos | Medias Móviles | Volumen ─────
+        # Construir HTML idéntico al informe
+        def _ind_s(lbl, val, sub=""):
+            sub_h = f'<div class="s-ind-sub">{sub}</div>' if sub else ""
+            return (
+                f'<tr>'
+                f'<td class="s-ind-lbl">{lbl}</td>'
+                f'<td class="s-ind-val">{val}{(" &nbsp;<span class=\'s-ind-sub\'>" + sub + "</span>") if sub else ""}</td>'
+                f'</tr>'
+            )
 
-        st.divider()
+        rsi_sub_s = "Sobrecomprado 🔴" if rsi_val > 70 else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪")
+        ind_rows = (
+            _ind_s("RSI (14)", f"{rsi_val:.2f}", rsi_sub_s) +
+            _ind_s("MACD", f"{macd_val:.4f}") +
+            _ind_s("MACD Señal", f"{macd_señal:.4f}") +
+            _ind_s("MACD Histograma", f"{macd_hist_val:+.4f}", "↑" if macd_hist_val > 0 else "↓") +
+            _ind_s("Bollinger Superior", f"{bb_sup:.4f}") +
+            _ind_s("Bollinger Media", f"{bb_med:.4f}") +
+            _ind_s("Bollinger Inferior", f"{bb_inf:.4f}") +
+            _ind_s("Bollinger %B", f"{pct_b:.1f}%") +
+            _ind_s("Parabolic SAR", f"{sar_val:.4f}", sar_tend)
+        )
 
-        # ── Bloque 3b: Medias Móviles ─────────────────────────────────────
-        st.markdown("### Medias Móviles")
-        st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
-        med_cols = st.columns(len(medias) * 2 if medias else 1)
-        for idx, p_m in enumerate(sorted(medias.keys())):
+        med_rows = ""
+        for p_m in sorted(medias.keys()):
             sma, ema = medias[p_m]
-            diff_sma = precio - sma
-            diff_ema = precio - ema
-            with med_cols[idx * 2]:
-                st.metric(f"SMA {p_m}", f"{sma:.4f}",
-                          delta=f"{diff_sma:+.4f} ({diff_sma/sma*100:+.1f}%)",
-                          help=TOOLTIPS.get(f"SMA {p_m}"))
-            with med_cols[idx * 2 + 1]:
-                st.metric(f"EMA {p_m}", f"{ema:.4f}",
-                          delta=f"{diff_ema:+.4f} ({diff_ema/ema*100:+.1f}%)")
-        st.markdown('</div>', unsafe_allow_html=True)
+            d_sma = precio - sma
+            d_ema = precio - ema
+            arr_s = "↑" if d_sma > 0 else "↓"
+            arr_e = "↑" if d_ema > 0 else "↓"
+            med_rows += (
+                _ind_s(f"SMA {p_m}", f"{sma:.4f}", arr_s) +
+                _ind_s(f"EMA {p_m}", f"{ema:.4f}", arr_e)
+            )
 
-        st.divider()
-
-        # ── Bloque 3c: Volumen ────────────────────────────────────────────
         if vol_data:
-            st.markdown("### Volumen")
-            st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
-            col_v1, col_v2, col_v3 = st.columns(3)
-            with col_v1:
-                st.metric("Ratio vs 10d",
-                          f"{vol_data['ratio_10d']:.0f}%",
-                          delta=vol_data['clasificacion_10d'],
-                          help=TOOLTIPS["Ratio vs 10d"])
-            with col_v2:
-                st.metric("Ratio vs 3m",
-                          f"{vol_data['ratio_3m']:.0f}%",
-                          delta=vol_data['clasificacion_3m'],
-                          help=TOOLTIPS["Ratio vs 3m"])
-            with col_v3:
-                st.metric("Volumen sesión", _fmt_numero(vol_data['volumen']))
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.caption(
-                f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
-                f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
+            vol_rows = (
+                _ind_s("Volumen sesión", _fmt_numero(vol_data["volumen"])) +
+                _ind_s("Media 10 sesiones", _fmt_numero(vol_data["media_10d"])) +
+                _ind_s("Media 3 meses", _fmt_numero(vol_data["media_3m"])) +
+                _ind_s("Ratio vs 10d", f"{vol_data['ratio_10d']:.1f}%", f"— {vol_data['clasificacion_10d']}") +
+                _ind_s("Ratio vs 3m", f"{vol_data['ratio_3m']:.1f}%", f"— {vol_data['clasificacion_3m']}")
+            )
+        else:
+            vol_rows = "<tr><td colspan='2' style='color:#94a3b8;font-style:italic'>Sin datos</td></tr>"
+
+        screen_ind_css = """
+        <style>
+        .s-ind-block { background:#fff; border-radius:10px; padding:16px 18px;
+                       box-shadow:0 1px 4px rgba(0,0,0,.07); }
+        .s-ind-title { font-size:11px; font-weight:700; color:#1e3a5f;
+                       text-transform:uppercase; letter-spacing:.6px;
+                       margin-bottom:8px; padding-bottom:4px;
+                       border-bottom:2px solid #2563eb; }
+        .s-ind-block table { width:100%; border-collapse:collapse; font-size:13px; }
+        .s-ind-block tr:nth-child(even) td { background:#f8fafc; }
+        .s-ind-block td { padding:5px 8px; border-bottom:1px solid #f1f5f9; }
+        .s-ind-lbl { color:#64748b; font-size:12px; width:55%; }
+        .s-ind-val { font-weight:700; color:#1e293b; }
+        .s-ind-sub { font-size:11px; color:#64748b; font-weight:400; }
+        </style>
+        """
+
+        st.markdown(screen_ind_css + f"""
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 0.9fr;gap:14px;margin-bottom:0">
+          <div class="s-ind-block">
+            <div class="s-ind-title">Indicadores Técnicos</div>
+            <table><tbody>{ind_rows}</tbody></table>
+          </div>
+          <div class="s-ind-block">
+            <div class="s-ind-title">Medias Móviles</div>
+            <table><tbody>{med_rows}</tbody></table>
+          </div>
+          <div class="s-ind-block">
+            <div class="s-ind-title">Volumen</div>
+            <table><tbody>{vol_rows}</tbody></table>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         st.divider()
 
