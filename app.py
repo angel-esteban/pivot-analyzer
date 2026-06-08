@@ -1601,7 +1601,10 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           rsi_val, macd_val, macd_señal, macd_hist_val,
                           sar_val: float, sar_tend: str, pct_b: float,
                           medias: dict, vol_data: dict, fundamentales: dict,
-                          tolerancia: float = 0.20) -> str:
+                          tolerancia: float = 0.20,
+                          niveles_reforzados: list = None,
+                          señales_dir: list = None,
+                          consenso_dir: tuple = None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1827,6 +1830,64 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f'</div>'
             )
 
+    # ── Convergencia Técnica (HTML) ───────────────────────────────────────
+    _conv_section = ""
+    if niveles_reforzados or señales_dir:
+        # Niveles reforzados
+        niv_rows = ""
+        for nr in (niveles_reforzados or []):
+            dist = ((nr["precio"] - precio) / precio * 100) if precio else 0
+            dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
+            tipo_label = "Resistencia" if nr["tipo"] == "R" else ("Soporte" if nr["tipo"] == "S" else "Pivot")
+            tipo_color = "#ef4444" if nr["tipo"] == "R" else ("#22c55e" if nr["tipo"] == "S" else "#3b82f6")
+            niv_rows += (
+                f'<tr>'
+                f'<td style="font-weight:700;color:{tipo_color}">{nr["precio"]:.4f}</td>'
+                f'<td style="color:#64748b;font-size:11px">{dist_str}</td>'
+                f'<td>{nr["pivot"]}</td>'
+                f'<td>{nr["media"]}</td>'
+                f'<td style="color:{tipo_color};font-size:11px">{tipo_label}</td>'
+                f'</tr>'
+            )
+        niv_html = (
+            f'<table><thead><tr>'
+            f'<th>Precio</th><th>Dist.</th><th>Pivot</th><th>Media</th><th>Tipo</th>'
+            f'</tr></thead><tbody>{niv_rows}</tbody></table>'
+            if niv_rows else '<div style="color:#94a3b8;font-size:12px">Sin niveles dentro de la tolerancia activa</div>'
+        )
+        # Señal de consenso
+        cons_emoji = consenso_dir[1] if consenso_dir else "⚪"
+        cons_label = consenso_dir[2] if consenso_dir else "—"
+        dir_rows = ""
+        for nombre_s, desc_s, dir_s, _ in (señales_dir or []):
+            dir_color = "#22c55e" if dir_s == "alcista" else ("#ef4444" if dir_s == "bajista" else "#94a3b8")
+            dir_rows += (
+                f'<tr>'
+                f'<td style="font-weight:600">{nombre_s}</td>'
+                f'<td>{desc_s}</td>'
+                f'<td style="color:{dir_color};font-weight:700;text-align:center">'
+                f'{"↑" if dir_s == "alcista" else ("↓" if dir_s == "bajista" else "–")}</td>'
+                f'</tr>'
+            )
+        _conv_section = (
+            f'<div class="card">\n'
+            f'<h2>&#128260; Convergencia T&#233;cnica</h2>\n'
+            f'<div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start">\n'
+            f'<div>\n'
+            f'<div class="col-title">Niveles Reforzados (Pivot + Media M&#243;vil)</div>\n'
+            f'{niv_html}\n'
+            f'</div>\n'
+            f'<div>\n'
+            f'<div class="col-title">Se&#241;al de Consenso</div>\n'
+            f'<div style="background:#f1f5f9;border-radius:8px;padding:10px 14px;margin-bottom:10px;'
+            f'font-size:16px;font-weight:700">{cons_emoji} {cons_label}</div>\n'
+            f'<table><thead><tr><th>Indicador</th><th>Estado</th><th style="text-align:center">Dir.</th>'
+            f'</tr></thead><tbody>{dir_rows}</tbody></table>\n'
+            f'</div>\n'
+            f'</div>\n'
+            f'</div>\n'
+        )
+
     # ── Ensamblar ─────────────────────────────────────────────────────────
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
@@ -1882,6 +1943,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div class="ind-grid">{ind_med_html}</div>\n</div>\n'
         f'<div>\n<div class="col-title">Volumen</div>\n{vol_html}\n</div>\n'
         f'</div>\n'
+
+        # Convergencia Técnica
+        + _conv_section +
 
         # Fundamentales
         f'{fund_section}\n'
@@ -2851,7 +2915,70 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
 
         st.divider()
 
-        # ── Bloque 2b: Convergencia Técnica ──────────────────────────────
+        # ── Bloque 3a: Indicadores Técnicos ──────────────────────────────
+        st.markdown("### Indicadores Técnicos")
+        st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
+        col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+        with col_i1:
+            st.metric("RSI 14", f"{rsi_val:.2f}",
+                      delta="Sobrecomprado" if rsi_val > 70 else (
+                          "Sobrevendido" if rsi_val < 30 else "Neutro"),
+                      help=TOOLTIPS["RSI 14"])
+        with col_i2:
+            st.metric("MACD", f"{macd_val:.4f}",
+                      delta=f"Hist: {macd_hist_val:+.4f}", help=TOOLTIPS["MACD"])
+        with col_i3:
+            st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
+        with col_i4:
+            st.metric("Bollinger %B", f"{pct_b:.1f}%", help=TOOLTIPS["Bollinger %B"])
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Bloque 3b: Medias Móviles ─────────────────────────────────────
+        st.markdown("### Medias Móviles")
+        st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
+        med_cols = st.columns(len(medias) * 2 if medias else 1)
+        for idx, p_m in enumerate(sorted(medias.keys())):
+            sma, ema = medias[p_m]
+            diff_sma = precio - sma
+            diff_ema = precio - ema
+            with med_cols[idx * 2]:
+                st.metric(f"SMA {p_m}", f"{sma:.4f}",
+                          delta=f"{diff_sma:+.4f} ({diff_sma/sma*100:+.1f}%)",
+                          help=TOOLTIPS.get(f"SMA {p_m}"))
+            with med_cols[idx * 2 + 1]:
+                st.metric(f"EMA {p_m}", f"{ema:.4f}",
+                          delta=f"{diff_ema:+.4f} ({diff_ema/ema*100:+.1f}%)")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Bloque 3c: Volumen ────────────────────────────────────────────
+        if vol_data:
+            st.markdown("### Volumen")
+            st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
+            col_v1, col_v2, col_v3 = st.columns(3)
+            with col_v1:
+                st.metric("Ratio vs 10d",
+                          f"{vol_data['ratio_10d']:.0f}%",
+                          delta=vol_data['clasificacion_10d'],
+                          help=TOOLTIPS["Ratio vs 10d"])
+            with col_v2:
+                st.metric("Ratio vs 3m",
+                          f"{vol_data['ratio_3m']:.0f}%",
+                          delta=vol_data['clasificacion_3m'],
+                          help=TOOLTIPS["Ratio vs 3m"])
+            with col_v3:
+                st.metric("Volumen sesión", _fmt_numero(vol_data['volumen']))
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.caption(
+                f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
+                f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
+
+        st.divider()
+
+        # ── Bloque 3d: Convergencia Técnica ──────────────────────────────
         _cv_h1, _cv_h2 = st.columns([6, 1])
         with _cv_h1:
             st.markdown("### 🔀 Convergencia Técnica")
@@ -2862,17 +2989,15 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
 
 Combina dos dimensiones de análisis que normalmente se ven por separado:
 
-**1. Niveles reforzados** — zonas de precio donde un nivel pivot y una media móvil (SMA o EMA) coinciden dentro de la tolerancia activa. Un soporte que además es la SMA50 tiene doble anclaje: memoria estadística del mercado (pivot) + referencia de tendencia seguida por institucionales (media).
+**1. Niveles reforzados** — zonas donde un pivot y una media móvil coinciden dentro de la tolerancia activa. Doble anclaje: memoria estadística del mercado (pivot) + referencia de tendencia institucional (media).
 
-**2. Señal direccional** — acuerdo entre todos los indicadores activos (RSI, MACD, SAR, Bollinger, precio vs medias). Cuanto mayor el consenso, mayor la convicción de la señal.
+**2. Señal direccional** — acuerdo entre todos los indicadores activos (RSI, MACD, SAR, Bollinger, precio vs medias). Cuanto mayor el consenso, mayor la convicción.
 
 ---
 
-**Cómo usarlo**
-
-- Un nivel reforzado próximo al precio actual es prioritario para gestión de stop o entrada.
-- Un consenso ≥ 70% alcista/bajista refuerza cualquier decisión tomada con base en los pivots.
-- Consenso mixto = mercado sin dirección clara → reducir tamaño de posición o esperar.
+- Consenso ≥ 70% alcista/bajista → señal de alta convicción.
+- Consenso mixto → mercado sin dirección clara, reducir tamaño o esperar.
+- Nivel reforzado próximo al precio = zona prioritaria para stop o entrada.
 
 ---
 *Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
@@ -2888,7 +3013,6 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                     dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
                     tipo_emoji = "🔴" if nr["tipo"] == "R" else ("🟢" if nr["tipo"] == "S" else "🔵")
                     tipo_label = "Resistencia" if nr["tipo"] == "R" else ("Soporte" if nr["tipo"] == "S" else "Pivot")
-
                     with st.container():
                         c1, c2, c3 = st.columns([3, 1, 2])
                         with c1:
@@ -2919,7 +3043,6 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
             )
             for nombre_s, desc_s, dir_s, _ in señales_dir:
                 q_google_s = f"{nombre_s} {desc_s.split()[1] if len(desc_s.split()) > 1 else ''} análisis técnico trading"
-                q_inv_s = nombre_s.replace(" ", "+")
                 c_s1, c_s2, c_s3 = st.columns([4, 1, 1])
                 with c_s1:
                     st.markdown(
@@ -2930,56 +3053,6 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                     st.link_button("🔍", _url_google(q_google_s), help=f"Google: {nombre_s}")
                 with c_s3:
                     st.link_button("📖", _url_investopedia(nombre_s), help=f"Investopedia: {nombre_s}")
-
-        st.divider()
-
-        # ── Bloque 3: Indicadores Técnicos (izq) | Volumen (der) ─────────
-        col_ind, col_vol = st.columns([3, 2])
-
-        with col_ind:
-            st.markdown("### Indicadores Técnicos")
-            st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
-            col_i1, col_i2, col_i3 = st.columns(3)
-            with col_i1:
-                st.metric("RSI 14", rsi_val,
-                          delta="Sobrecomprado" if rsi_val > 70 else (
-                              "Sobrevendido" if rsi_val < 30 else "Neutro"),
-                          help=TOOLTIPS["RSI 14"])
-                st.metric("MACD", f"{macd_val:.4f}",
-                          delta=f"Hist: {macd_hist_val:.4f}", help=TOOLTIPS["MACD"])
-            with col_i2:
-                st.metric("SAR", sar_tend, delta=f"{sar_val:.4f}", help=TOOLTIPS["SAR"])
-                st.metric("Bollinger %B", f"{pct_b:.1f}%", help=TOOLTIPS["Bollinger %B"])
-            with col_i3:
-                for p_m in [20, 50]:
-                    if p_m in medias:
-                        sma, ema = medias[p_m]
-                        diff = precio - sma
-                        st.metric(f"SMA {p_m}", f"{sma:.4f}",
-                                  delta=f"{diff:+.4f} ({diff/sma*100:+.1f}%)",
-                                  help=TOOLTIPS.get(f"SMA {p_m}"))
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with col_vol:
-            if vol_data:
-                st.markdown("### Volumen")
-                st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
-                col_v1, col_v2 = st.columns(2)
-                with col_v1:
-                    st.metric("Ratio vs 10d",
-                              f"{vol_data['ratio_10d']:.0f}%",
-                              delta=vol_data['clasificacion_10d'],
-                              help=TOOLTIPS["Ratio vs 10d"])
-                with col_v2:
-                    st.metric("Ratio vs 3m",
-                              f"{vol_data['ratio_3m']:.0f}%",
-                              delta=vol_data['clasificacion_3m'],
-                              help=TOOLTIPS["Ratio vs 3m"])
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.caption(
-                    f"Vol. hoy: {_fmt_numero(vol_data['volumen'])} | "
-                    f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
-                    f"Media 3m: {_fmt_numero(vol_data['media_3m'])}")
 
         st.divider()
 
@@ -3034,6 +3107,9 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                             vol_data=vol_data,
                             fundamentales=fundamentales,
                             tolerancia=tol_activa,
+                            niveles_reforzados=niveles_reforzados,
+                            señales_dir=señales_dir,
+                            consenso_dir=consenso_dir,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
