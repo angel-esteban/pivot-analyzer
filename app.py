@@ -72,6 +72,10 @@ st.markdown("""
     .ind-metrics [data-testid="stMetricValue"] { font-size: 0.95rem !important; line-height: 1.2 !important; font-weight: 600 !important; }
     .fund-metrics [data-testid="stMetricLabel"],
     .ind-metrics [data-testid="stMetricLabel"] { font-size: 0.82rem !important; font-weight: 500 !important; color: #374151 !important; }
+    /* Valores de selectbox y number_input más grandes */
+    [data-testid="stSelectbox"] div[data-baseweb="select"] span,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div { font-size: 1.05rem !important; }
+    [data-testid="stNumberInput"] input { font-size: 1.05rem !important; }
     .stButton button { width: 100%; }
     @media (max-width: 640px) {
         .block-container { padding: 0.3rem 0.2rem 2rem; }
