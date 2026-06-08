@@ -64,6 +64,14 @@ st.markdown("""
     .nivel-pp { color: #1565C0; font-family: monospace; }
     .confluencia { background: #FFF9C4; border-left: 3px solid #F57F17; padding: 2px 6px; }
     div[data-testid="metric-container"] { background: #F0F4F8; border-radius: 8px; }
+    [data-testid="stMetricValue"] { font-size: 1.25rem !important; line-height: 1.3 !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
+    [data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
+    /* Datos Fundamentales + Indicadores Técnicos + Volumen — valores pequeños, títulos más grandes */
+    .fund-metrics [data-testid="stMetricValue"],
+    .ind-metrics [data-testid="stMetricValue"] { font-size: 0.95rem !important; line-height: 1.2 !important; font-weight: 600 !important; }
+    .fund-metrics [data-testid="stMetricLabel"],
+    .ind-metrics [data-testid="stMetricLabel"] { font-size: 0.82rem !important; font-weight: 500 !important; color: #374151 !important; }
     .stButton button { width: 100%; }
     @media (max-width: 640px) {
         .block-container { padding: 0.3rem 0.2rem 2rem; }
@@ -2424,7 +2432,7 @@ def pantalla_analisis():
         nombre = info.get("longName") or info.get("shortName") or ticker_activo
 
         # ---- PRECIO ACTUAL ----
-        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        col_p1, col_p2, col_p3, col_p4 = st.columns([2.2, 2.1, 1.4, 1.1])
         cierre_ant = float(hist["Close"].iloc[-2]) if len(hist) > 1 else precio
         cambio = precio - cierre_ant
         cambio_pct = (cambio / cierre_ant * 100) if cierre_ant else 0
@@ -2433,16 +2441,9 @@ def pantalla_analisis():
         currency = info.get("currency", "")
         curr_str = f" {currency}" if currency else ""
 
-        # Timestamp del último dato disponible
-        try:
-            last_ts = pd.Timestamp(hist.index[-1])
-            try:
-                last_ts = last_ts.tz_localize(None)
-            except Exception:
-                last_ts = last_ts.tz_convert(None)
-            ts_str = last_ts.strftime("%d/%m/%Y")
-        except Exception:
-            ts_str = "—"
+        # Timestamp de carga del dato
+        from datetime import datetime as _dt
+        ts_str = _dt.now().strftime("%d/%m/%Y %H:%M")
 
         with col_p1:
             st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
@@ -2461,7 +2462,12 @@ def pantalla_analisis():
                            "Beta > 1: más volátil que el índice. "
                            "Beta < 1: menos volátil. Beta < 0: correlación inversa.")
 
-        st.caption(f"**{nombre}** · {tipo_activo.upper()} · Último dato: {ts_str} · Retraso ~15 min")
+        st.markdown(
+            f'<p style="font-size:0.88rem;color:#444;margin:4px 0 0 0">'
+            f'<b>{nombre}</b> · {tipo_activo.upper()} · '
+            f'Datos cargados: <b>{ts_str}</b> · Retraso ~15 min</p>',
+            unsafe_allow_html=True
+        )
 
         st.divider()
 
@@ -2552,13 +2558,104 @@ def pantalla_analisis():
         col_piv, col_conf = st.columns([3, 2])
 
         with col_piv:
-            st.markdown("### Pivot Points — " + sistema_activo)
+            _ph1, _ph2 = st.columns([6, 1])
+            with _ph1:
+                st.markdown("### Pivot Points — " + sistema_activo)
+            with _ph2:
+                with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("""
+**¿Qué son los Pivot Points?**
+
+Los Pivot Points son niveles de precio calculados matemáticamente a partir de los datos de la sesión anterior (máximo, mínimo y cierre). Representan zonas donde el mercado ha demostrado interés histórico y donde operadores institucionales y algoritmos concentran órdenes.
+
+---
+
+**Cálculo base (sistema Clásico)**
+- **PP** = (H + L + C) / 3 — centro de gravedad de la sesión anterior
+- **R1** = 2×PP − L · **R2** = PP + (H−L) · **R3** = H + 2×(PP−L)
+- **S1** = 2×PP − H · **S2** = PP − (H−L) · **S3** = L − 2×(H−PP)
+
+---
+
+**Sistemas disponibles**
+
+| Sistema | Característica |
+|---------|---------------|
+| **Clásico** | Fórmula estándar; máximo consenso de mercado |
+| **Woodie** | Mayor peso al cierre; PP ≠ media H/L/C |
+| **Camarilla** | Niveles muy ceñidos al precio; ideal intradía |
+| **Fibonacci** | Usa ratios 38.2 %, 61.8 %, 100 % sobre el rango |
+| **DeMark** | PP depende de si el cierre fue alcista o bajista |
+| **CPR** | Tres niveles (TC, PP, BC) que miden amplitud esperada del día |
+
+---
+
+**Timeframes calculados**
+- **Diario (D1)**: sesión de ayer. Relevante para intradía y swing corto.
+- **Semanal (W)**: semana anterior. Referencia swing 2–5 días.
+- **Mensual (M)**: mes anterior. Niveles macro de alta probabilidad.
+
+---
+
+**Interpretación operativa**
+- Precio **sobre el PP** → sesgo alcista; R1 y R2 son objetivos naturales.
+- Precio **bajo el PP** → sesgo bajista; S1 y S2 son los primeros soportes.
+- Un nivel donde el precio ha rebotado en sesiones previas tiene mayor peso estadístico.
+- Los pivots no son señales de entrada por sí solos — actúan como **zonas de atención** donde se evalúa la reacción del precio (volumen, velocidad, estructura de vela).
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
             for tf in TIMEFRAMES:
                 render_tabla_pivots(tf, resultados_pivots.get(tf), precio)
 
         with col_conf:
             if confluencias:
-                st.markdown("### Confluencias Multi-Timeframe")
+                _ch1, _ch2 = st.columns([5, 1])
+                with _ch1:
+                    st.markdown("### Confluencias Multi-Timeframe")
+                with _ch2:
+                    with st.popover("ℹ️", use_container_width=True):
+                        st.markdown("""
+**¿Qué es una Confluencia?**
+
+Una confluencia es una zona de precio donde **dos o más niveles de pivot de distintos timeframes o sistemas convergen** dentro de un margen de tolerancia. Cuantos más niveles coincidan, mayor es su relevancia técnica.
+
+---
+
+**Por qué importan**
+
+Operadores institucionales, algoritmos y traders discrecionales calculan pivots de forma independiente. Cuando múltiples sistemas señalan la misma zona, se acumulan órdenes de distintos actores — convirtiéndola en una barrera más difícil de superar o en un trampolín más potente.
+
+---
+
+**Sistema de estrellas**
+
+| Estrellas | Niveles coincidentes | Relevancia |
+|-----------|---------------------|------------|
+| ⭐ | 2 niveles | Notable — merece atención |
+| ⭐⭐ | 3 niveles | Alta — zona de alta probabilidad |
+| ⭐⭐⭐ | 4 o más niveles | Máxima — soporte/resistencia institucional |
+
+---
+
+**Implicaciones según tipo**
+
+- **Confluencia de resistencias** (R1+R2+R_semanal…): zona donde el precio probablemente encuentre vendedores. Objetivo de toma de beneficios en largos o posible entrada en cortos con confirmación.
+- **Confluencia de soportes** (S1+S2+S_semanal…): zona de potencial compra. Cuanto más cercana al precio y más ⭐, más relevante para gestionar stop o entrada.
+- **Confluencia mixta** (R de un TF + S de otro): zona de indecisión — el precio puede oscilar dentro del rango antes de definir dirección.
+
+---
+
+**Cómo operarlas**
+
+1. **No anticipar**: esperar que el precio llegue a la zona y observar la reacción (volumen, velas de inversión, reducción de momentum en RSI/MACD).
+2. **Stop-loss de referencia**: un cierre por debajo de una confluencia ⭐⭐⭐ tiene mayor implicación bajista que romper una resistencia aislada.
+3. **Combinar señales**: confluencia ⭐⭐⭐ en soporte + RSI < 30 + volumen bajo = escenario técnico de alta probabilidad de rebote. La convergencia entre sistemas es la clave.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
                 for c in confluencias:
                     dist = ((c["precio"] - precio) / precio * 100) if precio else 0
                     dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
@@ -2570,7 +2667,43 @@ def pantalla_analisis():
                         unsafe_allow_html=True
                     )
             else:
-                st.markdown("### Confluencias")
+                _ch1, _ch2 = st.columns([5, 1])
+                with _ch1:
+                    st.markdown("### Confluencias")
+                with _ch2:
+                    with st.popover("ℹ️", use_container_width=True):
+                        st.markdown("""
+**¿Qué es una Confluencia?**
+
+Una confluencia es una zona de precio donde **dos o más niveles de pivot de distintos timeframes o sistemas convergen** dentro de un margen de tolerancia. Cuantos más niveles coincidan, mayor es su relevancia técnica.
+
+---
+
+**Por qué importan**
+
+Operadores institucionales, algoritmos y traders discrecionales calculan pivots de forma independiente. Cuando múltiples sistemas señalan la misma zona, se acumulan órdenes de distintos actores — convirtiéndola en una barrera más difícil de superar o en un trampolín más potente.
+
+---
+
+**Sistema de estrellas**
+
+| Estrellas | Niveles coincidentes | Relevancia |
+|-----------|---------------------|------------|
+| ⭐ | 2 niveles | Notable — merece atención |
+| ⭐⭐ | 3 niveles | Alta — zona de alta probabilidad |
+| ⭐⭐⭐ | 4 o más niveles | Máxima — soporte/resistencia institucional |
+
+---
+
+**Implicaciones según tipo**
+
+- **Confluencia de resistencias**: zona donde el precio probablemente encuentre vendedores.
+- **Confluencia de soportes**: zona de potencial compra con mayor probabilidad de rebote.
+- **Confluencia mixta**: zona de indecisión — esperar definición de dirección.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
                 st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
 
         st.divider()
@@ -2580,6 +2713,7 @@ def pantalla_analisis():
 
         with col_ind:
             st.markdown("### Indicadores Técnicos")
+            st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
             col_i1, col_i2, col_i3 = st.columns(3)
             with col_i1:
                 st.metric("RSI 14", rsi_val,
@@ -2599,10 +2733,12 @@ def pantalla_analisis():
                         st.metric(f"SMA {p_m}", f"{sma:.4f}",
                                   delta=f"{diff:+.4f} ({diff/sma*100:+.1f}%)",
                                   help=TOOLTIPS.get(f"SMA {p_m}"))
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with col_vol:
             if vol_data:
                 st.markdown("### Volumen")
+                st.markdown('<div class="ind-metrics">', unsafe_allow_html=True)
                 col_v1, col_v2 = st.columns(2)
                 with col_v1:
                     st.metric("Ratio vs 10d",
@@ -2614,6 +2750,7 @@ def pantalla_analisis():
                               f"{vol_data['ratio_3m']:.0f}%",
                               delta=vol_data['clasificacion_3m'],
                               help=TOOLTIPS["Ratio vs 3m"])
+                st.markdown('</div>', unsafe_allow_html=True)
                 st.caption(
                     f"Vol. hoy: {_fmt_numero(vol_data['volumen'])} | "
                     f"Media 10d: {_fmt_numero(vol_data['media_10d'])} | "
@@ -2625,10 +2762,12 @@ def pantalla_analisis():
         if fundamentales:
             st.markdown("### Datos Fundamentales")
             fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+            st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
             cols_f = st.columns(3)
             for i, (k, v) in enumerate(fund_items):
                 with cols_f[i % 3]:
                     st.metric(k, v, help=TOOLTIPS.get(k))
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.divider()
 
