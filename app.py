@@ -499,6 +499,138 @@ def obtener_datos(ticker: str):
 # DATOS MACRO — ECB API (sin clave) + yfinance
 # =============================================================================
 
+@st.cache_data(ttl=3600)
+def obtener_historico_ecb(flow: str, series_key: str, n_obs: int = 72) -> "pd.Series | None":
+    """Serie histórica mensual desde ECB SDMX API."""
+    url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{series_key}"
+    try:
+        r = requests.get(url, params={"lastNObservations": n_obs, "format": "jsondata"}, timeout=15)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        ds = data["dataSets"][0]
+        obs = (list(ds["series"].values())[0]["observations"]
+               if "series" in ds else ds["observations"])
+        # Índice temporal desde structure
+        time_vals = data["structure"]["dimensions"]["observation"][0]["values"]
+        result = {}
+        for k, v in obs.items():
+            idx = int(k)
+            if idx < len(time_vals) and v[0] is not None:
+                result[time_vals[idx]["id"]] = float(v[0])
+        if not result:
+            return None
+        s = pd.Series(result)
+        s.index = pd.to_datetime(s.index)
+        return s.sort_index()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_historico_bis(n_obs: int = 72) -> "pd.Series | None":
+    """Fed Funds histórico mensual desde BIS WS_CBPOL."""
+    try:
+        r = requests.get(
+            "https://stats.bis.org/api/v1/data/WS_CBPOL/M.US",
+            params={"lastNObservations": n_obs},
+            timeout=15,
+            headers={"Accept": "application/vnd.sdmx.data+json", "User-Agent": "Mozilla/5.0"}
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        ds = data["data"]["dataSets"][0]
+        obs = list(ds.get("series", {}).values())[0]["observations"]
+        time_vals = data["data"]["structure"]["dimensions"]["observation"][0]["values"]
+        result = {}
+        for k, v in obs.items():
+            idx = int(k)
+            if idx < len(time_vals) and v[0] is not None:
+                result[time_vals[idx]["id"]] = float(v[0])
+        if not result:
+            return None
+        s = pd.Series(result)
+        s.index = pd.to_datetime(s.index)
+        return s.sort_index()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=86400)
+def obtener_historico_ipc_eeuu(n_years: int = 6) -> "pd.Series | None":
+    """US CPI YoY % histórico mensual desde BLS."""
+    import json as _json
+    from datetime import datetime as _dt
+    try:
+        year_now = _dt.now().year
+        payload = {"seriesid": ["CUUR0000SA0"],
+                   "startyear": str(year_now - n_years), "endyear": str(year_now)}
+        r = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                          data=_json.dumps(payload), timeout=20,
+                          headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200:
+            return None
+        resp = r.json()
+        if resp.get("status") != "REQUEST_SUCCEEDED":
+            return None
+        raw = resp["Results"]["series"][0]["data"]
+        raw.sort(key=lambda x: (x["year"], x["period"]))
+        result = {}
+        for pt in raw:
+            prev = [d for d in raw
+                    if d["year"] == str(int(pt["year"]) - 1) and d["period"] == pt["period"]]
+            if prev:
+                yoy = (float(pt["value"]) / float(prev[0]["value"]) - 1) * 100
+                month = int(pt["period"][1:])
+                result[pd.Timestamp(int(pt["year"]), month, 1)] = round(yoy, 2)
+        return pd.Series(result).sort_index() if result else None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_historico_yf(ticker: str, period: str = "2y") -> "pd.Series | None":
+    """Cierre histórico desde yfinance."""
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.history(period=period)
+        return hist["Close"] if not hist.empty else None
+    except Exception:
+        return None
+
+
+def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
+                 fecha_inicio: "pd.Timestamp | None" = None):
+    """Plotly multi-línea para series macro. Devuelve fig."""
+    import plotly.graph_objects as go
+    COLORS = ["#2563eb", "#16a34a", "#dc2626", "#d97706", "#7c3aed", "#0891b2"]
+    fig = go.Figure()
+    for i, (nombre, serie) in enumerate(series_dict.items()):
+        if serie is None or (hasattr(serie, "empty") and serie.empty):
+            continue
+        if fecha_inicio is not None:
+            serie = serie[serie.index >= fecha_inicio]
+        if serie.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=serie.index, y=serie.values, mode="lines", name=nombre,
+            line=dict(color=COLORS[i % len(COLORS)], width=2),
+            hovertemplate=f"<b>{nombre}</b><br>%{{x|%b %Y}}: %{{y:.2f}}{unidad}<extra></extra>"
+        ))
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=10, t=10, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    font=dict(size=11)),
+        hovermode="x unified",
+        plot_bgcolor="white", paper_bgcolor="white",
+        xaxis=dict(showgrid=True, gridcolor="#f1f5f9", tickformat="%b %Y",
+                   tickfont=dict(size=11)),
+        yaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                   ticksuffix=unidad, tickfont=dict(size=11)),
+    )
+    return fig
+
 @st.cache_data(ttl=3600)  # 1 hora — tipos e inflación cambian poco
 def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
     """Último valor de una serie del BCE Statistical Data Warehouse (JSON).
@@ -667,8 +799,21 @@ def obtener_precio_macro(ticker: str):
 def pestaña_macro():
     """Pestaña de contexto macroeconómico global."""
     st.markdown("### 🌍 Contexto Macroeconómico Global")
-    st.caption("BCE/Euribor: ECB Data Portal · Fed Funds: BIS · IPC EEUU: BLS · "
-               "Mercados: Yahoo Finance (~15 min de retraso)")
+
+    # ── Selector de horizonte temporal ───────────────────────────────────────
+    _hc1, _hc2 = st.columns([5, 3])
+    with _hc1:
+        st.caption("BCE/Euribor: ECB Data Portal · Fed Funds: BIS · IPC EEUU: BLS · "
+                   "Mercados: Yahoo Finance (~15 min de retraso)")
+    with _hc2:
+        horizonte = st.radio("Horizonte histórico", ["6M", "1A", "3A", "5A"],
+                             horizontal=True, index=1, key="macro_horizonte",
+                             label_visibility="collapsed")
+
+    _yf_period  = {"6M": "6mo", "1A": "2y", "3A": "3y", "5A": "5y"}[horizonte]
+    _n_obs      = {"6M": 8, "1A": 15, "3A": 40, "5A": 65}[horizonte]
+    _fecha_ini  = pd.Timestamp.now() - pd.DateOffset(
+                    months={"6M": 6, "1A": 12, "3A": 36, "5A": 60}[horizonte])
 
     # ── TIPOS DE INTERÉS ─────────────────────────────────────────────────────
     st.markdown("#### 📊 Tipos de Interés")
@@ -682,63 +827,79 @@ def pestaña_macro():
 
     with col1:
         st.metric("BCE — DFR", f"{dfr:.2f}%" if dfr is not None else "—",
-                  help="Tipo de la Facilidad de Depósito del BCE. Es el tipo de referencia de la zona euro: "
-                       "condiciona el coste del dinero para bancos y, en cascada, hipotecas, bonos y valoraciones de activos.")
+                  help="Tipo de la Facilidad de Depósito del BCE. Referencia de la zona euro.")
     with col2:
         st.metric("Euribor 12M", f"{euribor12m:.3f}%" if euribor12m is not None else "—",
-                  help="Tipo al que los bancos europeos se prestan dinero a 12 meses. "
-                       "Referencia directa para hipotecas variables en España.")
+                  help="Tipo interbancario a 12 meses. Referencia directa para hipotecas variables en España.")
     with col3:
         if us10y is not None:
             st.metric("US Treasury 10Y", f"{us10y:.2f}%", delta=f"{us10y_d:+.2f}% (día)",
-                      help="Rendimiento del bono soberano estadounidense a 10 años. "
-                           "Tasa libre de riesgo de referencia global: cuando sube, "
-                           "presiona a la baja las valoraciones de todos los activos de riesgo.")
+                      help="Rendimiento del bono soberano EEUU a 10 años. Tasa libre de riesgo global.")
         else:
             st.metric("US Treasury 10Y", "—")
     with col4:
-        if fed_funds is not None:
-            st.metric("Fed Funds", f"{fed_funds:.2f}%",
-                      help="Tipo de política monetaria de la Reserva Federal. "
-                           "Fuente: BIS Central Bank Policy Rates (WS_CBPOL), dato mensual.")
-        else:
-            st.metric("Fed Funds", "—",
-                      help="Tipo de política monetaria de la Reserva Federal. Fuente: BIS.")
+        st.metric("Fed Funds", f"{fed_funds:.2f}%" if fed_funds is not None else "—",
+                  help="Tipo de política monetaria de la Fed. Fuente: BIS WS_CBPOL.")
+
+    # Gráfico histórico — Tipos
+    with st.spinner("Cargando histórico tipos..."):
+        h_dfr      = obtener_historico_ecb("ECB", "B.U2.EUR.4F.KR.DFR.LEV", _n_obs)
+        h_euribor  = obtener_historico_ecb("FM", "M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA", _n_obs)
+        h_fedfunds = obtener_historico_bis(_n_obs)
+        h_us10y    = obtener_historico_yf("^TNX", _yf_period)
+
+    fig_tipos = _macro_chart({
+        "BCE DFR": h_dfr,
+        "Euribor 12M": h_euribor,
+        "Fed Funds": h_fedfunds,
+        "US Treasury 10Y": h_us10y,
+    }, unidad="%", fecha_inicio=_fecha_ini)
+    st.plotly_chart(fig_tipos, use_container_width=True, config={"displayModeBar": False})
 
     # ── INFLACIÓN ────────────────────────────────────────────────────────────
     st.markdown("#### 📈 Inflación (IPC interanual — último dato disponible)")
     col5, col6, col7 = st.columns(3)
 
-    with st.spinner("Cargando inflación BCE y FRED..."):
+    with st.spinner("Cargando inflación..."):
         hicp_eu  = obtener_dato_ecb("M.U2.N.000000.4.ANR", "ICP")
         hicp_es  = obtener_dato_ecb("M.ES.N.000000.4.ANR", "ICP")
         ipc_eeuu = obtener_ipc_eeuu()
 
     with col5:
         if hicp_eu is not None:
-            semaforo = "🔴" if hicp_eu > 3 else ("🟡" if hicp_eu > 2 else "🟢")
-            st.metric(f"IPC Eurozona {semaforo}", f"{hicp_eu:.1f}%",
-                      help="HICP (Índice Armonizado de Precios al Consumo) de la zona euro en tasa interanual. "
-                           "Objetivo BCE: ~2%. 🟢 ≤2% | 🟡 2-3% | 🔴 >3%")
+            sem = "🔴" if hicp_eu > 3 else ("🟡" if hicp_eu > 2 else "🟢")
+            st.metric(f"IPC Eurozona {sem}", f"{hicp_eu:.1f}%",
+                      help="HICP zona euro interanual. Objetivo BCE: ~2%.")
         else:
             st.metric("IPC Eurozona", "—")
     with col6:
         if hicp_es is not None:
-            semaforo = "🔴" if hicp_es > 3 else ("🟡" if hicp_es > 2 else "🟢")
-            st.metric(f"IPC España {semaforo}", f"{hicp_es:.1f}%",
-                      help="HICP de España en tasa interanual (INE/BCE). "
-                           "Divergencias respecto a la media europea afectan la competitividad real española.")
+            sem = "🔴" if hicp_es > 3 else ("🟡" if hicp_es > 2 else "🟢")
+            st.metric(f"IPC España {sem}", f"{hicp_es:.1f}%",
+                      help="HICP España interanual (INE/BCE).")
         else:
             st.metric("IPC España", "—")
     with col7:
         if ipc_eeuu is not None:
-            sem_us = "🔴" if ipc_eeuu > 3 else ("🟡" if ipc_eeuu > 2 else "🟢")
-            st.metric(f"IPC EEUU {sem_us}", f"{ipc_eeuu:.1f}%",
-                      help="CPI EEUU interanual (CPIAUCSL, BLS via FRED). "
-                           "Fuente: FRED / St. Louis Fed. 🟢 ≤2% | 🟡 2-3% | 🔴 >3%")
+            sem = "🔴" if ipc_eeuu > 3 else ("🟡" if ipc_eeuu > 2 else "🟢")
+            st.metric(f"IPC EEUU {sem}", f"{ipc_eeuu:.1f}%",
+                      help="CPI EEUU interanual. Fuente: BLS.")
         else:
-            st.metric("IPC EEUU", "—",
-                      help="CPI EEUU interanual. Fuente: FRED.")
+            st.metric("IPC EEUU", "—")
+
+    # Gráfico histórico — Inflación
+    _n_ipc = {"6M": 2, "1A": 3, "3A": 5, "5A": 7}[horizonte]
+    with st.spinner("Cargando histórico inflación..."):
+        h_hicp_eu = obtener_historico_ecb("ICP", "M.U2.N.000000.4.ANR", _n_obs)
+        h_hicp_es = obtener_historico_ecb("ICP", "M.ES.N.000000.4.ANR", _n_obs)
+        h_ipc_us  = obtener_historico_ipc_eeuu(_n_ipc)
+
+    fig_ipc = _macro_chart({
+        "IPC Eurozona": h_hicp_eu,
+        "IPC España": h_hicp_es,
+        "IPC EEUU": h_ipc_us,
+    }, unidad="%", fecha_inicio=_fecha_ini)
+    st.plotly_chart(fig_ipc, use_container_width=True, config={"displayModeBar": False})
 
     st.divider()
 
@@ -746,49 +907,56 @@ def pestaña_macro():
     st.markdown("#### 💱 Divisas (base EUR)")
     tickers_fx = {
         "EUR/USD": ("EURUSD=X",
-                    "Cruce euro/dólar. Para el inversor español: afecta el retorno de activos en USD "
-                    "sin cobertura de divisa. Por encima de 1.10 el USD está débil; por debajo de 1.05, fuerte."),
+                    "Cruce euro/dólar. Afecta retorno de activos USD sin cobertura. "
+                    ">1.10: USD débil. <1.05: USD fuerte."),
         "EUR/GBP": ("EURGBP=X",
-                    "Cruce euro/libra esterlina. Referencia para exposición al mercado británico (FTSE 100, gilts)."),
+                    "Cruce euro/libra. Referencia para exposición al mercado británico."),
         "EUR/JPY": ("EURJPY=X",
-                    "Cruce euro/yen. El yen es divisa refugio: su debilidad sostenida indica apetito por el riesgo global."),
+                    "Cruce euro/yen. Yen es divisa refugio: debilidad sostenida indica apetito por riesgo."),
         "EUR/CHF": ("EURCHF=X",
-                    "Cruce euro/franco suizo. El CHF también es refugio: cercano a 1.0 indica tensión en Europa."),
+                    "Cruce euro/franco suizo. CHF también es refugio: cercano a 1.0 indica tensión europea."),
     }
     cols_fx = st.columns(4)
     for i, (nombre, (tkr, tooltip)) in enumerate(tickers_fx.items()):
         precio, delta = obtener_precio_macro(tkr)
         with cols_fx[i]:
-            if precio is not None:
-                st.metric(nombre, f"{precio:.4f}", delta=f"{delta:+.2f}%", help=tooltip)
-            else:
-                st.metric(nombre, "—", help=tooltip)
+            st.metric(nombre, f"{precio:.4f}" if precio else "—",
+                      delta=f"{delta:+.2f}%" if delta else None, help=tooltip)
+
+    # Gráfico histórico — Divisas
+    with st.spinner("Cargando histórico divisas..."):
+        h_fx = {n: obtener_historico_yf(tkr, _yf_period)
+                for n, (tkr, _) in tickers_fx.items()}
+    fig_fx = _macro_chart(h_fx, unidad="", fecha_inicio=_fecha_ini)
+    st.plotly_chart(fig_fx, use_container_width=True, config={"displayModeBar": False})
 
     # ── COMMODITIES ──────────────────────────────────────────────────────────
     st.markdown("#### 🛢️ Commodities")
     tickers_comm = {
         "Oro (USD/oz)":      ("GC=F",
-                              "Precio del oro en futuros continuos (USD por onza troy). "
-                              "Activo refugio por excelencia: sube en entornos de incertidumbre, "
-                              "dólar débil e inflación elevada."),
+                              "Oro en futuros (USD/oz troy). Refugio clásico: sube con incertidumbre, "
+                              "dólar débil e inflación."),
         "Brent (USD/b)":     ("BZ=F",
-                              "Petróleo Brent en futuros (USD por barril). Referencia europea del crudo: "
-                              "componente directo de la inflación via energía y transporte."),
+                              "Petróleo Brent en futuros (USD/barril). Referencia europea del crudo."),
         "WTI (USD/b)":       ("CL=F",
-                              "West Texas Intermediate, referencia estadounidense del crudo. "
-                              "Normalmente cotiza con ligero descuento frente al Brent."),
+                              "West Texas Intermediate, referencia EEUU. Cotiza con descuento vs Brent."),
         "Gas Natural (USD)": ("NG=F",
-                              "Gas Natural Henry Hub (USD/MMBTU). Correlación con precios energéticos "
-                              "europeos especialmente alta desde el shock 2021-22."),
+                              "Gas Natural Henry Hub (USD/MMBTU). Alta correlación con precios "
+                              "energéticos europeos desde el shock 2021-22."),
     }
     cols_comm = st.columns(4)
     for i, (nombre, (tkr, tooltip)) in enumerate(tickers_comm.items()):
         precio, delta = obtener_precio_macro(tkr)
         with cols_comm[i]:
-            if precio is not None:
-                st.metric(nombre, f"{precio:.2f}", delta=f"{delta:+.2f}%", help=tooltip)
-            else:
-                st.metric(nombre, "—", help=tooltip)
+            st.metric(nombre, f"{precio:.2f}" if precio else "—",
+                      delta=f"{delta:+.2f}%" if delta else None, help=tooltip)
+
+    # Gráfico histórico — Commodities
+    with st.spinner("Cargando histórico commodities..."):
+        h_comm = {n: obtener_historico_yf(tkr, _yf_period)
+                  for n, (tkr, _) in tickers_comm.items()}
+    fig_comm = _macro_chart(h_comm, unidad=" USD", fecha_inicio=_fecha_ini)
+    st.plotly_chart(fig_comm, use_container_width=True, config={"displayModeBar": False})
 
     st.divider()
 
@@ -796,38 +964,66 @@ def pestaña_macro():
     st.markdown("#### 📉 Índices Bursátiles y Volatilidad")
     tickers_idx = [
         ("VIX",          "^VIX",
-         "Volatilidad implícita del S&P 500 (CBOE). >30: pánico. 15-30: cautela. <15: complacencia. "
-         "El VIX por encima de 25 históricamente coincide con correcciones del 10%+ en S&P 500."),
+         ">30: pánico. 15-30: cautela. <15: complacencia."),
         ("S&P 500",      "^GSPC",
-         "Índice de las 500 mayores empresas de EEUU. Referencia global de renta variable. "
-         "Concentración actual en tecnología megacap sin precedente histórico cercano al Nifty Fifty de 1972."),
+         "500 mayores empresas EEUU. Referencia global de renta variable."),
         ("Nasdaq 100",   "^NDX",
-         "Las 100 mayores no-financieras del Nasdaq. Domina tecnología y growth: "
-         "muy sensible a variaciones en tipos de interés reales (duración larga implícita)."),
+         "100 mayores no-financieras Nasdaq. Muy sensible a tipos de interés reales."),
         ("IBEX 35",      "^IBEX",
-         "Índice de referencia de la bolsa española. Fuerte peso bancario (~30%) y utilities. "
-         "Correlaciona con ciclo europeo y con la prima de riesgo periférica España-Alemania."),
+         "Referencia bolsa española. Fuerte peso bancario (~30%) y utilities."),
         ("DAX 40",       "^GDAXI",
-         "Índice de referencia alemán. Exportador puro: muy sensible al ciclo global, "
-         "especialmente a China y la demanda manufacturera mundial."),
+         "Índice alemán. Exportador puro: sensible al ciclo global y a China."),
         ("Eurostoxx 50", "^STOXX50E",
-         "Las 50 mayores empresas de la eurozona. Referencia de renta variable europea: "
-         "base de la mayoría de ETFs UCITS de RV Europa accesibles desde España."),
+         "50 mayores empresas eurozona. Base de ETFs UCITS de RV Europa."),
     ]
     cols_idx = st.columns(3)
     for i, (nombre, tkr, tooltip) in enumerate(tickers_idx):
         precio, delta = obtener_precio_macro(tkr)
         with cols_idx[i % 3]:
-            if precio is not None:
-                fmt = f"{precio:,.2f}"
-                st.metric(nombre, fmt, delta=f"{delta:+.2f}%", help=tooltip)
-            else:
-                st.metric(nombre, "—", help=tooltip)
+            st.metric(nombre, f"{precio:,.2f}" if precio else "—",
+                      delta=f"{delta:+.2f}%" if delta else None, help=tooltip)
+
+    # Gráfico histórico — Índices (dos separados: VIX solo, índices de precio)
+    with st.spinner("Cargando histórico índices..."):
+        h_vix  = obtener_historico_yf("^VIX",     _yf_period)
+        h_spx  = obtener_historico_yf("^GSPC",    _yf_period)
+        h_ndx  = obtener_historico_yf("^NDX",     _yf_period)
+        h_ibex = obtener_historico_yf("^IBEX",    _yf_period)
+        h_dax  = obtener_historico_yf("^GDAXI",   _yf_period)
+        h_sx50 = obtener_historico_yf("^STOXX50E",_yf_period)
+
+    # Normalizar a base 100 para comparar en el mismo gráfico
+    def _base100(s):
+        if s is None or s.empty:
+            return s
+        s = s[s.index >= _fecha_ini]
+        if s.empty:
+            return s
+        return (s / s.iloc[0]) * 100
+
+    fig_idx = _macro_chart({
+        "S&P 500":     _base100(h_spx),
+        "Nasdaq 100":  _base100(h_ndx),
+        "IBEX 35":     _base100(h_ibex),
+        "DAX 40":      _base100(h_dax),
+        "Eurostoxx 50":_base100(h_sx50),
+    }, unidad="", fecha_inicio=_fecha_ini)
+    fig_idx.update_layout(yaxis_title="Base 100")
+    st.plotly_chart(fig_idx, use_container_width=True, config={"displayModeBar": False})
+
+    # VIX aparte
+    st.caption("**VIX — Volatilidad implícita**")
+    fig_vix = _macro_chart({"VIX": h_vix}, unidad="", fecha_inicio=_fecha_ini, height=180)
+    fig_vix.update_traces(line_color="#dc2626")
+    fig_vix.add_hline(y=30, line_dash="dot", line_color="#dc2626",
+                      annotation_text="Pánico (30)", annotation_position="right")
+    fig_vix.add_hline(y=15, line_dash="dot", line_color="#16a34a",
+                      annotation_text="Complacencia (15)", annotation_position="right")
+    st.plotly_chart(fig_vix, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("---")
-    st.caption("**Fuentes:** BCE Statistical Data Warehouse (tipos e inflación, sin API key) · "
-               "Yahoo Finance (mercados, FX, commodities, índices) · "
-               "Análisis educativo — no constituye asesoramiento de inversión (MiFID II).")
+    st.caption("**Fuentes:** BCE Statistical Data Warehouse · BIS WS_CBPOL · BLS · "
+               "Yahoo Finance · Análisis educativo — no constituye asesoramiento de inversión (MiFID II).")
 
 
 def precio_actual(hist: pd.DataFrame):
