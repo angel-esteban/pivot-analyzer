@@ -517,17 +517,20 @@ def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
 
 @st.cache_data(ttl=3600)
 def obtener_euribor_12m() -> float | None:
-    """Euribor 12M — prueba varias claves de serie ECB hasta obtener un valor."""
+    """Euribor 12M — prueba varias claves y hosts ECB hasta obtener un valor."""
+    # (host, flow, key) — se prueban en orden; incluye el host antiguo como fallback
     candidatos = [
-        ("FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # clave estándar (diaria)
-        ("FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # frecuencia D (diaria alt.)
-        ("FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),   # mensual
-        ("FM", "B.U2.EUR.RT.MM.EURIBOR12MD.HSTA"),    # sin underscore final
-        ("FM", "B.U2.EUR.4F.KR.EURIBOR12MD_.HSTA"),   # distinta clasificación
+        ("https://data-api.ecb.europa.eu",   "FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
+        ("https://data-api.ecb.europa.eu",   "FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
+        ("https://data-api.ecb.europa.eu",   "FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
+        ("https://data-api.ecb.europa.eu",   "FM", "B.U2.EUR.RT.MM.EURIBOR12MD.HSTA"),
+        ("https://sdw-wsrest.ecb.europa.eu", "FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
+        ("https://sdw-wsrest.ecb.europa.eu", "FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
+        ("https://sdw-wsrest.ecb.europa.eu", "FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
     ]
-    for flow, key in candidatos:
+    for host, flow, key in candidatos:
         try:
-            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{key}"
+            url = f"{host}/service/data/{flow}/{key}"
             r = requests.get(url,
                              params={"lastNObservations": 1, "format": "jsondata"},
                              timeout=15)
@@ -546,6 +549,51 @@ def obtener_euribor_12m() -> float | None:
         except Exception:
             continue
     return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_fed_funds() -> float | None:
+    """Fed Funds Target Rate Upper Bound — FRED CSV público (sin API key).
+    Serie DFEDTARU: tipo objetivo máximo de la Fed."""
+    try:
+        r = requests.get(
+            "https://fred.stlouisfed.org/graph/fredgraph.csv",
+            params={"id": "DFEDTARU"},
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        if r.status_code != 200:
+            return None
+        lines = [l for l in r.text.strip().split("\n") if "," in l][1:]  # omite cabecera
+        if not lines:
+            return None
+        last_val = lines[-1].split(",")[1].strip()
+        return float(last_val) if last_val and last_val != "." else None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=86400)  # Dato mensual — refrescar una vez al día
+def obtener_ipc_eeuu() -> float | None:
+    """US CPI YoY % — calculado desde FRED CPIAUCSL (sin API key).
+    Tasa interanual: (último / hace 12 meses - 1) × 100."""
+    try:
+        r = requests.get(
+            "https://fred.stlouisfed.org/graph/fredgraph.csv",
+            params={"id": "CPIAUCSL"},
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        if r.status_code != 200:
+            return None
+        lines = [l for l in r.text.strip().split("\n") if "," in l][1:]  # omite cabecera
+        if len(lines) < 13:
+            return None
+        ultimo  = float(lines[-1].split(",")[1])
+        hace12m = float(lines[-13].split(",")[1])
+        return (ultimo / hace12m - 1) * 100
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=900)  # 15 min — datos de mercado
@@ -574,9 +622,10 @@ def pestaña_macro():
     st.markdown("#### 📊 Tipos de Interés")
     col1, col2, col3, col4 = st.columns(4)
 
-    with st.spinner("Cargando tipos BCE..."):
+    with st.spinner("Cargando tipos BCE y Fed..."):
         dfr        = obtener_dato_ecb("B.U2.EUR.4F.KR.DFR.LEV")
         euribor12m = obtener_euribor_12m()
+        fed_funds  = obtener_fed_funds()
     us10y, us10y_d = obtener_precio_macro("^TNX")
 
     with col1:
@@ -596,17 +645,22 @@ def pestaña_macro():
         else:
             st.metric("US Treasury 10Y", "—")
     with col4:
-        st.metric("Fed Funds", "→ fed.gov",
-                  help="Tipo objetivo de la Reserva Federal. Dato actualizado en: "
-                       "federalreserve.gov/releases/h15 · Se puede activar via FRED API Key.")
+        if fed_funds is not None:
+            st.metric("Fed Funds", f"{fed_funds:.2f}%",
+                      help="Tipo objetivo máximo de la Reserva Federal (DFEDTARU). "
+                           "Fuente: FRED / St. Louis Fed (dato diario, sin API key).")
+        else:
+            st.metric("Fed Funds", "—",
+                      help="Tipo objetivo de la Reserva Federal. Fuente: FRED.")
 
     # ── INFLACIÓN ────────────────────────────────────────────────────────────
     st.markdown("#### 📈 Inflación (IPC interanual — último dato disponible)")
     col5, col6, col7 = st.columns(3)
 
-    with st.spinner("Cargando inflación BCE..."):
-        hicp_eu = obtener_dato_ecb("M.U2.N.000000.4.ANR", "ICP")
-        hicp_es = obtener_dato_ecb("M.ES.N.000000.4.ANR", "ICP")
+    with st.spinner("Cargando inflación BCE y FRED..."):
+        hicp_eu  = obtener_dato_ecb("M.U2.N.000000.4.ANR", "ICP")
+        hicp_es  = obtener_dato_ecb("M.ES.N.000000.4.ANR", "ICP")
+        ipc_eeuu = obtener_ipc_eeuu()
 
     with col5:
         if hicp_eu is not None:
@@ -625,9 +679,14 @@ def pestaña_macro():
         else:
             st.metric("IPC España", "—")
     with col7:
-        st.metric("IPC EEUU", "→ FRED",
-                  help="CPI EEUU actualizado en: fred.stlouisfed.org/series/CPIAUCSL "
-                       "Se puede activar via FRED API Key en la configuración.")
+        if ipc_eeuu is not None:
+            sem_us = "🔴" if ipc_eeuu > 3 else ("🟡" if ipc_eeuu > 2 else "🟢")
+            st.metric(f"IPC EEUU {sem_us}", f"{ipc_eeuu:.1f}%",
+                      help="CPI EEUU interanual (CPIAUCSL, BLS via FRED). "
+                           "Fuente: FRED / St. Louis Fed. 🟢 ≤2% | 🟡 2-3% | 🔴 >3%")
+        else:
+            st.metric("IPC EEUU", "—",
+                      help="CPI EEUU interanual. Fuente: FRED.")
 
     st.divider()
 
