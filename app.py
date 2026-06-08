@@ -50,7 +50,6 @@ st.set_page_config(
 # CSS personalizado — optimizado para móvil
 st.markdown("""
 <style>
-    .stApp { background-color: #EEF2F7 !important; }
     .main > div { padding: 0.5rem 0.5rem; }
     .block-container { padding: 0.5rem 0.5rem 2rem; max-width: 900px; }
     h1 { font-size: 1.4rem !important; color: #1F4E79; }
