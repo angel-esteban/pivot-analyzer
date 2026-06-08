@@ -517,81 +517,120 @@ def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
 
 @st.cache_data(ttl=3600)
 def obtener_euribor_12m() -> float | None:
-    """Euribor 12M — prueba varias claves y hosts ECB hasta obtener un valor."""
-    # (host, flow, key) — se prueban en orden; incluye el host antiguo como fallback
-    candidatos = [
-        ("https://data-api.ecb.europa.eu",   "FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-        ("https://data-api.ecb.europa.eu",   "FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-        ("https://data-api.ecb.europa.eu",   "FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-        ("https://data-api.ecb.europa.eu",   "FM", "B.U2.EUR.RT.MM.EURIBOR12MD.HSTA"),
-        ("https://sdw-wsrest.ecb.europa.eu", "FM", "B.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-        ("https://sdw-wsrest.ecb.europa.eu", "FM", "D.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-        ("https://sdw-wsrest.ecb.europa.eu", "FM", "M.U2.EUR.RT.MM.EURIBOR12MD_.HSTA"),
-    ]
-    for host, flow, key in candidatos:
-        try:
-            url = f"{host}/service/data/{flow}/{key}"
-            r = requests.get(url,
-                             params={"lastNObservations": 1, "format": "jsondata"},
-                             timeout=15)
-            if r.status_code != 200:
-                continue
-            data = r.json()
-            ds = data["dataSets"][0]
-            obs = (list(ds["series"].values())[0]["observations"]
-                   if "series" in ds else ds["observations"])
-            if not obs:
-                continue
-            last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
-            val = obs[last_key][0]
-            if val is not None:
-                return float(val)
-        except Exception:
-            continue
-    return None
+    """Euribor 12M (1 año) — ECB Data Portal FM flow.
+    Clave correcta: EURIBOR1YD_ (no EURIBOR12MD_). Frecuencia mensual."""
+    try:
+        url = "https://data-api.ecb.europa.eu/service/data/FM/M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA"
+        r = requests.get(url,
+                         params={"lastNObservations": 1, "format": "jsondata"},
+                         timeout=15)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        ds = data["dataSets"][0]
+        obs = (list(ds["series"].values())[0]["observations"]
+               if "series" in ds else ds["observations"])
+        if not obs:
+            return None
+        last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
+        val = obs[last_key][0]
+        return float(val) if val is not None else None
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=3600)
 def obtener_fed_funds() -> float | None:
-    """Fed Funds Target Rate Upper Bound — FRED CSV público (sin API key).
-    Serie DFEDTARU: tipo objetivo máximo de la Fed."""
+    """Fed Funds rate — BIS Central Bank Policy Rates (WS_CBPOL).
+    Fuente: Bank for International Settlements, serie M.US."""
     try:
         r = requests.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv",
-            params={"id": "DFEDTARU"},
+            "https://stats.bis.org/api/v1/data/WS_CBPOL/M.US",
+            params={"lastNObservations": 1},
             timeout=15,
-            headers={"User-Agent": "Mozilla/5.0"}
+            headers={"Accept": "application/vnd.sdmx.data+json",
+                     "User-Agent": "Mozilla/5.0"}
         )
         if r.status_code != 200:
             return None
-        lines = [l for l in r.text.strip().split("\n") if "," in l][1:]  # omite cabecera
-        if not lines:
+        data = r.json()
+        ds = data["data"]["dataSets"][0]
+        series = ds.get("series", {})
+        if not series:
             return None
-        last_val = lines[-1].split(",")[1].strip()
-        return float(last_val) if last_val and last_val != "." else None
+        obs = list(series.values())[0]["observations"]
+        if not obs:
+            return None
+        last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
+        val = obs[last_key][0]
+        return float(val) if val is not None else None
     except Exception:
         return None
 
 
 @st.cache_data(ttl=86400)  # Dato mensual — refrescar una vez al día
 def obtener_ipc_eeuu() -> float | None:
-    """US CPI YoY % — calculado desde FRED CPIAUCSL (sin API key).
-    Tasa interanual: (último / hace 12 meses - 1) × 100."""
+    """US CPI YoY % — BLS public API (serie CUUR0000SA0, sin API key).
+    Tasa interanual: (último mes / mismo mes año anterior - 1) × 100."""
     try:
-        r = requests.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv",
-            params={"id": "CPIAUCSL"},
-            timeout=15,
-            headers={"User-Agent": "Mozilla/5.0"}
+        import json as _json
+        # Solicitar los últimos 13 meses (necesitamos el actual + el de hace 12)
+        from datetime import datetime
+        year_now = datetime.now().year
+        payload = {
+            "seriesid": ["CUUR0000SA0"],
+            "startyear": str(year_now - 1),
+            "endyear":   str(year_now),
+        }
+        r = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            data=_json.dumps(payload),
+            timeout=20,
+            headers={"Content-Type": "application/json",
+                     "User-Agent": "Mozilla/5.0"}
         )
         if r.status_code != 200:
             return None
-        lines = [l for l in r.text.strip().split("\n") if "," in l][1:]  # omite cabecera
-        if len(lines) < 13:
+        resp = r.json()
+        if resp.get("status") != "REQUEST_SUCCEEDED":
             return None
-        ultimo  = float(lines[-1].split(",")[1])
-        hace12m = float(lines[-13].split(",")[1])
-        return (ultimo / hace12m - 1) * 100
+        series_data = resp["Results"]["series"][0]["data"]
+        # Ordenar: año desc, período desc
+        series_data.sort(key=lambda x: (x["year"], x["period"]), reverse=True)
+        if len(series_data) < 2:
+            return None
+        latest = series_data[0]
+        # Buscar el mismo mes del año anterior
+        prev_year = [d for d in series_data
+                     if d["year"] == str(int(latest["year"]) - 1)
+                     and d["period"] == latest["period"]]
+        if not prev_year:
+            # Si no tenemos datos del año anterior en el rango, ampliar consulta
+            payload2 = {
+                "seriesid": ["CUUR0000SA0"],
+                "startyear": str(year_now - 2),
+                "endyear":   str(year_now - 1),
+            }
+            r2 = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                data=_json.dumps(payload2),
+                timeout=20,
+                headers={"Content-Type": "application/json",
+                         "User-Agent": "Mozilla/5.0"}
+            )
+            if r2.status_code != 200:
+                return None
+            resp2 = r2.json()
+            if resp2.get("status") != "REQUEST_SUCCEEDED":
+                return None
+            prev_data = resp2["Results"]["series"][0]["data"]
+            prev_year = [d for d in prev_data
+                         if d["year"] == str(int(latest["year"]) - 1)
+                         and d["period"] == latest["period"]]
+        if not prev_year:
+            return None
+        yoy = (float(latest["value"]) / float(prev_year[0]["value"]) - 1) * 100
+        return yoy
     except Exception:
         return None
 
@@ -615,7 +654,7 @@ def obtener_precio_macro(ticker: str):
 def pestaña_macro():
     """Pestaña de contexto macroeconómico global."""
     st.markdown("### 🌍 Contexto Macroeconómico Global")
-    st.caption("Tipos e inflación: BCE Statistical Data Warehouse (actualización horaria) · "
+    st.caption("BCE/Euribor: ECB Data Portal · Fed Funds: BIS · IPC EEUU: BLS · "
                "Mercados: Yahoo Finance (~15 min de retraso)")
 
     # ── TIPOS DE INTERÉS ─────────────────────────────────────────────────────
@@ -647,11 +686,11 @@ def pestaña_macro():
     with col4:
         if fed_funds is not None:
             st.metric("Fed Funds", f"{fed_funds:.2f}%",
-                      help="Tipo objetivo máximo de la Reserva Federal (DFEDTARU). "
-                           "Fuente: FRED / St. Louis Fed (dato diario, sin API key).")
+                      help="Tipo de política monetaria de la Reserva Federal. "
+                           "Fuente: BIS Central Bank Policy Rates (WS_CBPOL), dato mensual.")
         else:
             st.metric("Fed Funds", "—",
-                      help="Tipo objetivo de la Reserva Federal. Fuente: FRED.")
+                      help="Tipo de política monetaria de la Reserva Federal. Fuente: BIS.")
 
     # ── INFLACIÓN ────────────────────────────────────────────────────────────
     st.markdown("#### 📈 Inflación (IPC interanual — último dato disponible)")
