@@ -2872,6 +2872,125 @@ def pantalla_analisis():
             unsafe_allow_html=True
         )
 
+        # ── Gráfico de evolución de precio ───────────────────────────────
+        with st.expander("📈 Ver histórico de precio"):
+            import plotly.graph_objects as go
+            _ph_col1, _ph_col2 = st.columns([3, 1])
+            with _ph_col2:
+                _ph_periodo = st.radio("Período", ["1D", "1S", "1M", "3M", "6M", "1A", "3A", "5A"],
+                                       horizontal=False, index=5,
+                                       key="historico_precio_periodo")
+            _ph_map = {"1S": 5, "1M": 21, "3M": 63, "6M": 126, "1A": 252, "3A": 756, "5A": 1260}
+
+            if _ph_periodo == "1D":
+                # Datos intradía 5 min del último día de mercado
+                @st.cache_data(ttl=300)
+                def _obtener_intraday(tkr):
+                    import yfinance as yf
+                    df = yf.download(tkr, period="1d", interval="5m",
+                                     auto_adjust=True, progress=False)
+                    return df
+                _ph_hist = _obtener_intraday(ticker_activo).copy()
+                if _ph_hist.empty:
+                    st.info("No hay datos intradía disponibles para esta sesión.")
+                    _ph_hist = None
+                else:
+                    if hasattr(_ph_hist.index, "tz") and _ph_hist.index.tz is not None:
+                        _ph_hist.index = _ph_hist.index.tz_localize(None)
+            else:
+                _ph_n = _ph_map.get(_ph_periodo, 252)
+                _ph_hist = hist.tail(_ph_n).copy()
+                if hasattr(_ph_hist.index, "tz") and _ph_hist.index.tz is not None:
+                    _ph_hist.index = _ph_hist.index.tz_localize(None)
+
+            if _ph_hist is not None:
+                _ph_color_up   = "#16a34a"
+                _ph_color_down = "#dc2626"
+                _ph_color_line = "#2563eb"
+
+                with _ph_col1:
+                    _vista_opts = ["Línea", "Velas", "OHLC"] if _ph_periodo == "1D" else ["Velas", "Línea", "OHLC"]
+                    _view = st.radio("Vista", _vista_opts,
+                                     horizontal=True, index=0, key="historico_precio_vista")
+
+                fig_ph = go.Figure()
+
+                if _view == "Velas":
+                    fig_ph.add_trace(go.Candlestick(
+                        x=_ph_hist.index,
+                        open=_ph_hist["Open"], high=_ph_hist["High"],
+                        low=_ph_hist["Low"],   close=_ph_hist["Close"],
+                        name=ticker_activo,
+                        increasing_line_color=_ph_color_up,
+                        decreasing_line_color=_ph_color_down,
+                        increasing_fillcolor=_ph_color_up,
+                        decreasing_fillcolor=_ph_color_down,
+                    ))
+                elif _view == "OHLC":
+                    fig_ph.add_trace(go.Ohlc(
+                        x=_ph_hist.index,
+                        open=_ph_hist["Open"], high=_ph_hist["High"],
+                        low=_ph_hist["Low"],   close=_ph_hist["Close"],
+                        name=ticker_activo,
+                        increasing_line_color=_ph_color_up,
+                        decreasing_line_color=_ph_color_down,
+                    ))
+                else:
+                    fig_ph.add_trace(go.Scatter(
+                        x=_ph_hist.index, y=_ph_hist["Close"],
+                        mode="lines", name=ticker_activo,
+                        line=dict(color=_ph_color_line, width=2),
+                        fill="tozeroy",
+                        fillcolor="rgba(37,99,235,0.07)",
+                    ))
+
+                # Medias móviles — solo en períodos multi-día
+                if _ph_periodo != "1D":
+                    for _pm, _pc in [(20, "#f59e0b"), (50, "#7c3aed"), (200, "#94a3b8")]:
+                        if len(_ph_hist) >= _pm:
+                            _sma = _ph_hist["Close"].rolling(_pm).mean()
+                            fig_ph.add_trace(go.Scatter(
+                                x=_ph_hist.index, y=_sma,
+                                mode="lines", name=f"SMA{_pm}",
+                                line=dict(color=_pc, width=1.2, dash="dot"),
+                                hovertemplate=f"SMA{_pm}: %{{y:.4f}}<extra></extra>"
+                            ))
+
+                # Volumen como subplot de barras en la parte inferior
+                fig_ph.add_trace(go.Bar(
+                    x=_ph_hist.index, y=_ph_hist["Volume"],
+                    name="Volumen", marker_color="#cbd5e1",
+                    yaxis="y2", showlegend=False,
+                    hovertemplate="Vol: %{y:,.0f}<extra></extra>"
+                ))
+
+                # Formato de eje X
+                if _ph_periodo == "1D":
+                    _x_fmt = "%H:%M"
+                elif _ph_periodo == "1S":
+                    _x_fmt = "%a %d %b"
+                else:
+                    _x_fmt = "%d %b %y"
+
+                fig_ph.update_layout(
+                    height=420,
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    plot_bgcolor="white", paper_bgcolor="white",
+                    hovermode="x unified",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.01,
+                                xanchor="left", x=0, font=dict(size=11)),
+                    xaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                               rangeslider=dict(visible=False),
+                               tickformat=_x_fmt, tickfont=dict(size=10)),
+                    yaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                               tickfont=dict(size=10), domain=[0.22, 1.0]),
+                    yaxis2=dict(showgrid=False, domain=[0.0, 0.18],
+                                showticklabels=False),
+                    xaxis_rangeslider_visible=False,
+                )
+                st.plotly_chart(fig_ph, use_container_width=True,
+                                config={"displayModeBar": False})
+
         st.divider()
 
         # ---- CALCULAR PIVOTS ----
