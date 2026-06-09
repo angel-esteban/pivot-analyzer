@@ -2397,7 +2397,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 vol_data: dict, indicadores: dict, fundamentales: dict,
                 nombre: str = "", tipo_activo: str = "", cambio: float = 0.0,
                 cambio_pct: float = 0.0, h52=None, l52=None, currency: str = "",
-                pct_semaforo: float = 0.0):
+                pct_semaforo: float = 0.0,
+                niveles_reforzados: list = None, señales_dir: list = None,
+                consenso_dir: tuple = None, divergencias_tecnicas: list = None):
     """PDF con precio prominente + pivots multi-columna en paralelo."""
 
     buf = io.BytesIO()
@@ -2719,6 +2721,100 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("LEFTPADDING",  (1,0),(2,0),   8),
     ]))
     historia.append(iv_t)
+
+    # ── CONVERGENCIA TÉCNICA ────────────────────────────────────────────────
+    if niveles_reforzados or señales_dir or consenso_dir:
+        historia.append(Paragraph("Convergencia Tecnica", S_H2))
+
+        # Niveles reforzados
+        if niveles_reforzados:
+            niv_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
+                       for h in ["Precio", "Dist.", "Pivot", "Media", "Tipo"]]
+            niv_rows_pdf = [niv_hdr]
+            for nr in niveles_reforzados[:8]:
+                tipo_color = VE if "soporte" in nr.get("tipo","").lower() else RO
+                niv_rows_pdf.append([
+                    Paragraph(f'{nr["precio"]:.4f}', S_NRM),
+                    Paragraph(nr.get("dist_str", ""), S_NRM),
+                    Paragraph(str(nr.get("pivot", "")), S_NRM),
+                    Paragraph(str(nr.get("media", "")), S_NRM),
+                    Paragraph(nr.get("tipo", ""), _p(fontSize=7, textColor=tipo_color)),
+                ])
+            t_niv = Table(niv_rows_pdf, colWidths=[2.5*cm, 1.8*cm, 2*cm, 2*cm, 3.7*cm])
+            t_niv.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0),(-1,0), CA),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+                ("GRID",         (0,0),(-1,-1), 0.2, GB),
+                ("TOPPADDING",   (0,0),(-1,-1), 2),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+                ("LEFTPADDING",  (0,0),(-1,-1), 4),
+            ]))
+            historia.append(t_niv)
+            historia.append(Spacer(1, 0.2*cm))
+
+        # Señal consenso + indicadores direccionales
+        if consenso_dir or señales_dir:
+            cons_label = consenso_dir[2] if consenso_dir else "—"
+            dir_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
+                       for h in ["Indicador", "Estado", "Dir."]]
+            dir_rows_pdf = [dir_hdr]
+            for nombre_s, desc_s, dir_s, _ in (señales_dir or []):
+                dir_color = VE if dir_s == "alcista" else (RO if dir_s == "bajista" else colors.grey)
+                dir_rows_pdf.append([
+                    Paragraph(nombre_s, _p(fontSize=7, fontName="Helvetica-Bold")),
+                    Paragraph(desc_s, S_NRM),
+                    Paragraph("↑" if dir_s=="alcista" else ("↓" if dir_s=="bajista" else "–"),
+                              _p(fontSize=8, fontName="Helvetica-Bold", textColor=dir_color)),
+                ])
+            t_dir = Table(dir_rows_pdf, colWidths=[3.5*cm, 9.5*cm, 1*cm])
+            t_dir.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0),(-1,0), CA),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+                ("GRID",         (0,0),(-1,-1), 0.2, GB),
+                ("TOPPADDING",   (0,0),(-1,-1), 2),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+                ("LEFTPADDING",  (0,0),(-1,-1), 4),
+            ]))
+            historia.append(Paragraph(f"Señal de Consenso: {cons_label}", S_MH))
+            historia.append(t_dir)
+            historia.append(Spacer(1, 0.25*cm))
+
+    # ── DIVERGENCIAS TÉCNICAS ────────────────────────────────────────────────
+    if divergencias_tecnicas:
+        historia.append(Paragraph("Divergencias Tecnicas", S_H2))
+        _dv_alc = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
+        _dv_baj = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
+
+        for col_label, col_divs, col_color in [
+            ("Alcistas", _dv_alc, VE),
+            ("Bajistas", _dv_baj, RO),
+        ]:
+            if not col_divs:
+                continue
+            historia.append(Paragraph(col_label, _p(fontSize=7.5, fontName="Helvetica-Bold", textColor=col_color)))
+            dv_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
+                      for h in ["Tipo", "Descripcion", "Fuerza"]]
+            dv_rows = [dv_hdr]
+            for d in col_divs:
+                fuerza = d.get("fuerza", "media")
+                f_color = {"fuerte": VE, "media": AM, "debil": colors.grey}.get(fuerza, colors.grey)
+                dv_rows.append([
+                    Paragraph(d.get("tipo", ""), _p(fontSize=7, fontName="Helvetica-Bold")),
+                    Paragraph(d.get("descripcion", ""), S_NRM),
+                    Paragraph(fuerza.capitalize(), _p(fontSize=7, textColor=f_color)),
+                ])
+            t_dv = Table(dv_rows, colWidths=[3.5*cm, 10*cm, 2.5*cm])
+            t_dv.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0),(-1,0), CA),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+                ("GRID",         (0,0),(-1,-1), 0.2, GB),
+                ("TOPPADDING",   (0,0),(-1,-1), 2),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 2),
+                ("LEFTPADDING",  (0,0),(-1,-1), 4),
+            ]))
+            historia.append(t_dv)
+            historia.append(Spacer(1, 0.15*cm))
+        historia.append(Spacer(1, 0.1*cm))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
     if fundamentales:
@@ -3928,6 +4024,10 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                             l52=info.get("fiftyTwoWeekLow"),
                             currency=info.get("currency", ""),
                             pct_semaforo=pct_sem,
+                            niveles_reforzados=niveles_reforzados,
+                            señales_dir=señales_dir,
+                            consenso_dir=consenso_dir,
+                            divergencias_tecnicas=divergencias_tecnicas,
                         )
                     st.download_button(
                         label="📄 Descargar PDF",
