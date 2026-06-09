@@ -3912,7 +3912,53 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                     ok
                 )
 
-            def _scorecard(titulo, emoji_tit, criterios, color_hdr):
+            # Descripciones de cada estrategia para el ℹ️
+            _est_desc = {
+                "💰 Dividendos": (
+                    "Busca acciones con yield atractivo y precio en zona de valor para "
+                    "maximizar la rentabilidad por dividendo en el punto de entrada. "
+                    "Horizonte largo plazo. El dividendo remunera la espera mientras el "
+                    "valor aflora. Prioriza sostenibilidad del pago (payout, FCF) y "
+                    "comprar cerca de soportes técnicos para reducir el precio medio."
+                ),
+                "📈 Swing 12-16 sem": (
+                    "Operativa de posición media: captura movimientos tendenciales de "
+                    "3 a 4 meses. Requiere tendencia alineada (precio > SMA50 > SMA200), "
+                    "momentum activo (MACD positivo) y entrada cerca de soporte con "
+                    "recorrido claro hasta resistencia. El volumen debe confirmar el "
+                    "movimiento. Stop bajo el soporte identificado."
+                ),
+                "🏷️ Valor": (
+                    "Filosofía Graham/Buffett: comprar empresas buenas a precios bajos. "
+                    "Busca PER bajo, descuento respecto a medias históricas y Beta "
+                    "defensiva. No requiere timing técnico perfecto — el margen de "
+                    "seguridad es el precio. El dividendo actúa como colchón de retorno "
+                    "mientras el mercado reconoce el valor intrínseco."
+                ),
+                "🚀 Momentum": (
+                    "Seguir la tendencia establecida con fuerza. Se entra cuando el "
+                    "activo ya está subiendo con convicción: RSI en zona 55-72, MACD "
+                    "acelerando, volumen creciente. No es un rebote — es subirse a un "
+                    "tren en marcha. El riesgo principal es entrar tarde. Horizonte "
+                    "4-8 semanas. Stop ajustado bajo SMA50."
+                ),
+                "🔄 Rebote Técnico": (
+                    "Operativa de alta probabilidad a corto plazo: captura el rebote "
+                    "desde sobreventa extrema. Requiere RSI < 30, precio en soporte "
+                    "fuerte y divergencia alcista activa (RSI u OBV). Alta convicción "
+                    "pero stop muy ajustado. No es inversión de tendencia — es una "
+                    "corrección técnica. Horizonte 2-4 semanas."
+                ),
+                "🛡️ Señal de Salida": (
+                    "Detecta cuándo reducir o cerrar una posición larga existente. "
+                    "Los criterios se invierten: sobrecompra (RSI > 70), divergencias "
+                    "bajistas activas, MACD deteriorándose, OBV distribuyendo. "
+                    "Igual de importante que las señales de entrada. La mayoría de "
+                    "inversores saben comprar — pocos saben vender."
+                ),
+            }
+
+            def _scorecard(titulo, emoji_tit, criterios, color_hdr, desc=""):
                 total  = sum(p for _, p in criterios)
                 maxpts = len(criterios) * 2
                 pct    = int(total / maxpts * 100)
@@ -3921,11 +3967,18 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                 else:           vrd, vrd_col = "NO ES EL MOMENTO", "#991b1b"
                 vrd_bg = {"OPORTUNIDAD": "#f0fdf4", "VIGILAR": "#fffbeb", "NO ES EL MOMENTO": "#fff1f2"}[vrd]
 
+                info_btn = (
+                    f'<span title="{desc}" style="cursor:help;color:rgba(255,255,255,0.75);'
+                    f'font-size:0.85rem;margin-left:6px;border:1px solid rgba(255,255,255,0.5);'
+                    f'border-radius:50%;padding:0 5px;font-weight:400">ℹ</span>'
+                ) if desc else ""
+
                 filas = "".join(html for html, _ in criterios)
                 return f"""
 <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;height:100%">
-  <div style="background:{color_hdr};padding:10px 14px">
-    <span style="color:white;font-weight:700;font-size:1rem">{emoji_tit} {titulo}</span>
+  <div style="background:{color_hdr};padding:10px 14px;display:flex;align-items:center">
+    <span style="color:white;font-weight:700;font-size:1rem;flex:1">{emoji_tit} {titulo}</span>
+    {info_btn}
   </div>
   <div style="background:{vrd_bg};padding:8px 14px;display:flex;align-items:center;gap:10px">
     <span style="font-size:1.4rem;font-weight:800;color:{vrd_col}">{pct}</span>
@@ -4179,26 +4232,27 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
 
             if _est_sel == "Todas":
                 _keys = list(_estrategias.keys())
-                # 3 columnas × 2 filas
                 for _fila in [_keys[:3], _keys[3:]]:
                     _cols = st.columns(len(_fila))
                     for _col, _k in zip(_cols, _fila):
                         _color, _fn = _estrategias[_k]
+                        _desc_k = _est_desc.get(_k, "")
                         with _col:
                             st.markdown(
                                 _scorecard(_k.split(" ", 1)[-1], _k.split(" ")[0],
-                                           _fn(), _color),
+                                           _fn(), _color, _desc_k),
                                 unsafe_allow_html=True
                             )
                     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
             else:
-                _color, _fn = _estrategias[_est_sel]
+                _color, _fn  = _estrategias[_est_sel]
+                _desc_sel    = _est_desc.get(_est_sel, "")
                 _nombre_limpio = _est_sel.split(" ", 1)[-1]
-                _emoji_est = _est_sel.split(" ")[0]
+                _emoji_est     = _est_sel.split(" ")[0]
                 _c1, _c2 = st.columns([1, 1])
                 with _c1:
                     st.markdown(
-                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color),
+                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color, _desc_sel),
                         unsafe_allow_html=True
                     )
                 with _c2:
@@ -4212,7 +4266,19 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                         f"*Esta puntuación es orientativa y debe combinarse con tu propio "
                         f"análisis de contexto, horizonte y tamaño de posición.*"
                     )
-                    st.caption("Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II")
+
+            # ── Disclaimer pie de página ──────────────────────────────────
+            st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+            st.markdown(
+                '<p style="font-size:0.75rem;color:#9ca3af;text-align:center;'
+                'border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px">'
+                'Análisis educativo y orientativo · Las puntuaciones se calculan '
+                'automáticamente a partir de indicadores técnicos y fundamentales. '
+                'No constituyen asesoramiento personalizado de inversión en el sentido '
+                'de MiFID II / RD 217/2008. Para asesoramiento personalizado, contactar '
+                'con una EAF o entidad autorizada por CNMV.</p>',
+                unsafe_allow_html=True
+            )
 
     # ---- TAB ANÁLISIS IA (próxima versión) ----
     with tab_ia:
