@@ -484,15 +484,28 @@ def pantalla_login():
 # =============================================================================
 
 @st.cache_data(ttl=900)  # 15 minutos de caché
+@st.cache_data(ttl=900)
 def obtener_datos(ticker: str):
-    """Descarga datos OHLCV y metadatos del ticker."""
-    try:
-        t = yf.Ticker(ticker)
-        hist = t.history(period="1y", auto_adjust=True)
-        info = t.info
-        return hist, info
-    except Exception as e:
-        return None, {}
+    """Descarga datos OHLCV y metadatos del ticker. Reintentos ante fallos transitorios."""
+    import time as _time
+    for _intento in range(3):
+        try:
+            t    = yf.Ticker(ticker)
+            hist = t.history(period="1y", auto_adjust=True)
+            if hist is None or hist.empty:
+                if _intento < 2:
+                    _time.sleep(1.5)
+                    continue
+                return None, {}
+            try:
+                info = t.info
+            except Exception:
+                info = {}
+            return hist, info
+        except Exception:
+            if _intento < 2:
+                _time.sleep(1.5)
+    return None, {}
 
 
 # =============================================================================
@@ -2992,7 +3005,11 @@ def pantalla_analisis():
             hist, info = obtener_datos(ticker_activo)
 
         if hist is None or hist.empty:
-            st.error(f"No se pudieron obtener datos para **{ticker_activo}**. Verifica el ticker.")
+            st.error(
+                f"No se pudieron obtener datos para **{ticker_activo}**. "
+                f"Puede ser un fallo transitorio de Yahoo Finance — pulsa **🔄** para limpiar caché y vuelve a intentarlo. "
+                f"Si persiste, verifica que el ticker es correcto (ej: `REP.MC`, `IBE.MC`)."
+            )
             return
 
         precio = precio_actual(hist)
