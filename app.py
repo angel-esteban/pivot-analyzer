@@ -2909,7 +2909,7 @@ def pantalla_analisis():
                 _ph_color_line = "#2563eb"
 
                 with _ph_col1:
-                    _vista_opts = ["Línea", "Velas", "OHLC"] if _ph_periodo == "1D" else ["Velas", "Línea", "OHLC"]
+                    _vista_opts = ["Línea", "OHLC"] if _ph_periodo == "1D" else ["Velas", "Línea", "OHLC"]
                     _view = st.radio("Vista", _vista_opts,
                                      horizontal=True, index=0, key="historico_precio_vista")
 
