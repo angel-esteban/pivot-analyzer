@@ -3767,18 +3767,177 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
         </style>
         """
 
+        # ── Cabeceras con ℹ️ para cada bloque ───────────────────────────
+        _ih1, _ih2, _ih3 = st.columns([1.1, 1, 0.9])
+        with _ih1:
+            _ii1, _ii2 = st.columns([5, 1])
+            with _ii1:
+                st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Indicadores Técnicos</div>', unsafe_allow_html=True)
+            with _ii2:
+                with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("""
+**RSI — Relative Strength Index (14 sesiones)**
+
+Mide la velocidad y magnitud de los cambios de precio en una escala de 0 a 100.
+
+**Cálculo:** RSI = 100 − [100 / (1 + (Media ganancias 14 días / Media pérdidas 14 días))]
+
+| Zona | Valor | Interpretación |
+|------|-------|---------------|
+| Sobrecomprado | > 70 | El precio ha subido rápido; posible corrección |
+| Neutro | 30–70 | Sin señal extrema; observar tendencia |
+| Sobrevendido | < 30 | El precio ha caído rápido; posible rebote |
+
+⚠️ En tendencias fuertes el RSI puede permanecer en zona extrema semanas. Siempre confirmar con precio y volumen.
+
+---
+
+**MACD — Moving Average Convergence Divergence**
+
+Mide la diferencia entre dos medias exponenciales (EMA 12 y EMA 26). La línea de señal es una EMA 9 del MACD.
+
+- **MACD > Señal** y Histograma positivo → momentum alcista
+- **MACD < Señal** y Histograma negativo → momentum bajista
+- **Cruce alcista** (MACD cruza señal hacia arriba) → señal de compra técnica
+- **Histograma decreciendo** → el impulso se está agotando aunque la tendencia continúe
+
+**Cálculo:** MACD = EMA(12) − EMA(26) · Señal = EMA(9) del MACD · Histograma = MACD − Señal
+
+---
+
+**Bandas de Bollinger**
+
+Tres bandas calculadas sobre la SMA 20 ± 2 desviaciones estándar.
+
+- **Banda superior** = SMA20 + 2σ · **Media** = SMA20 · **Inferior** = SMA20 − 2σ
+- Contienen ~95% de los precios bajo distribución normal
+- **%B = 0%** → precio en banda inferior (sobrevendido técnico) · **%B = 100%** → en banda superior (sobrecomprado técnico)
+- **Contracción de bandas** (squeeze) precede movimientos explosivos
+
+---
+
+**Parabolic SAR**
+
+Indicador de seguimiento de tendencia con aceleración geométrica.
+
+- **Precio > SAR** → tendencia alcista; el SAR actúa como stop dinámico bajo el precio
+- **Precio < SAR** → tendencia bajista; el SAR actúa como stop dinámico sobre el precio
+- El SAR se mueve más rápido cuanto más tiempo lleva la tendencia (factor de aceleración 0.02–0.20)
+- Útil para gestión de trailing stops, pero genera señales falsas en mercados laterales
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
+        with _ih2:
+            _mi1, _mi2 = st.columns([5, 1])
+            with _mi1:
+                st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Medias Móviles</div>', unsafe_allow_html=True)
+            with _mi2:
+                with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("""
+**SMA — Simple Moving Average**
+
+Media aritmética de los N últimos cierres. Trata todos los días por igual.
+
+**Cálculo:** SMA(N) = (C₁ + C₂ + … + Cₙ) / N
+
+---
+
+**EMA — Exponential Moving Average**
+
+Promedio ponderado exponencialmente: los cierres recientes tienen más peso. Reacciona más rápido que la SMA al precio.
+
+**Cálculo:** EMA(N) = Cierre × k + EMA_anterior × (1−k), donde k = 2/(N+1)
+
+---
+
+**Períodos y referencias institucionales**
+
+| Periodo | Referencia | Uso |
+|---------|-----------|-----|
+| **20** | ~1 mes | Tendencia a corto plazo; Bollinger la usa como base |
+| **50** | ~2,5 meses | La más seguida por fondos para medio plazo |
+| **200** | ~10 meses | Separación bull/bear de largo plazo; ampliamente usada |
+
+---
+
+**Señales clave**
+
+- **Precio sobre la media** (↑): tendencia alcista en ese plazo. La media actúa como soporte dinámico.
+- **Precio bajo la media** (↓): tendencia bajista. La media actúa como resistencia dinámica.
+- **Golden Cross**: SMA50 cruza SMA200 hacia arriba → señal alcista de largo plazo.
+- **Death Cross**: SMA50 cruza SMA200 hacia abajo → señal bajista de largo plazo.
+- **Precio muy alejado de la SMA200**: posible mean reversion; el mercado tiende a volver a la media.
+
+---
+
+**SMA vs EMA**
+- SMA: más estable, menos señales falsas, más lenta.
+- EMA: más rápida en captar giros, más señales falsas en laterales.
+- Usar EMA en tendencias activas; SMA en mercados volátiles o para niveles de largo plazo.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
+        with _ih3:
+            _vi1, _vi2 = st.columns([5, 1])
+            with _vi1:
+                st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Volumen</div>', unsafe_allow_html=True)
+            with _vi2:
+                with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("""
+**Volumen — El indicador que confirma o niega**
+
+El volumen es el número de acciones o participaciones negociadas en un periodo. Es el único indicador que no puede ser manipulado con el precio — refleja la convicción real detrás de cada movimiento.
+
+---
+
+**Principio básico**
+
+> *"El volumen sigue a la tendencia hasta que la traiciona"*
+
+- **Precio sube + volumen sube** → tendencia alcista con convicción ✅
+- **Precio sube + volumen baja** → subida sin participación; riesgo de corrección ⚠️
+- **Precio baja + volumen sube** → caída con distribución; señal bajista fuerte ❌
+- **Precio baja + volumen baja** → corrección técnica; probable continuación alcista ✅
+
+---
+
+**Ratios de actividad**
+
+- **Ratio vs 10d**: compara el volumen de hoy con la media de las últimas 10 sesiones.
+  - > 150%: actividad muy alta — evento o catalizador probable
+  - 80–120%: actividad normal
+  - < 50%: sesión de baja participación — señales menos fiables
+
+- **Ratio vs 3m**: compara con la media de 3 meses (contexto estructural).
+  - Útil para detectar días de acumulación institucional (volumen alto sin movimiento de precio evidente).
+
+---
+
+**Clasificaciones**
+
+| Clasificación | Ratio | Implicación |
+|--------------|-------|------------|
+| MUY ALTO | > 200% | Evento significativo; posible cambio de tendencia |
+| ALTO | 130–200% | Confirmación de movimiento |
+| NORMAL | 70–130% | Sesión habitual |
+| BAJO | 40–70% | Baja convicción; desconfiar de rupturas |
+| MUY BAJO | < 40% | Sin participación; esperar |
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
+
         st.markdown(screen_ind_css + f"""
         <div style="display:grid;grid-template-columns:1.1fr 1fr 0.9fr;gap:14px;margin-bottom:0">
           <div class="s-ind-block">
-            <div class="s-ind-title">Indicadores Técnicos</div>
             <table><tbody>{ind_rows}</tbody></table>
           </div>
           <div class="s-ind-block">
-            <div class="s-ind-title">Medias Móviles</div>
             <table><tbody>{med_rows}</tbody></table>
           </div>
           <div class="s-ind-block">
-            <div class="s-ind-title">Volumen</div>
             <table><tbody>{vol_rows}</tbody></table>
           </div>
         </div>
@@ -3795,22 +3954,70 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
                 st.markdown("""
 **¿Qué es una divergencia técnica?**
 
-Una divergencia ocurre cuando el precio y un indicador se mueven en direcciones opuestas. Señala que el movimiento actual del precio **no está siendo confirmado** por el indicador, lo que anticipa posibles giros o agotamiento de tendencia.
+Una divergencia ocurre cuando el **precio** y un **indicador** se mueven en direcciones opuestas en los extremos recientes. Señala que el movimiento del precio no está siendo respaldado por el momentum interno del mercado — precursor de posibles giros o agotamiento de tendencia.
+
+> Principio: el precio miente antes que el indicador. Las divergencias detectan esa mentira.
 
 ---
 
-**RSI vs Precio** — Si el precio hace un máximo más alto pero el RSI uno más bajo, el impulso comprador se agota (bajista). Al revés, señal alcista.
+**📊 RSI vs Precio**
 
-**MACD histograma vs Precio** — El histograma mide la aceleración del momentum. Una divergencia aquí anticipa el giro antes que el cruce de líneas.
+Compara los máximos/mínimos del precio con los del RSI en las últimas 60 sesiones.
 
-**Volumen vs Precio** — Precio subiendo con volumen cayendo = movimiento sin convicción. Precio bajando con volumen creciendo = posible acumulación.
+- **Alcista**: precio hace un mínimo más bajo, pero el RSI hace un mínimo más alto → los vendedores pierden fuerza aunque el precio siga cayendo. El rebote es inminente.
+- **Bajista**: precio hace un máximo más alto, pero el RSI hace un máximo más bajo → los compradores se agotan. Alta probabilidad de corrección.
 
-**OBV vs Precio** — El OBV acumula o distribuye antes de que el precio lo refleje. Es la divergencia de mayor relevancia porque captura el flujo de dinero institucional.
+*Más fiable cuando el RSI se encuentra en zonas extremas (<35 alcista, >65 bajista).*
 
 ---
-- 🟢 **Alcista**: el indicador sugiere más fuerza de la que muestra el precio.
-- 🔴 **Bajista**: el indicador sugiere menos fuerza de la que muestra el precio.
-- **Fuerte** → diferencia significativa. **Moderada** → señal inicial, confirmar.
+
+**📈 MACD Histograma vs Precio**
+
+El histograma mide la aceleración del momentum (diferencia entre MACD y su señal). Diverge antes de que las líneas se crucen.
+
+- **Alcista**: precio en nuevos mínimos, histograma con barras negativas que disminuyen → el impulso bajista se frena.
+- **Bajista**: precio en nuevos máximos, histograma con barras positivas que disminuyen → el impulso alcista se frena.
+
+*Suele anticipar el cruce de líneas MACD/Señal con 3–8 sesiones de adelanto.*
+
+---
+
+**📦 Volumen vs Precio**
+
+Compara la pendiente del precio con la pendiente del volumen usando regresión lineal sobre las últimas 20 sesiones.
+
+- **Alcista**: precio baja pero el volumen baja también → la caída no tiene participación vendedora. Corrección débil.
+- **Bajista**: precio sube pero el volumen baja → la subida carece de convicción compradora. Movimiento sin respaldo.
+
+*El volumen es el único indicador que no puede ser "dibujado" con el precio.*
+
+---
+
+**🏦 OBV (On-Balance Volume) vs Precio**
+
+El OBV suma el volumen en días alcistas y lo resta en días bajistas. Captura el flujo neto de dinero antes de que el precio lo refleje.
+
+- **Alcista**: precio en nuevos mínimos, pero el OBV aguanta o sube → dinero institucional acumulando en silencio.
+- **Bajista**: precio en nuevos máximos, pero el OBV baja → distribución encubierta; los grandes operadores están vendiendo mientras el precio sube.
+
+*Considerada la divergencia de mayor calidad: el dinero inteligente deja huella en el volumen antes que en el precio.*
+
+---
+
+**Gradación de fuerza**
+
+| Fuerza | Criterio | Acción sugerida |
+|--------|---------|----------------|
+| **Fuerte** | Diferencia de pendientes significativa | Señal prioritaria; gestionar posición |
+| **Moderada** | Divergencia incipiente | Señal de alerta; esperar confirmación |
+
+---
+
+**⚠️ Limitaciones importantes**
+- Una divergencia puede persistir varias sesiones antes de resolverse.
+- No son señales de entrada por sí solas — requieren confirmación de precio (vela de reversión, ruptura de estructura, cambio de volumen).
+- En tendencias muy fuertes, las divergencias bajistas pueden fallar repetidamente.
+- Se analizan sobre las últimas 60 sesiones; condiciones más antiguas no se consideran.
 
 ---
 *Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
@@ -3869,17 +4076,55 @@ Una divergencia ocurre cuando el precio y un indicador se mueven en direcciones 
                 st.markdown("""
 **¿Qué es la Convergencia Técnica?**
 
-Combina dos dimensiones de análisis que normalmente se ven por separado:
-
-**1. Niveles reforzados** — zonas donde un pivot y una media móvil coinciden dentro de la tolerancia activa. Doble anclaje: memoria estadística del mercado (pivot) + referencia de tendencia institucional (media).
-
-**2. Señal direccional** — acuerdo entre todos los indicadores activos (RSI, MACD, SAR, Bollinger, precio vs medias). Cuanto mayor el consenso, mayor la convicción.
+La convergencia técnica cruza dos análisis que normalmente se realizan por separado: **niveles de precio relevantes** y **consenso de indicadores direccionales**. La idea central es que una señal respaldada por múltiples métodos independientes tiene mayor probabilidad de materializarse que una señal aislada.
 
 ---
 
-- Consenso ≥ 70% alcista/bajista → señal de alta convicción.
-- Consenso mixto → mercado sin dirección clara, reducir tamaño o esperar.
-- Nivel reforzado próximo al precio = zona prioritaria para stop o entrada.
+**1. Niveles Reforzados — Doble anclaje de precio**
+
+Son zonas donde **un nivel pivot y una media móvil coinciden** dentro del margen de tolerancia activo.
+
+- El **pivot** representa memoria estadística del mercado: es una zona donde la interacción entre compradores y vendedores ha dejado huella en el pasado reciente.
+- La **media móvil** representa la referencia dinámica de tendencia que siguen operadores institucionales, fondos y algoritmos.
+- Cuando ambos coinciden en la misma zona, la concentración de órdenes esperada es mayor.
+
+**Tipos de nivel:**
+- 🟢 **Soporte reforzado**: zona donde el precio tiene alta probabilidad de encontrar demanda. Referencia para stop-loss en posiciones largas o zona de entrada vigilada.
+- 🔴 **Resistencia reforzada**: zona donde el precio puede encontrar oferta. Objetivo de toma de beneficios o zona de entrada en cortos con confirmación.
+
+*La tolerancia activa define cuánto margen de distancia se permite entre el pivot y la media para considerarlos coincidentes.*
+
+---
+
+**2. Señal de Consenso — Votación de indicadores**
+
+Cada indicador "vota" por una dirección (alcista / bajista / neutro):
+
+| Indicador | Criterio alcista | Criterio bajista |
+|-----------|-----------------|-----------------|
+| RSI | > 50 | < 50 |
+| MACD | Histograma positivo | Histograma negativo |
+| Parabolic SAR | Precio > SAR | Precio < SAR |
+| Bollinger %B | > 50% | < 50% |
+| Precio vs SMA20 | Precio > SMA20 | Precio < SMA20 |
+| Precio vs SMA50 | Precio > SMA50 | Precio < SMA50 |
+| Precio vs SMA200 | Precio > SMA200 | Precio < SMA200 |
+
+El porcentaje de votos alcistas / bajistas forma la señal de consenso.
+
+**Interpretación:**
+- ≥ 70% alcista → convicción técnica alcista: los indicadores están alineados
+- ≥ 70% bajista → convicción técnica bajista
+- 40–60% → mercado lateral o sin dirección clara; señales menos fiables
+- Consenso mixto (cerca del 50%) → evitar decisiones basadas solo en indicadores; priorizar estructura de precio y volumen
+
+---
+
+**Cómo usarlo en la práctica**
+
+1. **Nivel reforzado + consenso alcista**: zona de soporte con indicadores a favor → escenario de alta probabilidad para valorar una entrada larga con stop bajo el nivel.
+2. **Nivel reforzado + consenso bajista**: zona de resistencia con indicadores en contra → objetivo natural de toma de beneficios o entrada corta.
+3. **Consenso mixto cerca de nivel reforzado**: esperar confirmación — el nivel puede actuar en cualquier dirección.
 
 ---
 *Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
