@@ -4316,53 +4316,310 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                     ok
                 )
 
-            # Descripciones de cada estrategia para el ℹ️
-            _est_desc = {
-                "💰 Dividendos": (
-                    "Busca acciones con yield atractivo y precio en zona de valor para "
-                    "maximizar la rentabilidad por dividendo en el punto de entrada. "
-                    "Horizonte largo plazo. El dividendo remunera la espera mientras el "
-                    "valor aflora. Prioriza sostenibilidad del pago (payout, FCF) y "
-                    "comprar cerca de soportes técnicos para reducir el precio medio."
-                ),
-                "📈 Swing 12-16 sem": (
-                    "Operativa de posición media: captura movimientos tendenciales de "
-                    "3 a 4 meses. Requiere tendencia alineada (precio > SMA50 > SMA200), "
-                    "momentum activo (MACD positivo) y entrada cerca de soporte con "
-                    "recorrido claro hasta resistencia. El volumen debe confirmar el "
-                    "movimiento. Stop bajo el soporte identificado."
-                ),
-                "🏷️ Valor": (
-                    "Filosofía Graham/Buffett: comprar empresas buenas a precios bajos. "
-                    "Busca PER bajo, descuento respecto a medias históricas y Beta "
-                    "defensiva. No requiere timing técnico perfecto — el margen de "
-                    "seguridad es el precio. El dividendo actúa como colchón de retorno "
-                    "mientras el mercado reconoce el valor intrínseco."
-                ),
-                "🚀 Momentum": (
-                    "Seguir la tendencia establecida con fuerza. Se entra cuando el "
-                    "activo ya está subiendo con convicción: RSI en zona 55-72, MACD "
-                    "acelerando, volumen creciente. No es un rebote — es subirse a un "
-                    "tren en marcha. El riesgo principal es entrar tarde. Horizonte "
-                    "4-8 semanas. Stop ajustado bajo SMA50."
-                ),
-                "🔄 Rebote Técnico": (
-                    "Operativa de alta probabilidad a corto plazo: captura el rebote "
-                    "desde sobreventa extrema. Requiere RSI < 30, precio en soporte "
-                    "fuerte y divergencia alcista activa (RSI u OBV). Alta convicción "
-                    "pero stop muy ajustado. No es inversión de tendencia — es una "
-                    "corrección técnica. Horizonte 2-4 semanas."
-                ),
-                "🛡️ Señal de Salida": (
-                    "Detecta cuándo reducir o cerrar una posición larga existente. "
-                    "Los criterios se invierten: sobrecompra (RSI > 70), divergencias "
-                    "bajistas activas, MACD deteriorándose, OBV distribuyendo. "
-                    "Igual de importante que las señales de entrada. La mayoría de "
-                    "inversores saben comprar — pocos saben vender."
-                ),
+            # Popovers detallados por estrategia (Streamlit markdown)
+            _est_popover = {
+                "💰 Dividendos": """
+**💰 Estrategia de Dividendos — Rentas a largo plazo**
+
+Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto de menor precio relativo. El dividendo remunera la espera; el precio de entrada determina el yield real que percibirás.
+
+---
+
+**Orden de análisis (de mayor a menor peso):**
+
+**1. Dividend Yield** *(criterio de selección)*
+- ≥ 3.5%: atractivo para estrategia de rentas
+- 2–3.5%: aceptable si el crecimiento del dividendo es sólido
+- < 2%: insuficiente como estrategia de rentas pura
+- *Punto clave: el yield mejora automáticamente cuando el precio cae. Comprar en correcciones aumenta la rentabilidad sin que la empresa cambie nada.*
+
+**2. Payout Ratio** *(sostenibilidad del pago)*
+- < 60%: dividendo muy sostenible; hay margen para crecer
+- 60–75%: sostenible pero sin holgura; vigilar tendencia de beneficios
+- > 75%: frágil; un trimestre malo puede recortar el dividendo
+- *Un dividendo alto pero insostenible es una trampa. El recorte de dividendo destruye el yield y el precio simultáneamente.*
+
+**3. Posición en rango 52 semanas** *(precio de entrada)*
+- < 35% del rango: zona de valor; precio deprimido históricamente
+- 35–65%: zona neutra; yield razonable pero no óptimo
+- > 65%: cerca de máximos; el yield es el más bajo del año
+- *Comprar cerca de mínimos anuales puede mejorar el yield efectivo un 20–40% respecto a comprar en máximos.*
+
+**4. SMA200** *(confirmación de valor)*
+- Precio bajo SMA200: zona de compra histórica para largo plazo
+- Precio sobre SMA200: mercado ya ha revalorizado; el yield es más bajo
+- *La SMA200 actúa como referencia del "precio justo a largo plazo". Por debajo es donde los gestores de fondos de renta encuentran valor.*
+
+**5. RSI** *(timing de entrada)*
+- RSI 30–45: sobreventa → zona óptima de entrada escalonada
+- RSI 45–60: neutral; válido pero sin urgencia
+- RSI > 65: sobrecomprado; esperar retroceso para mejorar precio medio
+
+**6. Divergencias y soportes** *(confirmación técnica)*
+- Divergencia alcista OBV activa: dinero institucional acumulando → señal de suelo
+- Soporte pivot+media próximo: colchón estructural; referencia natural para stop
+
+---
+
+**Momento óptimo de entrada**
+Todos los criterios alineados: yield ≥ 3.5% + precio bajo SMA200 + RSI < 45 + soporte reforzado activo + divergencia alcista OBV. Ese setup aparece pocas veces al año por valor — cuando aparece, es el punto de máxima asimetría riesgo/recompensa para rentas.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
+                "📈 Swing 12-16 sem": """
+**📈 Swing Trading 12–16 semanas — Posición tendencial**
+
+Captura movimientos tendenciales de 3–4 meses subiendo a una tendencia ya establecida, no apostando por un giro. El objetivo es comprar el retroceso dentro de una tendencia alcista con recorrido claro hasta la siguiente resistencia.
+
+---
+
+**Orden de análisis:**
+
+**1. Estructura de tendencia** *(condición necesaria — si falla, para aquí)*
+- Precio > SMA50 > SMA200: tendencia alcista completa; el mercado confirma la dirección
+- Precio > SMA50 pero SMA50 < SMA200: tendencia emergente; mayor riesgo
+- Precio < SMA50: sin tendencia establecida; el swing no tiene base
+- *Un swing en contra de la tendencia principal tiene una tasa de éxito estadísticamente inferior. No escalar un problema.*
+
+**2. RSI** *(ventana de entrada)*
+- RSI 42–62: zona ideal de entrada en retroceso dentro de tendencia
+- RSI < 42: retroceso profundo; posible debilidad real, no solo corrección
+- RSI > 65: sobreextendido; entrar ahora asume demasiado riesgo de corrección
+- *El objetivo no es comprar el suelo exacto, sino comprar en una zona donde la relación riesgo/recompensa es favorable.*
+
+**3. MACD histograma** *(momentum del movimiento)*
+- Histograma positivo y creciente: impulso activo; señal de continuación
+- Histograma positivo pero decreciente: impulso frena; esperar confirmación
+- Histograma negativo: momentum bajista; el setup está en entredicho
+- *El MACD histograma anticipa los cruces de líneas. Una divergencia bajista en histograma invalida el setup incluso si el precio sigue subiendo.*
+
+**4. Divergencias técnicas** *(validación o invalidación)*
+- Divergencia bajista RSI/MACD: señal de agotamiento → INVALIDA el setup hasta resolución
+- Divergencia alcista activa: confirmación adicional del rebote dentro de tendencia
+- *Una divergencia bajista activa en swing tendencial es el mayor riesgo del setup. Nunca ignorarla.*
+
+**5. Niveles de soporte y resistencia** *(geometría del trade)*
+- Soporte reforzado próximo: referencia lógica para stop-loss
+- Resistencia identificada: objetivo de precio; define el ratio riesgo/beneficio
+- Sin ambos identificados: el trade no tiene estructura; esperar
+
+**6. Volumen** *(confirmación del movimiento)*
+- Volumen creciente en el impulso: convicción compradora real
+- Volumen decreciente en el retroceso: corrección sana dentro de tendencia (ideal)
+- Volumen alto en caída: posible distribución; reevaluar
+
+---
+
+**Momento óptimo de entrada**
+Tendencia completa (precio>SMA50>SMA200) + RSI en 45–58 en retroceso + histograma MACD positivo aunque decreciendo + soporte reforzado identificado + sin divergencias bajistas activas + volumen bajo en el retroceso. Stop bajo el soporte identificado. Objetivo: resistencia siguiente (ratio mínimo 1:2).
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
+                "🏷️ Valor": """
+**🏷️ Inversión en Valor — Filosofía Graham/Buffett**
+
+Comprar participaciones en negocios de calidad a precios que ofrezcan un margen de seguridad respecto a su valor intrínseco. El tiempo y los beneficios compuestos hacen el trabajo. El timing es secundario al precio de entrada.
+
+---
+
+**Orden de análisis:**
+
+**1. PER (Price/Earnings)** *(valoración fundamental)*
+- < 12x: precio muy bajo respecto a beneficios; posible infravaloración
+- 12–18x: rango de valor razonable para empresas maduras
+- 18–25x: valoración justa; poco margen de seguridad
+- > 25x: precio exigente; requiere crecimiento excepcional para justificarse
+- *El PER solo tiene sentido en contexto: comparar con el sector, con el histórico del valor y con el crecimiento esperado de beneficios (PEG = PER / crecimiento BPA).*
+
+**2. Descuento respecto a SMA200** *(precio vs valor histórico)*
+- Precio ≥ 15% bajo SMA200: zona de valor histórico profunda
+- Precio 5–15% bajo SMA200: descuento moderado; razonable
+- Precio sobre SMA200: el mercado ya ha revalorizado; margen de seguridad reducido
+- *La SMA200 aproxima el precio medio de largo plazo. Comprar bajo ella implica pagar menos que la media histórica.*
+
+**3. Posición en rango 52W** *(temperatura del precio)*
+- < 30% del rango: precio históricamente deprimido; el mercado descuenta problemas reales o exagera
+- 30–55%: zona neutra; valoración equilibrada
+- > 65%: cerca de máximos anuales; escaso margen de seguridad
+- *El inversor en valor no busca comprar barato en términos absolutos, sino barato respecto al valor intrínseco. Un valor en máximos puede ser barato si el negocio crece rápido.*
+
+**4. Beta defensiva** *(perfil de riesgo)*
+- Beta < 0.7: activo defensivo; protege el capital en caídas de mercado
+- Beta 0.7–1.1: comportamiento de mercado; aceptable
+- Beta > 1.3: volátil; el margen de seguridad debe ser mayor para compensar
+- *El valor no implica necesariamente baja volatilidad, pero los activos defensivos permiten mantener la posición psicológicamente durante el periodo de reconocimiento del valor.*
+
+**5. Dividend yield** *(colchón de retorno)*
+- Dividendo > 0: la espera tiene retribución mientras el mercado reconoce el valor
+- Payout sostenible: el dividendo no compromete la inversión en el negocio
+- *El dividendo no es un criterio de selección en valor, pero actúa como seguro: si el mercado tarda en reconocer el valor, el dividendo compensa la espera.*
+
+**6. Divergencias técnicas** *(confirmación de acumulación)*
+- Divergencia alcista OBV: el dinero inteligente acumula mientras el precio cae; señal de que el descuento es real pero temporal
+- Soporte reforzado: colchón estructural que limita el riesgo de caída adicional
+
+---
+
+**Momento óptimo de entrada**
+PER < 15x + precio ≥ 10% bajo SMA200 + posición < 40% en rango 52W + divergencia alcista OBV activa (acumulación) + soporte reforzado identificado. Entrada escalonada: no concentrar todo en un punto dado que el timing es secundario — el margen de seguridad es la protección.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
+                "🚀 Momentum": """
+**🚀 Momentum — Subirse al tren en marcha**
+
+No es anticipar un giro sino confirmar y seguir una tendencia ya establecida con fuerza. El momentum se basa en la inercia del precio: lo que sube tiende a seguir subiendo mientras la convicción y el flujo de capital se mantengan.
+
+---
+
+**Orden de análisis:**
+
+**1. Tendencia estructural** *(condición de base)*
+- Precio > SMA50 > SMA200: tendencia alcista establecida en todos los plazos
+- SAR alcista (precio sobre el SAR): la tendencia tiene dirección definida
+- Consenso de indicadores ≥ 70% alcista: el conjunto de señales confirma la dirección
+- *El momentum solo funciona en tendencias claras. En laterales, las señales son falsas y el coste por rotación es alto.*
+
+**2. RSI** *(zona de momentum activo)*
+- RSI 55–72: zona de momentum sin sobrecompra extrema; el tren sigue pero no está a punto de frenar
+- RSI > 72: sobrecomprado; el momentum puede continuar pero el riesgo de corrección es elevado
+- RSI < 50: momentum perdido; la tendencia se ha enfriado; no es el momento
+- *En momentum puro, el RSI puede mantenerse en zona 60–75 semanas seguidas en tendencias fuertes. No salir solo porque el RSI está "alto".*
+
+**3. MACD histograma** *(aceleración del impulso)*
+- Histograma positivo y creciente: el impulso se acelera; señal más fuerte del setup
+- Histograma positivo estable: impulso mantenido; válido pero sin aceleración
+- Histograma positivo decreciente: el impulso frena; posible entrada tardía
+- Histograma negativo: momentum perdido aunque el precio siga cerca de máximos
+- *La trampa del momentum tardío: el precio puede estar alto pero el histograma ya declinando indica que el movimiento está maduro.*
+
+**4. Volumen** *(convicción institucional)*
+- Volumen creciente en la tendencia alcista: flujo de capital real respaldando el movimiento
+- Volumen neutral: tendencia válida pero sin aceleración
+- Volumen decreciente mientras el precio sube: movimiento sin convicción; riesgo de reversión
+- *El momentum sin volumen creciente es frágil. Los grandes movimientos necesitan flujo institucional.*
+
+**5. Divergencias bajistas** *(señal de alerta máxima)*
+- Sin divergencias bajistas: setup limpio
+- Divergencia bajista en RSI o MACD: el momentum se agota aunque el precio no lo refleje todavía; NO entrar
+- *Una divergencia bajista en momentum es la señal de salida, no de entrada. Si aparece, el setup se invalida completamente.*
+
+**6. Distancia a SMA50** *(extensión del movimiento)*
+- < 8% sobre SMA50: movimiento con recorrido; la tendencia no está sobreextendida
+- 8–15% sobre SMA50: vigilar; posible corrección a la media antes del siguiente impulso
+- > 15% sobre SMA50: muy sobreextendido; la corrección a la media puede ser el siguiente movimiento
+
+---
+
+**Momento óptimo de entrada**
+SAR alcista + consenso ≥ 70% alcista + RSI entre 55–68 + histograma MACD positivo y estable o creciente + volumen creciente en el impulso + SIN divergencias bajistas. Stop bajo SMA50. Objetivo: resistencia identificada o trailing stop al 8% desde máximos.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
+                "🔄 Rebote Técnico": """
+**🔄 Rebote Técnico — Capturar el giro desde sobreventa**
+
+Operativa de alta probabilidad estadística a corto plazo: aprovechar el retorno a la media desde condiciones de sobreventa extrema. No es inversión de tendencia — es una corrección técnica dentro de una caída. Horizonte 2–4 semanas. Disciplina de stop es crítica.
+
+---
+
+**Orden de análisis:**
+
+**1. RSI** *(condición necesaria — primero esto)*
+- RSI < 30: sobreventa extrema; zona estadísticamente favorable a rebote
+- RSI 30–38: sobreventa moderada; señal de interés pero sin urgencia
+- RSI > 40: sin sobreventa; no hay base técnica para rebote a corto plazo; NO operar
+- *El RSI < 30 no significa "comprar ahora" — significa que las condiciones para un rebote están presentes. Necesitas los otros factores para confirmar.*
+
+**2. Bollinger %B** *(extensión de la caída)*
+- %B < 0.10: precio en el extremo inferior de las bandas; zona de sobreventa estadística
+- %B 0.10–0.20: sobreventa moderada; consistente con RSI
+- %B > 0.25: la caída no es extrema en términos de volatilidad histórica; rebote técnico menos probable
+- *Las Bandas de Bollinger miden la volatilidad histórica. Un precio en la banda inferior extrema tiene alta probabilidad estadística de revertir hacia la media (SMA20).*
+
+**3. Divergencia alcista** *(confirmación clave)*
+- Divergencia alcista RSI o OBV activa: el indicador forma mínimos más altos mientras el precio forma mínimos más bajos → la presión vendedora se agota
+- Sin divergencia: el rebote es posible pero sin señal de confirmación → reducir tamaño o esperar
+- *La divergencia alcista transforma una zona de sobreventa en un setup de alta convicción. Sin ella, el rebote puede ocurrir pero la probabilidad es menor.*
+
+**4. Soporte técnico reforzado** *(zona de inflexión)*
+- Nivel pivot + media móvil convergiendo en la zona de caída: suelo estructural; los compradores tienen una referencia clara
+- Confluencia multi-timeframe en la misma zona: mayor probabilidad de rebote
+- Sin soporte identificado: el precio puede seguir cayendo sin freno; evitar
+- *El soporte no garantiza el rebote, pero define el precio de invalidación del setup. Si el soporte cede, la tesis es incorrecta.*
+
+**5. Volumen** *(patrón de agotamiento vendedor)*
+- Volumen decreciente en los últimos días de caída: los vendedores se agotan; el movimiento bajista pierde fuerza
+- Volumen alto en vela de giro (martillo, envolvente alcista): señal de capitulación + entrada compradora
+- Volumen creciente en la caída: distribución activa; el suelo puede estar más abajo
+
+**6. Posición relativa en rango 52W**
+- < 20% del rango: zona de mínimos históricos; más probable que el mercado reconozca el precio como barato
+- > 40% del rango: la caída no es estadísticamente extrema en contexto anual
+
+---
+
+**Momento óptimo de entrada**
+RSI < 32 + %B < 0.15 + divergencia alcista OBV o RSI activa + soporte reforzado identificado + volumen decreciendo en la caída. Entrada en la zona del soporte con stop ajustado un 2–3% por debajo. Objetivo: SMA20 o SMA50 (retorno a la media). Si el soporte cede, salir sin excusas.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
+                "🛡️ Señal de Salida": """
+**🛡️ Señal de Salida — Saber cuándo termina el trade**
+
+Detecta cuándo reducir o cerrar una posición larga existente. Los criterios son el espejo de los de entrada: sobrecompra donde antes había sobreventa, distribución donde antes había acumulación, divergencias bajistas donde antes eran alcistas. La mayoría de inversores tienen criterios de entrada pero no de salida — aquí está el análisis.
+
+---
+
+**Orden de análisis:**
+
+**1. RSI** *(temperatura del precio)*
+- RSI > 70: sobrecompra técnica; zona de menor retorno esperado histórico
+- RSI > 75: sobrecompra extrema; el rebote bajista tiene alta probabilidad estadística
+- RSI entre 60–70: zona de precaución; vigilar pero no actuar todavía
+- *El RSI alto no obliga a vender, pero sí obliga a revisar el stop y no añadir posición. En tendencias fuertes, el RSI puede mantenerse sobre 70 semanas — la divergencia bajista es la señal de acción.*
+
+**2. Divergencias bajistas** *(señal de agotamiento — la más importante)*
+- Divergencia bajista RSI: precio hace máximos más altos, RSI hace máximos más bajos → compradores pierden fuerza
+- Divergencia bajista MACD histograma: el impulso alcista se agota aunque el precio siga subiendo
+- Divergencia bajista OBV: el dinero institucional distribuye mientras el precio sube → los grandes venden a los pequeños
+- *La divergencia bajista de OBV es la más grave: indica que los inversores con información o con tamaño suficiente para mover el mercado están reduciendo posición. El precio puede aguantar días o semanas, pero el suelo se ha debilitado.*
+
+**3. Posición en rango 52W** *(contexto de precio)*
+- > 85% del rango: precio cerca de máximos históricos anuales; la asimetría riesgo/recompensa es desfavorable
+- > 70%: zona de precaución; la resistencia natural de máximos anteriores es relevante
+- < 60%: precio no está en zona extrema de sobrecompra; otras señales deben dominar
+
+**4. MACD histograma** *(velocidad de deterioro)*
+- Histograma positivo pero decreciendo durante 3+ sesiones: el impulso alcista frena
+- Cruce a negativo con precio todavía en máximos: señal de distribución
+- Histograma positivo y estable: la tendencia mantiene fuerza; no actuar solo por RSI alto
+
+**5. SAR** *(cambio de tendencia estructural)*
+- SAR pasa de alcista a bajista (precio cruza debajo del SAR): señal técnica directa de cambio de tendencia; señal de reducción o cierre
+- SAR aún alcista con RSI alto: la tendencia sigue; solo vigilar
+
+**6. OBV** *(flujo de dinero institucional)*
+- OBV decreciente mientras el precio sube o se mantiene: distribución silenciosa; la señal de salida más relevante
+- OBV paralelo al precio: flujo neutral; no hay distribución activa
+- *El OBV distribuyendo es el equivalente del OBV acumulando en la señal de compra. El dinero institucional se mueve antes que el precio.*
+
+---
+
+**Momento óptimo de reducción/salida**
+RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + posición > 75% en rango 52W. Acción: reducir 30–50% de la posición, ajustar stop al nivel de soporte más reciente y dejar correr el resto con trailing stop. Si RSI > 75 + divergencia bajista fuerte: cerrar posición completa o cubrir con opciones.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""",
             }
 
-            def _scorecard(titulo, emoji_tit, criterios, color_hdr, desc=""):
+            def _scorecard(titulo, emoji_tit, criterios, color_hdr):
                 total  = sum(p for _, p in criterios)
                 maxpts = len(criterios) * 2
                 pct    = int(total / maxpts * 100)
@@ -4370,19 +4627,11 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                 elif pct >= 45: vrd, vrd_col = "VIGILAR",     "#92400e"
                 else:           vrd, vrd_col = "NO ES EL MOMENTO", "#991b1b"
                 vrd_bg = {"OPORTUNIDAD": "#f0fdf4", "VIGILAR": "#fffbeb", "NO ES EL MOMENTO": "#fff1f2"}[vrd]
-
-                info_btn = (
-                    f'<span title="{desc}" style="cursor:help;color:rgba(255,255,255,0.75);'
-                    f'font-size:0.85rem;margin-left:6px;border:1px solid rgba(255,255,255,0.5);'
-                    f'border-radius:50%;padding:0 5px;font-weight:400">ℹ</span>'
-                ) if desc else ""
-
                 filas = "".join(html for html, _ in criterios)
                 return f"""
 <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;height:100%">
-  <div style="background:{color_hdr};padding:10px 14px;display:flex;align-items:center">
-    <span style="color:white;font-weight:700;font-size:1rem;flex:1">{emoji_tit} {titulo}</span>
-    {info_btn}
+  <div style="background:{color_hdr};padding:10px 14px">
+    <span style="color:white;font-weight:700;font-size:1rem">{emoji_tit} {titulo}</span>
   </div>
   <div style="background:{vrd_bg};padding:8px 14px;display:flex;align-items:center;gap:10px">
     <span style="font-size:1.4rem;font-weight:800;color:{vrd_col}">{pct}</span>
@@ -4662,12 +4911,26 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                     elif _payout >= 70:
                         puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado. Revisar tendencia de BPA.")
                     # Recomendación
-                    if _pos52 > 60 or (_sma200 > 0 and _precio > _sma200):
-                        rec = f"Esperar corrección. Zona de entrada preferible: entorno a SMA200 ({_sma200:.2f}) o RSI < 45."
+                    _entry_yield = (_yield / (_precio / _sma200)) if _sma200 > 0 and _precio > 0 else 0
+                    if _pos52 > 65 and _sma200 > 0 and _precio > _sma200:
+                        _gap = (_precio / _sma200 - 1) * 100
+                        rec = (f"No es el momento óptimo. Precio un {_gap:.1f}% sobre SMA200 y en zona alta del rango anual — "
+                               f"el yield efectivo es el más bajo del año. Zona de espera: SMA200 ({_sma200:.2f}€) con RSI < 45. "
+                               f"Si el precio retrocede ahí, el yield efectivo mejoraría aproximadamente un {_gap:.0f}%.")
+                    elif _pos52 > 60 or (_sma200 > 0 and _precio > _sma200):
+                        rec = (f"Zona subóptima para entrada completa. Considera una posición parcial (30-40%) ahora "
+                               f"y reserva capital para promediar si el precio retrocede hacia SMA200 ({_sma200:.2f}€) o RSI baja de 45.")
+                    elif _rsi < 40 and _niv_soporte and _div_alc:
+                        rec = (f"Setup óptimo activo: RSI en sobreventa ({_rsi:.0f}), soporte técnico presente y divergencia alcista confirmada. "
+                               f"Entrada escalonada en 2-3 tramos. Stop por debajo del soporte identificado. "
+                               f"La combinación yield + precio bajo + señal técnica es el escenario de máxima asimetría.")
                     elif _rsi < 45 and _niv_soporte:
-                        rec = "Setup favorable para entrada escalonada. Soporte técnico activo como referencia de stop."
+                        rec = (f"Condiciones razonables. RSI en {_rsi:.0f} con soporte técnico activo. "
+                               f"Entrada parcial (50%) con stop bajo soporte. Reservar capital para mejorar precio medio "
+                               f"si hay corrección adicional.")
                     else:
-                        rec = "Vigilar. No es zona óptima pero tampoco descartable. Entrada parcial posible."
+                        rec = ("Vigilar sin comprometer capital. Esperar que RSI baje de 45 o que el precio llegue a zona de soporte "
+                               "reforzado para tener una referencia técnica clara de stop.")
 
                 elif key == "📈 Swing 12-16 sem":
                     tend_ok = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
@@ -4687,12 +4950,25 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                         puntos.append("✅ Soporte y resistencia identificados — recorrido definido.")
                     elif not _niv_soporte:
                         puntos.append("⚠️ Sin soporte técnico claro — difícil establecer stop lógico.")
+                    _soporte_str = f"{_niv_soporte[0]['precio']:.4f}€" if _niv_soporte else "no identificado"
+                    _resist_str  = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "no identificada"
                     if _div_rsi_baj or _div_mcd_baj:
-                        rec = "Setup invalidado por divergencia bajista. Esperar a que se resuelva antes de considerar entrada."
-                    elif tend_ok and 45 <= _rsi <= 62 and not _div_baj:
-                        rec = "Condiciones favorables. Entrada en zona de soporte más próxima con stop bajo ese nivel."
+                        rec = ("⛔ Setup invalidado. Divergencia bajista activa — la tendencia muestra agotamiento interno "
+                               "aunque el precio no lo refleje todavía. Esperar resolución de la divergencia (3-8 sesiones) "
+                               "antes de considerar entrada. Comprar ahora es perseguir el precio en el peor momento.")
+                    elif tend_ok and 45 <= _rsi <= 62 and not _div_baj and _niv_soporte:
+                        _recorrido = ((_niv_resist[0]["precio"] / _niv_soporte[0]["precio"] - 1) * 100) if _niv_soporte and _niv_resist else 0
+                        rec = (f"Setup técnico favorable. Entrada en zona de soporte reforzado ({_soporte_str}) "
+                               f"con stop 2-3% por debajo. Objetivo: resistencia identificada ({_resist_str}). "
+                               f"Recorrido potencial: ~{_recorrido:.1f}%. "
+                               f"RSI en {_rsi:.0f} — ventana válida sin sobreextensión.")
+                    elif tend_ok and _rsi > 62:
+                        rec = (f"Tendencia correcta pero RSI en {_rsi:.0f} — sobreextendido. "
+                               f"Esperar retroceso a soporte ({_soporte_str}) o RSI bajo 58 para mejorar el punto de entrada "
+                               f"y aumentar el ratio riesgo/beneficio.")
                     else:
-                        rec = "Setup parcial. Esperar alineación completa antes de comprometer capital."
+                        rec = (f"Setup incompleto. {'Tendencia no establecida — ' if not tend_ok else ''}"
+                               f"esperar alineación precio>SMA50>SMA200 + RSI 45-62 + soporte identificado antes de comprometer capital.")
 
                 elif key == "🏷️ Valor":
                     if _pe > 0:
@@ -4704,9 +4980,20 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                         puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual. Valor genuino raramente se encuentra cerca de máximos.")
                     if _div_alc:
                         puntos.append("✅ OBV/Volumen mostrando acumulación — señal de que el mercado ya reconoce el descuento.")
-                    rec = ("Candidato a valor si los fundamentales aguantan el análisis detallado (FCF, deuda, ROCE)."
-                           if _pe > 0 and _pe < 18 and _pos52 < 55
-                           else "Precaución — el precio no refleja descuento suficiente para margen de seguridad adecuado.")
+                    if _pe > 0 and _pe < 15 and _pos52 < 40 and (_sma200 == 0 or _precio < _sma200):
+                        rec = (f"Candidato de valor claro: PER {_pe:.1f}x + precio bajo SMA200 + zona baja del rango anual. "
+                               f"Profundizar en FCF, nivel de deuda y ROCE antes de entrar. "
+                               f"Si los fundamentales aguantan, entrada escalonada en 3 tramos con stop bajo soporte.")
+                    elif _pe > 0 and _pe < 18 and _pos52 < 55:
+                        rec = (f"Candidato moderado. PER {_pe:.1f}x razonable pero el precio no está en descuento máximo. "
+                               f"Revisar tendencia de BPA y FCF yield. Entrada parcial posible con stop técnico claro.")
+                    elif _pe <= 0:
+                        rec = ("Sin datos de PER disponibles — imposible evaluar el margen de seguridad fundamental. "
+                               "Profundizar en valoración por FCF o EV/EBITDA antes de considerar la posición.")
+                    else:
+                        rec = (f"Precio no refleja descuento suficiente para estrategia valor: PER {_pe:.1f}x + "
+                               f"posición {_pos52:.0f}% en rango anual. El margen de seguridad es insuficiente. "
+                               f"Esperar corrección hacia SMA200 ({_sma200:.2f}€) o PER < 15x para tener la asimetría adecuada.")
 
                 elif key == "🚀 Momentum":
                     _dist50 = (_precio / _sma50 - 1) * 100 if _sma50 > 0 else 0
@@ -4722,9 +5009,22 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                         puntos.append("⚠️ Volumen sin aceleración — verificar si el movimiento tiene continuidad.")
                     if _div_baj:
                         puntos.append("❌ Divergencia bajista detectada — señal de agotamiento. Momentum en riesgo.")
-                    rec = ("Momentum activo. Si se entra, stop bajo SMA50 y objetivo en resistencia identificada."
-                           if _sar == "alcista" and not _div_baj and _rsi < 73
-                           else "Momentum debilitándose o sobreextendido. No perseguir el precio aquí.")
+                    _sma50_str = f"{_sma50:.4f}€" if _sma50 > 0 else "SMA50"
+                    _resist_str = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "resistencia siguiente"
+                    if _sar == "alcista" and not _div_baj and 55 <= _rsi <= 70 and _vslope > 0:
+                        _dist_sma50 = ((_precio / _sma50 - 1) * 100) if _sma50 > 0 else 0
+                        rec = (f"Momentum activo y limpio. Entrada válida ahora con stop bajo SMA50 ({_sma50_str}). "
+                               f"El precio está un {_dist_sma50:.1f}% sobre SMA50 — {'margen razonable' if _dist_sma50 < 8 else 'algo sobreextendido; considerar esperar retroceso a SMA50'}. "
+                               f"Objetivo: {_resist_str}. Trailing stop al 8% desde máximos una vez en beneficio.")
+                    elif _div_baj:
+                        rec = ("⛔ No entrar. Divergencia bajista activa — el momentum se agota aunque el precio aguante. "
+                               "Esperar resolución. Si ya estás en posición, ajustar stop a nivel de soporte más reciente.")
+                    elif _rsi > 72:
+                        rec = (f"RSI en {_rsi:.0f} — sobrecomprado. No perseguir el precio en este nivel. "
+                               f"Esperar retroceso a SMA50 ({_sma50_str}) o RSI < 62 para reentrar con mejor ratio riesgo/beneficio.")
+                    else:
+                        rec = ("Momentum sin las condiciones completas. Esperar SAR alcista + RSI 55-70 + volumen creciente "
+                               "para tener la confluencia de señales que define el setup.")
 
                 elif key == "🔄 Rebote Técnico":
                     if _rsi < 30:
@@ -4739,9 +5039,21 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                         puntos.append("⚠️ Sin divergencia alcista confirmada — el rebote no está señalizado por indicadores.")
                     if _pctb is not None and _pctb < 0.15:
                         puntos.append(f"✅ %B Bollinger en {_pctb:.2f} — precio en banda inferior extrema.")
-                    rec = ("Setup de rebote válido. Operativa de alta probabilidad pero stop muy ajustado bajo soporte."
-                           if _rsi < 35 and _niv_soporte and _div_alc
-                           else "Condiciones incompletas. Esperar convergencia de más señales antes de actuar.")
+                    _soporte_str = f"{_niv_soporte[0]['precio']:.4f}€" if _niv_soporte else "soporte no identificado"
+                    if _rsi < 32 and _niv_soporte and _div_alc and (_pctb is None or _pctb < 0.20):
+                        rec = (f"Setup de rebote técnico de alta probabilidad. "
+                               f"RSI en {_rsi:.0f} + divergencia alcista activa + soporte reforzado ({_soporte_str}). "
+                               f"Entrada en zona del soporte con stop 2-3% por debajo. "
+                               f"Objetivo: retorno a SMA20 o SMA50 (2-4 semanas). Si el soporte cede: salir sin excusas.")
+                    elif _rsi < 38 and _niv_soporte:
+                        rec = (f"Condiciones parciales. RSI en {_rsi:.0f} con soporte activo pero sin divergencia alcista confirmada. "
+                               f"Posición reducida (30-40%) con stop muy ajustado. Esperar vela de giro o divergencia para completar.")
+                    elif _rsi < 38 and not _niv_soporte:
+                        rec = (f"RSI en {_rsi:.0f} indica sobreventa pero sin soporte técnico identificado — "
+                               f"no hay referencia para el stop. No operar sin saber dónde se invalida la tesis.")
+                    else:
+                        rec = (f"Sin condiciones de rebote: RSI en {_rsi:.0f} sin sobreventa técnica. "
+                               f"Esperar RSI < 35 + soporte + divergencia alcista para tener el setup completo.")
 
                 elif key == "🛡️ Señal de Salida":
                     if _rsi > 70:
@@ -4755,9 +5067,19 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                         puntos.append("✅ OBV distribuyendo — el dinero institucional está saliendo bajo la subida.")
                     if not puntos:
                         puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
-                    rec = ("Señales de salida activas. Considerar reducción parcial de posición o stop ajustado."
-                           if (_rsi > 68 or _div_rsi_baj or _div_mcd_baj)
-                           else "Sin señales claras. Mantener posición con stop en su nivel actual.")
+                    if _div_rsi_baj or _div_mcd_baj or (_obvs < -0.001):
+                        _tipos_baj = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
+                        rec = (f"⚠️ Señales de distribución activas ({', '.join(_tipos_baj) if _tipos_baj else 'OBV'}). "
+                               f"Acción: reducir 40-50% de la posición al precio actual. "
+                               f"Ajustar stop del resto al soporte técnico más reciente. "
+                               f"Si RSI supera 75 o hay cruce bajista MACD: cerrar posición completa.")
+                    elif _rsi > 70 and _pos52 > 75:
+                        rec = (f"RSI en {_rsi:.0f} + precio en {_pos52:.0f}% del rango anual — asimetría desfavorable. "
+                               f"Sin divergencia activa todavía, pero el riesgo/recompensa no justifica añadir posición. "
+                               f"Ajustar stop al soporte más reciente y vigilar el histograma MACD para señal de deterioro.")
+                    else:
+                        rec = ("Sin señales de salida claras. Mantener posición con stop en soporte más reciente. "
+                               "Vigilar divergencia bajista OBV/RSI como primer aviso de distribución.")
 
                 return puntos, rec
 
@@ -4779,23 +5101,32 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                     _cols = st.columns(len(_fila))
                     for _col, _k in zip(_cols, _fila):
                         _color, _fn = _estrategias[_k]
-                        _desc_k = _est_desc.get(_k, "")
                         with _col:
+                            _th1, _th2 = st.columns([5, 1])
+                            with _th2:
+                                with st.popover("ℹ️", use_container_width=True):
+                                    st.markdown(_est_popover.get(_k, ""))
                             st.markdown(
                                 _scorecard(_k.split(" ", 1)[-1], _k.split(" ")[0],
-                                           _fn(), _color, _desc_k),
+                                           _fn(), _color),
                                 unsafe_allow_html=True
                             )
                     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
             else:
                 _color, _fn  = _estrategias[_est_sel]
-                _desc_sel    = _est_desc.get(_est_sel, "")
                 _nombre_limpio = _est_sel.split(" ", 1)[-1]
                 _emoji_est     = _est_sel.split(" ")[0]
+                # Header row with popover
+                _sh1, _sh2 = st.columns([6, 1])
+                with _sh1:
+                    st.markdown(f"#### {_emoji_est} {_nombre_limpio}")
+                with _sh2:
+                    with st.popover("ℹ️", use_container_width=True):
+                        st.markdown(_est_popover.get(_est_sel, ""))
                 _c1, _c2 = st.columns([3, 2])
                 with _c1:
                     st.markdown(
-                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color, _desc_sel),
+                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color),
                         unsafe_allow_html=True
                     )
                 with _c2:
