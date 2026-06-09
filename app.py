@@ -2368,13 +2368,11 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'</div>\n'
 
         # Convergencia Técnica
-        + _conv_section +
-
-        # Divergencias Técnicas
-        + _divs_section +
+        + _conv_section
+        + _divs_section
 
         # Fundamentales
-        f'{fund_section}\n'
+        + f'{fund_section}\n'
 
         f'</div>\n'  # end .body
 
