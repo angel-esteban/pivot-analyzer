@@ -1988,7 +1988,8 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           tolerancia: float = 0.20,
                           niveles_reforzados: list = None,
                           señales_dir: list = None,
-                          consenso_dir: tuple = None) -> str:
+                          consenso_dir: tuple = None,
+                          divergencias_tecnicas: list = None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -2272,6 +2273,44 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>\n'
         )
 
+    # ── Sección Divergencias Técnicas ────────────────────────────────────────
+    _divs_section = ""
+    if divergencias_tecnicas:
+        _dv_alc = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
+        _dv_baj = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
+
+        def _div_badge(d):
+            fuerza = d.get("fuerza", "media")
+            f_color = {"fuerte": "#15803d", "media": "#d97706", "débil": "#94a3b8"}.get(fuerza, "#94a3b8")
+            tipo_em = "🔼" if d["direccion"] == "alcista" else "🔽"
+            return (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'padding:6px 10px;background:#f8fafc;border-radius:6px;margin-bottom:6px;'
+                f'border-left:3px solid {f_color}">'
+                f'<span style="font-weight:600;font-size:12px">{tipo_em} {d["tipo"]} — {d["descripcion"]}</span>'
+                f'<span style="font-size:11px;color:{f_color};text-transform:capitalize">{fuerza}</span>'
+                f'</div>'
+            )
+
+        _alc_rows = "".join(_div_badge(d) for d in _dv_alc) if _dv_alc else '<div style="color:#94a3b8;font-size:12px">Sin divergencias alcistas</div>'
+        _baj_rows = "".join(_div_badge(d) for d in _dv_baj) if _dv_baj else '<div style="color:#94a3b8;font-size:12px">Sin divergencias bajistas</div>'
+
+        _divs_section = (
+            f'<div class="card">\n'
+            f'<h2>&#9889; Divergencias T&#233;cnicas</h2>\n'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">\n'
+            f'<div>\n'
+            f'<div class="col-title" style="color:#15803d">&#9650; Alcistas</div>\n'
+            f'{_alc_rows}\n'
+            f'</div>\n'
+            f'<div>\n'
+            f'<div class="col-title" style="color:#dc2626">&#9660; Bajistas</div>\n'
+            f'{_baj_rows}\n'
+            f'</div>\n'
+            f'</div>\n'
+            f'</div>\n'
+        )
+
     # ── Ensamblar ─────────────────────────────────────────────────────────
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
@@ -2330,6 +2369,9 @@ tr:nth-child(even) td { background:#f8fafc; }
 
         # Convergencia Técnica
         + _conv_section +
+
+        # Divergencias Técnicas
+        + _divs_section +
 
         # Fundamentales
         f'{fund_section}\n'
@@ -3398,7 +3440,7 @@ def pantalla_analisis():
                 tarjetas_html += (
                     f'<div style="background:var(--secondary-background-color,#f0f2f6);'
                     f'border-radius:0.5rem;padding:0.55rem 0.75rem;flex:1;min-width:0">'
-                    f'<div style="font-size:0.75rem;color:var(--text-color,#888);'
+                    f'<div style="font-size:0.75rem;color:var(--text-color,#666);'
                     f'margin-bottom:0.25rem;font-weight:500">{factor}</div>'
                     f'<div style="font-size:0.95rem;font-weight:700;'
                     f'word-break:break-word;white-space:normal">{descripcion}</div>'
@@ -3570,10 +3612,11 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
         # Construir HTML idéntico al informe
         def _ind_s(lbl, val, sub=""):
             sub_h = f'<div class="s-ind-sub">{sub}</div>' if sub else ""
+            _sub_span = f" &nbsp;<span class='s-ind-sub'>{sub}</span>" if sub else ""
             return (
                 f'<tr>'
                 f'<td class="s-ind-lbl">{lbl}</td>'
-                f'<td class="s-ind-val">{val}{(" &nbsp;<span class=\'s-ind-sub\'>" + sub + "</span>") if sub else ""}</td>'
+                f'<td class="s-ind-val">{val}{_sub_span}</td>'
                 f'</tr>'
             )
 
@@ -3855,6 +3898,7 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                             niveles_reforzados=niveles_reforzados,
                             señales_dir=señales_dir,
                             consenso_dir=consenso_dir,
+                            divergencias_tecnicas=divergencias_tecnicas,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
