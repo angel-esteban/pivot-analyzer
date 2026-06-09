@@ -1317,6 +1317,174 @@ def detectar_confluencias(resultados: dict, tolerancia: float = 0.20):
 
 
 # =============================================================================
+# DIVERGENCIAS TÉCNICAS
+# =============================================================================
+
+def detectar_divergencias(hist, n_sesiones=60):
+    """
+    Detecta divergencias entre precio y cuatro indicadores:
+    RSI, MACD histograma, Volumen y OBV.
+    Retorna lista de dicts: {tipo, direccion, descripcion, emoji, fuerza}
+    """
+    import numpy as _np_div
+
+    if len(hist) < 30:
+        return []
+
+    df    = hist.tail(n_sesiones).copy()
+    close = df["Close"].squeeze()
+    vol   = df["Volume"].squeeze()
+    divs  = []
+
+    # ── Helper: extremos locales ─────────────────────────────────────
+    def _extremos(s, order=5):
+        v = s.values
+        n = len(v)
+        picos, valles = [], []
+        for i in range(order, n - order):
+            bloque = v[i - order: i + order + 1]
+            if v[i] == bloque.max() and v[i] > bloque.mean():
+                picos.append(i)
+            if v[i] == bloque.min() and v[i] < bloque.mean():
+                valles.append(i)
+        return picos, valles
+
+    # ── 1. RSI ───────────────────────────────────────────────────────
+    try:
+        delta = close.diff()
+        gain  = delta.clip(lower=0).rolling(14).mean()
+        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        rsi   = 100 - (100 / (1 + gain / loss.replace(0, _np_div.nan)))
+
+        picos, valles = _extremos(close, order=4)
+
+        if len(picos) >= 2:
+            p1, p2 = picos[-2], picos[-1]
+            if close.iloc[p2] > close.iloc[p1] and rsi.iloc[p2] < rsi.iloc[p1]:
+                dp  = (close.iloc[p2] - close.iloc[p1]) / close.iloc[p1] * 100
+                dr  = rsi.iloc[p1] - rsi.iloc[p2]
+                divs.append({
+                    "tipo": "RSI", "direccion": "bajista", "emoji": "🔴",
+                    "fuerza": "fuerte" if dr > 5 else "moderada",
+                    "descripcion": (
+                        f"Precio marcó nuevo máximo (+{dp:.1f}%) pero RSI cedió "
+                        f"−{dr:.1f} pts. Posible agotamiento alcista."
+                    ),
+                })
+
+        if len(valles) >= 2:
+            v1, v2 = valles[-2], valles[-1]
+            if close.iloc[v2] < close.iloc[v1] and rsi.iloc[v2] > rsi.iloc[v1]:
+                dp = (close.iloc[v1] - close.iloc[v2]) / close.iloc[v1] * 100
+                dr = rsi.iloc[v2] - rsi.iloc[v1]
+                divs.append({
+                    "tipo": "RSI", "direccion": "alcista", "emoji": "🟢",
+                    "fuerza": "fuerte" if dr > 5 else "moderada",
+                    "descripcion": (
+                        f"Precio marcó nuevo mínimo (−{dp:.1f}%) pero RSI "
+                        f"aguantó +{dr:.1f} pts. Posible agotamiento bajista."
+                    ),
+                })
+    except Exception:
+        pass
+
+    # ── 2. MACD histograma ───────────────────────────────────────────
+    try:
+        ema12  = close.ewm(span=12, adjust=False).mean()
+        ema26  = close.ewm(span=26, adjust=False).mean()
+        hist_m = (ema12 - ema26) - (ema12 - ema26).ewm(span=9, adjust=False).mean()
+        ref    = abs(hist_m.mean()) * 0.5
+
+        picos, valles = _extremos(close, order=4)
+
+        if len(picos) >= 2:
+            p1, p2 = picos[-2], picos[-1]
+            if close.iloc[p2] > close.iloc[p1] and hist_m.iloc[p2] < hist_m.iloc[p1]:
+                divs.append({
+                    "tipo": "MACD", "direccion": "bajista", "emoji": "🔴",
+                    "fuerza": "fuerte" if abs(hist_m.iloc[p2] - hist_m.iloc[p1]) > ref else "moderada",
+                    "descripcion": (
+                        "Precio en nuevo máximo pero el histograma MACD "
+                        "pierde altura. El momentum comprador se debilita."
+                    ),
+                })
+
+        if len(valles) >= 2:
+            v1, v2 = valles[-2], valles[-1]
+            if close.iloc[v2] < close.iloc[v1] and hist_m.iloc[v2] > hist_m.iloc[v1]:
+                divs.append({
+                    "tipo": "MACD", "direccion": "alcista", "emoji": "🟢",
+                    "fuerza": "fuerte" if abs(hist_m.iloc[v2] - hist_m.iloc[v1]) > ref else "moderada",
+                    "descripcion": (
+                        "Precio en nuevo mínimo pero el histograma MACD "
+                        "reduce la presión. El momentum bajista se agota."
+                    ),
+                })
+    except Exception:
+        pass
+
+    # ── 3. Volumen vs Precio ─────────────────────────────────────────
+    try:
+        x  = _np_div.arange(len(close))
+        ps = _np_div.polyfit(x, close.values.astype(float), 1)[0] / float(close.mean())
+        vs = _np_div.polyfit(x, vol.values.astype(float),   1)[0] / float(vol.mean())
+        th = 0.0003
+
+        if ps > th and vs < -th:
+            divs.append({
+                "tipo": "Volumen", "direccion": "bajista", "emoji": "🔴",
+                "fuerza": "moderada",
+                "descripcion": (
+                    "Precio con pendiente alcista pero volumen cayendo. "
+                    "Subida sin convicción compradora — posible trampa alcista."
+                ),
+            })
+        elif ps < -th and vs > th:
+            divs.append({
+                "tipo": "Volumen", "direccion": "alcista", "emoji": "🟢",
+                "fuerza": "moderada",
+                "descripcion": (
+                    "Precio con pendiente bajista pero volumen creciendo. "
+                    "Posible acumulación institucional bajo la caída."
+                ),
+            })
+    except Exception:
+        pass
+
+    # ── 4. OBV vs Precio ─────────────────────────────────────────────
+    try:
+        obv = (_np_div.sign(close.diff()) * vol).fillna(0).cumsum()
+        x   = _np_div.arange(len(close))
+        ps  = _np_div.polyfit(x, close.values.astype(float), 1)[0] / float(close.mean())
+        os_ = _np_div.polyfit(x, obv.values.astype(float),   1)[0] / (abs(float(obv.mean())) + 1)
+        th  = 0.0003
+
+        if ps < -th and os_ > th:
+            divs.append({
+                "tipo": "OBV", "direccion": "alcista", "emoji": "🟢",
+                "fuerza": "fuerte",
+                "descripcion": (
+                    "OBV acumula mientras el precio cae. "
+                    "El dinero institucional compra la debilidad — "
+                    "divergencia alcista de alta relevancia."
+                ),
+            })
+        elif ps > th and os_ < -th:
+            divs.append({
+                "tipo": "OBV", "direccion": "bajista", "emoji": "🔴",
+                "fuerza": "fuerte",
+                "descripcion": (
+                    "OBV distribuye mientras el precio sube. "
+                    "Salida de manos fuertes bajo la subida — "
+                    "divergencia bajista de alta relevancia."
+                ),
+            })
+    except Exception:
+        pass
+
+    return divs
+
+
 # CONVERGENCIA TÉCNICA — Pivots + Medias + Indicadores
 # =============================================================================
 
@@ -2702,19 +2870,20 @@ def pantalla_analisis():
                 st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis Técnico", "🤖 Análisis IA", "🌍 Macro"]
+    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
 
     tab_objs = st.tabs(tabs_list)
-    tab_analisis = tab_objs[0]
-    tab_ia       = tab_objs[1]
-    tab_macro    = tab_objs[2]
+    tab_analisis  = tab_objs[0]
+    tab_estrategia = tab_objs[1]
+    tab_ia        = tab_objs[2]
+    tab_macro     = tab_objs[3]
 
-    if es_superadmin and len(tab_objs) >= 5:
-        tab_admin = tab_objs[3]
-        tab_ayuda = tab_objs[4]
+    if es_superadmin and len(tab_objs) >= 6:
+        tab_admin = tab_objs[4]
+        tab_ayuda = tab_objs[5]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -3160,8 +3329,32 @@ def pantalla_analisis():
             tolerancia=tol_activa
         )
 
+        # ---- DIVERGENCIAS TÉCNICAS ----
+        divergencias_tecnicas = detectar_divergencias(hist)
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
+
+        # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
+        st.session_state["estrategia_data"] = {
+            "ticker":        ticker_activo,
+            "nombre":        nombre,
+            "precio":        precio,
+            "tipo_activo":   tipo_activo,
+            "info":          info,
+            "hist":          hist,
+            "medias":        medias,
+            "rsi_val":       rsi_val,
+            "macd_hist_val": macd_hist_val,
+            "macd_val":      macd_val,
+            "macd_señal":    macd_señal,
+            "consenso_dir":  consenso_dir,
+            "divergencias":  divergencias_tecnicas,
+            "niveles_ref":   niveles_reforzados,
+            "sar_tend":      sar_tend,
+            "pct_b":         pct_b,
+            "ts":            ts_str,
+        }
 
         # ======== LAYOUT PRINCIPAL ========
 
@@ -3439,6 +3632,80 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
 
         st.divider()
 
+        # ── Bloque 3e: Divergencias Técnicas ─────────────────────────────
+        _dv_h1, _dv_h2 = st.columns([6, 1])
+        with _dv_h1:
+            st.markdown("### ⚡ Divergencias Técnicas")
+        with _dv_h2:
+            with st.popover("ℹ️", use_container_width=True):
+                st.markdown("""
+**¿Qué es una divergencia técnica?**
+
+Una divergencia ocurre cuando el precio y un indicador se mueven en direcciones opuestas. Señala que el movimiento actual del precio **no está siendo confirmado** por el indicador, lo que anticipa posibles giros o agotamiento de tendencia.
+
+---
+
+**RSI vs Precio** — Si el precio hace un máximo más alto pero el RSI uno más bajo, el impulso comprador se agota (bajista). Al revés, señal alcista.
+
+**MACD histograma vs Precio** — El histograma mide la aceleración del momentum. Una divergencia aquí anticipa el giro antes que el cruce de líneas.
+
+**Volumen vs Precio** — Precio subiendo con volumen cayendo = movimiento sin convicción. Precio bajando con volumen creciendo = posible acumulación.
+
+**OBV vs Precio** — El OBV acumula o distribuye antes de que el precio lo refleje. Es la divergencia de mayor relevancia porque captura el flujo de dinero institucional.
+
+---
+- 🟢 **Alcista**: el indicador sugiere más fuerza de la que muestra el precio.
+- 🔴 **Bajista**: el indicador sugiere menos fuerza de la que muestra el precio.
+- **Fuerte** → diferencia significativa. **Moderada** → señal inicial, confirmar.
+
+---
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+""")
+
+        if not divergencias_tecnicas:
+            st.info("✅ Sin divergencias detectadas en las últimas 60 sesiones. Precio e indicadores alineados.")
+        else:
+            # Separar por dirección para mostrar en columnas
+            _dv_alc = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
+            _dv_baj = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
+
+            _dv_col1, _dv_col2 = st.columns(2)
+
+            def _dv_card(div):
+                _bg  = "#f0fdf4" if div["direccion"] == "alcista" else "#fff1f2"
+                _brd = "#16a34a" if div["direccion"] == "alcista" else "#dc2626"
+                _fc  = "#166534" if div["direccion"] == "alcista" else "#991b1b"
+                _tag = ("🔺 Alcista" if div["direccion"] == "alcista" else "🔻 Bajista")
+                _fza = f' · <span style="font-size:0.72rem;opacity:0.8">{div["fuerza"].upper()}</span>'
+                st.markdown(
+                    f'<div style="background:{_bg};border-left:4px solid {_brd};'
+                    f'border-radius:6px;padding:10px 12px;margin-bottom:8px">'
+                    f'<div style="font-size:0.78rem;font-weight:700;color:{_fc};margin-bottom:4px">'
+                    f'{div["emoji"]} {div["tipo"]} — {_tag}{_fza}</div>'
+                    f'<div style="font-size:0.82rem;color:#374151;line-height:1.4">'
+                    f'{div["descripcion"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            with _dv_col1:
+                if _dv_alc:
+                    st.markdown("**Señales alcistas**")
+                    for d in _dv_alc:
+                        _dv_card(d)
+                else:
+                    st.caption("Sin divergencias alcistas")
+
+            with _dv_col2:
+                if _dv_baj:
+                    st.markdown("**Señales bajistas**")
+                    for d in _dv_baj:
+                        _dv_card(d)
+                else:
+                    st.caption("Sin divergencias bajistas")
+
+        st.divider()
+
         # ── Bloque 3d: Convergencia Técnica ──────────────────────────────
         _cv_h1, _cv_h2 = st.columns([6, 1])
         with _cv_h1:
@@ -3608,6 +3875,344 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                         mime="application/pdf",
                         key="dl_pdf",
                     )
+
+    # ---- TAB ESTRATEGIA ----
+    with tab_estrategia:
+        ed = st.session_state.get("estrategia_data")
+
+        if not ed:
+            st.info("📊 Selecciona y analiza un valor en la pestaña **Análisis Técnico** para ver las estrategias.")
+        else:
+            import numpy as _np_est
+
+            # ── Cabecera ─────────────────────────────────────────────────
+            st.markdown(
+                f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">'
+                f'<span style="font-size:1.3rem;font-weight:700">{ed["ticker"]}</span>'
+                f'<span style="font-size:1rem;color:#555">{ed["nombre"]}</span>'
+                f'<span style="font-size:0.85rem;color:#888;margin-left:auto">Datos: {ed["ts"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                f'<p style="font-size:1.05rem;margin:0 0 12px 0">'
+                f'Precio: <b>{ed["precio"]:.4f}</b></p>',
+                unsafe_allow_html=True
+            )
+
+            # ── Helpers de scoring ────────────────────────────────────────
+            def _criterio(ok, texto, detalle=""):
+                if ok == 2:   icn, col = "✅", "#166534"
+                elif ok == 1: icn, col = "⚠️", "#92400e"
+                else:         icn, col = "❌", "#991b1b"
+                det = f'<span style="color:#6b7280;font-size:0.78rem"> — {detalle}</span>' if detalle else ""
+                return (
+                    f'<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:0.84rem">'
+                    f'{icn} <span style="color:{col}">{texto}</span>{det}</div>',
+                    ok
+                )
+
+            def _scorecard(titulo, emoji_tit, criterios, color_hdr):
+                total  = sum(p for _, p in criterios)
+                maxpts = len(criterios) * 2
+                pct    = int(total / maxpts * 100)
+                if pct >= 70:   vrd, vrd_col = "OPORTUNIDAD", "#166534"
+                elif pct >= 45: vrd, vrd_col = "VIGILAR",     "#92400e"
+                else:           vrd, vrd_col = "NO ES EL MOMENTO", "#991b1b"
+                vrd_bg = {"OPORTUNIDAD": "#f0fdf4", "VIGILAR": "#fffbeb", "NO ES EL MOMENTO": "#fff1f2"}[vrd]
+
+                filas = "".join(html for html, _ in criterios)
+                return f"""
+<div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;height:100%">
+  <div style="background:{color_hdr};padding:10px 14px">
+    <span style="color:white;font-weight:700;font-size:1rem">{emoji_tit} {titulo}</span>
+  </div>
+  <div style="background:{vrd_bg};padding:8px 14px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:1.4rem;font-weight:800;color:{vrd_col}">{pct}</span>
+    <span style="font-size:0.65rem;color:{vrd_col};font-weight:600">/100</span>
+    <span style="font-size:0.82rem;font-weight:700;color:{vrd_col};margin-left:4px">{vrd}</span>
+  </div>
+  <div style="padding:8px 14px">{filas}</div>
+</div>"""
+
+            # ── Extraer variables ─────────────────────────────────────────
+            _info    = ed["info"]
+            _hist    = ed["hist"]
+            _medias  = ed["medias"]
+            _rsi     = ed["rsi_val"]
+            _mhist   = ed["macd_hist_val"]
+            _mval    = ed["macd_val"]
+            _mseñal  = ed["macd_señal"]
+            _divs    = ed["divergencias"]
+            _niv     = ed["niveles_ref"]
+            _sar     = ed["sar_tend"]
+            _pctb    = ed["pct_b"]
+            _cons    = ed["consenso_dir"]
+            _precio  = ed["precio"]
+
+            try: _yield   = float(_info.get("dividendYield", 0) or 0) * 100
+            except: _yield = 0.0
+            try: _payout  = float(_info.get("payoutRatio",   0) or 0) * 100
+            except: _payout = 0.0
+            try: _pe      = float(_info.get("trailingPE",    0) or 0)
+            except: _pe = 0.0
+            try: _beta    = float(_info.get("beta",          1) or 1)
+            except: _beta = 1.0
+            try: _52h     = float(_info.get("fiftyTwoWeekHigh", _precio) or _precio)
+            except: _52h = _precio
+            try: _52l     = float(_info.get("fiftyTwoWeekLow",  _precio) or _precio)
+            except: _52l = _precio
+
+            _sma50  = float(_medias.get("SMA_50",  {}).get("valor", 0) or 0)
+            _sma200 = float(_medias.get("SMA_200", {}).get("valor", 0) or 0)
+            _sma20  = float(_medias.get("SMA_20",  {}).get("valor", 0) or 0)
+
+            _rng52 = _52h - _52l if _52h != _52l else 1
+            _pos52 = (_precio - _52l) / _rng52 * 100  # 0=mín, 100=máx
+
+            # Volume trend (last 20 sessions)
+            try:
+                _vols = _hist["Volume"].squeeze().tail(20).values.astype(float)
+                _x20  = _np_est.arange(len(_vols))
+                _vslope = _np_est.polyfit(_x20, _vols, 1)[0] / (_vols.mean() + 1)
+            except: _vslope = 0.0
+
+            # OBV trend (last 40 sessions)
+            try:
+                _cl40 = _hist["Close"].squeeze().tail(40)
+                _vl40 = _hist["Volume"].squeeze().tail(40)
+                _obv  = (_np_est.sign(_cl40.diff()) * _vl40).fillna(0).cumsum()
+                _x40  = _np_est.arange(len(_obv))
+                _obvs = _np_est.polyfit(_x40, _obv.values.astype(float), 1)[0] / (abs(float(_obv.mean())) + 1)
+            except: _obvs = 0.0
+
+            _div_alc = any(d["direccion"] == "alcista" for d in _divs)
+            _div_baj = any(d["direccion"] == "bajista" for d in _divs)
+            _div_rsi_baj = any(d["tipo"] == "RSI"  and d["direccion"] == "bajista" for d in _divs)
+            _div_mcd_baj = any(d["tipo"] == "MACD" and d["direccion"] == "bajista" for d in _divs)
+            _niv_soporte = any(n["tipo"] == "S" for n in _niv)
+            _niv_resist  = any(n["tipo"] == "R" for n in _niv)
+
+            # ══════════════════════════════════════════════════════════════
+            # SELECTOR
+            # ══════════════════════════════════════════════════════════════
+            _est_opciones = ["Todas", "💰 Dividendos", "📈 Swing 12-16 sem",
+                             "🏷️ Valor", "🚀 Momentum", "🔄 Rebote Técnico", "🛡️ Señal de Salida"]
+            _est_sel = st.radio("Mostrar estrategia:", _est_opciones,
+                                horizontal=True, key="est_selector",
+                                label_visibility="collapsed")
+
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+            # ══════════════════════════════════════════════════════════════
+            # DEFINICIÓN DE LAS 6 ESTRATEGIAS
+            # ══════════════════════════════════════════════════════════════
+
+            def _build_dividendos():
+                c = []
+                c.append(_criterio(2 if _yield >= 3.5 else 1 if _yield >= 2 else 0,
+                    f"Dividend yield {_yield:.1f}%",
+                    "≥3.5% ✅  2-3.5% ⚠️  <2% ❌"))
+                c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
+                    "Precio respecto a SMA200",
+                    f"{'Por debajo ✅' if _sma200 > 0 and _precio < _sma200 else 'Por encima ❌'}"))
+                c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
+                    f"RSI {_rsi:.0f} — zona de entrada",
+                    "<45 óptimo · 45-55 aceptable · >55 caro"))
+                c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
+                    f"Posición en rango 52W: {_pos52:.0f}%",
+                    "<35% del rango = zona valor"))
+                c.append(_criterio(2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
+                    f"Payout ratio {_payout:.0f}%",
+                    "<70% sostenible · 70-90% ajustado · >90% riesgo"))
+                c.append(_criterio(2 if _div_alc and not _div_baj else 1 if not _div_baj else 0,
+                    "Divergencias técnicas",
+                    "Alcista ✅ · Neutral ⚠️ · Bajista ❌"))
+                c.append(_criterio(2 if _niv_soporte else 1,
+                    "Soporte técnico cercano",
+                    "Nivel pivot+media como colchón de entrada"))
+                return c
+
+            def _build_swing():
+                c = []
+                tend_ok = (_sma50 > 0 and _sma200 > 0 and
+                           _precio > _sma50 and _sma50 > _sma200)
+                tend_par = (_sma50 > 0 and _precio > _sma50 and
+                            not (_sma50 > _sma200))
+                c.append(_criterio(2 if tend_ok else 1 if tend_par else 0,
+                    "Tendencia alcista alineada",
+                    "Precio>SMA50>SMA200 = estructura ideal"))
+                c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
+                    f"MACD histograma {'positivo ✅' if _mhist > 0 else 'negativo ❌'}",
+                    "Positivo y acelerando = momentum activo"))
+                c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
+                    f"RSI {_rsi:.0f} — ventana de entrada",
+                    "45-62 ideal · fuera = sobreextendido"))
+                c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
+                    "Volumen confirmando",
+                    "Creciente ✅ · Estable ⚠️ · Cayendo ❌"))
+                c.append(_criterio(2 if _niv_soporte and _niv_resist else 1 if _niv_soporte else 0,
+                    "Soporte + resistencia identificados",
+                    "Recorrido claro entre entrada y objetivo"))
+                c.append(_criterio(0 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 2,
+                    "Sin divergencias bajistas RSI/MACD",
+                    "Divergencia activa invalida el setup"))
+                c.append(_criterio(2 if _cons[0] == "alcista" else 1 if _cons[0] == "neutro" else 0,
+                    f"Consenso técnico: {_cons[2]}",
+                    "Todos los indicadores deben apuntar al alza"))
+                return c
+
+            def _build_valor():
+                c = []
+                c.append(_criterio(2 if 0 < _pe < 15 else 1 if _pe < 22 else 0,
+                    f"PER {_pe:.1f}x" if _pe else "PER no disponible",
+                    "<15x barato · 15-22x razonable · >22x caro"))
+                c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 * 0.97 else
+                                   1 if _sma200 > 0 and _precio < _sma200 * 1.03 else 0,
+                    "Descuento respecto a SMA200",
+                    ">3% bajo SMA200 = zona valor"))
+                c.append(_criterio(2 if _beta < 0.8 else 1 if _beta < 1.2 else 0,
+                    f"Beta {_beta:.2f}",
+                    "<0.8 defensivo · 0.8-1.2 neutro · >1.2 especulativo"))
+                c.append(_criterio(2 if _pos52 < 40 else 1 if _pos52 < 65 else 0,
+                    f"Posición en rango 52W: {_pos52:.0f}%",
+                    "Comprar cerca de mínimos anuales"))
+                c.append(_criterio(2 if _rsi < 50 else 1 if _rsi < 60 else 0,
+                    f"RSI {_rsi:.0f}",
+                    "No entrar en valor caro técnicamente"))
+                c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
+                    "Señal de acumulación (OBV/Volumen)",
+                    "Dinero institucional entrando"))
+                c.append(_criterio(2 if _yield >= 2 else 1 if _yield > 0 else 0,
+                    f"Yield {_yield:.1f}% — margen de espera",
+                    "El dividendo remunera mientras el valor aflora"))
+                return c
+
+            def _build_momentum():
+                c = []
+                c.append(_criterio(2 if (_sma50 > 0 and _precio > _sma50 * 1.02 and
+                                         _sma50 > _sma200) else 1 if (_sma50 > 0 and _precio > _sma50) else 0,
+                    "Fuerza relativa sobre medias",
+                    "Precio ≥2% sobre SMA50 en tendencia"))
+                c.append(_criterio(2 if 55 <= _rsi <= 72 else 1 if 50 <= _rsi <= 75 else 0,
+                    f"RSI {_rsi:.0f} — momentum activo",
+                    "55-72 = tendencia fuerte sin exceso"))
+                c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
+                    "MACD confirma impulso",
+                    "Histograma positivo y línea sobre señal"))
+                c.append(_criterio(2 if _vslope > 0.002 else 1 if _vslope > 0 else 0,
+                    "Volumen acelerado",
+                    "Crecimiento sostenido confirma el impulso"))
+                c.append(_criterio(2 if _sar == "alcista" else 0,
+                    f"SAR Parabólico: {'alcista ✅' if _sar == 'alcista' else 'bajista ❌'}",
+                    "SAR por debajo del precio = tendencia activa"))
+                c.append(_criterio(0 if _div_baj else 2,
+                    "Sin señales de distribución",
+                    "Cualquier divergencia bajista cancela momentum"))
+                c.append(_criterio(2 if _cons[0] == "alcista" else 1 if _cons[0] == "neutro" else 0,
+                    f"Consenso técnico: {_cons[2]}",
+                    "Todos los indicadores alineados"))
+                return c
+
+            def _build_rebote():
+                c = []
+                c.append(_criterio(2 if _rsi < 30 else 1 if _rsi < 38 else 0,
+                    f"RSI {_rsi:.0f} — sobreventa",
+                    "<30 sobreventa extrema · 30-38 zona interés"))
+                c.append(_criterio(2 if _niv_soporte else 0,
+                    "Soporte técnico activo",
+                    "Sin soporte identificado = rebote sin ancla"))
+                c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
+                    "Divergencia alcista RSI u OBV",
+                    "Sin divergencia = caída sin señal de giro"))
+                c.append(_criterio(2 if _pctb is not None and _pctb < 0.1 else
+                                   1 if _pctb is not None and _pctb < 0.25 else 0,
+                    f"Bollinger %B {_pctb:.2f}" if _pctb is not None else "Bollinger %B n/d",
+                    "<0.10 = precio en banda inferior extrema"))
+                c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
+                    "Volumen en zona de soporte",
+                    "Volumen creciendo cerca de mínimos = acumulación"))
+                c.append(_criterio(2 if _pos52 < 25 else 1 if _pos52 < 40 else 0,
+                    f"Posición en rango 52W: {_pos52:.0f}%",
+                    "<25% = zona de mínimos anuales"))
+                return c
+
+            def _build_salida():
+                c = []
+                c.append(_criterio(2 if _rsi > 70 else 1 if _rsi > 63 else 0,
+                    f"RSI {_rsi:.0f} — sobrecompra",
+                    ">70 señal de salida · 63-70 vigilar"))
+                c.append(_criterio(2 if _div_rsi_baj or _div_mcd_baj else
+                                   1 if _div_baj else 0,
+                    "Divergencia bajista RSI/MACD",
+                    "La señal más fiable de agotamiento"))
+                c.append(_criterio(2 if _mhist < 0 and _mval < _mseñal else
+                                   1 if _mhist < 0 else 0,
+                    "MACD deteriorándose",
+                    "Histograma negativo y cruce bajista"))
+                c.append(_criterio(2 if _sar == "bajista" else 0,
+                    f"SAR Parabólico: {'bajista ⚠️' if _sar == 'bajista' else 'alcista ✅'}",
+                    "SAR por encima del precio = tendencia agotada"))
+                c.append(_criterio(2 if _pos52 > 85 else 1 if _pos52 > 70 else 0,
+                    f"Posición en rango 52W: {_pos52:.0f}%",
+                    ">85% = precio cerca de máximos anuales"))
+                c.append(_criterio(2 if _obvs < -0.001 else 1 if _obvs < 0.001 else 0,
+                    "OBV distribuyendo",
+                    "Salida de dinero institucional bajo la subida"))
+                c.append(_criterio(2 if _cons[0] == "bajista" else
+                                   1 if _cons[0] == "neutro" else 0,
+                    f"Consenso técnico: {_cons[2]}",
+                    "Indicadores virados a bajista"))
+                return c
+
+            # ══════════════════════════════════════════════════════════════
+            # RENDER
+            # ══════════════════════════════════════════════════════════════
+            _estrategias = {
+                "💰 Dividendos":      ("#15803d", _build_dividendos),
+                "📈 Swing 12-16 sem": ("#1d4ed8", _build_swing),
+                "🏷️ Valor":           ("#7c3aed", _build_valor),
+                "🚀 Momentum":        ("#b45309", _build_momentum),
+                "🔄 Rebote Técnico":  ("#0f766e", _build_rebote),
+                "🛡️ Señal de Salida": ("#be123c", _build_salida),
+            }
+
+            if _est_sel == "Todas":
+                _keys = list(_estrategias.keys())
+                # 3 columnas × 2 filas
+                for _fila in [_keys[:3], _keys[3:]]:
+                    _cols = st.columns(len(_fila))
+                    for _col, _k in zip(_cols, _fila):
+                        _color, _fn = _estrategias[_k]
+                        with _col:
+                            st.markdown(
+                                _scorecard(_k.split(" ", 1)[-1], _k.split(" ")[0],
+                                           _fn(), _color),
+                                unsafe_allow_html=True
+                            )
+                    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            else:
+                _color, _fn = _estrategias[_est_sel]
+                _nombre_limpio = _est_sel.split(" ", 1)[-1]
+                _emoji_est = _est_sel.split(" ")[0]
+                _c1, _c2 = st.columns([1, 1])
+                with _c1:
+                    st.markdown(
+                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color),
+                        unsafe_allow_html=True
+                    )
+                with _c2:
+                    st.markdown("#### Interpretación")
+                    _crit_lista = _fn()
+                    _ok  = sum(1 for _, p in _crit_lista if p == 2)
+                    _par = sum(1 for _, p in _crit_lista if p == 1)
+                    _mal = sum(1 for _, p in _crit_lista if p == 0)
+                    st.markdown(
+                        f"**{_ok}** criterios cumplen · **{_par}** parciales · **{_mal}** no cumplen\n\n"
+                        f"*Esta puntuación es orientativa y debe combinarse con tu propio "
+                        f"análisis de contexto, horizonte y tamaño de posición.*"
+                    )
+                    st.caption("Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II")
 
     # ---- TAB ANÁLISIS IA (próxima versión) ----
     with tab_ia:
