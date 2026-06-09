@@ -2878,7 +2878,15 @@ def pantalla_analisis():
             import pandas as _pd_ch
 
             # ── helpers compartidos ──────────────────────────────────────
-            def _chart_layout(fig, x_fmt, height=400):
+            def _chart_layout(fig, x_fmt, height=400, y_range=None):
+                _yaxis = dict(showgrid=True, gridcolor="#e5e7eb",
+                              gridwidth=1, griddash="dash",
+                              tickfont=dict(size=10), domain=[0.22, 1.0],
+                              showline=True, linecolor="#d1d5db",
+                              autorange=True)
+                if y_range:
+                    _yaxis["range"] = y_range
+                    _yaxis["autorange"] = False
                 fig.update_layout(
                     height=height,
                     margin=dict(l=0, r=0, t=10, b=0),
@@ -2891,14 +2899,18 @@ def pantalla_analisis():
                                rangeslider=dict(visible=False),
                                tickformat=x_fmt, tickfont=dict(size=10),
                                showline=True, linecolor="#d1d5db"),
-                    yaxis=dict(showgrid=True, gridcolor="#e5e7eb",
-                               gridwidth=1, griddash="dash",
-                               tickfont=dict(size=10), domain=[0.22, 1.0],
-                               showline=True, linecolor="#d1d5db"),
+                    yaxis=_yaxis,
                     yaxis2=dict(showgrid=False, domain=[0.0, 0.18],
                                 showticklabels=False),
                     xaxis_rangeslider_visible=False,
                 )
+
+            def _y_range(series, pad=0.015):
+                """Rango Y ajustado al contenido con un pequeño margen."""
+                _mn = float(series.min())
+                _mx = float(series.max())
+                _d  = (_mx - _mn) if _mx != _mn else _mn * 0.02
+                return [_mn - _d * pad * 4, _mx + _d * pad * 2]
 
             def _add_volumen(fig, df):
                 cols_v = [c for c in df.columns if str(c).lower() == "volume"]
@@ -2952,13 +2964,16 @@ def pantalla_analisis():
                             layer="below", line_width=0
                         )
 
-                    # Línea de precio
+                    # Línea de precio con relleno
+                    _id_fill_rgba = "rgba(229,92,58,0.12)" if _id_color == "#e55c3a" else "rgba(37,99,235,0.12)"
                     fig_id.add_trace(go.Scatter(
                         x=_id_df.index,
                         y=_id_df[_id_close],
                         mode="lines",
                         name=ticker_activo,
                         line=dict(color=_id_color, width=2),
+                        fill="tozeroy",
+                        fillcolor=_id_fill_rgba,
                         hovertemplate="%{x|%H:%M}  <b>%{y:.4f}</b><extra></extra>",
                     ))
 
@@ -2966,16 +2981,26 @@ def pantalla_analisis():
                     fig_id.add_hline(
                         y=float(_id_open_val),
                         line_dash="dot", line_color="#9ca3af", line_width=1,
-                        annotation_text="Apertura",
-                        annotation_font_size=10,
-                        annotation_position="top left",
+                    )
+                    # Etiqueta "Apertura" en el eje Y, fuera del área del gráfico
+                    fig_id.add_annotation(
+                        xref="paper", x=-0.005,
+                        yref="y",     y=float(_id_open_val),
+                        text="Apertura",
+                        showarrow=False,
+                        xanchor="right",
+                        yanchor="middle",
+                        font=dict(size=9, color="#9ca3af"),
+                        bgcolor="white",
+                        borderpad=1,
                     )
 
                     _add_volumen(fig_id, _id_df)
 
+                    _id_yr = _y_range(_id_df[_id_close])
                     fig_id.update_layout(
                         height=400,
-                        margin=dict(l=0, r=0, t=10, b=0),
+                        margin=dict(l=58, r=0, t=10, b=0),
                         plot_bgcolor="white", paper_bgcolor="white",
                         hovermode="x unified",
                         showlegend=False,
@@ -2991,6 +3016,7 @@ def pantalla_analisis():
                             showgrid=True, gridcolor="#e5e7eb",
                             gridwidth=1, griddash="dash",
                             tickfont=dict(size=10), domain=[0.22, 1.0],
+                            range=_id_yr, autorange=False,
                         ),
                         yaxis2=dict(showgrid=False, domain=[0.0, 0.18],
                                     showticklabels=False),
@@ -3049,13 +3075,20 @@ def pantalla_analisis():
                     _h_last  = float(_h_df[_col_close].iloc[-1])
                     _h_first = float(_h_df[_col_close].iloc[0])
                     _h_lcolor = "#e55c3a" if _h_last >= _h_first else "#2563eb"
+                    _h_fill_rgba = "rgba(229,92,58,0.08)" if _h_last >= _h_first else "rgba(37,99,235,0.08)"
                     fig_hh.add_trace(go.Scatter(
                         x=_h_df.index, y=_h_df[_col_close],
                         mode="lines", name=ticker_activo,
                         line=dict(color=_h_lcolor, width=2),
-                        fill="tozeroy",
-                        fillcolor=f"rgba(229,92,58,0.07)" if _h_last >= _h_first else "rgba(37,99,235,0.07)",
+                        fill="tozeroy", fillcolor=_h_fill_rgba,
                     ))
+
+                # Rango Y: basado en high/low para velas/OHLC, en close para línea
+                if _h_view in ("Velas", "OHLC"):
+                    import numpy as _np_ch
+                    _h_yr = _y_range(_pd_ch.concat([_h_df[_col_high], _h_df[_col_low]]))
+                else:
+                    _h_yr = _y_range(_h_df[_col_close])
 
                 # SMAs
                 for _pm, _pc in [(20, "#f59e0b"), (50, "#7c3aed"), (200, "#94a3b8")]:
@@ -3072,7 +3105,7 @@ def pantalla_analisis():
 
                 _h_xfmt = "%a %d %b" if _h_per == "5D" else "%d %b %y"
                 with _hc1:
-                    _chart_layout(fig_hh, _h_xfmt)
+                    _chart_layout(fig_hh, _h_xfmt, y_range=_h_yr)
                     st.plotly_chart(fig_hh, use_container_width=True,
                                     config={"displayModeBar": False})
 
