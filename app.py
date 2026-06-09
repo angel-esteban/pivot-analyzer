@@ -4061,55 +4061,72 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
             # DEFINICIÓN DE LAS 6 ESTRATEGIAS
             # ══════════════════════════════════════════════════════════════
 
+            # ── Helper: estado de divergencias (texto descriptivo) ───────
+            def _div_txt_alc():
+                tipos = [d["tipo"] for d in _divs if d["direccion"] == "alcista"]
+                return f"Alcista activa — {', '.join(tipos)}" if tipos else "Sin divergencias"
+
+            def _div_txt_baj():
+                tipos = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
+                return f"Bajista activa — {', '.join(tipos)}" if tipos else "Sin divergencias bajistas"
+
+            def _div_txt():
+                alc = [d["tipo"] for d in _divs if d["direccion"] == "alcista"]
+                baj = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
+                if alc and not baj:   return f"Alcista — {', '.join(alc)}"
+                if baj and not alc:   return f"⚠️ Bajista — {', '.join(baj)}"
+                if alc and baj:       return f"Mixta — alc:{','.join(alc)} baj:{','.join(baj)}"
+                return "Sin divergencias detectadas"
+
             def _build_dividendos():
+                _yield_ok = _yield > 0 and _yield < 25  # >25% = dato yfinance anómalo
+                _y_show   = _yield if _yield_ok else 0
                 c = []
-                c.append(_criterio(2 if _yield >= 3.5 else 1 if _yield >= 2 else 0,
-                    f"Dividend yield {_yield:.1f}%",
-                    "≥3.5% ✅  2-3.5% ⚠️  <2% ❌"))
+                c.append(_criterio(2 if _y_show >= 3.5 else 1 if _y_show >= 2 else 0,
+                    f"Dividend yield {_y_show:.1f}%" + (" ⚠️ dato dudoso" if not _yield_ok and _yield > 0 else ""),
+                    "≥3.5% atractivo · 2-3.5% aceptable · <2% insuficiente"))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
-                    "Precio respecto a SMA200",
-                    f"{'Por debajo ✅' if _sma200 > 0 and _precio < _sma200 else 'Por encima ❌'}"))
+                    f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
+                    f"{'Bajo SMA200 — zona de valor ✅' if _sma200 > 0 and _precio < _sma200 else f'Sobre SMA200 +{(_precio/_sma200-1)*100:.1f}% — precio caro' if _sma200 > 0 else ''}"))
                 c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
-                    f"RSI {_rsi:.0f} — zona de entrada",
-                    "<45 óptimo · 45-55 aceptable · >55 caro"))
+                    f"RSI {_rsi:.0f}",
+                    f"{'Zona óptima de entrada ✅' if _rsi < 45 else 'Aceptable, sin urgencia ⚠️' if _rsi < 55 else 'Precio técnicamente caro para entrada ❌'}"))
                 c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
-                    f"Posición en rango 52W: {_pos52:.0f}%",
-                    "<35% del rango = zona valor"))
+                    f"Posición 52W: {_pos52:.0f}% del rango",
+                    f"{'Zona baja — buen precio relativo ✅' if _pos52 < 35 else 'Zona media ⚠️' if _pos52 < 60 else 'Cerca de máximos anuales ❌'}"))
                 c.append(_criterio(2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
-                    f"Payout ratio {_payout:.0f}%",
-                    "<70% sostenible · 70-90% ajustado · >90% riesgo"))
+                    f"Payout ratio {_payout:.0f}%" if _payout else "Payout no disponible",
+                    f"{'Sostenible ✅' if _payout < 70 else 'Ajustado ⚠️' if _payout < 90 else 'Riesgo de recorte ❌'}"))
                 c.append(_criterio(2 if _div_alc and not _div_baj else 1 if not _div_baj else 0,
                     "Divergencias técnicas",
-                    "Alcista ✅ · Neutral ⚠️ · Bajista ❌"))
+                    _div_txt()))
                 c.append(_criterio(2 if _niv_soporte else 1,
-                    "Soporte técnico cercano",
+                    "Soporte técnico identificado",
                     "Nivel pivot+media como colchón de entrada"))
                 return c
 
             def _build_swing():
+                tend_ok  = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
+                tend_par = _sma50 > 0 and _precio > _sma50 and not tend_ok
                 c = []
-                tend_ok = (_sma50 > 0 and _sma200 > 0 and
-                           _precio > _sma50 and _sma50 > _sma200)
-                tend_par = (_sma50 > 0 and _precio > _sma50 and
-                            not (_sma50 > _sma200))
                 c.append(_criterio(2 if tend_ok else 1 if tend_par else 0,
                     "Tendencia alcista alineada",
-                    "Precio>SMA50>SMA200 = estructura ideal"))
+                    f"{'Precio>SMA50>SMA200 ✅' if tend_ok else 'Precio>SMA50 pero SMA50<SMA200 ⚠️' if tend_par else f'Precio bajo SMA50 ({_sma50:.2f}) ❌'}"))
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
-                    f"MACD histograma {'positivo ✅' if _mhist > 0 else 'negativo ❌'}",
-                    "Positivo y acelerando = momentum activo"))
+                    f"MACD histograma {_mhist:+.4f}",
+                    f"{'Positivo y acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo pero perdiendo fuerza ⚠️' if _mhist > 0 else 'Negativo — sin momentum ❌'}"))
                 c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
-                    f"RSI {_rsi:.0f} — ventana de entrada",
-                    "45-62 ideal · fuera = sobreextendido"))
+                    f"RSI {_rsi:.0f}",
+                    f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido — esperar ❌'}"))
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
-                    "Volumen confirmando",
-                    "Creciente ✅ · Estable ⚠️ · Cayendo ❌"))
+                    "Volumen de confirmación",
+                    f"{'Creciente — confirma el movimiento ✅' if _vslope > 0.001 else 'Estable ⚠️' if _vslope > -0.001 else 'Cayendo — movimiento sin convicción ❌'}"))
                 c.append(_criterio(2 if _niv_soporte and _niv_resist else 1 if _niv_soporte else 0,
-                    "Soporte + resistencia identificados",
-                    "Recorrido claro entre entrada y objetivo"))
+                    "Mapa soporte/resistencia",
+                    f"{'Soporte y resistencia definidos ✅' if _niv_soporte and _niv_resist else 'Solo soporte — sin objetivo claro ⚠️' if _niv_soporte else 'Sin niveles definidos ❌'}"))
                 c.append(_criterio(0 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 2,
-                    "Sin divergencias bajistas RSI/MACD",
-                    "Divergencia activa invalida el setup"))
+                    "Estado de divergencias",
+                    _div_txt_baj()))
                 c.append(_criterio(2 if _cons[0] == "alcista" else 1 if _cons[0] == "neutro" else 0,
                     f"Consenso técnico: {_cons[2]}",
                     "Todos los indicadores deben apuntar al alza"))
@@ -4119,104 +4136,226 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                 c = []
                 c.append(_criterio(2 if 0 < _pe < 15 else 1 if _pe < 22 else 0,
                     f"PER {_pe:.1f}x" if _pe else "PER no disponible",
-                    "<15x barato · 15-22x razonable · >22x caro"))
+                    f"{'Barato ✅' if 0 < _pe < 15 else 'Razonable ⚠️' if _pe < 22 else 'Caro ❌' if _pe else 'Sin datos'}"))
+                _dist200 = (_precio / _sma200 - 1) * 100 if _sma200 > 0 else 0
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 * 0.97 else
                                    1 if _sma200 > 0 and _precio < _sma200 * 1.03 else 0,
-                    "Descuento respecto a SMA200",
-                    ">3% bajo SMA200 = zona valor"))
+                    f"vs SMA200: {_dist200:+.1f}%" if _sma200 else "SMA200 no disponible",
+                    f"{'Descuento >3% ✅' if _dist200 < -3 else 'En línea ⚠️' if abs(_dist200) < 3 else 'Prima sobre media ❌'}"))
                 c.append(_criterio(2 if _beta < 0.8 else 1 if _beta < 1.2 else 0,
                     f"Beta {_beta:.2f}",
-                    "<0.8 defensivo · 0.8-1.2 neutro · >1.2 especulativo"))
+                    f"{'Defensivo ✅' if _beta < 0.8 else 'Neutro ⚠️' if _beta < 1.2 else 'Especulativo ❌'}"))
                 c.append(_criterio(2 if _pos52 < 40 else 1 if _pos52 < 65 else 0,
-                    f"Posición en rango 52W: {_pos52:.0f}%",
-                    "Comprar cerca de mínimos anuales"))
+                    f"Posición 52W: {_pos52:.0f}%",
+                    f"{'Zona baja ✅' if _pos52 < 40 else 'Zona media ⚠️' if _pos52 < 65 else 'Cerca de máximos ❌'}"))
                 c.append(_criterio(2 if _rsi < 50 else 1 if _rsi < 60 else 0,
                     f"RSI {_rsi:.0f}",
-                    "No entrar en valor caro técnicamente"))
+                    f"{'Sin sobrecompra técnica ✅' if _rsi < 50 else 'Aceptable ⚠️' if _rsi < 60 else 'Técnicamente caro ❌'}"))
                 c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
-                    "Señal de acumulación (OBV/Volumen)",
-                    "Dinero institucional entrando"))
-                c.append(_criterio(2 if _yield >= 2 else 1 if _yield > 0 else 0,
-                    f"Yield {_yield:.1f}% — margen de espera",
-                    "El dividendo remunera mientras el valor aflora"))
+                    "Acumulación (OBV/Volumen)",
+                    _div_txt_alc()))
+                c.append(_criterio(2 if 0 < _yield < 25 and _yield >= 2 else 1 if _yield > 0 else 0,
+                    f"Yield {_yield:.1f}%" if _yield < 25 else "Yield (dato dudoso)",
+                    "El dividendo remunera la espera"))
                 return c
 
             def _build_momentum():
                 c = []
-                c.append(_criterio(2 if (_sma50 > 0 and _precio > _sma50 * 1.02 and
-                                         _sma50 > _sma200) else 1 if (_sma50 > 0 and _precio > _sma50) else 0,
-                    "Fuerza relativa sobre medias",
-                    "Precio ≥2% sobre SMA50 en tendencia"))
+                _dist50 = (_precio / _sma50 - 1) * 100 if _sma50 > 0 else 0
+                c.append(_criterio(2 if _sma50 > 0 and _precio > _sma50 * 1.02 and _sma50 > _sma200
+                                   else 1 if _sma50 > 0 and _precio > _sma50 else 0,
+                    f"Fuerza vs SMA50: {_dist50:+.1f}%" if _sma50 else "SMA50 no disponible",
+                    f"{'≥2% sobre SMA50 en tendencia ✅' if _dist50 >= 2 and _sma50 > _sma200 else 'Sobre SMA50 pero débil ⚠️' if _dist50 > 0 else 'Bajo SMA50 ❌'}"))
                 c.append(_criterio(2 if 55 <= _rsi <= 72 else 1 if 50 <= _rsi <= 75 else 0,
-                    f"RSI {_rsi:.0f} — momentum activo",
-                    "55-72 = tendencia fuerte sin exceso"))
+                    f"RSI {_rsi:.0f}",
+                    f"{'Momentum activo ✅' if 55 <= _rsi <= 72 else 'Zona válida ⚠️' if 50 <= _rsi <= 75 else 'Sobrecomprado — riesgo de corrección ❌' if _rsi > 75 else 'Sin momentum ❌'}"))
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
-                    "MACD confirma impulso",
-                    "Histograma positivo y línea sobre señal"))
+                    f"MACD {_mhist:+.4f}",
+                    f"{'Acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo ⚠️' if _mhist > 0 else 'Negativo ❌'}"))
                 c.append(_criterio(2 if _vslope > 0.002 else 1 if _vslope > 0 else 0,
-                    "Volumen acelerado",
-                    "Crecimiento sostenido confirma el impulso"))
+                    "Volumen",
+                    f"{'Acelerado ✅' if _vslope > 0.002 else 'Creciente ⚠️' if _vslope > 0 else 'Cayendo ❌'}"))
                 c.append(_criterio(2 if _sar == "alcista" else 0,
-                    f"SAR Parabólico: {'alcista ✅' if _sar == 'alcista' else 'bajista ❌'}",
-                    "SAR por debajo del precio = tendencia activa"))
+                    f"SAR Parabólico: {_sar}",
+                    f"{'Por debajo del precio — tendencia activa ✅' if _sar == 'alcista' else 'Por encima del precio — tendencia rota ❌'}"))
                 c.append(_criterio(0 if _div_baj else 2,
-                    "Sin señales de distribución",
-                    "Cualquier divergencia bajista cancela momentum"))
+                    "Señales de distribución",
+                    _div_txt_baj()))
                 c.append(_criterio(2 if _cons[0] == "alcista" else 1 if _cons[0] == "neutro" else 0,
-                    f"Consenso técnico: {_cons[2]}",
-                    "Todos los indicadores alineados"))
+                    f"Consenso: {_cons[2]}",
+                    "Indicadores alineados al alza"))
                 return c
 
             def _build_rebote():
                 c = []
                 c.append(_criterio(2 if _rsi < 30 else 1 if _rsi < 38 else 0,
-                    f"RSI {_rsi:.0f} — sobreventa",
-                    "<30 sobreventa extrema · 30-38 zona interés"))
+                    f"RSI {_rsi:.0f}",
+                    f"{'Sobreventa extrema ✅' if _rsi < 30 else 'Zona de interés ⚠️' if _rsi < 38 else 'Sin sobreventa — rebote sin base ❌'}"))
                 c.append(_criterio(2 if _niv_soporte else 0,
-                    "Soporte técnico activo",
-                    "Sin soporte identificado = rebote sin ancla"))
+                    "Soporte técnico",
+                    f"{'Nivel pivot+media activo ✅' if _niv_soporte else 'Sin soporte — rebote sin ancla ❌'}"))
                 c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
-                    "Divergencia alcista RSI u OBV",
-                    "Sin divergencia = caída sin señal de giro"))
+                    "Divergencia alcista",
+                    _div_txt_alc()))
                 c.append(_criterio(2 if _pctb is not None and _pctb < 0.1 else
                                    1 if _pctb is not None and _pctb < 0.25 else 0,
-                    f"Bollinger %B {_pctb:.2f}" if _pctb is not None else "Bollinger %B n/d",
-                    "<0.10 = precio en banda inferior extrema"))
+                    f"Bollinger %B: {_pctb:.2f}" if _pctb is not None else "Bollinger %B n/d",
+                    f"{'Banda inferior extrema ✅' if _pctb and _pctb < 0.1 else 'Zona baja ⚠️' if _pctb and _pctb < 0.25 else 'Fuera de zona ❌'}"))
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
-                    "Volumen en zona de soporte",
-                    "Volumen creciendo cerca de mínimos = acumulación"))
+                    "Volumen en soporte",
+                    f"{'Creciendo — acumulación ✅' if _vslope > 0.001 else 'Estable ⚠️' if _vslope > -0.001 else 'Cayendo ❌'}"))
                 c.append(_criterio(2 if _pos52 < 25 else 1 if _pos52 < 40 else 0,
-                    f"Posición en rango 52W: {_pos52:.0f}%",
-                    "<25% = zona de mínimos anuales"))
+                    f"Posición 52W: {_pos52:.0f}%",
+                    f"{'Zona de mínimos anuales ✅' if _pos52 < 25 else 'Zona baja ⚠️' if _pos52 < 40 else 'Lejos de mínimos ❌'}"))
                 return c
 
             def _build_salida():
                 c = []
                 c.append(_criterio(2 if _rsi > 70 else 1 if _rsi > 63 else 0,
-                    f"RSI {_rsi:.0f} — sobrecompra",
-                    ">70 señal de salida · 63-70 vigilar"))
-                c.append(_criterio(2 if _div_rsi_baj or _div_mcd_baj else
-                                   1 if _div_baj else 0,
-                    "Divergencia bajista RSI/MACD",
-                    "La señal más fiable de agotamiento"))
-                c.append(_criterio(2 if _mhist < 0 and _mval < _mseñal else
-                                   1 if _mhist < 0 else 0,
-                    "MACD deteriorándose",
-                    "Histograma negativo y cruce bajista"))
+                    f"RSI {_rsi:.0f}",
+                    f"{'Sobrecompra — señal de salida ✅' if _rsi > 70 else 'Zona de vigilancia ⚠️' if _rsi > 63 else 'Sin sobrecompra ❌'}"))
+                c.append(_criterio(2 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 0,
+                    "Divergencia bajista",
+                    _div_txt_baj()))
+                c.append(_criterio(2 if _mhist < 0 and _mval < _mseñal else 1 if _mhist < 0 else 0,
+                    f"MACD {_mhist:+.4f}",
+                    f"{'Negativo con cruce bajista ✅' if _mhist < 0 and _mval < _mseñal else 'Negativo ⚠️' if _mhist < 0 else 'Aún positivo ❌'}"))
                 c.append(_criterio(2 if _sar == "bajista" else 0,
-                    f"SAR Parabólico: {'bajista ⚠️' if _sar == 'bajista' else 'alcista ✅'}",
-                    "SAR por encima del precio = tendencia agotada"))
+                    f"SAR Parabólico: {_sar}",
+                    f"{'Por encima del precio — tendencia rota ✅' if _sar == 'bajista' else 'Aún alcista ❌'}"))
                 c.append(_criterio(2 if _pos52 > 85 else 1 if _pos52 > 70 else 0,
-                    f"Posición en rango 52W: {_pos52:.0f}%",
-                    ">85% = precio cerca de máximos anuales"))
+                    f"Posición 52W: {_pos52:.0f}%",
+                    f"{'Cerca de máximos anuales ✅' if _pos52 > 85 else 'Zona alta ⚠️' if _pos52 > 70 else 'No en zona de salida ❌'}"))
                 c.append(_criterio(2 if _obvs < -0.001 else 1 if _obvs < 0.001 else 0,
-                    "OBV distribuyendo",
-                    "Salida de dinero institucional bajo la subida"))
-                c.append(_criterio(2 if _cons[0] == "bajista" else
-                                   1 if _cons[0] == "neutro" else 0,
-                    f"Consenso técnico: {_cons[2]}",
+                    "OBV",
+                    f"{'Distribuyendo — salida institucional ✅' if _obvs < -0.001 else 'Neutro ⚠️' if _obvs < 0.001 else 'Acumulando ❌'}"))
+                c.append(_criterio(2 if _cons[0] == "bajista" else 1 if _cons[0] == "neutro" else 0,
+                    f"Consenso: {_cons[2]}",
                     "Indicadores virados a bajista"))
                 return c
+
+            # ── Interpretación cualitativa por estrategia ─────────────────
+            def _interpretar(key):
+                puntos, rec = [], ""
+                if key == "💰 Dividendos":
+                    _y_ok = 0 < _yield < 25
+                    _yv   = _yield if _y_ok else 0
+                    if not _y_ok and _yield > 0:
+                        puntos.append("⚠️ El yield que muestra el proveedor de datos parece anómalo — verifica el dividendo real en la web de la empresa.")
+                    if _yv >= 3.5:
+                        puntos.append(f"✅ Yield del {_yv:.1f}% por encima del umbral de interés para estrategia de rentas.")
+                    elif _yv > 0:
+                        puntos.append(f"⚠️ Yield del {_yv:.1f}% — retorno por dividendo modesto para estrategia de rentas pura.")
+                    if _sma200 > 0 and _precio > _sma200:
+                        gap = (_precio / _sma200 - 1) * 100
+                        puntos.append(f"❌ Precio un {gap:.1f}% sobre SMA200 — no es zona de valor. Esperar retroceso hacia {_sma200:.2f}€ mejora significativamente el yield efectivo de entrada.")
+                    elif _sma200 > 0:
+                        puntos.append(f"✅ Precio bajo SMA200 — compras en zona de valor histórico.")
+                    if _pos52 > 70:
+                        puntos.append(f"❌ Precio en el {_pos52:.0f}% del rango anual — cerca de máximos. El coste de oportunidad de esperar una corrección es bajo.")
+                    if _payout > 0 and _payout < 70:
+                        puntos.append(f"✅ Payout del {_payout:.0f}% — dividendo bien cubierto por beneficios.")
+                    elif _payout >= 70:
+                        puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado. Revisar tendencia de BPA.")
+                    # Recomendación
+                    if _pos52 > 60 or (_sma200 > 0 and _precio > _sma200):
+                        rec = f"Esperar corrección. Zona de entrada preferible: entorno a SMA200 ({_sma200:.2f}) o RSI < 45."
+                    elif _rsi < 45 and _niv_soporte:
+                        rec = "Setup favorable para entrada escalonada. Soporte técnico activo como referencia de stop."
+                    else:
+                        rec = "Vigilar. No es zona óptima pero tampoco descartable. Entrada parcial posible."
+
+                elif key == "📈 Swing 12-16 sem":
+                    tend_ok = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
+                    if tend_ok:
+                        puntos.append("✅ Estructura tendencial completa — precio sobre SMA50 sobre SMA200.")
+                    else:
+                        puntos.append("❌ Estructura tendencial incompleta — el swing requiere tendencia previa establecida.")
+                    if 45 <= _rsi <= 62:
+                        puntos.append(f"✅ RSI en {_rsi:.0f} — ventana de entrada válida sin sobrecompra.")
+                    elif _rsi > 65:
+                        puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobreextendido. Riesgo de corrección antes del impulso siguiente.")
+                    if _div_rsi_baj or _div_mcd_baj:
+                        puntos.append("❌ Divergencia bajista RSI/MACD activa — setup invalidado. Esperar resolución.")
+                    elif _div_alc:
+                        puntos.append("✅ Divergencia alcista activa — señal de apoyo al setup.")
+                    if _niv_soporte and _niv_resist:
+                        puntos.append("✅ Soporte y resistencia identificados — recorrido definido.")
+                    elif not _niv_soporte:
+                        puntos.append("⚠️ Sin soporte técnico claro — difícil establecer stop lógico.")
+                    if _div_rsi_baj or _div_mcd_baj:
+                        rec = "Setup invalidado por divergencia bajista. Esperar a que se resuelva antes de considerar entrada."
+                    elif tend_ok and 45 <= _rsi <= 62 and not _div_baj:
+                        rec = "Condiciones favorables. Entrada en zona de soporte más próxima con stop bajo ese nivel."
+                    else:
+                        rec = "Setup parcial. Esperar alineación completa antes de comprometer capital."
+
+                elif key == "🏷️ Valor":
+                    if _pe > 0:
+                        puntos.append(f"{'✅' if _pe < 15 else '⚠️' if _pe < 22 else '❌'} PER {_pe:.1f}x — {'precio atractivo respecto a beneficios' if _pe < 15 else 'valoración razonable' if _pe < 22 else 'precio exigente para estrategia valor'}.")
+                    if _sma200 > 0:
+                        d = (_precio / _sma200 - 1) * 100
+                        puntos.append(f"{'✅' if d < -3 else '⚠️' if abs(d) < 3 else '❌'} Cotiza a {d:+.1f}% {'bajo' if d < 0 else 'sobre'} SMA200 — referencia de valor histórico.")
+                    if _pos52 > 65:
+                        puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual. Valor genuino raramente se encuentra cerca de máximos.")
+                    if _div_alc:
+                        puntos.append("✅ OBV/Volumen mostrando acumulación — señal de que el mercado ya reconoce el descuento.")
+                    rec = ("Candidato a valor si los fundamentales aguantan el análisis detallado (FCF, deuda, ROCE)."
+                           if _pe > 0 and _pe < 18 and _pos52 < 55
+                           else "Precaución — el precio no refleja descuento suficiente para margen de seguridad adecuado.")
+
+                elif key == "🚀 Momentum":
+                    _dist50 = (_precio / _sma50 - 1) * 100 if _sma50 > 0 else 0
+                    if _sar == "alcista" and _cons[0] == "alcista":
+                        puntos.append("✅ SAR y consenso de indicadores alineados — tendencia activa confirmada.")
+                    if 55 <= _rsi <= 72:
+                        puntos.append(f"✅ RSI en {_rsi:.0f} — momentum activo sin sobrecompra extrema.")
+                    elif _rsi > 72:
+                        puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobrecomprado. Entrada ahora asume riesgo de corrección a corto plazo.")
+                    if _vslope > 0.001:
+                        puntos.append("✅ Volumen creciente — el impulso tiene respaldo institucional.")
+                    else:
+                        puntos.append("⚠️ Volumen sin aceleración — verificar si el movimiento tiene continuidad.")
+                    if _div_baj:
+                        puntos.append("❌ Divergencia bajista detectada — señal de agotamiento. Momentum en riesgo.")
+                    rec = ("Momentum activo. Si se entra, stop bajo SMA50 y objetivo en resistencia identificada."
+                           if _sar == "alcista" and not _div_baj and _rsi < 73
+                           else "Momentum debilitándose o sobreextendido. No perseguir el precio aquí.")
+
+                elif key == "🔄 Rebote Técnico":
+                    if _rsi < 30:
+                        puntos.append(f"✅ RSI en {_rsi:.0f} — sobreventa extrema. Zona estadísticamente favorable a rebote.")
+                    elif _rsi < 38:
+                        puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobreventa moderada. Señal de interés pero sin urgencia.")
+                    else:
+                        puntos.append(f"❌ RSI en {_rsi:.0f} — sin sobreventa. No hay base técnica para rebote a corto.")
+                    if _div_alc:
+                        puntos.append("✅ Divergencia alcista activa — confirmación clave para el rebote.")
+                    else:
+                        puntos.append("⚠️ Sin divergencia alcista confirmada — el rebote no está señalizado por indicadores.")
+                    if _pctb is not None and _pctb < 0.15:
+                        puntos.append(f"✅ %B Bollinger en {_pctb:.2f} — precio en banda inferior extrema.")
+                    rec = ("Setup de rebote válido. Operativa de alta probabilidad pero stop muy ajustado bajo soporte."
+                           if _rsi < 35 and _niv_soporte and _div_alc
+                           else "Condiciones incompletas. Esperar convergencia de más señales antes de actuar.")
+
+                elif key == "🛡️ Señal de Salida":
+                    if _rsi > 70:
+                        puntos.append(f"✅ RSI en {_rsi:.0f} — sobrecompra técnica. Zona históricamente de menor retorno esperado.")
+                    if _div_rsi_baj or _div_mcd_baj:
+                        tipos = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
+                        puntos.append(f"✅ Divergencia bajista en {', '.join(tipos)} — señal de agotamiento de alta fiabilidad.")
+                    if _pos52 > 85:
+                        puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual — precio cerca de máximos. Asimetría riesgo/recompensa desfavorable.")
+                    if _obvs < -0.001:
+                        puntos.append("✅ OBV distribuyendo — el dinero institucional está saliendo bajo la subida.")
+                    if not puntos:
+                        puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
+                    rec = ("Señales de salida activas. Considerar reducción parcial de posición o stop ajustado."
+                           if (_rsi > 68 or _div_rsi_baj or _div_mcd_baj)
+                           else "Sin señales claras. Mantener posición con stop en su nivel actual.")
+
+                return puntos, rec
 
             # ══════════════════════════════════════════════════════════════
             # RENDER
@@ -4249,23 +4388,38 @@ Combina dos dimensiones de análisis que normalmente se ven por separado:
                 _desc_sel    = _est_desc.get(_est_sel, "")
                 _nombre_limpio = _est_sel.split(" ", 1)[-1]
                 _emoji_est     = _est_sel.split(" ")[0]
-                _c1, _c2 = st.columns([1, 1])
+                _c1, _c2 = st.columns([3, 2])
                 with _c1:
                     st.markdown(
                         _scorecard(_nombre_limpio, _emoji_est, _fn(), _color, _desc_sel),
                         unsafe_allow_html=True
                     )
                 with _c2:
-                    st.markdown("#### Interpretación")
-                    _crit_lista = _fn()
-                    _ok  = sum(1 for _, p in _crit_lista if p == 2)
-                    _par = sum(1 for _, p in _crit_lista if p == 1)
-                    _mal = sum(1 for _, p in _crit_lista if p == 0)
+                    _puntos, _rec = _interpretar(_est_sel)
                     st.markdown(
-                        f"**{_ok}** criterios cumplen · **{_par}** parciales · **{_mal}** no cumplen\n\n"
-                        f"*Esta puntuación es orientativa y debe combinarse con tu propio "
-                        f"análisis de contexto, horizonte y tamaño de posición.*"
+                        '<div style="border:1px solid #e5e7eb;border-radius:10px;'
+                        'padding:14px 16px;height:100%">',
+                        unsafe_allow_html=True
                     )
+                    st.markdown("**Análisis**")
+                    for _p in _puntos:
+                        st.markdown(
+                            f'<div style="font-size:0.83rem;padding:4px 0;'
+                            f'border-bottom:1px solid #f3f4f6;line-height:1.4">{_p}</div>',
+                            unsafe_allow_html=True
+                        )
+                    if _rec:
+                        st.markdown(
+                            f'<div style="margin-top:12px;background:#f8fafc;'
+                            f'border-radius:6px;padding:10px 12px">'
+                            f'<span style="font-size:0.75rem;font-weight:700;'
+                            f'color:#374151;text-transform:uppercase;letter-spacing:.05em">'
+                            f'Recomendación</span>'
+                            f'<div style="font-size:0.85rem;color:#111827;margin-top:4px;'
+                            f'line-height:1.45">{_rec}</div></div>',
+                            unsafe_allow_html=True
+                        )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
             # ── Disclaimer pie de página ──────────────────────────────────
             st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
