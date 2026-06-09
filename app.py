@@ -2846,7 +2846,8 @@ def pantalla_analisis():
 
         # Timestamp de carga del dato
         from datetime import datetime as _dt
-        ts_str = _dt.now().strftime("%d/%m/%Y %H:%M")
+        import zoneinfo as _zi
+        ts_str = _dt.now(_zi.ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M")
 
         with col_p1:
             st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
