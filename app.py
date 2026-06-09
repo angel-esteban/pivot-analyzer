@@ -2873,123 +2873,208 @@ def pantalla_analisis():
         )
 
         # ── Gráfico de evolución de precio ───────────────────────────────
-        with st.expander("📈 Ver histórico de precio"):
+        with st.expander("📈 Ver gráfico de precio"):
             import plotly.graph_objects as go
-            _ph_col1, _ph_col2 = st.columns([3, 1])
-            with _ph_col2:
-                _ph_periodo = st.radio("Período", ["1D", "1S", "1M", "3M", "6M", "1A", "3A", "5A"],
-                                       horizontal=False, index=5,
-                                       key="historico_precio_periodo")
-            _ph_map = {"1S": 5, "1M": 21, "3M": 63, "6M": 126, "1A": 252, "3A": 756, "5A": 1260}
+            import pandas as _pd_ch
 
-            if _ph_periodo == "1D":
-                # Datos intradía 5 min del último día de mercado
-                @st.cache_data(ttl=300)
-                def _obtener_intraday(tkr):
-                    import yfinance as yf
-                    df = yf.download(tkr, period="1d", interval="5m",
-                                     auto_adjust=True, progress=False)
-                    return df
-                _ph_hist = _obtener_intraday(ticker_activo).copy()
-                if _ph_hist.empty:
-                    st.info("No hay datos intradía disponibles para esta sesión.")
-                    _ph_hist = None
-                else:
-                    if hasattr(_ph_hist.index, "tz") and _ph_hist.index.tz is not None:
-                        _ph_hist.index = _ph_hist.index.tz_localize(None)
-            else:
-                _ph_n = _ph_map.get(_ph_periodo, 252)
-                _ph_hist = hist.tail(_ph_n).copy()
-                if hasattr(_ph_hist.index, "tz") and _ph_hist.index.tz is not None:
-                    _ph_hist.index = _ph_hist.index.tz_localize(None)
-
-            if _ph_hist is not None:
-                _ph_color_up   = "#16a34a"
-                _ph_color_down = "#dc2626"
-                _ph_color_line = "#2563eb"
-
-                with _ph_col1:
-                    _vista_opts = ["Línea", "OHLC"] if _ph_periodo == "1D" else ["Velas", "Línea", "OHLC"]
-                    _view = st.radio("Vista", _vista_opts,
-                                     horizontal=True, index=0, key="historico_precio_vista")
-
-                fig_ph = go.Figure()
-
-                if _view == "Velas":
-                    fig_ph.add_trace(go.Candlestick(
-                        x=_ph_hist.index,
-                        open=_ph_hist["Open"], high=_ph_hist["High"],
-                        low=_ph_hist["Low"],   close=_ph_hist["Close"],
-                        name=ticker_activo,
-                        increasing_line_color=_ph_color_up,
-                        decreasing_line_color=_ph_color_down,
-                        increasing_fillcolor=_ph_color_up,
-                        decreasing_fillcolor=_ph_color_down,
-                    ))
-                elif _view == "OHLC":
-                    fig_ph.add_trace(go.Ohlc(
-                        x=_ph_hist.index,
-                        open=_ph_hist["Open"], high=_ph_hist["High"],
-                        low=_ph_hist["Low"],   close=_ph_hist["Close"],
-                        name=ticker_activo,
-                        increasing_line_color=_ph_color_up,
-                        decreasing_line_color=_ph_color_down,
-                    ))
-                else:
-                    fig_ph.add_trace(go.Scatter(
-                        x=_ph_hist.index, y=_ph_hist["Close"],
-                        mode="lines", name=ticker_activo,
-                        line=dict(color=_ph_color_line, width=2),
-                        fill="tozeroy",
-                        fillcolor="rgba(37,99,235,0.07)",
-                    ))
-
-                # Medias móviles — solo en períodos multi-día
-                if _ph_periodo != "1D":
-                    for _pm, _pc in [(20, "#f59e0b"), (50, "#7c3aed"), (200, "#94a3b8")]:
-                        if len(_ph_hist) >= _pm:
-                            _sma = _ph_hist["Close"].rolling(_pm).mean()
-                            fig_ph.add_trace(go.Scatter(
-                                x=_ph_hist.index, y=_sma,
-                                mode="lines", name=f"SMA{_pm}",
-                                line=dict(color=_pc, width=1.2, dash="dot"),
-                                hovertemplate=f"SMA{_pm}: %{{y:.4f}}<extra></extra>"
-                            ))
-
-                # Volumen como subplot de barras en la parte inferior
-                fig_ph.add_trace(go.Bar(
-                    x=_ph_hist.index, y=_ph_hist["Volume"],
-                    name="Volumen", marker_color="#cbd5e1",
-                    yaxis="y2", showlegend=False,
-                    hovertemplate="Vol: %{y:,.0f}<extra></extra>"
-                ))
-
-                # Formato de eje X
-                if _ph_periodo == "1D":
-                    _x_fmt = "%H:%M"
-                elif _ph_periodo == "1S":
-                    _x_fmt = "%a %d %b"
-                else:
-                    _x_fmt = "%d %b %y"
-
-                fig_ph.update_layout(
-                    height=420,
+            # ── helpers compartidos ──────────────────────────────────────
+            def _chart_layout(fig, x_fmt, height=400):
+                fig.update_layout(
+                    height=height,
                     margin=dict(l=0, r=0, t=10, b=0),
                     plot_bgcolor="white", paper_bgcolor="white",
                     hovermode="x unified",
                     legend=dict(orientation="h", yanchor="bottom", y=1.01,
                                 xanchor="left", x=0, font=dict(size=11)),
-                    xaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                    xaxis=dict(showgrid=True, gridcolor="#e5e7eb",
+                               gridwidth=1, griddash="dash",
                                rangeslider=dict(visible=False),
-                               tickformat=_x_fmt, tickfont=dict(size=10)),
-                    yaxis=dict(showgrid=True, gridcolor="#f1f5f9",
-                               tickfont=dict(size=10), domain=[0.22, 1.0]),
+                               tickformat=x_fmt, tickfont=dict(size=10),
+                               showline=True, linecolor="#d1d5db"),
+                    yaxis=dict(showgrid=True, gridcolor="#e5e7eb",
+                               gridwidth=1, griddash="dash",
+                               tickfont=dict(size=10), domain=[0.22, 1.0],
+                               showline=True, linecolor="#d1d5db"),
                     yaxis2=dict(showgrid=False, domain=[0.0, 0.18],
                                 showticklabels=False),
                     xaxis_rangeslider_visible=False,
                 )
-                st.plotly_chart(fig_ph, use_container_width=True,
-                                config={"displayModeBar": False})
+
+            def _add_volumen(fig, df):
+                cols_v = [c for c in df.columns if str(c).lower() == "volume"]
+                if cols_v:
+                    fig.add_trace(go.Bar(
+                        x=df.index, y=df[cols_v[0]],
+                        name="Volumen", marker_color="#d1d5db",
+                        yaxis="y2", showlegend=False,
+                        hovertemplate="Vol: %{y:,.0f}<extra></extra>"
+                    ))
+
+            # ── tabs Intradía / Histórica ────────────────────────────────
+            _tab_id, _tab_hist = st.tabs(["📊 Intradía", "📈 Histórica"])
+
+            # ══ TAB INTRADÍA ══════════════════════════════════════════════
+            with _tab_id:
+                @st.cache_data(ttl=300)
+                def _get_intraday(tkr):
+                    import yfinance as yf
+                    df = yf.download(tkr, period="1d", interval="5m",
+                                     auto_adjust=True, progress=False,
+                                     multi_level_index=False)
+                    return df
+
+                _id_df = _get_intraday(ticker_activo).copy()
+
+                if _id_df.empty:
+                    st.info("No hay datos intradía disponibles para esta sesión.")
+                else:
+                    if hasattr(_id_df.index, "tz") and _id_df.index.tz is not None:
+                        _id_df.index = _id_df.index.tz_localize(None)
+
+                    _id_close = [c for c in _id_df.columns if str(c).lower() == "close"][0]
+                    _id_open_val = _id_df.iloc[0][_id_close]
+                    _id_last_val = _id_df.iloc[-1][_id_close]
+                    _id_color = "#e55c3a" if _id_last_val >= _id_open_val else "#2563eb"
+
+                    # Rango horario completo del mercado (09:00–17:30 por defecto)
+                    _id_fecha = _id_df.index[0].date()
+                    _id_open_ts  = _pd_ch.Timestamp(f"{_id_fecha} 09:00:00")
+                    _id_close_ts = _pd_ch.Timestamp(f"{_id_fecha} 17:30:00")
+
+                    fig_id = go.Figure()
+
+                    # Área gris para horas sin datos (mercado no abierto aún o ya cerrado)
+                    _id_ultimo = _id_df.index[-1]
+                    if _id_ultimo < _id_close_ts:
+                        fig_id.add_vrect(
+                            x0=_id_ultimo, x1=_id_close_ts,
+                            fillcolor="#f3f4f6", opacity=0.6,
+                            layer="below", line_width=0
+                        )
+
+                    # Línea de precio
+                    fig_id.add_trace(go.Scatter(
+                        x=_id_df.index,
+                        y=_id_df[_id_close],
+                        mode="lines",
+                        name=ticker_activo,
+                        line=dict(color=_id_color, width=2),
+                        hovertemplate="%{x|%H:%M}  <b>%{y:.4f}</b><extra></extra>",
+                    ))
+
+                    # Línea horizontal de apertura
+                    fig_id.add_hline(
+                        y=float(_id_open_val),
+                        line_dash="dot", line_color="#9ca3af", line_width=1,
+                        annotation_text="Apertura",
+                        annotation_font_size=10,
+                        annotation_position="top left",
+                    )
+
+                    _add_volumen(fig_id, _id_df)
+
+                    fig_id.update_layout(
+                        height=400,
+                        margin=dict(l=0, r=0, t=10, b=0),
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        hovermode="x unified",
+                        showlegend=False,
+                        xaxis=dict(
+                            showgrid=True, gridcolor="#e5e7eb",
+                            gridwidth=1, griddash="dash",
+                            range=[_id_open_ts, _id_close_ts],
+                            tickformat="%H:%M", tickfont=dict(size=10),
+                            showline=True, linecolor="#d1d5db",
+                            rangeslider=dict(visible=False),
+                        ),
+                        yaxis=dict(
+                            showgrid=True, gridcolor="#e5e7eb",
+                            gridwidth=1, griddash="dash",
+                            tickfont=dict(size=10), domain=[0.22, 1.0],
+                        ),
+                        yaxis2=dict(showgrid=False, domain=[0.0, 0.18],
+                                    showticklabels=False),
+                    )
+                    st.plotly_chart(fig_id, use_container_width=True,
+                                    config={"displayModeBar": False})
+
+            # ══ TAB HISTÓRICA ═════════════════════════════════════════════
+            with _tab_hist:
+                _per_opts  = ["5D", "1M", "3M", "6M", "1A", "5A", "Todo"]
+                _per_map   = {"5D": 5, "1M": 21, "3M": 63, "6M": 126,
+                              "1A": 252, "5A": 1260, "Todo": 99999}
+
+                _hc1, _hc2 = st.columns([4, 1])
+                with _hc2:
+                    _h_per = st.radio("Período", _per_opts,
+                                      index=4, horizontal=False,
+                                      key="hist_periodo")
+                    _h_view = st.radio("Vista", ["Velas", "Línea", "OHLC"],
+                                       index=0, horizontal=False,
+                                       key="hist_vista")
+
+                _h_n = _per_map.get(_h_per, 252)
+                _h_df = hist.tail(_h_n).copy()
+                if hasattr(_h_df.index, "tz") and _h_df.index.tz is not None:
+                    _h_df.index = _h_df.index.tz_localize(None)
+
+                _col_close = [c for c in _h_df.columns if str(c).lower() == "close"][0]
+                _col_open  = [c for c in _h_df.columns if str(c).lower() == "open"][0]
+                _col_high  = [c for c in _h_df.columns if str(c).lower() == "high"][0]
+                _col_low   = [c for c in _h_df.columns if str(c).lower() == "low"][0]
+
+                fig_hh = go.Figure()
+
+                if _h_view == "Velas":
+                    fig_hh.add_trace(go.Candlestick(
+                        x=_h_df.index,
+                        open=_h_df[_col_open], high=_h_df[_col_high],
+                        low=_h_df[_col_low],   close=_h_df[_col_close],
+                        name=ticker_activo,
+                        increasing_line_color="#16a34a",
+                        decreasing_line_color="#dc2626",
+                        increasing_fillcolor="#16a34a",
+                        decreasing_fillcolor="#dc2626",
+                    ))
+                elif _h_view == "OHLC":
+                    fig_hh.add_trace(go.Ohlc(
+                        x=_h_df.index,
+                        open=_h_df[_col_open], high=_h_df[_col_high],
+                        low=_h_df[_col_low],   close=_h_df[_col_close],
+                        name=ticker_activo,
+                        increasing_line_color="#16a34a",
+                        decreasing_line_color="#dc2626",
+                    ))
+                else:
+                    _h_last  = float(_h_df[_col_close].iloc[-1])
+                    _h_first = float(_h_df[_col_close].iloc[0])
+                    _h_lcolor = "#e55c3a" if _h_last >= _h_first else "#2563eb"
+                    fig_hh.add_trace(go.Scatter(
+                        x=_h_df.index, y=_h_df[_col_close],
+                        mode="lines", name=ticker_activo,
+                        line=dict(color=_h_lcolor, width=2),
+                        fill="tozeroy",
+                        fillcolor=f"rgba(229,92,58,0.07)" if _h_last >= _h_first else "rgba(37,99,235,0.07)",
+                    ))
+
+                # SMAs
+                for _pm, _pc in [(20, "#f59e0b"), (50, "#7c3aed"), (200, "#94a3b8")]:
+                    if len(_h_df) >= _pm:
+                        _sma = _h_df[_col_close].rolling(_pm).mean()
+                        fig_hh.add_trace(go.Scatter(
+                            x=_h_df.index, y=_sma,
+                            mode="lines", name=f"SMA{_pm}",
+                            line=dict(color=_pc, width=1.2, dash="dot"),
+                            hovertemplate=f"SMA{_pm}: %{{y:.4f}}<extra></extra>"
+                        ))
+
+                _add_volumen(fig_hh, _h_df)
+
+                _h_xfmt = "%a %d %b" if _h_per == "5D" else "%d %b %y"
+                with _hc1:
+                    _chart_layout(fig_hh, _h_xfmt)
+                    st.plotly_chart(fig_hh, use_container_width=True,
+                                    config={"displayModeBar": False})
 
         st.divider()
 
