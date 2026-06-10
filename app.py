@@ -4620,6 +4620,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             }
 
             def _scorecard(titulo, emoji_tit, criterios, color_hdr):
+                """Returns (header_html, body_html) — header has the colored bar, body has score+criteria."""
                 total  = sum(p for _, p in criterios)
                 maxpts = len(criterios) * 2
                 pct    = int(total / maxpts * 100)
@@ -4628,18 +4629,21 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 else:           vrd, vrd_col = "NO ES EL MOMENTO", "#991b1b"
                 vrd_bg = {"OPORTUNIDAD": "#f0fdf4", "VIGILAR": "#fffbeb", "NO ES EL MOMENTO": "#fff1f2"}[vrd]
                 filas = "".join(html for html, _ in criterios)
-                return f"""
-<div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;height:100%">
-  <div style="background:{color_hdr};padding:10px 14px">
-    <span style="color:white;font-weight:700;font-size:1rem">{emoji_tit} {titulo}</span>
-  </div>
-  <div style="background:{vrd_bg};padding:8px 14px;display:flex;align-items:center;gap:10px">
-    <span style="font-size:1.4rem;font-weight:800;color:{vrd_col}">{pct}</span>
-    <span style="font-size:0.65rem;color:{vrd_col};font-weight:600">/100</span>
-    <span style="font-size:0.82rem;font-weight:700;color:{vrd_col};margin-left:4px">{vrd}</span>
-  </div>
-  <div style="padding:8px 14px">{filas}</div>
-</div>"""
+                hdr = (f'<div style="background:{color_hdr};padding:10px 14px;'
+                       f'border-radius:8px 0 0 0;border:1px solid {color_hdr};border-bottom:none">'
+                       f'<span style="color:white;font-weight:700;font-size:1rem">'
+                       f'{emoji_tit} {titulo}</span></div>')
+                body = (f'<div style="border:1px solid #e5e7eb;border-top:none;'
+                        f'border-radius:0 0 8px 8px;overflow:hidden">'
+                        f'<div style="background:{vrd_bg};padding:8px 14px;'
+                        f'display:flex;align-items:center;gap:10px">'
+                        f'<span style="font-size:1.4rem;font-weight:800;color:{vrd_col}">{pct}</span>'
+                        f'<span style="font-size:0.65rem;color:{vrd_col};font-weight:600">/100</span>'
+                        f'<span style="font-size:0.82rem;font-weight:700;color:{vrd_col};margin-left:4px">{vrd}</span>'
+                        f'</div>'
+                        f'<div style="padding:8px 14px">{filas}</div>'
+                        f'</div>')
+                return hdr, body
 
             # ── Extraer variables ─────────────────────────────────────────
             _info    = ed["info"]
@@ -5102,33 +5106,32 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     for _col, _k in zip(_cols, _fila):
                         _color, _fn = _estrategias[_k]
                         with _col:
-                            _th1, _th2 = st.columns([5, 1])
+                            _t_hdr, _t_body = _scorecard(
+                                _k.split(" ", 1)[-1], _k.split(" ")[0], _fn(), _color
+                            )
+                            _th1, _th2 = st.columns([9, 1])
+                            with _th1:
+                                st.markdown(_t_hdr, unsafe_allow_html=True)
                             with _th2:
                                 with st.popover("ℹ️", use_container_width=True):
                                     st.markdown(_est_popover.get(_k, ""))
-                            st.markdown(
-                                _scorecard(_k.split(" ", 1)[-1], _k.split(" ")[0],
-                                           _fn(), _color),
-                                unsafe_allow_html=True
-                            )
+                            st.markdown(_t_body, unsafe_allow_html=True)
                     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
             else:
                 _color, _fn  = _estrategias[_est_sel]
                 _nombre_limpio = _est_sel.split(" ", 1)[-1]
                 _emoji_est     = _est_sel.split(" ")[0]
-                # Header row with popover
-                _sh1, _sh2 = st.columns([6, 1])
-                with _sh1:
-                    st.markdown(f"#### {_emoji_est} {_nombre_limpio}")
-                with _sh2:
-                    with st.popover("ℹ️", use_container_width=True):
-                        st.markdown(_est_popover.get(_est_sel, ""))
                 _c1, _c2 = st.columns([3, 2])
                 with _c1:
-                    st.markdown(
-                        _scorecard(_nombre_limpio, _emoji_est, _fn(), _color),
-                        unsafe_allow_html=True
-                    )
+                    _s_hdr, _s_body = _scorecard(_nombre_limpio, _emoji_est, _fn(), _color)
+                    # Header row: colored bar + ℹ️ button, both inside the card column
+                    _ch1, _ch2 = st.columns([9, 1])
+                    with _ch1:
+                        st.markdown(_s_hdr, unsafe_allow_html=True)
+                    with _ch2:
+                        with st.popover("ℹ️", use_container_width=True):
+                            st.markdown(_est_popover.get(_est_sel, ""))
+                    st.markdown(_s_body, unsafe_allow_html=True)
                 with _c2:
                     _puntos, _rec = _interpretar(_est_sel)
                     st.markdown(
