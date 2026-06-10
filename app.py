@@ -4688,9 +4688,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             try: _52l     = float(_info.get("fiftyTwoWeekLow",  _precio) or _precio)
             except: _52l = _precio
 
-            _sma50  = float(_medias.get("SMA_50",  {}).get("valor", 0) or 0)
-            _sma200 = float(_medias.get("SMA_200", {}).get("valor", 0) or 0)
-            _sma20  = float(_medias.get("SMA_20",  {}).get("valor", 0) or 0)
+            _sma50  = float((_medias.get(50)  or (0, 0))[0])
+            _sma200 = float((_medias.get(200) or (0, 0))[0])
+            _sma20  = float((_medias.get(20)  or (0, 0))[0])
 
             _rng52 = _52h - _52l if _52h != _52l else 1
             _pos52 = (_precio - _52l) / _rng52 * 100  # 0=mín, 100=máx
