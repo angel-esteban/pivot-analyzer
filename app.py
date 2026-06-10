@@ -4560,6 +4560,61 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         _hue_t.setStyle(TableStyle(_hue_style))
         historia.append(_hue_t)
 
+
+    # ── DIAGNOSTICO TECNICO ───────────────────────────────────────────────
+    _componentes_diag_pdf = [
+        ("ATH",          analisis_ath),
+        ("SMA200",       analisis_sma200),
+        ("Resistencias", analisis_resist),
+        ("Fibonacci",    analisis_fibo),
+        ("RSI",          analisis_rsi),
+        ("Volumen",      analisis_vol),
+    ]
+    _tiene_diag = any(a is not None for _, a in _componentes_diag_pdf)
+    if _tiene_diag or puntuacion_tec:
+        historia.append(Spacer(1, 0.3*cm))
+        historia.append(Paragraph("Diagnostico Tecnico", S_H2))
+
+        _dt_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
+                   for h in ["Componente", "Escenario", "Narrativa"]]
+        _dt_rows = [_dt_hdr]
+        for _cn_d, _ca_d in _componentes_diag_pdf:
+            if _ca_d and "escenario" in _ca_d and "texto" in _ca_d:
+                _esc_d = _ca_d["escenario"].replace("_", " ").title()
+                _narr_d = _ca_d["texto"][:220] + "..." if len(_ca_d["texto"]) > 220 else _ca_d["texto"]
+                _dt_rows.append([
+                    Paragraph(_cn_d, _p(fontSize=7, fontName="Helvetica-Bold")),
+                    Paragraph(_esc_d, S_NRM),
+                    Paragraph(_narr_d, _p(fontSize=6.5)),
+                ])
+        if len(_dt_rows) > 1:
+            _dt_t = Table(_dt_rows, colWidths=[2.2*cm, 3.0*cm, 11.3*cm])
+            _dt_t.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0),(-1,0), CA),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+                ("GRID",          (0,0),(-1,-1), 0.2, GB),
+                ("TOPPADDING",    (0,0),(-1,-1), 3),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+                ("LEFTPADDING",   (0,0),(-1,-1), 4),
+                ("VALIGN",        (0,0),(-1,-1), "TOP"),
+            ]))
+            historia.append(_dt_t)
+            historia.append(Spacer(1, 0.2*cm))
+
+        if puntuacion_tec:
+            _sc_d  = puntuacion_tec["score_total"]
+            _sn_d  = puntuacion_tec["señal"]
+            _col_d = {"alcista": VE, "bajista": RO,
+                      "neutral": colors.HexColor("#64748b")}.get(_sn_d, GB)
+            _cv_d  = puntuacion_tec["conviccion"]
+            _dt_d  = puntuacion_tec["disp_total"]
+            historia.append(Paragraph(
+                f"<b>Puntuacion Tecnica Integrada: {_sc_d:.1f}/10 -- {_sn_d.upper()}</b> "
+                f"({_cv_d}/{_dt_d} componentes) -- {puntuacion_tec['texto']}",
+                _p(fontSize=7.5, textColor=_col_d)
+            ))
+            historia.append(Spacer(1, 0.15*cm))
+
     # ── PIE ───────────────────────────────────────────────────────────────
     historia.append(Spacer(1, 0.5*cm))
     historia.append(HRFlowable(width="100%", thickness=0.5, color=GB))
