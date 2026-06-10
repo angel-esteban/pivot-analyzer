@@ -1215,6 +1215,150 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
     }
 
 
+
+def analizar_rsi(hist, precio: float, nombre: str) -> "dict | None":
+    """
+    Analiza el RSI de 14 períodos: zona, tendencia y divergencia precio-RSI.
+
+    Escenarios: sobrecompra_extrema, sobrecompra, zona_alcista, zona_neutra,
+                zona_bajista, sobreventa, sobreventa_extrema.
+    """
+    if hist is None or len(hist) < 20:
+        return None
+
+    cierre  = hist["Close"]
+    delta   = cierre.diff()
+    ganancia = delta.clip(lower=0).rolling(14).mean()
+    perdida  = (-delta.clip(upper=0)).rolling(14).mean()
+    rs       = ganancia / perdida.replace(0, float("nan"))
+    rsi_serie = 100 - (100 / (1 + rs))
+    rsi_clean = rsi_serie.dropna()
+
+    if len(rsi_clean) < 6:
+        return None
+
+    rsi_val    = float(rsi_clean.iloc[-1])
+    rsi_5ago   = float(rsi_clean.iloc[-6])
+    trend_diff = rsi_val - rsi_5ago
+
+    # ── Zona ─────────────────────────────────────────────────────────
+    if rsi_val >= 80:
+        escenario = "sobrecompra_extrema"
+    elif rsi_val >= 70:
+        escenario = "sobrecompra"
+    elif rsi_val >= 55:
+        escenario = "zona_alcista"
+    elif rsi_val >= 45:
+        escenario = "zona_neutra"
+    elif rsi_val >= 30:
+        escenario = "zona_bajista"
+    elif rsi_val >= 20:
+        escenario = "sobreventa"
+    else:
+        escenario = "sobreventa_extrema"
+
+    # ── Tendencia del RSI (últimas 5 sesiones) ───────────────────────
+    if trend_diff > 3:
+        tendencia = "subiendo"
+    elif trend_diff < -3:
+        tendencia = "bajando"
+    else:
+        tendencia = "lateral"
+
+    # ── Divergencia precio-RSI (ventana 20 sesiones) ─────────────────
+    divergencia = None
+    if len(rsi_clean) >= 20 and len(cierre) >= 20:
+        precio_v = cierre.tail(20)
+        rsi_v    = rsi_clean.tail(20)
+        p_last, p_max, p_min = float(precio_v.iloc[-1]), float(precio_v.max()), float(precio_v.min())
+        r_last, r_max, r_min = float(rsi_v.iloc[-1]), float(rsi_v.max()), float(rsi_v.min())
+        # Divergencia bajista: precio en máximos pero RSI claramente por debajo de su máximo
+        if p_last >= p_max * 0.99 and r_last < r_max - 8:
+            divergencia = "bajista"
+        # Divergencia alcista: precio en mínimos pero RSI claramente por encima de su mínimo
+        elif p_last <= p_min * 1.01 and r_last > r_min + 8:
+            divergencia = "alcista"
+
+    # ── Narrativa ────────────────────────────────────────────────────
+    nombre_c = nombre.split(" ")[0] if " " in nombre else nombre
+    tend_str = {"subiendo": "con momentum creciente", "bajando": "con momentum decreciente",
+                "lateral": "sin cambio de momentum significativo"}.get(tendencia, "")
+    rsi_str  = f"{rsi_val:.1f}"
+
+    div_txt = ""
+    if divergencia == "bajista":
+        div_txt = (
+            f" ⚠️ Divergencia bajista detectada: el precio alcanza nuevos máximos "
+            f"pero el RSI no confirma — señal clásica de debilitamiento del impulso."
+        )
+    elif divergencia == "alcista":
+        div_txt = (
+            f" 💡 Divergencia alcista detectada: el precio marca nuevos mínimos "
+            f"pero el RSI no los acompaña — posible agotamiento de la presión vendedora."
+        )
+
+    if escenario == "sobrecompra_extrema":
+        texto = (
+            f"{nombre_c} presenta un RSI de {rsi_str}, en zona de sobrecompra extrema (>80) "
+            f"{tend_str}. Históricamente, lecturas por encima de 80 señalan un activo "
+            f"muy extendido en el corto plazo — no implican inversión inmediata, pero sí "
+            f"que el margen de seguridad técnico es reducido.{div_txt}"
+        )
+    elif escenario == "sobrecompra":
+        texto = (
+            f"{nombre_c} cotiza con RSI {rsi_str} en zona de sobrecompra clásica (70-80) "
+            f"{tend_str}. La zona 70-80 no es señal de venta automática — en tendencias "
+            f"alcistas fuertes el RSI puede permanecer semanas en sobrecompra. "
+            f"El nivel a vigilar es la pérdida del 70.{div_txt}"
+        )
+    elif escenario == "zona_alcista":
+        texto = (
+            f"{nombre_c} tiene un RSI de {rsi_str} en la zona alcista (55-70) "
+            f"{tend_str}. Zona de momentum positivo: el precio opera con mayor presión "
+            f"compradora que vendedora. En tendencias alcistas, el RSI suele "
+            f"oscilar entre 40 y 80 sin entrar en zona de sobreventa.{div_txt}"
+        )
+    elif escenario == "zona_neutra":
+        texto = (
+            f"{nombre_c} presenta RSI {rsi_str} en zona neutra (45-55) "
+            f"{tend_str}. El momentum no marca dirección clara — compradores y vendedores "
+            f"en equilibrio. La ruptura del nivel 50 con convicción suele anticipar "
+            f"el siguiente movimiento direccional.{div_txt}"
+        )
+    elif escenario == "zona_bajista":
+        texto = (
+            f"{nombre_c} cotiza con RSI {rsi_str} en zona bajista (30-45) "
+            f"{tend_str}. Mayor presión vendedora que compradora. En tendencias bajistas, "
+            f"el RSI suele oscilar entre 20 y 60 sin llegar a sobrecompra — "
+            f"la zona 40-45 actúa frecuentemente como resistencia del RSI.{div_txt}"
+        )
+    elif escenario == "sobreventa":
+        texto = (
+            f"{nombre_c} presenta un RSI de {rsi_str} en zona de sobreventa (20-30) "
+            f"{tend_str}. El activo cotiza con presión vendedora extrema. "
+            f"Las lecturas en sobreventa pueden indicar oportunidad de rebote, "
+            f"pero en tendencias bajistas fuertes el RSI puede permanecer deprimido. "
+            f"Esperar confirmación de giro antes de actuar.{div_txt}"
+        )
+    else:  # sobreventa_extrema
+        texto = (
+            f"{nombre_c} tiene un RSI de {rsi_str} en sobreventa extrema (<20) "
+            f"{tend_str}. Lecturas tan bajas son estadísticamente infrecuentes "
+            f"y suelen corresponder a movimientos de capitulación. "
+            f"Alta asimetría riesgo/recompensa potencial, pero la capitulación puede "
+            f"prolongarse. Niveles de suporte estructural como referencia de entrada.{div_txt}"
+        )
+
+    return {
+        "rsi_val":    rsi_val,
+        "tendencia":  tendencia,
+        "trend_diff": trend_diff,
+        "divergencia": divergencia,
+        "escenario":  escenario,
+        "texto":      texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -4765,6 +4909,10 @@ def pantalla_analisis():
         # ---- FIBONACCI RETRACEMENT/EXTENSIÓN ----
         analisis_fibo = analizar_fibonacci(hist, precio, nombre)
 
+        # ---- RSI ZONA / TENDENCIA / DIVERGENCIA ----
+        analisis_rsi = analizar_rsi(hist, precio, nombre)
+
+
 
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
@@ -4793,6 +4941,7 @@ def pantalla_analisis():
             "analisis_sma200": analisis_sma200,
             "analisis_resist": analisis_resist,
             "analisis_fibo":   analisis_fibo,
+            "analisis_rsi":    analisis_rsi,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -5795,6 +5944,77 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             )
         else:
             st.caption("Datos insuficientes para calcular niveles de Fibonacci.")
+
+
+
+        # ── Componente 5: RSI Zona / Tendencia / Divergencia ─────────────
+        if analisis_rsi:
+            _ri = analisis_rsi
+            _esc_ri = _ri["escenario"]
+            _colores_ri = {
+                "sobrecompra_extrema": ("#fef2f2", "#991b1b", "🔴", "SOBRECOMPRA EXTREMA (RSI >80)"),
+                "sobrecompra":         ("#fef2f2", "#dc2626", "⬆️", "SOBRECOMPRA (RSI 70–80)"),
+                "zona_alcista":        ("#f0fdf4", "#16a34a", "📈", "ZONA ALCISTA (RSI 55–70)"),
+                "zona_neutra":         ("#f8fafc", "#64748b", "↔️", "ZONA NEUTRA (RSI 45–55)"),
+                "zona_bajista":        ("#fff7ed", "#c2410c", "📉", "ZONA BAJISTA (RSI 30–45)"),
+                "sobreventa":          ("#eff6ff", "#1d4ed8", "⬇️", "SOBREVENTA (RSI 20–30)"),
+                "sobreventa_extrema":  ("#eff6ff", "#1e3a8a", "🔵", "SOBREVENTA EXTREMA (RSI <20)"),
+            }
+            _bg_ri, _col_ri, _ico_ri, _lab_ri = _colores_ri.get(
+                _esc_ri, ("#f8fafc", "#64748b", "📊", _esc_ri.upper())
+            )
+
+            # Si hay divergencia, matiz especial en el borde
+            if _ri["divergencia"] == "bajista":
+                _col_ri = "#dc2626"
+            elif _ri["divergencia"] == "alcista":
+                _col_ri = "#16a34a"
+
+            _tend_icon = {"subiendo": "↑", "bajando": "↓", "lateral": "→"}.get(
+                _ri["tendencia"], "→"
+            )
+            _div_label = {
+                "alcista": "✅ Divergencia alcista",
+                "bajista": "⚠️ Divergencia bajista",
+            }.get(_ri["divergencia"], "Ninguna")
+
+            _c1_ri, _c2_ri, _c3_ri = st.columns(3)
+            with _c1_ri:
+                st.metric(
+                    "RSI (14 períodos)",
+                    f"{_ri['rsi_val']:.1f}",
+                    help="Relative Strength Index calculado sobre 14 sesiones. "
+                         "Zona sobrecompra >70 · Zona sobreventa <30"
+                )
+            with _c2_ri:
+                st.metric(
+                    "Tendencia RSI",
+                    f"{_tend_icon} {_ri['tendencia'].capitalize()}",
+                    delta=f"{_ri['trend_diff']:+.1f} pts (5 ses.)",
+                    delta_color="normal" if _ri["trend_diff"] >= 0 else "inverse",
+                    help="Variación del RSI respecto a 5 sesiones atrás"
+                )
+            with _c3_ri:
+                st.metric(
+                    "Divergencia precio-RSI",
+                    _div_label,
+                    help="Divergencia bajista: precio en máximos pero RSI no confirma. "
+                         "Divergencia alcista: precio en mínimos pero RSI no confirma."
+                )
+            st.markdown(
+                f'<div style="background:{_bg_ri};border-left:4px solid {_col_ri};'
+                f'border-radius:6px;padding:12px 16px;margin-top:8px;">'
+                f'<span style="font-weight:700;color:{_col_ri};">'
+                f'{_ico_ri} RSI — {_lab_ri}</span><br/>'
+                f'<p style="margin:6px 0 0 0;font-size:0.92rem;color:#374151;">'
+                f'{_ri["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("Datos insuficientes para calcular el RSI.")
+
+        st.divider()
 
 
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
