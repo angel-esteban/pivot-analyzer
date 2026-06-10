@@ -613,6 +613,156 @@ def obtener_historico_yf(ticker: str, period: str = "2y") -> "pd.Series | None":
         return None
 
 
+@st.cache_data(ttl=3600)
+def obtener_hist_maximo(ticker: str) -> "pd.DataFrame | None":
+    """Descarga el histórico máximo disponible (period='max') para detectar ATH reales."""
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.history(period="max", auto_adjust=True)
+        if hist.empty or len(hist) < 50:
+            return None
+        return hist
+    except Exception:
+        return None
+
+
+def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict | None":
+    """
+    Detecta la posición del precio respecto a los máximos históricos (ATH).
+
+    Escenarios:
+      subida_libre_establecida → precio ya supera ATH
+      en_ath                   → precio en zona ATH (< 1% por debajo)
+      aproximandose_cerca      → 1-3% por debajo del ATH
+      aproximandose            → 3-8% por debajo del ATH
+      referencia               → 8-25% por debajo del ATH
+      lejos                    → más del 25% por debajo del ATH
+
+    Proyección Fibonacci 127.2% sobre el tramo (mínimo anual previo → ATH)
+    cuando el escenario es bullish (subida libre, en ATH o aproximándose).
+
+    Returns dict con: ath, ath_fecha, dist_pct, escenario, target, texto
+    """
+    if hist_largo is None or len(hist_largo) < 50:
+        return None
+
+    # ── ATH ──────────────────────────────────────────────────────────────
+    idx_ath = hist_largo["High"].idxmax()
+    ath = float(hist_largo["High"].max())
+    try:
+        ath_fecha = idx_ath.strftime("%B %Y")
+    except Exception:
+        ath_fecha = str(idx_ath)[:7]
+
+    # ── Distancia al ATH (negativa = precio por debajo) ──────────────────
+    dist_pct = (precio - ath) / ath * 100
+
+    # ── Escenario ────────────────────────────────────────────────────────
+    if dist_pct > 0:
+        escenario = "subida_libre_establecida"
+    elif dist_pct > -1.0:
+        escenario = "en_ath"
+    elif dist_pct > -3.0:
+        escenario = "aproximandose_cerca"
+    elif dist_pct > -8.0:
+        escenario = "aproximandose"
+    elif dist_pct > -25.0:
+        escenario = "referencia"
+    else:
+        escenario = "lejos"
+
+    # ── Proyección Fibonacci 127.2% ──────────────────────────────────────
+    target = None
+    bullish = escenario in ("subida_libre_establecida", "en_ath",
+                            "aproximandose_cerca", "aproximandose")
+    if bullish:
+        try:
+            before_ath = hist_largo.loc[:idx_ath]
+            # Mínimo del año previo al ATH (máximo 252 velas)
+            lookback = before_ath.tail(252)
+            last_low = float(lookback["Low"].min())
+            if ath > last_low:
+                raw = last_low + (ath - last_low) * 1.272
+                target = round(raw, 4)
+        except Exception:
+            target = None
+
+    # ── Plantilla narrativa ──────────────────────────────────────────────
+    nombre_corto = nombre.split(" ")[0] if " " in nombre else nombre
+    ath_str = f"{ath:.4f}"
+
+    if escenario == "subida_libre_establecida":
+        if target and target > precio:
+            texto = (
+                f"{nombre_corto} cotiza en zona de máximos históricos, en subida libre "
+                f"por encima de los {ath_str} euros. El camino está despejado sin "
+                f"resistencias técnicas definidas, con proyección de extensión "
+                f"hacia los {target:.4f} euros."
+            )
+        else:
+            texto = (
+                f"{nombre_corto} cotiza en zona de máximos históricos, en subida libre "
+                f"por encima de los {ath_str} euros y sin resistencias técnicas "
+                f"definidas al alza."
+            )
+
+    elif escenario == "en_ath":
+        texto = (
+            f"{nombre_corto} cotiza prácticamente en sus máximos históricos "
+            f"({ath_str} euros). La superación sostenida de este nivel dejaría "
+            f"al valor en subida libre"
+            + (f", con camino despejado hacia los {target:.4f} euros." if target else ".")
+        )
+
+    elif escenario == "aproximandose_cerca":
+        texto = (
+            f"{nombre_corto} se acerca muy de cerca a los máximos históricos que "
+            f"presenta en los {ath_str} euros. Muy pendientes de la superación de "
+            f"estos precios, ya que dejaría al valor en subida libre"
+            + (
+                f", con el camino despejado para buscar una extensión de las "
+                f"subidas hasta los {target:.4f} euros."
+                if target
+                else "."
+            )
+        )
+
+    elif escenario == "aproximandose":
+        texto = (
+            f"{nombre_corto} se acerca poco a poco a los máximos históricos que "
+            f"presenta en los {ath_str} euros. Muy pendientes de la superación de "
+            f"estos precios, ya que dejaría al valor en subida libre"
+            + (
+                f", con el camino despejado para que podamos ver una extensión de "
+                f"las subidas hasta el nivel de los {target:.4f} euros."
+                if target
+                else "."
+            )
+        )
+
+    elif escenario == "referencia":
+        texto = (
+            f"{nombre_corto} presenta sus máximos históricos en los {ath_str} euros "
+            f"({abs(dist_pct):.1f}% de recorrido alcista potencial). "
+            f"Nivel de referencia clave si las subidas continúan."
+        )
+
+    else:  # lejos
+        texto = (
+            f"{nombre_corto} cotiza con un descuento del {abs(dist_pct):.0f}% respecto "
+            f"a sus máximos históricos de {ath_fecha} en los {ath_str} euros."
+        )
+
+    return {
+        "ath":       ath,
+        "ath_fecha": ath_fecha,
+        "dist_pct":  dist_pct,
+        "escenario": escenario,
+        "target":    target,
+        "texto":     texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -4148,6 +4298,10 @@ def pantalla_analisis():
         # ---- HUECOS DE PRECIO ----
         huecos_abiertos = detectar_huecos(hist)
 
+        # ---- MÁXIMOS HISTÓRICOS (ATH) ----
+        hist_maximo = obtener_hist_maximo(ticker_activo)
+        analisis_ath = analizar_maximos_historicos(hist_maximo, precio, nombre)
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
 
@@ -4171,6 +4325,7 @@ def pantalla_analisis():
             "pct_b":         pct_b,
             "ts":            ts_str,
             "huecos":        huecos_abiertos,
+            "analisis_ath":  analisis_ath,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -4903,6 +5058,72 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
                     )
         else:
             st.caption("No se detectan huecos abiertos significativos (≥ 0.3%) en los últimos 252 días.")
+
+        st.divider()
+
+        # ── Bloque: Diagnóstico Técnico ───────────────────────────────────
+        st.markdown("### 📝 Diagnóstico Técnico")
+
+        # ── Componente 1: Máximos Históricos ─────────────────────────────
+        if analisis_ath:
+            _ath = analisis_ath
+            _esc = _ath["escenario"]
+
+            # Paleta de colores por escenario
+            _colores_ath = {
+                "subida_libre_establecida": ("#f0fdf4", "#16a34a", "🚀", "SUBIDA LIBRE"),
+                "en_ath":                  ("#f0fdf4", "#16a34a", "🏔️", "EN MÁXIMOS HISTÓRICOS"),
+                "aproximandose_cerca":     ("#fefce8", "#ca8a04", "⚡", "MUY CERCA DEL ATH"),
+                "aproximandose":           ("#fefce8", "#ca8a04", "📈", "APROXIMÁNDOSE AL ATH"),
+                "referencia":              ("#f8fafc", "#64748b", "📊", "REFERENCIA ATH"),
+                "lejos":                   ("#f8fafc", "#94a3b8", "📉", "ATH LEJANO"),
+            }
+            _bg, _border, _emoji, _badge = _colores_ath.get(
+                _esc, ("#f8fafc", "#64748b", "📊", "ATH")
+            )
+
+            # Métricas rápidas
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1:
+                st.metric(
+                    "Máximo Histórico (ATH)",
+                    f"{_ath['ath']:.4f} €",
+                    help="Precio máximo absoluto en todo el histórico disponible"
+                )
+            with _c2:
+                _dist_str = (
+                    f"+{_ath['dist_pct']:.2f}%" if _ath["dist_pct"] >= 0
+                    else f"{_ath['dist_pct']:.2f}%"
+                )
+                st.metric(
+                    "Distancia al ATH",
+                    _dist_str,
+                    help="% que separa el precio actual del máximo histórico"
+                )
+            with _c3:
+                if _ath["target"]:
+                    st.metric(
+                        "Proyección Fibonacci 127.2%",
+                        f"{_ath['target']:.4f} €",
+                        help="Extensión de Fibonacci 127.2% desde el mínimo del año previo al ATH"
+                    )
+                else:
+                    st.metric("Fecha del ATH", _ath["ath_fecha"])
+
+            # Tarjeta narrativa
+            st.markdown(
+                f'<div style="background:{_bg};border-left:4px solid {_border};'
+                f'border-radius:8px;padding:14px 18px;margin-top:8px;">'
+                f'<span style="font-size:11px;font-weight:700;color:{_border};'
+                f'text-transform:uppercase;letter-spacing:0.5px;">'
+                f'{_emoji} {_badge}</span>'
+                f'<p style="margin:8px 0 0 0;font-size:15px;color:#1e293b;line-height:1.6;">'
+                f'{_ath["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("No se pudo calcular el análisis de máximos históricos para este valor.")
 
         st.divider()
 
