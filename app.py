@@ -3138,7 +3138,14 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           bb_sup: float = None,
                           bb_med: float = None,
                           bb_inf: float = None,
-                          huecos: list = None) -> str:
+                          huecos: list = None,
+                          analisis_ath=None,
+                          analisis_sma200=None,
+                          analisis_resist=None,
+                          analisis_fibo=None,
+                          analisis_rsi=None,
+                          analisis_vol=None,
+                          puntuacion_tec=None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -6719,6 +6726,13 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
                             bb_med=bb_med,
                             bb_inf=bb_inf,
                             huecos=huecos_abiertos,
+                            analisis_ath=analisis_ath,
+                            analisis_sma200=analisis_sma200,
+                            analisis_resist=analisis_resist,
+                            analisis_fibo=analisis_fibo,
+                            analisis_rsi=analisis_rsi,
+                            analisis_vol=analisis_vol,
+                            puntuacion_tec=puntuacion_tec,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
