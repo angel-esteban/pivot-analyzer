@@ -7755,8 +7755,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 
     # ---- TAB MACRO ----
     with tab_macro:
-        st.markdown("## 🌍 Análisis Macro")
-        st.info("**Esta funcionalidad está en desarrollo y estará disponible en una versión próxima.**")
+        pestaña_macro()
 
     # ---- TAB ADMIN (solo superadmin) ----
     if tab_admin is not None:
