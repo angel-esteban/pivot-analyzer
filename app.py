@@ -1498,6 +1498,94 @@ def detectar_divergencias(hist, n_sesiones=60):
     return divs
 
 
+# =============================================================================
+# HUECOS DE PRECIO
+# =============================================================================
+
+def detectar_huecos(hist: "pd.DataFrame", n_dias: int = 252,
+                    min_pct: float = 0.3) -> list:
+    """
+    Detecta huecos de precio abiertos (no rellenados) en los últimos n_dias.
+    - Hueco alcista: low[i] > high[i-1]  → zona de soporte potencial
+    - Hueco bajista: high[i] < low[i-1]  → zona de resistencia potencial
+    Un hueco se considera abierto si el precio nunca ha vuelto a cruzar la zona.
+    Retorna lista de dicts ordenada por distancia al precio actual (más cercano primero).
+    """
+    if hist is None or len(hist) < 5:
+        return []
+
+    df = hist.tail(n_dias).copy()
+    if len(df) < 5:
+        return []
+
+    precio_actual = float(df["Close"].iloc[-1])
+    huecos = []
+
+    for i in range(1, len(df)):
+        prev_high = float(df["High"].iloc[i - 1])
+        prev_low  = float(df["Low"].iloc[i - 1])
+        curr_high = float(df["High"].iloc[i])
+        curr_low  = float(df["Low"].iloc[i])
+        fecha     = df.index[i]
+
+        # ── Hueco alcista ─────────────────────────────────────────────────────
+        if curr_low > prev_high:
+            gap_low  = prev_high
+            gap_high = curr_low
+            gap_pct  = (gap_high - gap_low) / gap_low * 100
+            if gap_pct < min_pct:
+                continue
+            # Abierto si ningún low posterior ha bajado de gap_low
+            future_lows = df["Low"].iloc[i + 1:].values
+            abierto = all(fl > gap_low for fl in future_lows) if len(future_lows) > 0 else True
+            if abierto:
+                dist_pct = (precio_actual - gap_high) / gap_high * 100
+                dias = int((df.index[-1] - fecha).days) if hasattr(fecha, 'days') else 0
+                try:
+                    dias = int((df.index[-1] - fecha).days)
+                except Exception:
+                    dias = 0
+                huecos.append({
+                    "fecha":       fecha.strftime("%d/%m/%Y"),
+                    "tipo":        "alcista",
+                    "gap_low":     round(gap_low, 4),
+                    "gap_high":    round(gap_high, 4),
+                    "gap_pct":     round(gap_pct, 2),
+                    "dist_pct":    round(dist_pct, 2),
+                    "dias_abierto": dias,
+                })
+
+        # ── Hueco bajista ─────────────────────────────────────────────────────
+        elif curr_high < prev_low:
+            gap_low  = curr_high
+            gap_high = prev_low
+            gap_pct  = (gap_high - gap_low) / gap_low * 100
+            if gap_pct < min_pct:
+                continue
+            # Abierto si ningún high posterior ha subido de gap_high
+            future_highs = df["High"].iloc[i + 1:].values
+            abierto = all(fh < gap_high for fh in future_highs) if len(future_highs) > 0 else True
+            if abierto:
+                dist_pct = (precio_actual - gap_low) / gap_low * 100
+                try:
+                    dias = int((df.index[-1] - fecha).days)
+                except Exception:
+                    dias = 0
+                huecos.append({
+                    "fecha":       fecha.strftime("%d/%m/%Y"),
+                    "tipo":        "bajista",
+                    "gap_low":     round(gap_low, 4),
+                    "gap_high":    round(gap_high, 4),
+                    "gap_pct":     round(gap_pct, 2),
+                    "dist_pct":    round(dist_pct, 2),
+                    "dias_abierto": dias,
+                })
+
+    # Ordenar: más cercano al precio actual primero
+    huecos.sort(key=lambda x: abs(x["dist_pct"]))
+    return huecos
+
+
 # CONVERGENCIA TÉCNICA — Pivots + Medias + Indicadores
 # =============================================================================
 
@@ -1992,7 +2080,8 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           divergencias_tecnicas: list = None,
                           bb_sup: float = None,
                           bb_med: float = None,
-                          bb_inf: float = None) -> str:
+                          bb_inf: float = None,
+                          huecos: list = None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -2323,6 +2412,43 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>\n'
         )
 
+    # ── Huecos de precio ──────────────────────────────────────────────────
+    _huecos_section = ""
+    if huecos:
+        def _hueco_card(h):
+            _tipo   = h["tipo"]
+            _bg     = "#f0fdf4" if _tipo == "alcista" else "#fef2f2"
+            _border = "#16a34a" if _tipo == "alcista" else "#dc2626"
+            _label  = "Soporte potencial" if _tipo == "alcista" else "Resistencia potencial"
+            _emoji  = "&#9650;" if _tipo == "alcista" else "&#9660;"
+            _dist   = h["dist_pct"]
+            _dcolor = "#16a34a" if _dist >= 0 else "#dc2626"
+            _dstr   = f"+{_dist:.2f}%" if _dist >= 0 else f"{_dist:.2f}%"
+            return (
+                f'<div style="background:{_bg};border-left:4px solid {_border};'
+                f'border-radius:6px;padding:10px 12px;margin-bottom:8px">'
+                f'<div style="font-size:11px;color:{_border};font-weight:700;'
+                f'text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'
+                f'{_emoji} Hueco {_tipo} &middot; {_label}</div>'
+                f'<div style="font-size:13px;font-weight:700;color:#1e293b">'
+                f'{h["gap_low"]:.4f} &#8211; {h["gap_high"]:.4f}</div>'
+                f'<div style="font-size:12px;color:#475569;margin-top:3px">'
+                f'Tama&#241;o: <b>{h["gap_pct"]:.2f}%</b> &nbsp;&middot;&nbsp; '
+                f'Distancia: <b style="color:{_dcolor}">{_dstr}</b></div>'
+                f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'
+                f'{h["fecha"]} &middot; {h["dias_abierto"]}d abierto</div>'
+                f'</div>'
+            )
+        _cards = "".join(_hueco_card(h) for h in huecos[:6])
+        _huecos_section = (
+            f'<div class="card">\n'
+            f'<h2>&#128202; Huecos de Precio Abiertos</h2>\n'
+            f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">\n'
+            f'{_cards}\n'
+            f'</div>\n'
+            f'</div>\n'
+        )
+
     # ── Ensamblar ─────────────────────────────────────────────────────────
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
@@ -2382,6 +2508,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         # Convergencia Técnica
         + _conv_section
         + _divs_section
+
+        # Huecos de Precio
+        + _huecos_section
 
         # Fundamentales
         + f'{fund_section}\n'
@@ -2889,7 +3018,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 cambio_pct: float = 0.0, h52=None, l52=None, currency: str = "",
                 pct_semaforo: float = 0.0,
                 niveles_reforzados: list = None, señales_dir: list = None,
-                consenso_dir: tuple = None, divergencias_tecnicas: list = None):
+                consenso_dir: tuple = None, divergencias_tecnicas: list = None,
+                huecos: list = None):
     """PDF con precio prominente + pivots multi-columna en paralelo."""
 
     buf = io.BytesIO()
@@ -3330,6 +3460,44 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 ("LEFTPADDING",  (0,0),(-1,-1), 4),
             ]))
             historia.append(t_fund)
+
+    # ── Huecos de precio ──────────────────────────────────────────────────
+    if huecos:
+        historia.append(Spacer(1, 0.3*cm))
+        historia.append(Paragraph("Huecos de Precio Abiertos", S_H2))
+        historia.append(Spacer(1, 0.15*cm))
+
+        _hue_data = [["Tipo", "Zona", "Tamano", "Distancia", "Fecha", "Dias"]]
+        for _h in huecos[:8]:
+            _tipo_str = "Alcista [+]" if _h["tipo"] == "alcista" else "Bajista [-]"
+            _zona_str = f'{_h["gap_low"]:.4f} - {_h["gap_high"]:.4f}'
+            _dist_str = f'{_h["dist_pct"]:+.2f}%'
+            _hue_data.append([
+                _tipo_str, _zona_str,
+                f'{_h["gap_pct"]:.2f}%',
+                _dist_str,
+                _h["fecha"],
+                str(_h["dias_abierto"]) + "d",
+            ])
+
+        _hue_col_widths = [2.2*cm, 4.8*cm, 1.8*cm, 2.2*cm, 2.4*cm, 1.4*cm]
+        _hue_t = Table(_hue_data, colWidths=_hue_col_widths, repeatRows=1)
+        _hue_style = [
+            ("BACKGROUND",   (0, 0), (-1, 0), CA),
+            ("TEXTCOLOR",    (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE",     (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, GF]),
+            ("GRID",         (0, 0), (-1, -1), 0.2, GB),
+            ("TOPPADDING",   (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 2),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 4),
+        ]
+        # Color rows by tipo
+        for _ri, _h in enumerate(huecos[:8], 1):
+            _row_color = colors.HexColor("#f0fdf4") if _h["tipo"] == "alcista" else colors.HexColor("#fef2f2")
+            _hue_style.append(("BACKGROUND", (0, _ri), (-1, _ri), _row_color))
+        _hue_t.setStyle(TableStyle(_hue_style))
+        historia.append(_hue_t)
 
     # ── PIE ───────────────────────────────────────────────────────────────
     historia.append(Spacer(1, 0.5*cm))
@@ -3977,6 +4145,9 @@ def pantalla_analisis():
         # ---- DIVERGENCIAS TÉCNICAS ----
         divergencias_tecnicas = detectar_divergencias(hist)
 
+        # ---- HUECOS DE PRECIO ----
+        huecos_abiertos = detectar_huecos(hist)
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
 
@@ -3999,6 +4170,7 @@ def pantalla_analisis():
             "sar_tend":      sar_tend,
             "pct_b":         pct_b,
             "ts":            ts_str,
+            "huecos":        huecos_abiertos,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -4675,6 +4847,65 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
 
         st.divider()
 
+        # ── Bloque 3f: Huecos de Precio ───────────────────────────────────
+        st.markdown("### 📊 Huecos de Precio Abiertos")
+        _h_info_md = """
+**¿Qué es un hueco?**
+
+Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior al máximo de la sesión anterior (hueco alcista) o inferior al mínimo anterior (hueco bajista). Los huecos abiertos actúan como imanes: el mercado tiende a volver a rellenarlos estadísticamente.
+
+---
+
+**Tipos**
+- 🔼 **Alcista**: zona de soporte potencial. El precio subió dejando un vacío por debajo.
+- 🔽 **Bajista**: zona de resistencia potencial. El precio cayó dejando un vacío por encima.
+
+---
+
+**Distancia**
+- Positiva (+): el precio actual está *por encima* de la zona del hueco.
+- Negativa (−): el precio actual está *por debajo* de la zona del hueco.
+
+---
+
+*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+"""
+        with st.expander("ℹ️ Huecos de Precio", expanded=False):
+            st.markdown(_h_info_md)
+
+        if huecos_abiertos:
+            _h_cols = st.columns(min(len(huecos_abiertos), 3))
+            for _hi, _hue in enumerate(huecos_abiertos[:6]):
+                with _h_cols[_hi % 3]:
+                    _h_tipo    = _hue["tipo"]
+                    _h_emoji   = "🔼" if _h_tipo == "alcista" else "🔽"
+                    _h_color   = "#16a34a" if _h_tipo == "alcista" else "#dc2626"
+                    _h_bg      = "#f0fdf4" if _h_tipo == "alcista" else "#fef2f2"
+                    _h_label   = "Soporte potencial" if _h_tipo == "alcista" else "Resistencia potencial"
+                    _h_dist    = _hue["dist_pct"]
+                    _h_dist_str = f"+{_h_dist:.2f}%" if _h_dist >= 0 else f"{_h_dist:.2f}%"
+                    _h_dist_color = "#16a34a" if _h_dist >= 0 else "#dc2626"
+                    st.markdown(
+                        f'<div style="background:{_h_bg};border-left:4px solid {_h_color};'
+                        f'border-radius:6px;padding:10px 12px;margin-bottom:8px">'
+                        f'<div style="font-size:11px;color:{_h_color};font-weight:700;'
+                        f'text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'
+                        f'{_h_emoji} Hueco {_h_tipo} · {_h_label}</div>'
+                        f'<div style="font-size:13px;font-weight:700;color:#1e293b">'
+                        f'{_hue["gap_low"]:.4f} – {_hue["gap_high"]:.4f}</div>'
+                        f'<div style="font-size:12px;color:#475569;margin-top:3px">'
+                        f'Tamaño: <b>{_hue["gap_pct"]:.2f}%</b> · '
+                        f'Distancia: <b style="color:{_h_dist_color}">{_h_dist_str}</b></div>'
+                        f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'
+                        f'{_hue["fecha"]} · {_hue["dias_abierto"]}d abierto</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+        else:
+            st.caption("No se detectan huecos abiertos significativos (≥ 0.3%) en los últimos 252 días.")
+
+        st.divider()
+
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
         if fundamentales:
             st.markdown("### Datos Fundamentales")
@@ -4733,6 +4964,7 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                             bb_sup=bb_sup,
                             bb_med=bb_med,
                             bb_inf=bb_inf,
+                            huecos=huecos_abiertos,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
@@ -4766,6 +4998,7 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                             señales_dir=señales_dir,
                             consenso_dir=consenso_dir,
                             divergencias_tecnicas=divergencias_tecnicas,
+                            huecos=huecos_abiertos,
                         )
                     st.download_button(
                         label="📄 Descargar PDF",
@@ -5619,7 +5852,6 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _c1, _c2 = st.columns([3, 2])
                 with _c1:
                     _s_hdr, _s_body = _scorecard(_nombre_limpio, _emoji_est, _fn(), _color)
-                    # Header row: colored bar + ℹ️ button, both inside the card column
                     _ch1, _ch2 = st.columns([9, 1])
                     with _ch1:
                         st.markdown(_s_hdr, unsafe_allow_html=True)
@@ -5658,7 +5890,6 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             st.divider()
             st.markdown("### 📥 Exportar informe de estrategia")
 
-            # Persistir informe entre re-renders con session_state
             for _ss_key in ("est_inf_data", "est_inf_fmt", "est_inf_ts", "est_inf_file"):
                 if _ss_key not in st.session_state:
                     st.session_state[_ss_key] = None
