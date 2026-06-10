@@ -6631,6 +6631,13 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
                             consenso_dir=consenso_dir,
                             divergencias_tecnicas=divergencias_tecnicas,
                             huecos=huecos_abiertos,
+                            analisis_ath=analisis_ath,
+                            analisis_sma200=analisis_sma200,
+                            analisis_resist=analisis_resist,
+                            analisis_fibo=analisis_fibo,
+                            analisis_rsi=analisis_rsi,
+                            analisis_vol=analisis_vol,
+                            puntuacion_tec=puntuacion_tec,
                         )
                     st.download_button(
                         label="📄 Descargar PDF",
