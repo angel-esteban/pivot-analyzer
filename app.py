@@ -1359,6 +1359,120 @@ def analizar_rsi(hist, precio: float, nombre: str) -> "dict | None":
     }
 
 
+
+def analizar_volumen(hist, nombre: str) -> "dict | None":
+    """
+    Analiza el volumen relativo y la señal de acumulación/distribución.
+
+    Volumen relativo: media 5 sesiones vs media 20 sesiones.
+    Acumulación/Distribución: compara volumen en días alcistas vs bajistas
+    en la ventana de las últimas 10 sesiones (señal simplificada de OBV).
+
+    Escenarios: volumen_excepcional, volumen_alto, volumen_normal,
+                volumen_bajo, volumen_seco.
+    """
+    if hist is None or len(hist) < 22:
+        return None
+
+    vol = hist["Volume"]
+    if vol.sum() == 0:
+        return None
+
+    cierre = hist["Close"]
+
+    vol_5d  = float(vol.tail(5).mean())
+    vol_20d = float(vol.tail(20).mean())
+
+    if vol_20d == 0:
+        return None
+
+    vol_rel = vol_5d / vol_20d * 100        # 100 % = igual a la media 20d
+
+    # ── Escenario de volumen ──────────────────────────────────────────
+    if vol_rel >= 200:
+        escenario = "volumen_excepcional"
+    elif vol_rel >= 150:
+        escenario = "volumen_alto"
+    elif vol_rel >= 80:
+        escenario = "volumen_normal"
+    elif vol_rel >= 50:
+        escenario = "volumen_bajo"
+    else:
+        escenario = "volumen_seco"
+
+    # ── Señal acumulación / distribución (últimas 10 sesiones) ───────
+    ventana = hist.tail(10)
+    diff_c  = ventana["Close"].diff().fillna(0)
+    vol_alc = float(ventana["Volume"][diff_c > 0].sum())
+    vol_baj = float(ventana["Volume"][diff_c < 0].sum())
+    total   = vol_alc + vol_baj
+
+    if total > 0:
+        ratio_alc = vol_alc / total
+        if ratio_alc >= 0.62:
+            acc_dist = "acumulacion"
+        elif ratio_alc <= 0.38:
+            acc_dist = "distribucion"
+        else:
+            acc_dist = "neutral"
+    else:
+        acc_dist = "neutral"
+
+    # ── Narrativa ────────────────────────────────────────────────────
+    nombre_c = nombre.split(" ")[0] if " " in nombre else nombre
+    vol_rel_str = f"{vol_rel:.0f}%"
+    acc_txt = {
+        "acumulacion": "El flujo de volumen de las últimas 10 sesiones es predominantemente alcista — señal de acumulación.",
+        "distribucion": "El volumen en días bajistas supera al alcista en las últimas 10 sesiones — señal de distribución.",
+        "neutral": "El volumen se distribuye de forma equilibrada entre sesiones alcistas y bajistas.",
+    }[acc_dist]
+
+    if escenario == "volumen_excepcional":
+        texto = (
+            f"{nombre_c} registra un volumen medio de las últimas 5 sesiones equivalente al "
+            f"{vol_rel_str} de su media de 20 días — nivel excepcional. Los episodios de "
+            f"volumen >200% suelen marcar puntos de inflexión o confirmación de ruptura. "
+            f"Requiere interpretar la dirección del precio para distinguir capitulación de "
+            f"impulso. {acc_txt}"
+        )
+    elif escenario == "volumen_alto":
+        texto = (
+            f"{nombre_c} presenta un volumen reciente ({vol_rel_str} vs media 20d) "
+            f"claramente por encima de la media — participación institucional elevada. "
+            f"El movimiento de precio en este contexto tiene mayor credibilidad técnica. "
+            f"{acc_txt}"
+        )
+    elif escenario == "volumen_normal":
+        texto = (
+            f"{nombre_c} opera con volumen en línea con su media histórica de 20 sesiones "
+            f"({vol_rel_str}). Actividad dentro de rangos normales — sin señales de "
+            f"participación extraordinaria. {acc_txt}"
+        )
+    elif escenario == "volumen_bajo":
+        texto = (
+            f"{nombre_c} cotiza con volumen reducido ({vol_rel_str} vs media 20d). "
+            f"Baja participación — los movimientos de precio en este contexto son menos "
+            f"fiables y más susceptibles de revertir ante cualquier catalizador de volumen. "
+            f"{acc_txt}"
+        )
+    else:  # volumen_seco
+        texto = (
+            f"{nombre_c} presenta volumen muy por debajo de su media ({vol_rel_str} vs media 20d) "
+            f"— mercado sin interés o en período de baja actividad (festivos, verano, etc.). "
+            f"Las señales técnicas en volumen seco tienen escasa significancia estadística. "
+            f"{acc_txt}"
+        )
+
+    return {
+        "vol_5d":    vol_5d,
+        "vol_20d":   vol_20d,
+        "vol_rel":   vol_rel,
+        "acc_dist":  acc_dist,
+        "escenario": escenario,
+        "texto":     texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -4912,6 +5026,10 @@ def pantalla_analisis():
         # ---- RSI ZONA / TENDENCIA / DIVERGENCIA ----
         analisis_rsi = analizar_rsi(hist, precio, nombre)
 
+        # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
+        analisis_vol = analizar_volumen(hist, nombre)
+
+
 
 
         # ---- FUNDAMENTALES ----
@@ -4942,6 +5060,7 @@ def pantalla_analisis():
             "analisis_resist": analisis_resist,
             "analisis_fibo":   analisis_fibo,
             "analisis_rsi":    analisis_rsi,
+            "analisis_vol":    analisis_vol,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -6013,6 +6132,73 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             )
         else:
             st.caption("Datos insuficientes para calcular el RSI.")
+
+        st.divider()
+
+
+
+        # ── Componente 6: Volumen Relativo / Acumulación-Distribución ────
+        if analisis_vol:
+            _v = analisis_vol
+            _esc_v = _v["escenario"]
+            _colores_v = {
+                "volumen_excepcional": ("#fdf4ff", "#7e22ce", "🔊", "VOLUMEN EXCEPCIONAL"),
+                "volumen_alto":        ("#eff6ff", "#1d4ed8", "📶", "VOLUMEN ALTO"),
+                "volumen_normal":      ("#f8fafc", "#64748b", "📊", "VOLUMEN NORMAL"),
+                "volumen_bajo":        ("#fff7ed", "#c2410c", "🔉", "VOLUMEN BAJO"),
+                "volumen_seco":        ("#fef2f2", "#dc2626", "🔇", "VOLUMEN SECO"),
+            }
+            _bg_v, _col_v, _ico_v, _lab_v = _colores_v.get(
+                _esc_v, ("#f8fafc", "#64748b", "📊", _esc_v.upper())
+            )
+            _acc_label = {
+                "acumulacion": "✅ Acumulación",
+                "distribucion": "⚠️ Distribución",
+                "neutral":     "↔️ Neutral",
+            }.get(_v["acc_dist"], "—")
+            _acc_color = {
+                "acumulacion": "normal",
+                "distribucion": "inverse",
+                "neutral": "off",
+            }.get(_v["acc_dist"], "off")
+
+            _c1_v, _c2_v, _c3_v = st.columns(3)
+            with _c1_v:
+                st.metric(
+                    "Vol. relativo (5d/20d)",
+                    f"{_v['vol_rel']:.0f}%",
+                    delta=f"{_v['vol_rel']-100:+.0f}% vs media",
+                    delta_color="normal" if _v["vol_rel"] >= 100 else "inverse",
+                    help="Media de volumen de las últimas 5 sesiones como % de la media de 20 sesiones. "
+                         "100 % = igual a la media histórica reciente."
+                )
+            with _c2_v:
+                st.metric(
+                    "Media vol. 5 días",
+                    f"{_v['vol_5d']:,.0f}",
+                    help="Volumen medio de las últimas 5 sesiones"
+                )
+            with _c3_v:
+                st.metric(
+                    "Flujo 10 sesiones",
+                    _acc_label,
+                    delta_color=_acc_color,
+                    help="Señal de acumulación/distribución: compara el volumen en días alcistas "
+                         "vs bajistas en las últimas 10 sesiones. ≥62% alcista = acumulación · "
+                         "≤38% alcista = distribución."
+                )
+            st.markdown(
+                f'<div style="background:{_bg_v};border-left:4px solid {_col_v};'
+                f'border-radius:6px;padding:12px 16px;margin-top:8px;">'
+                f'<span style="font-weight:700;color:{_col_v};">'
+                f'{_ico_v} VOLUMEN — {_lab_v}</span><br/>'
+                f'<p style="margin:6px 0 0 0;font-size:0.92rem;color:#374151;">'
+                f'{_v["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("Datos de volumen no disponibles para este valor.")
 
         st.divider()
 
