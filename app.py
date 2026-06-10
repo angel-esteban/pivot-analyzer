@@ -914,6 +914,307 @@ def analizar_sma200(hist, precio: float, nombre: str) -> "dict | None":
     }
 
 
+def analizar_resistencias_estructurales(
+    niveles_ref, precio: float, nombre: str
+) -> "dict | None":
+    """
+    Analiza la posición del precio respecto a los niveles estructurales reforzados
+    (zonas donde coinciden un pivot y una media móvil).
+
+    Escenarios:
+        en_resistencia   → precio a <1.5% de la resistencia más cercana
+        en_soporte       → precio a <1.5% del soporte más cercano
+        zona_alta_rango  → posición en rango > 65%
+        zona_baja_rango  → posición en rango < 35%
+        zona_media_rango → posición en rango 35-65%
+        sin_resistencia  → precio por encima de todos los niveles
+        sin_soporte      → precio por debajo de todos los niveles
+
+    Returns dict con: soporte, resistencia, dist_soporte, dist_resist,
+                      pos_rango_pct, escenario, texto
+    """
+    if not niveles_ref or precio <= 0:
+        return None
+
+    # Separar por tipo
+    soportes     = sorted(
+        [n for n in niveles_ref if n.get("tipo") == "S"],
+        key=lambda x: x["precio"], reverse=True
+    )
+    resistencias = sorted(
+        [n for n in niveles_ref if n.get("tipo") == "R"],
+        key=lambda x: x["precio"]
+    )
+
+    # Nivel más cercano por debajo / por encima
+    soporte_cercano = next((n for n in soportes     if n["precio"] < precio * 0.9998), None)
+    resist_cercana  = next((n for n in resistencias if n["precio"] > precio * 1.0002), None)
+
+    if soporte_cercano is None and resist_cercana is None:
+        return None
+
+    # Distancias porcentuales
+    dist_soporte = ((precio - soporte_cercano["precio"]) / precio * 100) if soporte_cercano else None
+    dist_resist  = ((resist_cercana["precio"] - precio)  / precio * 100) if resist_cercana else None
+
+    # Posición dentro del rango soporte–resistencia
+    if soporte_cercano and resist_cercana:
+        rango = resist_cercana["precio"] - soporte_cercano["precio"]
+        pos_rango_pct = (precio - soporte_cercano["precio"]) / rango * 100 if rango > 0 else 50.0
+    else:
+        pos_rango_pct = None
+
+    # Escenario
+    if dist_resist is not None and dist_resist < 1.5:
+        escenario = "en_resistencia"
+    elif dist_soporte is not None and dist_soporte < 1.5:
+        escenario = "en_soporte"
+    elif resist_cercana is None:
+        escenario = "sin_resistencia"
+    elif soporte_cercano is None:
+        escenario = "sin_soporte"
+    elif pos_rango_pct is not None and pos_rango_pct > 65:
+        escenario = "zona_alta_rango"
+    elif pos_rango_pct is not None and pos_rango_pct < 35:
+        escenario = "zona_baja_rango"
+    else:
+        escenario = "zona_media_rango"
+
+    # ── Narrativas ───────────────────────────────────────────────────────────
+    nombre_corto = nombre.split(" ")[0] if " " in nombre else nombre
+    resist_str   = f"{resist_cercana['precio']:.4f} €"  if resist_cercana  else "—"
+    sop_str      = f"{soporte_cercano['precio']:.4f} €" if soporte_cercano else "—"
+    pivot_r      = resist_cercana.get("pivot",  "")     if resist_cercana  else ""
+    pivot_s      = soporte_cercano.get("pivot", "")     if soporte_cercano else ""
+    pivot_r_str  = f" ({pivot_r})"  if pivot_r  else ""
+    pivot_s_str  = f" ({pivot_s})"  if pivot_s  else ""
+
+    if escenario == "en_resistencia":
+        texto = (
+            f"{nombre_corto} cotiza a solo {dist_resist:.1f}% de la resistencia estructural "
+            f"reforzada{pivot_r_str} en {resist_str} — zona de confluencia entre nivel pivot "
+            f"y media móvil de alta relevancia. El precio se aproxima a un techo técnico "
+            f"de primer orden. Superación con volumen sería señal de continuación alcista; "
+            f"rechazo en la zona, señal de distribución."
+        )
+    elif escenario == "en_soporte":
+        texto = (
+            f"{nombre_corto} cotiza a {dist_soporte:.1f}% del soporte estructural "
+            f"reforzado{pivot_s_str} en {sop_str} — zona de confluencia pivot + media móvil "
+            f"con historial de absorción. El mantenimiento de este nivel será determinante "
+            f"para el próximo movimiento de importancia."
+        )
+    elif escenario == "sin_resistencia":
+        texto = (
+            f"{nombre_corto} cotiza por encima de todos los niveles de resistencia "
+            f"estructural identificados — el precio opera sin techo técnico reforzado conocido. "
+            f"Mayor incertidumbre sobre el próximo nivel de referencia. "
+            f"Soporte más cercano: {sop_str} ({dist_soporte:.1f}% por debajo)."
+        )
+    elif escenario == "sin_soporte":
+        texto = (
+            f"{nombre_corto} cotiza por debajo de todos los soportes estructurales "
+            f"identificados — ausencia de suelo técnico reforzado, zona de mayor riesgo "
+            f"para posiciones largas. La resistencia más cercana, ahora techo, "
+            f"se sitúa en {resist_str} ({dist_resist:.1f}% arriba)."
+        )
+    elif escenario == "zona_alta_rango":
+        texto = (
+            f"{nombre_corto} opera en la zona alta del rango estructural "
+            f"({pos_rango_pct:.0f}% del recorrido soporte–resistencia). "
+            f"Distancia al techo reforzado{pivot_r_str} en {resist_str}: {dist_resist:.1f}%. "
+            f"La asimetría riesgo/recompensa es desfavorable para nuevas entradas largas."
+        )
+    elif escenario == "zona_baja_rango":
+        texto = (
+            f"{nombre_corto} opera en la zona baja del rango estructural "
+            f"({pos_rango_pct:.0f}% del recorrido soporte–resistencia). "
+            f"Soporte reforzado{pivot_s_str} en {sop_str} a {dist_soporte:.1f}%. "
+            f"La asimetría riesgo/recompensa favorece estrategias de valor y rebote técnico."
+        )
+    else:  # zona_media_rango
+        texto = (
+            f"{nombre_corto} cotiza en la zona media del rango estructural — soporte "
+            f"reforzado{pivot_s_str} en {sop_str} ({dist_soporte:.1f}% abajo) y resistencia "
+            f"reforzada{pivot_r_str} en {resist_str} ({dist_resist:.1f}% arriba). "
+            f"Posición neutral con recorrido simétrico en ambas direcciones."
+        )
+
+    return {
+        "soporte":       soporte_cercano,
+        "resistencia":   resist_cercana,
+        "dist_soporte":  dist_soporte,
+        "dist_resist":   dist_resist,
+        "pos_rango_pct": pos_rango_pct,
+        "escenario":     escenario,
+        "texto":         texto,
+    }
+
+
+
+def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
+    """
+    Calcula niveles de retroceso y extensión de Fibonacci sobre el swing del año
+    (máximo y mínimo de las últimas ~252 sesiones).
+
+    Escenarios: extension_161, extension_127, en_maximo,
+                retroceso_236, retroceso_382, retroceso_618,
+                retroceso_786, swing_roto.
+    """
+    if hist is None or len(hist) < 60:
+        return None
+
+    n = min(252, len(hist))
+    v = hist.tail(n)
+
+    swing_max = float(v["High"].max())
+    swing_min = float(v["Low"].min())
+    idx_max   = v["High"].idxmax()
+    idx_min   = v["Low"].idxmin()
+
+    if swing_max <= swing_min or swing_max <= 0:
+        return None
+
+    rango   = swing_max - swing_min
+    bullish = idx_max > idx_min          # True si el máximo es el evento más reciente
+
+    # Posición relativa del precio (0 % = mínimo swing, 100 % = máximo swing)
+    pos_pct = (precio - swing_min) / rango * 100
+
+    # Niveles Fibonacci como precio absoluto
+    FIB_LABELS = [
+        ("161.8%", 161.8),
+        ("127.2%", 127.2),
+        ("100.0%", 100.0),
+        ("78.6%",   78.6),
+        ("61.8%",   61.8),
+        ("50.0%",   50.0),
+        ("38.2%",   38.2),
+        ("23.6%",   23.6),
+        ("0.0%",     0.0),
+    ]
+    niveles_precio = {
+        label: swing_min + (pct / 100.0) * rango
+        for label, pct in FIB_LABELS
+    }
+
+    # Nivel más cercano por debajo y por encima del precio actual
+    below = {l: p for l, p in niveles_precio.items() if p <= precio * 1.0005}
+    above = {l: p for l, p in niveles_precio.items() if p >= precio * 0.9995}
+
+    fib_abajo  = max(below.items(), key=lambda x: x[1]) if below else None
+    fib_arriba = min(above.items(), key=lambda x: x[1]) if above else None
+
+    if fib_abajo:
+        d = (precio - fib_abajo[1]) / precio * 100
+        fib_abajo = {"label": fib_abajo[0], "precio": fib_abajo[1], "dist_pct": d}
+    if fib_arriba:
+        d = (fib_arriba[1] - precio) / precio * 100
+        fib_arriba = {"label": fib_arriba[0], "precio": fib_arriba[1], "dist_pct": d}
+
+    # ── Escenario ────────────────────────────────────────────────────────
+    if pos_pct > 161.8:
+        escenario = "extension_161"
+    elif pos_pct > 127.2:
+        escenario = "extension_127"
+    elif pos_pct >= 90.0:
+        escenario = "en_maximo"
+    elif pos_pct >= 76.4:
+        escenario = "retroceso_236"
+    elif pos_pct >= 55.0:
+        escenario = "retroceso_382"
+    elif pos_pct >= 35.0:
+        escenario = "retroceso_618"
+    elif pos_pct >= 15.0:
+        escenario = "retroceso_786"
+    else:
+        escenario = "swing_roto"
+
+    # ── Narrativa ────────────────────────────────────────────────────────
+    nombre_c   = nombre.split(" ")[0] if " " in nombre else nombre
+    tipo_swing = "alcista" if bullish else "bajista"
+    s_min = f"{swing_min:,.4f}"
+    s_max = f"{swing_max:,.4f}"
+    pos_s = f"{pos_pct:.1f}%"
+
+    if escenario == "extension_161":
+        texto = (
+            f"{nombre_c} cotiza por encima del 161.8% de extensión del swing {tipo_swing} "
+            f"({s_min} → {s_max}). Zona de impulso excepcional — el precio ha superado los dos "
+            f"objetivos de extensión clásicos. El momentum es sólido pero los modelos de retorno "
+            f"a la media señalan riesgo de corrección elevado desde estos niveles."
+        )
+    elif escenario == "extension_127":
+        arriba_str = (
+            f" Próximo objetivo: 161.8% en {fib_arriba['precio']:,.4f} "
+            f"(+{fib_arriba['dist_pct']:.1f}%)."
+        ) if fib_arriba and fib_arriba["label"] == "161.8%" else ""
+        texto = (
+            f"{nombre_c} ha alcanzado la extensión del 127.2% del swing {tipo_swing} "
+            f"({s_min} → {s_max}) — objetivo clásico de proyección Fibonacci. Zona de posible "
+            f"resistencia o consolidación; el precio ha recorrido un {pos_s} del swing.{arriba_str}"
+        )
+    elif escenario == "en_maximo":
+        arriba_str = (
+            f" Una ruptura activaría la extensión del 127.2% en "
+            f"{fib_arriba['precio']:,.4f} como próximo objetivo."
+        ) if fib_arriba else ""
+        texto = (
+            f"{nombre_c} cotiza cerca del máximo del swing {tipo_swing} ({s_max}), "
+            f"en la zona del 100% de Fibonacci (posición en swing: {pos_s}). "
+            f"Nivel de referencia crítico: la defensa o ruptura de este nivel determina "
+            f"si el precio entra en territorio de extensión o inicia corrección.{arriba_str}"
+        )
+    elif escenario == "retroceso_236":
+        texto = (
+            f"{nombre_c} se encuentra en el primer retroceso Fibonacci (23.6%) del swing "
+            f"{tipo_swing} ({s_min} → {s_max}). Pullback leve — posición {pos_s} del swing. "
+            f"Esta zona actúa como soporte dinámico en tendencias fuertes; la pérdida del 23.6% "
+            f"({niveles_precio['23.6%']:,.4f}) abriría el camino al 38.2%."
+        )
+    elif escenario == "retroceso_382":
+        texto = (
+            f"{nombre_c} cotiza en la zona de retroceso del 38.2-50% del swing {tipo_swing} "
+            f"({s_min} → {s_max}) — retroceso estándar. Posición actual: {pos_s} del swing. "
+            f"El nivel del 38.2% ({niveles_precio['38.2%']:,.4f}) es soporte de tendencia; "
+            f"el 50.0% ({niveles_precio['50.0%']:,.4f}) marca el punto medio del movimiento. "
+            f"La siguiente zona crítica al alza es el 61.8% (golden ratio)."
+        )
+    elif escenario == "retroceso_618":
+        texto = (
+            f"{nombre_c} cotiza en la 'zona dorada' de Fibonacci (50-61.8%) del swing {tipo_swing} "
+            f"({s_min} → {s_max}) — el retroceso estadísticamente más relevante. "
+            f"El nivel del 61.8% ({niveles_precio['61.8%']:,.4f}) es la referencia del Golden Ratio, "
+            f"donde la mayoría de tendencias válidas encuentran soporte. "
+            f"Posición actual: {pos_s} del swing."
+        )
+    elif escenario == "retroceso_786":
+        texto = (
+            f"{nombre_c} ha retrocedido al 78.6% del swing {tipo_swing} "
+            f"({s_min} → {s_max}) — retroceso profundo. La estructura del swing queda muy debilitada. "
+            f"Solo la defensa del nivel {niveles_precio['78.6%']:,.4f} mantiene técnicamente viva "
+            f"la estructura {tipo_swing}. Posición actual: {pos_s} del swing."
+        )
+    else:  # swing_roto
+        texto = (
+            f"{nombre_c} ha perforado el origen del swing {tipo_swing} ({s_min}) — "
+            f"estructura Fibonacci del período anual invalidada (posición: {pos_s}). "
+            f"El precio opera por debajo del nivel de 0% Fibonacci. Nueva estructura en formación."
+        )
+
+    return {
+        "swing_min":   swing_min,
+        "swing_max":   swing_max,
+        "bullish":     bullish,
+        "pos_pct":     pos_pct,
+        "niveles":     niveles_precio,
+        "fib_abajo":   fib_abajo,
+        "fib_arriba":  fib_arriba,
+        "escenario":   escenario,
+        "texto":       texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -4456,6 +4757,15 @@ def pantalla_analisis():
         # ---- SMA200 GIRO / TENDENCIA ----
         analisis_sma200 = analizar_sma200(hist, precio, nombre)
 
+        # ---- RESISTENCIAS ESTRUCTURALES ----
+        analisis_resist = analizar_resistencias_estructurales(
+            niveles_reforzados, precio, nombre
+        )
+
+        # ---- FIBONACCI RETRACEMENT/EXTENSIÓN ----
+        analisis_fibo = analizar_fibonacci(hist, precio, nombre)
+
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
 
@@ -4481,6 +4791,8 @@ def pantalla_analisis():
             "huecos":        huecos_abiertos,
             "analisis_ath":    analisis_ath,
             "analisis_sma200": analisis_sma200,
+            "analisis_resist": analisis_resist,
+            "analisis_fibo":   analisis_fibo,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -5348,7 +5660,142 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
         else:
             st.caption("No hay suficientes datos para calcular la media de 200 sesiones.")
 
+        # ── Componente 3: Resistencias y Soportes Estructurales ───────────
+        analisis_resist = ed.get("analisis_resist")
+        if analisis_resist:
+            _r = analisis_resist
+            _esc_r = _r["escenario"]
+
+            # Paleta por escenario
+            _colores_r = {
+                "en_resistencia":   ("#fef2f2", "#dc2626", "🧱", "EN RESISTENCIA ESTRUCTURAL"),
+                "zona_alta_rango":  ("#fef2f2", "#dc2626", "📛", "ZONA ALTA DEL RANGO"),
+                "sin_soporte":      ("#fef2f2", "#dc2626", "⚠️", "SIN SOPORTE TÉCNICO"),
+                "en_soporte":       ("#f0fdf4", "#16a34a", "🛡️", "EN SOPORTE ESTRUCTURAL"),
+                "zona_baja_rango":  ("#f0fdf4", "#16a34a", "🎯", "ZONA BAJA DEL RANGO"),
+                "sin_resistencia":  ("#f0fdf4", "#16a34a", "🚀", "SIN RESISTENCIA SOBRE EL PRECIO"),
+                "zona_media_rango": ("#f8fafc", "#64748b", "↔️", "ZONA MEDIA DEL RANGO"),
+            }
+            _bg_r, _brd_r, _em_r, _badge_r = _colores_r.get(
+                _esc_r, ("#f8fafc", "#64748b", "📊", "NIVELES ESTRUCTURALES")
+            )
+
+            _c1r, _c2r, _c3r = st.columns(3)
+            with _c1r:
+                if _r["soporte"]:
+                    _sp = _r["soporte"]
+                    st.metric(
+                        "Soporte reforzado",
+                        f"{_sp['precio']:.4f} €",
+                        delta=f"-{_r['dist_soporte']:.2f}%" if _r["dist_soporte"] else None,
+                        delta_color="inverse",
+                        help=f"Nivel pivot + media móvil: {_sp.get('pivot','')}"
+                    )
+                else:
+                    st.metric("Soporte reforzado", "—", help="Sin soporte identificado bajo el precio")
+            with _c2r:
+                if _r["resistencia"]:
+                    _rs = _r["resistencia"]
+                    st.metric(
+                        "Resistencia reforzada",
+                        f"{_rs['precio']:.4f} €",
+                        delta=f"+{_r['dist_resist']:.2f}%" if _r["dist_resist"] else None,
+                        help=f"Nivel pivot + media móvil: {_rs.get('pivot','')}"
+                    )
+                else:
+                    st.metric("Resistencia reforzada", "—", help="Sin resistencia identificada sobre el precio")
+            with _c3r:
+                if _r["pos_rango_pct"] is not None:
+                    st.metric(
+                        "Posición en rango",
+                        f"{_r['pos_rango_pct']:.0f}%",
+                        help="% de posición entre el soporte y la resistencia más cercanos (0%=soporte, 100%=resistencia)"
+                    )
+                else:
+                    st.metric("Posición en rango", "—", help="Insuficientes niveles para calcular el rango")
+
+            st.markdown(
+                f'<div style="background:{_bg_r};border-left:4px solid {_brd_r};'
+                f'border-radius:8px;padding:14px 18px;margin-top:8px;">'
+                f'<span style="font-size:11px;font-weight:700;color:{_brd_r};'
+                f'text-transform:uppercase;letter-spacing:0.5px;">'
+                f'{_em_r} {_badge_r}</span>'
+                f'<p style="margin:8px 0 0 0;font-size:15px;color:#1e293b;line-height:1.6;">'
+                f'{_r["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("No se pudieron calcular niveles estructurales para este valor.")
+
         st.divider()
+
+
+        # ── Componente 4: Fibonacci Retracement / Extensión ─────────────
+        analisis_fibo = ed.get("analisis_fibo")
+        if analisis_fibo:
+            _f = analisis_fibo
+            _esc_f = _f["escenario"]
+            _colores_f = {
+                "extension_161": ("#eff6ff", "#1d4ed8", "🚀", "EXTENSIÓN 161.8%"),
+                "extension_127": ("#eff6ff", "#2563eb", "📈", "EXTENSIÓN 127.2%"),
+                "en_maximo":     ("#f0fdf4", "#16a34a", "🏔️", "EN EL MÁXIMO DEL SWING"),
+                "retroceso_236": ("#f0fdf4", "#15803d", "✅", "RETROCESO 23.6%"),
+                "retroceso_382": ("#fefce8", "#ca8a04", "⚖️", "RETROCESO 38.2–50%"),
+                "retroceso_618": ("#fff7ed", "#c2410c", "🌀", "ZONA DORADA 61.8%"),
+                "retroceso_786": ("#fef2f2", "#dc2626", "⚠️", "RETROCESO PROFUNDO 78.6%"),
+                "swing_roto":    ("#fef2f2", "#991b1b", "💥", "SWING ROTO"),
+            }
+            _bg_f, _col_f, _ico_f, _lab_f = _colores_f.get(
+                _esc_f,
+                ("#f8fafc", "#64748b", "📐", _esc_f.upper())
+            )
+            _fa = _f.get("fib_abajo")
+            _fu = _f.get("fib_arriba")
+            _c1_f, _c2_f, _c3_f = st.columns(3)
+            with _c1_f:
+                if _fa:
+                    st.metric(
+                        f"Fib debajo ({_fa['label']})",
+                        f"{_fa['precio']:,.4f}",
+                        delta=f"-{_fa['dist_pct']:.1f}%",
+                        delta_color="off",
+                        help="Nivel de Fibonacci más cercano por debajo del precio actual"
+                    )
+                else:
+                    st.metric("Fib debajo", "—")
+            with _c2_f:
+                if _fu:
+                    st.metric(
+                        f"Fib arriba ({_fu['label']})",
+                        f"{_fu['precio']:,.4f}",
+                        delta=f"+{_fu['dist_pct']:.1f}%",
+                        delta_color="off",
+                        help="Nivel de Fibonacci más cercano por encima del precio actual"
+                    )
+                else:
+                    st.metric("Fib arriba", "—")
+            with _c3_f:
+                st.metric(
+                    "Posición en swing",
+                    f"{_f['pos_pct']:.1f}%",
+                    delta="alcista" if _f["bullish"] else "bajista",
+                    delta_color="normal" if _f["bullish"] else "inverse",
+                    help="0 % = mínimo del swing anual · 100 % = máximo · >100 % = extensión"
+                )
+            st.markdown(
+                f'<div style="background:{_bg_f};border-left:4px solid {_col_f};'
+                f'border-radius:6px;padding:12px 16px;margin-top:8px;">'
+                f'<span style="font-weight:700;color:{_col_f};">'
+                f'{_ico_f} FIBONACCI — {_lab_f}</span><br/>'
+                f'<p style="margin:6px 0 0 0;font-size:0.92rem;color:#374151;">'
+                f'{_f["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("Datos insuficientes para calcular niveles de Fibonacci.")
+
 
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
         if fundamentales:
@@ -6254,6 +6701,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                f"Sin divergencia activa todavía, pero el riesgo/recompensa no justifica añadir posición. "
                                f"Ajustar stop al soporte más reciente y vigilar el histograma MACD para señal de deterioro.")
                     else:
+
                         rec = ("Sin señales de salida claras. Mantener posición con stop en soporte más reciente. "
                                "Vigilar divergencia bajista OBV/RSI como primer aviso de distribución.")
 
