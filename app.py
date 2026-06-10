@@ -5661,7 +5661,7 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             st.caption("No hay suficientes datos para calcular la media de 200 sesiones.")
 
         # ── Componente 3: Resistencias y Soportes Estructurales ───────────
-        analisis_resist = ed.get("analisis_resist")
+        analisis_resist = analisis_resist
         if analisis_resist:
             _r = analisis_resist
             _esc_r = _r["escenario"]
@@ -5732,7 +5732,7 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
 
 
         # ── Componente 4: Fibonacci Retracement / Extensión ─────────────
-        analisis_fibo = ed.get("analisis_fibo")
+        analisis_fibo = analisis_fibo
         if analisis_fibo:
             _f = analisis_fibo
             _esc_f = _f["escenario"]
