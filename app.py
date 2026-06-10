@@ -2399,6 +2399,486 @@ tr:nth-child(even) td { background:#f8fafc; }
 
 
 # =============================================================================
+# GENERACIÓN DE INFORME HTML — ESTRATEGIA
+# =============================================================================
+
+def generar_informe_estrategia_html(ticker: str, nombre: str, precio: float,
+                                     ts: str, estrategias: list) -> str:
+    """
+    Genera un informe HTML auto-contenido para una o varias estrategias.
+
+    estrategias: list of dicts con claves:
+      - nombre    : str  (ej. "💰 Dividendos")
+      - color     : str  (hex del header)
+      - criterios : list of (html_str, ok_int)  — salida de _build_xxx()
+      - puntos    : list of str (HTML)           — salida de _interpretar()
+      - rec       : str                          — recomendación narrativa
+      - popover_md: str                          — texto markdown del ℹ️
+    """
+    import re as _re
+
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # ── Convertidor markdown → HTML (formato de los popovers) ────────────
+    def _md_to_html(md: str) -> str:
+        lines = md.split("\n")
+        out   = []
+        in_ul = False
+
+        def _inline(s):
+            # **bold** y *italic*, evita solapamientos
+            s = _re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+            s = _re.sub(r"\*([^*]+?)\*",  r'<em style="color:#64748b">\1</em>', s)
+            return s
+
+        for raw in lines:
+            line = raw.strip()
+
+            # Línea vacía
+            if not line:
+                if in_ul:
+                    out.append("</ul>")
+                    in_ul = False
+                continue
+
+            # Separador
+            if line == "---":
+                if in_ul:
+                    out.append("</ul>")
+                    in_ul = False
+                out.append('<hr style="border:none;border-top:1px solid #e2e8f0;margin:10px 0">')
+                continue
+
+            # Ítem de lista
+            if line.startswith("- "):
+                if not in_ul:
+                    out.append('<ul style="margin:4px 0 6px 18px;padding:0">')
+                    in_ul = True
+                out.append(
+                    f'<li style="margin-bottom:3px;font-size:12px;line-height:1.5">'
+                    f'{_inline(line[2:])}</li>'
+                )
+                continue
+
+            # Título italic *Disclaimer*
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+
+            # Línea solo en bold (subtítulo de sección)
+            m_h = _re.match(r"^\*\*(.+?)\*\*\s*(\*.+?\*)?$", line)
+            if m_h:
+                titulo = m_h.group(1)
+                sub    = m_h.group(2) or ""
+                sub_h  = (f' <em style="color:#64748b;font-size:11px">{sub[1:-1]}</em>'
+                          if sub else "")
+                out.append(
+                    f'<div style="font-weight:700;font-size:12.5px;color:#1e3a5f;'
+                    f'margin-top:10px;margin-bottom:3px">{titulo}{sub_h}</div>'
+                )
+            else:
+                content = _inline(line)
+                out.append(
+                    f'<p style="font-size:12px;margin:3px 0;line-height:1.5;'
+                    f'color:#374151">{content}</p>'
+                )
+
+        if in_ul:
+            out.append("</ul>")
+        return "\n".join(out)
+
+    # ── CSS ──────────────────────────────────────────────────────────────
+    css = """
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
+       color:#1e293b; background:#f1f5f9; }
+.header { background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);
+          color:white; padding:22px 32px; }
+.ticker-tag { font-size:13px; opacity:.75; margin-bottom:4px;
+              letter-spacing:1px; text-transform:uppercase; }
+.precio-row { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+.precio-val { font-size:38px; font-weight:800; letter-spacing:-1.5px; }
+.empresa    { font-size:13px; opacity:.85; }
+.chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.chip  { background:rgba(255,255,255,.18); border-radius:20px;
+         padding:3px 11px; font-size:11.5px; }
+.body  { padding:20px 32px 32px; }
+.strat-block { background:white; border-radius:10px;
+               box-shadow:0 1px 4px rgba(0,0,0,.08);
+               margin-bottom:20px; overflow:hidden; }
+.strat-hdr { padding:11px 16px; display:flex; align-items:center;
+             justify-content:space-between; }
+.strat-hdr-left { display:flex; align-items:center; gap:12px; }
+.strat-title { font-size:15px; font-weight:700; color:white; }
+.strat-score { font-size:28px; font-weight:800; color:white; line-height:1; }
+.strat-pts   { font-size:10px; color:rgba(255,255,255,.7); }
+.strat-vrd   { font-size:11px; font-weight:700; color:white;
+               background:rgba(255,255,255,.2); border-radius:4px;
+               padding:2px 8px; margin-left:6px; }
+.strat-body  { display:grid; grid-template-columns:1fr 1fr; gap:0;
+               border-top:1px solid #f1f5f9; }
+.criteria-col { padding:14px 16px; border-right:1px solid #f1f5f9; }
+.analysis-col { padding:14px 16px; }
+.col-lbl { font-size:10px; font-weight:700; color:#64748b;
+           text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+.crit-row { padding:4px 0; border-bottom:1px solid #f9fafb;
+            font-size:12.5px; line-height:1.4; }
+.punto-row { padding:3px 0; border-bottom:1px solid #f9fafb;
+             font-size:12px; line-height:1.4; }
+.rec-box { background:#f8fafc; border-radius:6px; padding:10px 12px;
+           margin-top:10px; }
+.rec-lbl { font-size:10px; font-weight:700; color:#374151;
+           text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+.rec-txt { font-size:12px; color:#111827; line-height:1.5; }
+.explanation { padding:16px 20px; background:#fafbfc;
+               border-top:2px solid #f1f5f9; }
+.exp-lbl { font-size:10px; font-weight:700; color:#1e3a5f;
+           text-transform:uppercase; letter-spacing:.6px;
+           margin-bottom:10px; padding-bottom:5px;
+           border-bottom:2px solid #2563eb; display:inline-block; }
+.footer { text-align:center; font-size:11px; color:#94a3b8;
+          padding:14px 32px; border-top:1px solid #e2e8f0; }
+@media print { body { background:white; }
+  .strat-block { box-shadow:none; border:1px solid #e2e8f0; } }
+"""
+
+    # ── Bloques por estrategia ────────────────────────────────────────────
+    bloques = ""
+    for est in estrategias:
+        est_nombre  = est["nombre"]
+        color       = est["color"]
+        criterios   = est["criterios"]
+        puntos      = est["puntos"]
+        rec         = est["rec"]
+        popover_md  = est["popover_md"]
+
+        # Score
+        total  = sum(ok for _, ok in criterios)
+        maxpts = len(criterios) * 2
+        pct    = int(total / maxpts * 100) if maxpts else 0
+        if pct >= 70:   vrd = "OPORTUNIDAD"
+        elif pct >= 45: vrd = "VIGILAR"
+        else:           vrd = "NO ES EL MOMENTO"
+
+        # Criterios HTML
+        crit_rows = "".join(
+            f'<div class="crit-row">{html}</div>'
+            for html, _ in criterios
+        )
+
+        # Puntos de análisis HTML
+        puntos_rows = "".join(
+            f'<div class="punto-row">{p}</div>'
+            for p in puntos
+        ) if puntos else '<div style="color:#94a3b8;font-style:italic;font-size:12px">Sin análisis disponible</div>'
+
+        rec_html = (
+            f'<div class="rec-box">'
+            f'<div class="rec-lbl">Recomendación</div>'
+            f'<div class="rec-txt">{rec}</div>'
+            f'</div>'
+        ) if rec else ""
+
+        exp_html = _md_to_html(popover_md)
+
+        bloques += (
+            f'<div class="strat-block">\n'
+            f'  <div class="strat-hdr" style="background:{color}">\n'
+            f'    <div class="strat-hdr-left">\n'
+            f'      <span class="strat-title">{est_nombre}</span>\n'
+            f'      <span class="strat-vrd">{vrd}</span>\n'
+            f'    </div>\n'
+            f'    <div style="text-align:right">\n'
+            f'      <span class="strat-score">{pct}</span>'
+            f'<span class="strat-pts">&thinsp;/100</span>\n'
+            f'    </div>\n'
+            f'  </div>\n'
+            f'  <div class="strat-body">\n'
+            f'    <div class="criteria-col">\n'
+            f'      <div class="col-lbl">Criterios de evaluación</div>\n'
+            f'      {crit_rows}\n'
+            f'    </div>\n'
+            f'    <div class="analysis-col">\n'
+            f'      <div class="col-lbl">Análisis situacional</div>\n'
+            f'      {puntos_rows}\n'
+            f'      {rec_html}\n'
+            f'    </div>\n'
+            f'  </div>\n'
+            f'  <div class="explanation">\n'
+            f'    <div class="exp-lbl">&#128218; Descripción detallada de la estrategia</div>\n'
+            f'    {exp_html}\n'
+            f'  </div>\n'
+            f'</div>\n'
+        )
+
+    return (
+        f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
+        f'<meta charset="UTF-8">'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        f'<title>PivotAnalyzer &#8212; Estrategia {ticker.upper()}</title>\n'
+        f'<style>{css}</style>\n</head>\n<body>\n'
+
+        f'<div class="header">\n'
+        f'  <div class="ticker-tag">&#128202; PivotAnalyzer &middot; Informe de Estrategia</div>\n'
+        f'  <div class="precio-row">\n'
+        f'    <span class="precio-val">{ticker.upper()}</span>\n'
+        f'    <span style="font-size:18px;opacity:.9">{nombre}</span>\n'
+        f'  </div>\n'
+        f'  <div class="chips">\n'
+        f'    <span class="chip">Precio: {precio:.4f}</span>\n'
+        f'    <span class="chip">Datos: {ts}</span>\n'
+        f'    <span class="chip">Generado: {ahora}</span>\n'
+        f'    <span class="chip">{len(estrategias)} estrategia{"s" if len(estrategias) > 1 else ""}</span>\n'
+        f'  </div>\n'
+        f'</div>\n'
+
+        f'<div class="body">\n'
+        f'{bloques}'
+        f'</div>\n'
+
+        f'<div class="footer">\n'
+        f'An&#225;lisis educativo &nbsp;&middot;&nbsp; '
+        f'No constituye asesoramiento de inversi&#243;n regulado bajo MiFID II '
+        f'(Directiva 2014/65/UE) &nbsp;&middot;&nbsp; '
+        f'PivotAnalyzer &mdash; Scriptum\n'
+        f'</div>\n</body>\n</html>'
+    )
+
+
+# =============================================================================
+# GENERACIÓN DE PDF — ESTRATEGIA
+# =============================================================================
+
+def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
+                            ts: str, estrategias: list) -> bytes:
+    """
+    PDF de estrategia con scorecard + análisis + explicación detallada.
+
+    estrategias: list of dicts con claves:
+      - nombre    : str
+      - color     : str hex
+      - criterios : list of (html_str, ok_int)
+      - puntos    : list of str  (texto plano / HTML simple)
+      - rec       : str
+      - popover_md: str  (markdown del ℹ️)
+    """
+    import re as _re
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+
+    CA  = colors.HexColor("#1e3a5f")
+    GF  = colors.HexColor("#f1f5f9")
+    GB  = colors.HexColor("#e2e8f0")
+    BL  = colors.white
+    VE  = colors.HexColor("#16a34a")
+    AM  = colors.HexColor("#f59e0b")
+    RO  = colors.HexColor("#dc2626")
+
+    def _strip(s: str) -> str:
+        for em, rep in [("✅", "[+]"), ("⚠️", "[~]"), ("❌", "[-]"),
+                        ("⛔", "[!]"), ("🔼", "^"), ("🔽", "v"),
+                        ("🟢", ""), ("🟡", ""), ("🔴", ""), ("⚪", ""),
+                        ("📊", ""), ("💰", ""), ("📈", ""), ("🏷️", ""),
+                        ("🚀", ""), ("🔄", ""), ("🛡️", ""), ("📖", ""),
+                        ("🌍", ""), ("📉", ""), ("💡", ""), ("🎯", "")]:
+            s = s.replace(em, rep)
+        return "".join(c if ord(c) < 256 else "??" for c in s).strip()
+
+    def _esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _html_to_plain(html: str) -> str:
+        text = _re.sub(r"<[^>]+>", " ", html)
+        text = _re.sub(r"\s+", " ", text).strip()
+        return _strip(text)
+
+    _SS = getSampleStyleSheet()
+    _n  = [0]
+    def _p(**kw):
+        _n[0] += 1
+        return ParagraphStyle(f"_pes{_n[0]}", parent=_SS["Normal"], **kw)
+
+    # Estilos
+    S_HDR_T  = _p(fontName="Helvetica-Bold",    fontSize=20, textColor=BL)
+    S_HDR_S  = _p(fontName="Helvetica",         fontSize=9,  textColor=colors.HexColor("#93c5fd"))
+    S_HDR_P  = _p(fontName="Helvetica-Bold",    fontSize=14, textColor=BL, alignment=TA_RIGHT)
+    S_HDR_D  = _p(fontName="Helvetica",         fontSize=7.5,textColor=BL, alignment=TA_RIGHT)
+    S_EST_N  = _p(fontName="Helvetica-Bold",    fontSize=11, textColor=BL)
+    S_EST_V  = _p(fontName="Helvetica-Bold",    fontSize=9,  textColor=BL, alignment=TA_CENTER)
+    S_SCORE  = _p(fontName="Helvetica-Bold",    fontSize=22, textColor=BL, alignment=TA_RIGHT)
+    S_SCORE2 = _p(fontName="Helvetica",         fontSize=7,  textColor=colors.HexColor("#dbeafe"), alignment=TA_RIGHT)
+    S_SEC_H  = _p(fontName="Helvetica-Bold",    fontSize=7,  textColor=CA, spaceAfter=3)
+    S_CRIT   = _p(fontName="Helvetica",         fontSize=7.5,spaceAfter=1, leading=10)
+    S_PUNTO  = _p(fontName="Helvetica",         fontSize=7.5,spaceAfter=1, leading=10)
+    S_REC_H  = _p(fontName="Helvetica-Bold",    fontSize=7,  textColor=CA, spaceBefore=4, spaceAfter=2)
+    S_REC    = _p(fontName="Helvetica",         fontSize=7.5,leading=11,  textColor=colors.HexColor("#111827"))
+    S_EXP_H  = _p(fontName="Helvetica-Bold",    fontSize=8,  textColor=CA, spaceBefore=5, spaceAfter=3)
+    S_EXP_T  = _p(fontName="Helvetica-Bold",    fontSize=7.5,textColor=CA, spaceBefore=3, spaceAfter=2)
+    S_EXP_P  = _p(fontName="Helvetica",         fontSize=7,  leading=10,  textColor=colors.HexColor("#374151"), spaceAfter=1)
+    S_EXP_I  = _p(fontName="Helvetica-Oblique", fontSize=6.5,textColor=colors.HexColor("#64748b"), spaceAfter=1, leftIndent=4)
+    S_EXP_LI = _p(fontName="Helvetica",         fontSize=7,  leading=10,  leftIndent=8,  spaceAfter=1)
+    S_PIE    = _p(fontName="Helvetica",         fontSize=6.5,textColor=colors.grey, alignment=TA_CENTER)
+
+    ahora    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    historia = []
+
+    # ── Cabecera ──────────────────────────────────────────────────────────
+    _nom = _strip((nombre or ticker)[:60])
+    _tkr = ticker.upper()
+
+    cab = Table(
+        [[Paragraph(_tkr, S_HDR_T),
+          Paragraph(_esc(_nom), _p(fontName="Helvetica-Bold", fontSize=11, textColor=BL, alignment=TA_CENTER)),
+          Paragraph("Informe de Estrategia", S_HDR_S)],
+         [Paragraph(f"Precio: {precio:.4f}", S_HDR_P),
+          Paragraph(f"Datos: {_strip(ts)}", _p(fontName="Helvetica", fontSize=7.5, textColor=BL, alignment=TA_CENTER)),
+          Paragraph(f"Generado: {ahora}", S_HDR_D)]],
+        colWidths=[5*cm, 8*cm, 5*cm],
+        rowHeights=[1.4*cm, 1.0*cm]
+    )
+    cab.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, -1), CA),
+        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING",   (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+    ]))
+    historia.append(cab)
+    historia.append(Spacer(1, 0.3*cm))
+
+    # ── Bloque por estrategia ─────────────────────────────────────────────
+    for est in estrategias:
+        est_nombre = _strip(est["nombre"])
+        color_rl   = colors.HexColor(est["color"])
+        criterios  = est["criterios"]
+        puntos     = est["puntos"]
+        rec        = _strip(est.get("rec") or "")
+        popover_md = est.get("popover_md", "")
+
+        total  = sum(ok for _, ok in criterios)
+        maxpts = len(criterios) * 2
+        pct    = int(total / maxpts * 100) if maxpts else 0
+        if pct >= 70:   vrd = "OPORTUNIDAD"
+        elif pct >= 45: vrd = "VIGILAR"
+        else:           vrd = "NO ES EL MOMENTO"
+        vrd_col = {"OPORTUNIDAD": VE, "VIGILAR": AM, "NO ES EL MOMENTO": RO}[vrd]
+
+        # Header con color de estrategia
+        hdr = Table(
+            [[Paragraph(_esc(est_nombre), S_EST_N),
+              Paragraph(vrd, S_EST_V),
+              [Paragraph(str(pct), S_SCORE),
+               Paragraph("/ 100", S_SCORE2)]]],
+            colWidths=[8*cm, 5.5*cm, 4.5*cm]
+        )
+        hdr.setStyle(TableStyle([
+            ("BACKGROUND",   (0, 0), (-1, -1), color_rl),
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING",   (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+            ("ALIGN",        (1, 0), (1, 0),   "CENTER"),
+            ("ALIGN",        (2, 0), (2, 0),   "RIGHT"),
+        ]))
+        historia.append(hdr)
+
+        # Dos columnas: criterios | análisis + recomendación
+        crit_items  = []
+        punto_items = []
+
+        for html_str, ok in criterios:
+            icon = "[+]" if ok == 2 else "[~]" if ok == 1 else "[-]"
+            text = _html_to_plain(html_str).lstrip("[+][~][-]? ").strip()
+            crit_items.append(Paragraph(f"{icon} {_esc(text)}", S_CRIT))
+            crit_items.append(Spacer(1, 1))
+
+        for p_html in puntos:
+            text = _html_to_plain(p_html)
+            punto_items.append(Paragraph(_esc(text), S_PUNTO))
+            punto_items.append(Spacer(1, 1))
+
+        if rec:
+            punto_items.append(Paragraph("RECOMENDACION:", S_REC_H))
+            punto_items.append(Paragraph(_esc(rec), S_REC))
+
+        body = Table(
+            [[crit_items, punto_items]],
+            colWidths=[9*cm, 9*cm]
+        )
+        body.setStyle(TableStyle([
+            ("VALIGN",       (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING",   (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING",(0, 0), (-1, -1), 8),
+            ("BACKGROUND",   (0, 0), (0, -1),  GF),
+            ("LINEAFTER",    (0, 0), (0, -1),   0.5, GB),
+            ("BOX",          (0, 0), (-1, -1),  0.5, GB),
+        ]))
+        historia.append(body)
+
+        # Explicación detallada (del markdown del popover)
+        historia.append(Spacer(1, 0.15*cm))
+        historia.append(Paragraph("DESCRIPCION DETALLADA DE LA ESTRATEGIA", S_EXP_H))
+
+        for raw_line in popover_md.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line == "---":
+                historia.append(HRFlowable(width="100%", thickness=0.5,
+                                           color=GB, spaceAfter=2, spaceBefore=2))
+                continue
+            if line.startswith("- "):
+                content = _strip(line[2:])
+                content = _re.sub(r"\*\*(.+?)\*\*", r"\1", content)
+                content = _re.sub(r"\*([^*]+?)\*",  r"\1", content)
+                historia.append(Paragraph(f"  {chr(8226)} {_esc(content)}", S_EXP_LI))
+                continue
+            # Detectar líneas solo-bold → título de sección
+            m_bold = _re.match(r"^\*\*(.+?)\*\*\s*(\*.+?\*)?$", line)
+            if m_bold:
+                titulo  = _strip(m_bold.group(1))
+                sub_raw = m_bold.group(2) or ""
+                sub     = _strip(sub_raw[1:-1]) if sub_raw else ""
+                label   = f"<b>{_esc(titulo)}</b>"
+                if sub:
+                    label += f"  <i>{_esc(sub)}</i>"
+                historia.append(Paragraph(label, S_EXP_T))
+                continue
+            # Cursiva standalone
+            if line.startswith("*") and line.endswith("*") and len(line) > 2:
+                content = _strip(line[1:-1])
+                content = _re.sub(r"\*\*(.+?)\*\*", r"\1", content)
+                historia.append(Paragraph(f"<i>{_esc(content)}</i>", S_EXP_I))
+                continue
+            # Párrafo normal
+            content = _strip(line)
+            content = _re.sub(r"\*\*(.+?)\*\*", r"\1", content)
+            content = _re.sub(r"\*([^*]+?)\*",  r"\1", content)
+            historia.append(Paragraph(_esc(content), S_EXP_P))
+
+        historia.append(Spacer(1, 0.4*cm))
+
+    # ── Pie de página ────────────────────────────────────────────────────
+    historia.append(HRFlowable(width="100%", thickness=0.5, color=GB,
+                                spaceAfter=4, spaceBefore=4))
+    historia.append(Paragraph(
+        "Analisis educativo  |  No constituye asesoramiento de inversion regulado "
+        "bajo MiFID II (Directiva 2014/65/UE)  |  PivotAnalyzer -- Scriptum",
+        S_PIE
+    ))
+
+    doc.build(historia)
+    return buf.getvalue()
+
+
+# =============================================================================
 # GENERACIÓN DE PDF
 # =============================================================================
 
@@ -5174,99 +5654,92 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         )
                     st.markdown('</div>', unsafe_allow_html=True)
 
-            # ── Disclaimer pie de página ──────────────────────────────────
+            # ── Exportar informe de estrategia ────────────────────────────────────────
+            st.divider()
+            st.markdown("### 📥 Exportar informe de estrategia")
+
+            # Persistir informe entre re-renders con session_state
+            for _ss_key in ("est_inf_data", "est_inf_fmt", "est_inf_ts", "est_inf_file"):
+                if _ss_key not in st.session_state:
+                    st.session_state[_ss_key] = None
+
+            _col_fmt_est, _col_btn_est, _col_dl_est = st.columns([1, 2, 2])
+            with _col_fmt_est:
+                _fmt_est = st.radio("Formato", ["HTML", "PDF"],
+                                    horizontal=True, key="fmt_est_export")
+            with _col_btn_est:
+                if st.button("⬇️ Generar informe", type="primary",
+                             key="btn_est_export"):
+                    _ts_dl   = datetime.now().strftime("%Y%m%d_%H%M")
+                    _keys_dl = list(_estrategias.keys()) if _est_sel == "Todas" else [_est_sel]
+                    _est_dl_data = []
+                    for _k_dl in _keys_dl:
+                        _c_dl, _f_dl = _estrategias[_k_dl]
+                        _crit_dl     = _f_dl()
+                        _pts_dl, _rc_dl = _interpretar(_k_dl)
+                        _est_dl_data.append({
+                            "nombre":     _k_dl,
+                            "color":      _c_dl,
+                            "criterios":  _crit_dl,
+                            "puntos":     _pts_dl,
+                            "rec":        _rc_dl,
+                            "popover_md": _est_popover.get(_k_dl, ""),
+                        })
+                    with st.spinner("Generando..."):
+                        if _fmt_est == "HTML":
+                            _raw = generar_informe_estrategia_html(
+                                ticker      = ed["ticker"],
+                                nombre      = ed["nombre"],
+                                precio      = ed["precio"],
+                                ts          = ed["ts"],
+                                estrategias = _est_dl_data,
+                            ).encode("utf-8")
+                            st.session_state["est_inf_fmt"]  = "html"
+                            st.session_state["est_inf_file"] = (
+                                f"{ed['ticker']}_estrategia_{_ts_dl}.html"
+                            )
+                        else:
+                            _raw = generar_pdf_estrategia(
+                                ticker      = ed["ticker"],
+                                nombre      = ed["nombre"],
+                                precio      = ed["precio"],
+                                ts          = ed["ts"],
+                                estrategias = _est_dl_data,
+                            )
+                            st.session_state["est_inf_fmt"]  = "pdf"
+                            st.session_state["est_inf_file"] = (
+                                f"{ed['ticker']}_estrategia_{_ts_dl}.pdf"
+                            )
+                    st.session_state["est_inf_data"] = _raw
+                    st.session_state["est_inf_ts"]   = _ts_dl
+                    st.rerun()
+
+            with _col_dl_est:
+                if st.session_state.get("est_inf_data") is not None:
+                    _dl_fmt  = st.session_state["est_inf_fmt"]
+                    _dl_file = st.session_state["est_inf_file"]
+                    _dl_mime = "text/html" if _dl_fmt == "html" else "application/pdf"
+                    st.download_button(
+                        label     = f"📄 Descargar ({_dl_fmt.upper()})",
+                        data      = st.session_state["est_inf_data"],
+                        file_name = _dl_file,
+                        mime      = _dl_mime,
+                        key       = "dl_est_informe",
+                    )
+            # Disclaimer
             st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
             st.markdown(
                 '<p style="font-size:0.75rem;color:#9ca3af;text-align:center;'
                 'border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px">'
-                'Análisis educativo y orientativo · Las puntuaciones se calculan '
-                'automáticamente a partir de indicadores técnicos y fundamentales. '
-                'No constituyen asesoramiento personalizado de inversión en el sentido '
+                'An\u00e1lisis educativo y orientativo \u00b7 Las puntuaciones se calculan '
+                'autom\u00e1ticamente a partir de indicadores t\u00e9cnicos y fundamentales. '
+                'No constituyen asesoramiento personalizado de inversi\u00f3n en el sentido '
                 'de MiFID II / RD 217/2008. Para asesoramiento personalizado, contactar '
                 'con una EAF o entidad autorizada por CNMV.</p>',
                 unsafe_allow_html=True
             )
 
-    # ---- TAB ANÁLISIS IA (próxima versión) ----
+    # ---- TAB ANALISIS IA (proxima version) ----
     with tab_ia:
-        st.markdown("## 🤖 Análisis IA")
-        st.info("**Esta funcionalidad está en desarrollo y estará disponible en una versión próxima.**")
-        st.markdown("---")
-        st.markdown("""
-### ¿Qué incluirá el Análisis IA?
-
-**📷 Visión de gráficos**
-Sube una captura de cualquier gráfico (TradingView, Bloomberg, MetaTrader) y la IA identificará
-patrones técnicos, soportes y resistencias visuales, y los comparará con los pivots calculados.
-
-**🔍 Interpretación contextual**
-La IA leerá los indicadores técnicos calculados (RSI, MACD, Bollinger, SAR) en conjunto
-y generará un diagnóstico narrativo del estado del activo: tendencia, momentum, zonas clave.
-
-**📋 Informe de tesis**
-A partir del análisis técnico + macro + fundamentales disponibles, la IA redactará
-un resumen de tesis de inversión con nivel de convicción, factores clave y niveles de invalidación.
-
-**💬 Preguntas sobre el activo**
-Chat contextual: una vez analizado un ticker, podrás preguntar directamente sobre él
-(*"¿qué pasaría si rompe R2?"*, *"¿cómo se comportó este activo en 2022?"*).
-""")
-        st.markdown("---")
-        st.caption("Análisis IA · PivotAnalyzer v2.0 — En desarrollo · Scriptum")
-
-    # ---- TAB MACRO ----
-    with tab_macro:
-        pestaña_macro()
-
-    # ---- TAB ADMIN ----
-    if es_superadmin and tab_admin:
-        with tab_admin:
-            panel_admin()
-
-    # ---- TAB AYUDA ----
-    with tab_ayuda:
-        st.markdown("### Guía rápida de Pivot Points")
-        st.markdown("""
-**Pivot Point (PP)** — Nivel de equilibrio calculado con datos de la sesión anterior (máx, mín, cierre).
-
-**Resistencias (R1-R4)** — Por encima del PP. El precio tiende a frenarse o rebotar.
-
-**Soportes (S1-S4)** — Por debajo del PP. Zonas de posible rebote al alza.
-
-**Confluencia** — Cuando niveles de distintos timeframes coinciden en ±{tol} €. Mayor fiabilidad.
-
----
-**Sistemas disponibles:**
-- **Clásico** — El más universal. Base para todos los demás.
-- **Woodie** — Doble peso al cierre. Mejor en días con gap.
-- **Camarilla** — 8 niveles muy cerca del precio. Operativa intradía.
-- **DeMark** — Condicional según dirección del día anterior. 1 sola resistencia y 1 soporte.
-- **Fibonacci** — Usa ratios 0.382, 0.618, 1.000. Correcciones en tendencia.
-- **Mid-Points** — Niveles intermedios entre los Clásicos. Lateralizaciones.
-
----
-**Semáforo global:**
-- 🟢 Verde (≥65%) — Sesgo técnico positivo
-- 🟡 Amarillo (40-65%) — Sin sesgo claro
-- 🔴 Rojo (<40%) — Sesgo técnico negativo
-
-Factores: Precio vs PP Diario · RSI · MACD · Bollinger %B · Volumen · Parabolic SAR
-
----
-*Análisis educativo. No constituye asesoramiento de inversión regulado bajo MiFID II (Directiva 2014/65/UE).*
-        """)
-
-
-# =============================================================================
-# PUNTO DE ENTRADA
-# =============================================================================
-
-def main():
-    if "usuario" not in st.session_state:
-        pantalla_login()
-    else:
-        pantalla_analisis()
-
-
-if __name__ == "__main__":
-    main()
+        st.markdown("## \U0001f916 An\u00e1lisis IA")
+        st.info("**Esta funcionalidad est\u00e1 en desarrollo y estar\u00e1 disponible en una versi\u00f3n pr\u00f3xima.**")
