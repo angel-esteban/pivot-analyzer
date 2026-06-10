@@ -4700,8 +4700,8 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             _div_baj = any(d["direccion"] == "bajista" for d in _divs)
             _div_rsi_baj = any(d["tipo"] == "RSI"  and d["direccion"] == "bajista" for d in _divs)
             _div_mcd_baj = any(d["tipo"] == "MACD" and d["direccion"] == "bajista" for d in _divs)
-            _niv_soporte = any(n["tipo"] == "S" for n in _niv)
-            _niv_resist  = any(n["tipo"] == "R" for n in _niv)
+            _niv_soporte = [n for n in _niv if n["tipo"] == "S"]
+            _niv_resist  = [n for n in _niv if n["tipo"] == "R"]
 
             # ══════════════════════════════════════════════════════════════
             # SELECTOR
