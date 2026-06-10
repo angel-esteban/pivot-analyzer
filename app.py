@@ -1989,7 +1989,10 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           niveles_reforzados: list = None,
                           señales_dir: list = None,
                           consenso_dir: tuple = None,
-                          divergencias_tecnicas: list = None) -> str:
+                          divergencias_tecnicas: list = None,
+                          bb_sup: float = None,
+                          bb_med: float = None,
+                          bb_inf: float = None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -2155,11 +2158,20 @@ tr:nth-child(even) td { background:#f8fafc; }
 
     rsi_sub = ("Sobrecomprado 🔴" if rsi_val > 70
                else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪"))
+    # Bandas de Bollinger — usar valores pasados o fallback a "—"
+    bb_sup_str = f"{bb_sup:.4f}" if bb_sup is not None else "—"
+    bb_med_str = f"{bb_med:.4f}" if bb_med is not None else "—"
+    bb_inf_str = f"{bb_inf:.4f}" if bb_inf is not None else "—"
     ind_base_html = (
         _ind("RSI 14", f"{rsi_val:.1f}", rsi_sub) +
-        _ind("MACD", f"{macd_val:.4f}", f"Hist: {macd_hist_val:+.4f}") +
-        _ind("SAR", sar_tend, f"{sar_val:.4f}") +
-        _ind("Bollinger %B", f"{pct_b:.1f}%")
+        _ind("MACD", f"{macd_val:.4f}") +
+        _ind("MACD Señal", f"{macd_señal:.4f}") +
+        _ind("MACD Histograma", f"{macd_hist_val:+.4f}", "↑ Alcista" if macd_hist_val > 0 else "↓ Bajista") +
+        _ind("Bollinger Superior", bb_sup_str) +
+        _ind("Bollinger Media", bb_med_str) +
+        _ind("Bollinger Inferior", bb_inf_str) +
+        _ind("Bollinger %B", f"{pct_b:.1f}%") +
+        _ind("Parabolic SAR", sar_tend, f"{sar_val:.4f}")
     )
     ind_med_html = ""
     for p_m in [20, 50, 200]:
@@ -4238,6 +4250,9 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                             señales_dir=señales_dir,
                             consenso_dir=consenso_dir,
                             divergencias_tecnicas=divergencias_tecnicas,
+                            bb_sup=bb_sup,
+                            bb_med=bb_med,
+                            bb_inf=bb_inf,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
