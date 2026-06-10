@@ -5743,3 +5743,19 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     with tab_ia:
         st.markdown("## \U0001f916 An\u00e1lisis IA")
         st.info("**Esta funcionalidad est\u00e1 en desarrollo y estar\u00e1 disponible en una versi\u00f3n pr\u00f3xima.**")
+
+    # ---- TAB MACRO ----
+    with tab_macro:
+        st.markdown("## 🌍 Análisis Macro")
+        st.info("**Esta funcionalidad está en desarrollo y estará disponible en una versión próxima.**")
+
+    # ---- TAB ADMIN (solo superadmin) ----
+    if tab_admin is not None:
+        with tab_admin:
+            st.markdown("## ⚙️ Administración de Usuarios")
+            st.info("**Panel de administración disponible solo para superadministradores.**")
+
+    # ---- TAB AYUDA ----
+    with tab_ayuda:
+        st.markdown("## 📖 Ayuda")
+        st.info("**Sección de ayuda en construcción.**")
