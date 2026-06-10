@@ -5759,3 +5759,13 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     with tab_ayuda:
         st.markdown("## 📖 Ayuda")
         st.info("**Sección de ayuda en construcción.**")
+
+
+# =============================================================================
+# PUNTO DE ENTRADA
+# =============================================================================
+
+if "usuario" not in st.session_state:
+    pantalla_login()
+else:
+    pantalla_analisis()
