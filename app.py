@@ -3470,6 +3470,63 @@ tr:nth-child(even) td { background:#f8fafc; }
         )
 
     # ── Huecos de precio ──────────────────────────────────────────────────
+
+    # ── Diagnóstico Técnico ──────────────────────────────────────────────
+    _diag_rows_html = []
+    _componentes_diag_html = [
+        ("ATH",          analisis_ath),
+        ("SMA200",       analisis_sma200),
+        ("Resistencias", analisis_resist),
+        ("Fibonacci",    analisis_fibo),
+        ("RSI",          analisis_rsi),
+        ("Volumen",      analisis_vol),
+    ]
+    for _cn_h, _ca_h in _componentes_diag_html:
+        if _ca_h and "escenario" in _ca_h and "texto" in _ca_h:
+            _esc_h = _ca_h["escenario"].replace("_", " ").title()
+            _narr_h = _ca_h["texto"][:240] + "..." if len(_ca_h["texto"]) > 240 else _ca_h["texto"]
+            _diag_rows_html.append(
+                f'<tr>'
+                f'<td style="font-weight:600;padding:5px 10px;white-space:nowrap;color:#1e3a5f">{_cn_h}</td>'
+                f'<td style="padding:5px 10px;color:#374151;font-size:12px">{_esc_h}</td>'
+                f'<td style="padding:5px 10px;font-size:12px;color:#555;line-height:1.5">{_narr_h}</td>'
+                f'</tr>'
+            )
+    _score_row_html = ""
+    if puntuacion_tec:
+        _sc_h = puntuacion_tec["score_total"]
+        _sn_h = puntuacion_tec["señal"]
+        _col_h = {"alcista": "#16a34a", "bajista": "#dc2626", "neutral": "#64748b"}.get(_sn_h, "#64748b")
+        _cv_h = puntuacion_tec["conviccion"]
+        _dp_h = puntuacion_tec["disp_total"]
+        _score_row_html = (
+            f'<tr style="background:#f0f9ff">'
+            f'<td colspan="3" style="padding:10px 12px">'
+            f'<strong style="color:{_col_h};font-size:14px">&#127919; Puntuacion Tecnica: '
+            f'{_sc_h:.1f}/10 &#8212; {_sn_h.upper()}</strong>'
+            f'&nbsp;<span style="color:#64748b;font-size:12px">({_cv_h}/{_dp_h} componentes coinciden)</span>'
+            f'<br/><span style="font-size:12px;color:#374151;line-height:1.6">'
+            f'{puntuacion_tec["texto"]}</span>'
+            f'</td></tr>'
+        )
+    _diag_section = ""
+    if _diag_rows_html or _score_row_html:
+        _diag_section = (
+            f'<div style="margin:20px 0">'
+            f'<div class="col-title" style="margin-bottom:10px">Diagnostico Tecnico</div>'
+            f'<table style="width:100%;border-collapse:collapse;font-size:13px;'
+            f'border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">'
+            f'<thead><tr style="background:#1e3a5f;color:#fff">'
+            f'<th style="padding:8px 10px;text-align:left;width:120px">Componente</th>'
+            f'<th style="padding:8px 10px;text-align:left;width:180px">Escenario</th>'
+            f'<th style="padding:8px 10px;text-align:left">Narrativa</th>'
+            f'</tr></thead>'
+            f'<tbody style="background:#fff">'
+            + "".join(_diag_rows_html)
+            + _score_row_html
+            + f'</tbody></table></div>'
+        )
+
     _huecos_section = ""
     if huecos:
         def _hueco_card(h):
@@ -3568,6 +3625,9 @@ tr:nth-child(even) td { background:#f8fafc; }
 
         # Huecos de Precio
         + _huecos_section
+
+        # Diagnostico Tecnico
+        + _diag_section
 
         # Fundamentales
         + f'{fund_section}\n'
