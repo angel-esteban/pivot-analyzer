@@ -763,6 +763,157 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
     }
 
 
+def analizar_sma200(hist, precio: float, nombre: str) -> "dict | None":
+    """
+    Detecta la pendiente y posible giro de la media móvil de 200 sesiones.
+
+    Lógica de escenario:
+      Calcula la pendiente de la SMA200 con una ventana de 5 sesiones.
+      Compara la pendiente actual con la de hace 20 sesiones para detectar giros.
+
+      Escenarios de pendiente:
+        giro_alcista_reciente  → pendiente ahora positiva, era negativa hace 20 sesiones
+        tendencia_alcista      → pendiente positiva sostenida (≥ 20 sesiones)
+        giro_bajista_reciente  → pendiente ahora negativa, era positiva hace 20 sesiones
+        tendencia_bajista      → pendiente negativa sostenida (≥ 20 sesiones)
+
+      Cruzado con posición del precio (sobre / bajo SMA200) → 8 plantillas narrativas.
+
+    Returns dict con: sma200, dist_pct, escenario, precio_sobre, pendiente_pct, texto
+    """
+    if hist is None or len(hist) < 210:
+        return None
+
+    cierre = hist["Close"]
+    sma = cierre.rolling(200).mean()
+
+    # Necesitamos al menos 220 valores para tener 20 sesiones de historial de pendiente
+    sma_clean = sma.dropna()
+    if len(sma_clean) < 25:
+        return None
+
+    sma200_val = float(sma_clean.iloc[-1])
+
+    # Pendiente: diferencia de 5 sesiones (en valor absoluto y porcentual)
+    slope_now_abs = float(sma_clean.iloc[-1] - sma_clean.iloc[-6])
+    slope_now_pct = slope_now_abs / sma200_val * 100
+
+    # Pendiente hace 20 sesiones (si hay suficientes datos)
+    if len(sma_clean) >= 26:
+        slope_past_abs = float(sma_clean.iloc[-21] - sma_clean.iloc[-26])
+    else:
+        slope_past_abs = slope_now_abs  # fallback: misma dirección
+
+    # Umbral de "plana": menos de 0.03% de variación en 5 sesiones (ignorar ruido)
+    UMBRAL_PLANO = sma200_val * 0.0003
+
+    now_positiva = slope_now_abs > UMBRAL_PLANO
+    now_negativa = slope_now_abs < -UMBRAL_PLANO
+    past_positiva = slope_past_abs > UMBRAL_PLANO
+    past_negativa = slope_past_abs < -UMBRAL_PLANO
+
+    if now_positiva and past_negativa:
+        escenario = "giro_alcista_reciente"
+    elif now_negativa and past_positiva:
+        escenario = "giro_bajista_reciente"
+    elif now_positiva:
+        escenario = "tendencia_alcista"
+    elif now_negativa:
+        escenario = "tendencia_bajista"
+    else:
+        escenario = "plana"
+
+    precio_sobre = precio > sma200_val
+    dist_pct = (precio - sma200_val) / sma200_val * 100
+
+    # ── Plantillas narrativas (escenario × posición del precio) ──────────
+    nombre_corto = nombre.split(" ")[0] if " " in nombre else nombre
+    sma_str = f"{sma200_val:.4f}"
+    dist_str = f"{abs(dist_pct):.1f}%"
+    pos_str = "por encima" if precio_sobre else "por debajo"
+
+    if escenario == "giro_alcista_reciente":
+        if precio_sobre:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} acaba de girar al alza "
+                f"en los {sma_str} euros, señal técnica de primer orden que indica "
+                f"que la tendencia de largo plazo está cambiando de signo. "
+                f"El precio cotiza un {dist_str} por encima de este nivel, "
+                f"lo que refuerza la señal alcista."
+            )
+        else:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} ha iniciado un giro "
+                f"alcista en los {sma_str} euros, aunque el precio todavía cotiza "
+                f"por debajo de este nivel. La superación de la media sería una "
+                f"señal técnica de fortaleza de primer orden."
+            )
+
+    elif escenario == "tendencia_alcista":
+        if precio_sobre:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} mantiene pendiente "
+                f"alcista, actuando como soporte dinámico en los {sma_str} euros. "
+                f"El precio cotiza un {dist_str} por encima, en una estructura "
+                f"técnica de largo plazo positiva."
+            )
+        else:
+            texto = (
+                f"A pesar de que la media de 200 sesiones de {nombre_corto} mantiene "
+                f"pendiente alcista ({sma_str} euros), el precio ha perforado este "
+                f"nivel clave. Señal de debilidad técnica a vigilar de cerca; "
+                f"la recuperación por encima de la media sería prioritaria."
+            )
+
+    elif escenario == "giro_bajista_reciente":
+        if not precio_sobre:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} acaba de girar a la "
+                f"baja en los {sma_str} euros, señal de deterioro en la tendencia "
+                f"de largo plazo. El precio cotiza por debajo de esta referencia "
+                f"clave, lo que aumenta la presión vendedora estructural."
+            )
+        else:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} ha iniciado un giro "
+                f"bajista en los {sma_str} euros. El precio aún cotiza por encima "
+                f"de este nivel, pero el deterioro de la pendiente es una señal "
+                f"de alerta que conviene monitorizar de cerca."
+            )
+
+    elif escenario == "tendencia_bajista":
+        if not precio_sobre:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} mantiene pendiente "
+                f"bajista con el valor cotizando {dist_str} por debajo de este "
+                f"nivel ({sma_str} euros). Estructura de largo plazo negativa "
+                f"que pesa sobre el sesgo técnico del valor."
+            )
+        else:
+            texto = (
+                f"La media de 200 sesiones de {nombre_corto} mantiene pendiente "
+                f"bajista ({sma_str} euros), aunque el precio ha logrado situarse "
+                f"un {dist_str} por encima de esta referencia. Recuperación "
+                f"técnica a confirmar con la estabilización de la pendiente."
+            )
+
+    else:  # plana
+        texto = (
+            f"La media de 200 sesiones de {nombre_corto} se encuentra prácticamente "
+            f"plana en los {sma_str} euros, con el precio cotizando un {dist_str} "
+            f"{pos_str} de este nivel. Sin señal clara de tendencia de largo plazo."
+        )
+
+    return {
+        "sma200":        sma200_val,
+        "dist_pct":      dist_pct,
+        "pendiente_pct": slope_now_pct,
+        "escenario":     escenario,
+        "precio_sobre":  precio_sobre,
+        "texto":         texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -4302,6 +4453,9 @@ def pantalla_analisis():
         hist_maximo = obtener_hist_maximo(ticker_activo)
         analisis_ath = analizar_maximos_historicos(hist_maximo, precio, nombre)
 
+        # ---- SMA200 GIRO / TENDENCIA ----
+        analisis_sma200 = analizar_sma200(hist, precio, nombre)
+
         # ---- FUNDAMENTALES ----
         fundamentales = bloque_fundamentales(info, tipo_activo)
 
@@ -4325,7 +4479,8 @@ def pantalla_analisis():
             "pct_b":         pct_b,
             "ts":            ts_str,
             "huecos":        huecos_abiertos,
-            "analisis_ath":  analisis_ath,
+            "analisis_ath":    analisis_ath,
+            "analisis_sma200": analisis_sma200,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -5124,6 +5279,74 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             )
         else:
             st.caption("No se pudo calcular el análisis de máximos históricos para este valor.")
+
+        # ── Componente 2: SMA200 — Tendencia y Giro ───────────────────────
+        if analisis_sma200:
+            _s = analisis_sma200
+            _esc_s = _s["escenario"]
+
+            # Paleta por escenario
+            _colores_sma = {
+                "giro_alcista_reciente":  ("#f0fdf4", "#16a34a", "🔄", "GIRO ALCISTA — MM200"),
+                "tendencia_alcista":      ("#f0fdf4", "#16a34a", "📈", "TENDENCIA ALCISTA — MM200"),
+                "giro_bajista_reciente":  ("#fef2f2", "#dc2626", "🔄", "GIRO BAJISTA — MM200"),
+                "tendencia_bajista":      ("#fef2f2", "#dc2626", "📉", "TENDENCIA BAJISTA — MM200"),
+                "plana":                  ("#f8fafc", "#64748b", "➡️", "MM200 LATERAL"),
+            }
+            _bg_s, _brd_s, _em_s, _badge_s = _colores_sma.get(
+                _esc_s, ("#f8fafc", "#64748b", "📊", "MM200")
+            )
+
+            # Si el precio perfora la media en contra de la tendencia, matiz naranja
+            _contradiccion = (
+                (_esc_s == "tendencia_alcista" and not _s["precio_sobre"]) or
+                (_esc_s == "tendencia_bajista" and _s["precio_sobre"]) or
+                (_esc_s == "giro_bajista_reciente" and _s["precio_sobre"])
+            )
+            if _contradiccion:
+                _bg_s, _brd_s = "#fffbeb", "#d97706"
+
+            _c1s, _c2s, _c3s = st.columns(3)
+            with _c1s:
+                st.metric(
+                    "Media 200 sesiones",
+                    f"{_s['sma200']:.4f} €",
+                    help="Valor actual de la media móvil simple de 200 sesiones"
+                )
+            with _c2s:
+                _d_str = (
+                    f"+{_s['dist_pct']:.2f}%" if _s["dist_pct"] >= 0
+                    else f"{_s['dist_pct']:.2f}%"
+                )
+                st.metric(
+                    "Distancia precio / MM200",
+                    _d_str,
+                    help="% que separa el precio actual de la media de 200 sesiones"
+                )
+            with _c3s:
+                _pend_str = (
+                    f"+{_s['pendiente_pct']:.3f}% / 5 ses." if _s["pendiente_pct"] >= 0
+                    else f"{_s['pendiente_pct']:.3f}% / 5 ses."
+                )
+                st.metric(
+                    "Pendiente MM200",
+                    _pend_str,
+                    help="Variación porcentual de la media en las últimas 5 sesiones"
+                )
+
+            st.markdown(
+                f'<div style="background:{_bg_s};border-left:4px solid {_brd_s};'
+                f'border-radius:8px;padding:14px 18px;margin-top:8px;">'
+                f'<span style="font-size:11px;font-weight:700;color:{_brd_s};'
+                f'text-transform:uppercase;letter-spacing:0.5px;">'
+                f'{_em_s} {_badge_s}</span>'
+                f'<p style="margin:8px 0 0 0;font-size:15px;color:#1e293b;line-height:1.6;">'
+                f'{_s["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("No hay suficientes datos para calcular la media de 200 sesiones.")
 
         st.divider()
 
@@ -6073,6 +6296,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _c1, _c2 = st.columns([3, 2])
                 with _c1:
                     _s_hdr, _s_body = _scorecard(_nombre_limpio, _emoji_est, _fn(), _color)
+                    # Header row: colored bar + ℹ️ button, both inside the card column
                     _ch1, _ch2 = st.columns([9, 1])
                     with _ch1:
                         st.markdown(_s_hdr, unsafe_allow_html=True)
@@ -6111,6 +6335,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             st.divider()
             st.markdown("### 📥 Exportar informe de estrategia")
 
+            # Persistir informe entre re-renders con session_state
             for _ss_key in ("est_inf_data", "est_inf_fmt", "est_inf_ts", "est_inf_file"):
                 if _ss_key not in st.session_state:
                     st.session_state[_ss_key] = None
@@ -6211,7 +6436,6 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     with tab_ayuda:
         st.markdown("## 📖 Ayuda")
         st.info("**Sección de ayuda en construcción.**")
-
 
 # =============================================================================
 # PUNTO DE ENTRADA
