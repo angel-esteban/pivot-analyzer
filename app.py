@@ -6539,9 +6539,9 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             st.markdown("### Datos Fundamentales")
             fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
-            cols_f = st.columns(3)
+            cols_f = st.columns(4)
             for i, (k, v) in enumerate(fund_items):
-                with cols_f[i % 3]:
+                with cols_f[i % 4]:
                     st.metric(k, v, help=TOOLTIPS.get(k))
             st.markdown('</div>', unsafe_allow_html=True)
 
