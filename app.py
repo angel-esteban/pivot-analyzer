@@ -4076,7 +4076,14 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 pct_semaforo: float = 0.0,
                 niveles_reforzados: list = None, señales_dir: list = None,
                 consenso_dir: tuple = None, divergencias_tecnicas: list = None,
-                huecos: list = None):
+                huecos: list = None,
+                analisis_ath=None,
+                analisis_sma200=None,
+                analisis_resist=None,
+                analisis_fibo=None,
+                analisis_rsi=None,
+                analisis_vol=None,
+                puntuacion_tec=None):
     """PDF con precio prominente + pivots multi-columna en paralelo."""
 
     buf = io.BytesIO()
