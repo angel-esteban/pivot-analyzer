@@ -4412,7 +4412,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 tipo_color = VE if "soporte" in nr.get("tipo","").lower() else RO
                 niv_rows_pdf.append([
                     Paragraph(f'{nr["precio"]:.4f}', S_NRM),
-                    Paragraph(nr.get("dist_str", ""), S_NRM),
+                    Paragraph(
+                        (f'+{((nr["precio"]-precio)/precio*100):+.2f}%'
+                         if precio else ""),
+                        S_NRM
+                    ),
                     Paragraph(str(nr.get("pivot", "")), S_NRM),
                     Paragraph(str(nr.get("media", "")), S_NRM),
                     Paragraph(nr.get("tipo", ""), _p(fontSize=7, textColor=tipo_color)),
