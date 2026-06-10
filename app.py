@@ -1473,6 +1473,203 @@ def analizar_volumen(hist, nombre: str) -> "dict | None":
     }
 
 
+
+# Tabla de puntuaciones por componente y escenario (0 = bajista extremo, 10 = alcista extremo)
+_PUNTUACIONES_ATH = {
+    "subida_libre_establecida": 9,
+    "en_ath":                   8,
+    "aproximandose_cerca":      7,
+    "aproximandose":            6,
+    "referencia":               4,
+    "lejos":                    2,
+}
+_PUNTUACIONES_SMA200 = {
+    "giro_alcista_reciente":  9,
+    "tendencia_alcista":      7,
+    "plana":                  5,
+    "giro_bajista_reciente":  2,
+    "tendencia_bajista":      1,
+}
+_PUNTUACIONES_RESIST = {
+    "en_soporte":       8,
+    "zona_baja_rango":  7,
+    "sin_resistencia":  8,
+    "zona_media_rango": 5,
+    "zona_alta_rango":  3,
+    "en_resistencia":   2,
+    "sin_soporte":      2,
+}
+_PUNTUACIONES_FIBO = {
+    "extension_161":  9,
+    "extension_127":  8,
+    "en_maximo":      7,
+    "retroceso_236":  6,
+    "retroceso_382":  5,
+    "retroceso_618":  7,   # golden ratio — potencial reversión alcista
+    "retroceso_786":  3,
+    "swing_roto":     1,
+}
+_PUNTUACIONES_RSI = {
+    "sobrecompra_extrema": 2,   # extendido, riesgo de corrección
+    "sobrecompra":         3,
+    "zona_alcista":        7,
+    "zona_neutra":         5,
+    "zona_bajista":        3,
+    "sobreventa":          7,   # potencial rebote
+    "sobreventa_extrema":  8,   # capitulación, asimetría alcista
+}
+_PUNTUACIONES_VOL = {
+    "volumen_excepcional": 7,   # neutro-alcista: amplifica dirección
+    "volumen_alto":        7,
+    "volumen_normal":      5,
+    "volumen_bajo":        4,
+    "volumen_seco":        3,
+}
+# Pesos de cada componente en el score final
+_PESOS = {
+    "ath":    0.15,
+    "sma200": 0.20,
+    "resist": 0.15,
+    "fibo":   0.15,
+    "rsi":    0.20,
+    "vol":    0.15,
+}
+
+
+def calcular_puntuacion_tecnica(
+    analisis_ath, analisis_sma200, analisis_resist,
+    analisis_fibo, analisis_rsi, analisis_vol
+) -> "dict":
+    """
+    Agrega los 6 componentes del Diagnóstico Técnico en un score 0-10.
+
+    Retorna:
+        score_total (float 0-10)
+        scores_ind  (dict componente → {puntos, peso, contribucion, escenario})
+        señal       ('alcista' | 'neutral' | 'bajista')
+        conviccion  (int: número de componentes que coinciden con la señal)
+        texto       (str narrativa)
+    """
+    componentes = [
+        ("ath",    analisis_ath,    _PUNTUACIONES_ATH,    "ATH",          "📈 Máx. Histórico"),
+        ("sma200", analisis_sma200, _PUNTUACIONES_SMA200, "SMA200",       "〰️ Media 200"),
+        ("resist", analisis_resist, _PUNTUACIONES_RESIST, "Resistencias", "🧱 Niveles"),
+        ("fibo",   analisis_fibo,   _PUNTUACIONES_FIBO,   "Fibonacci",    "📐 Fibonacci"),
+        ("rsi",    analisis_rsi,    _PUNTUACIONES_RSI,    "RSI",          "⚡ RSI"),
+        ("vol",    analisis_vol,    _PUNTUACIONES_VOL,    "Volumen",      "🔊 Volumen"),
+    ]
+
+    scores_ind  = {}
+    score_num   = 0.0
+    peso_total  = 0.0
+
+    for key, analisis, tabla, nombre_c, icono in componentes:
+        peso = _PESOS[key]
+        if analisis and "escenario" in analisis:
+            esc     = analisis["escenario"]
+            pts     = tabla.get(esc, 5)
+            contrib = pts * peso
+            scores_ind[key] = {
+                "nombre":      nombre_c,
+                "icono":       icono,
+                "escenario":   esc,
+                "puntos":      pts,
+                "peso":        peso,
+                "contrib":     contrib,
+                "disponible":  True,
+            }
+            score_num  += contrib
+            peso_total += peso
+        else:
+            scores_ind[key] = {
+                "nombre":     nombre_c,
+                "icono":      icono,
+                "escenario":  "—",
+                "puntos":     5,
+                "peso":       peso,
+                "contrib":    0.0,
+                "disponible": False,
+            }
+
+    # Normalizar si faltan componentes
+    if peso_total > 0:
+        score_total = score_num / peso_total * (peso_total / sum(_PESOS.values()))
+        # Ajuste: si peso_total < 1 normalizamos al rango completo
+        score_total = score_num / peso_total * 10 / 10
+        # Simplificado: score = suma_contribuciones / peso_disponible
+        score_total = score_num / peso_total
+    else:
+        score_total = 5.0
+
+    # Señal
+    if score_total >= 6.5:
+        señal = "alcista"
+    elif score_total <= 3.5:
+        señal = "bajista"
+    else:
+        señal = "neutral"
+
+    # Convicción: cuántos componentes disponibles coinciden con la señal
+    conviccion = 0
+    disp_total = sum(1 for v in scores_ind.values() if v["disponible"])
+    for v in scores_ind.values():
+        if not v["disponible"]:
+            continue
+        p = v["puntos"]
+        if señal == "alcista" and p >= 6:
+            conviccion += 1
+        elif señal == "bajista" and p <= 4:
+            conviccion += 1
+        elif señal == "neutral" and 4 < p < 7:
+            conviccion += 1
+
+    # Narrativa
+    score_str = f"{score_total:.1f}"
+    conv_str  = f"{conviccion}/{disp_total}" if disp_total else "—"
+
+    if señal == "alcista":
+        if score_total >= 8:
+            texto = (
+                f"Puntuación técnica integrada de {score_str}/10 — sesgo fuertemente alcista. "
+                f"{conviccion} de {disp_total} componentes confluyen en la lectura positiva. "
+                f"La estructura técnica favorece al comprador en el contexto actual."
+            )
+        else:
+            texto = (
+                f"Puntuación técnica integrada de {score_str}/10 — sesgo alcista moderado. "
+                f"{conviccion} de {disp_total} componentes con lectura positiva. "
+                f"La estructura técnica es favorable pero sin convicción unánime."
+            )
+    elif señal == "bajista":
+        if score_total <= 2:
+            texto = (
+                f"Puntuación técnica integrada de {score_str}/10 — sesgo fuertemente bajista. "
+                f"{conviccion} de {disp_total} componentes confluyen en la lectura negativa. "
+                f"La estructura técnica no favorece posiciones largas en este momento."
+            )
+        else:
+            texto = (
+                f"Puntuación técnica integrada de {score_str}/10 — sesgo bajista moderado. "
+                f"{conviccion} de {disp_total} componentes con lectura negativa. "
+                f"Prudencia técnica — esperar señales de mejora antes de actuar."
+            )
+    else:
+        texto = (
+            f"Puntuación técnica integrada de {score_str}/10 — zona neutral. "
+            f"Los componentes no ofrecen dirección clara ({conv_str} en zona neutral). "
+            f"Mercado en equilibrio técnico — priorizar análisis fundamental y macro."
+        )
+
+    return {
+        "score_total": score_total,
+        "scores_ind":  scores_ind,
+        "señal":       señal,
+        "conviccion":  conviccion,
+        "disp_total":  disp_total,
+        "texto":       texto,
+    }
+
+
 def _macro_chart(series_dict: dict, unidad: str = "%", height: int = 260,
                  fecha_inicio: "pd.Timestamp | None" = None):
     """Plotly multi-línea para series macro. Devuelve fig."""
@@ -5029,6 +5226,13 @@ def pantalla_analisis():
         # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
         analisis_vol = analizar_volumen(hist, nombre)
 
+        # ---- PUNTUACIÓN TÉCNICA INTEGRADA ----
+        puntuacion_tec = calcular_puntuacion_tecnica(
+            analisis_ath, analisis_sma200, analisis_resist,
+            analisis_fibo, analisis_rsi, analisis_vol
+        )
+
+
 
 
 
@@ -5061,6 +5265,7 @@ def pantalla_analisis():
             "analisis_fibo":   analisis_fibo,
             "analisis_rsi":    analisis_rsi,
             "analisis_vol":    analisis_vol,
+            "puntuacion_tec":  puntuacion_tec,
         }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -6201,6 +6406,132 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
             st.caption("Datos de volumen no disponibles para este valor.")
 
         st.divider()
+
+
+
+        # ── Componente 7: Puntuación Técnica Integrada ───────────────────
+        puntuacion_tec = puntuacion_tec  # variable local ya calculada
+        if puntuacion_tec:
+            _pt = puntuacion_tec
+            _score = _pt["score_total"]
+            _señal = _pt["señal"]
+
+            _cfg_señal = {
+                "alcista": ("#f0fdf4", "#16a34a", "🟢", "SESGO ALCISTA"),
+                "neutral": ("#f8fafc", "#64748b", "⚪", "ZONA NEUTRAL"),
+                "bajista": ("#fef2f2", "#dc2626", "🔴", "SESGO BAJISTA"),
+            }
+            _bg_pt, _col_pt, _ico_pt, _lab_pt = _cfg_señal.get(
+                _señal, ("#f8fafc", "#64748b", "⚪", "NEUTRAL")
+            )
+
+            # Score en formato grande
+            _c1_pt, _c2_pt, _c3_pt = st.columns(3)
+            with _c1_pt:
+                st.metric(
+                    "Puntuación Técnica",
+                    f"{_score:.1f} / 10",
+                    help="Media ponderada de los 6 componentes del Diagnóstico Técnico. "
+                         "0–3.5 = bajista · 3.5–6.5 = neutral · 6.5–10 = alcista"
+                )
+            with _c2_pt:
+                st.metric(
+                    "Señal",
+                    f"{_ico_pt} {_señal.capitalize()}",
+                    help="Señal técnica agregada basada en la puntuación total"
+                )
+            with _c3_pt:
+                st.metric(
+                    "Convicción",
+                    f"{_pt['conviccion']}/{_pt['disp_total']} componentes",
+                    help="Número de componentes que coinciden con la señal dominante"
+                )
+
+            # Tarjeta narrativa
+            st.markdown(
+                f'<div style="background:{_bg_pt};border-left:4px solid {_col_pt};'
+                f'border-radius:6px;padding:12px 16px;margin-top:8px;">'
+                f'<span style="font-weight:700;color:{_col_pt};">'
+                f'🎯 DIAGNÓSTICO TÉCNICO INTEGRADO — {_lab_pt}</span><br/>'
+                f'<p style="margin:6px 0 0 0;font-size:0.92rem;color:#374151;">'
+                f'{_pt["texto"]}</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+            # ── Botón de explicación ──────────────────────────────────
+            with st.expander("📖 ¿Cómo se calcula esta puntuación?"):
+                st.markdown(
+                    "La puntuación técnica integrada es una **media ponderada** de los "
+                    "6 componentes del Diagnóstico Técnico. Cada componente aporta una "
+                    "puntuación de **0 a 10** según su escenario actual, y se pondera "
+                    "por su relevancia en el análisis técnico multi-método."
+                )
+
+                # Tabla de desglose
+                import pandas as _pd_score
+                _filas = []
+                for _k, _info in _pt["scores_ind"].items():
+                    _disp = "✅" if _info["disponible"] else "—"
+                    _pts_str = str(_info["puntos"]) if _info["disponible"] else "—"
+                    _peso_str = f"{_info['peso']*100:.0f}%"
+                    _contrib_str = f"{_info['contrib']:.2f}" if _info["disponible"] else "—"
+                    _filas.append({
+                        "Componente":    _info["icono"] + " " + _info["nombre"],
+                        "Escenario":     _info["escenario"].replace("_", " ").title(),
+                        "Puntos (0-10)": _pts_str,
+                        "Peso":          _peso_str,
+                        "Contribucion":  _contrib_str,
+                        "Datos":         _disp,
+                    })
+                _df_score = _pd_score.DataFrame(_filas)
+                st.dataframe(_df_score, hide_index=True, use_container_width=True)
+
+                st.markdown("**Rangos de señal:**")
+                st.markdown(
+                    "- Rojo **0.0 – 3.4** Sesgo bajista  "
+                    "- Blanco **3.5 – 6.4** Zona neutral  "
+                    "- Verde **6.5 – 10** Sesgo alcista"
+                )
+                st.markdown("**Puntuaciones por escenario — referencia rápida:**")
+                _tabla_ref = {
+                    "Componente":        ["ATH", "SMA200", "Resistencias", "Fibonacci", "RSI", "Volumen"],
+                    "Bajista (1-3)":     [
+                        "Lejos del maximo",
+                        "Tendencia bajista",
+                        "En resistencia / sin soporte",
+                        "Swing roto / retroceso 78.6%",
+                        "Sobrecompra extrema / zona bajista",
+                        "Volumen seco",
+                    ],
+                    "Neutro (4-6)":      [
+                        "Aproximandose",
+                        "Plana",
+                        "Zona media",
+                        "Retrocesos medios",
+                        "Zona neutra",
+                        "Normal",
+                    ],
+                    "Alcista (7-9)":     [
+                        "En ATH / Subida libre",
+                        "Tendencia / Giro alcista",
+                        "En soporte / sin resistencia",
+                        "Extension / zona dorada",
+                        "Zona alcista / sobreventa",
+                        "Alto / excepcional",
+                    ],
+                }
+                import pandas as _pd2
+                st.dataframe(_pd2.DataFrame(_tabla_ref), hide_index=True, use_container_width=True)
+                st.caption(
+                    "Analisis educativo. No constituye asesoramiento personalizado "
+                    "de inversion bajo MiFID II. El analisis tecnico no predice "
+                    "el comportamiento futuro de los precios."
+                )
+
+        st.divider()
+
+
 
 
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
