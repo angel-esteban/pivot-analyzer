@@ -2511,8 +2511,18 @@ recurso y por qué la credibilidad del BCE es el ancla del euro.
     # BLOQUE 4 — LETRAS Y BONOS DEL TESORO (referencia desde curva AAA + spread)
     # ════════════════════════════════════════════════════════════════════════
     st.markdown("#### 🏛️ Instrumentos del Tesoro Público Español")
-    st.caption("TIR orientativa basada en tipos AAA Euro Área + spread histórico España. "
-               "Para tipos exactos de la última subasta consultar [Tesoro Público](https://www.tesoro.es).")
+    st.caption(
+        "Las TIR mostradas son **rendimientos de mercado secundario** (curva AAA Euro Área + spread España-Alemania estimado). "
+        "El mercado secundario refleja el precio al que se negocian bonos ya emitidos, "
+        "no el tipo marginal de la última subasta primaria. "
+        "En condiciones normales la diferencia entre ambos es de **1–5 puntos básicos**; "
+        "en momentos de estrés puede ampliarse a 10–20 pb."
+    )
+    st.info(
+        "🏛️ **Para los tipos exactos de la última subasta primaria** consulta la página oficial: "
+        "[tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)",
+        icon=None
+    )
 
     with st.expander("📖 Letras, Bonos y Obligaciones — ¿En qué se diferencian?", expanded=False):
         st.markdown("""
@@ -2574,9 +2584,15 @@ una rentabilidad fija durante décadas.
         _col_inst = "#16a34a" if "Letra" in _nombre_inst else "#1d4ed8" if "Bono" in _nombre_inst else "#7e22ce"
         with _cols_inst[_i % 5]:
             _rf_card(_nombre_inst, _tir_est, _desc_inst, color=_col_inst, bg=_bg_inst,
-                     descripcion="TIR orientativa*")
+                     descripcion="Mdo. secundario*")
 
-    st.caption("\* TIR orientativa = tipo AAA Euro Área + spread histórico España. Para el tipo exacto de la última subasta consultar Tesoro Directo.")
+    st.caption(
+        "\* Fuente: mercado secundario — curva AAA Euro Área (BCE) + spread España-Alemania en tiempo real. "
+        "Diferencia típica con el tipo marginal de subasta primaria: **1–5 pb** en condiciones normales, "
+        "hasta **10–20 pb** en episodios de volatilidad. "
+        "Para el tipo exacto de la última subasta: "
+        "[Tesoro Público — Resultado últimas subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)"
+    )
 
     st.divider()
 
@@ -5892,7 +5908,7 @@ def pantalla_analisis():
         tab_ayuda = tab_objs[-1]
 
     # ---- TAB ANÁLISIS ----
-    with tab_analisis:
+    def _render_analisis():
         # ── Fila 1: Mercado / Sistema / Tolerancia / Analizar ──────────────
         col1, col2, col3, col4 = st.columns([2.5, 2, 1.8, 1])
         with col1:
@@ -8334,6 +8350,11 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         mime="application/pdf",
                         key="dl_pdf",
                     )
+
+
+    # ---- RENDER TAB ANÁLISIS (función anidada para que los return no salgan de pantalla_analisis) ----
+    with tab_analisis:
+        _render_analisis()
 
     # ---- ALERTAS DE PRECIO ----
     with tab_analisis:
