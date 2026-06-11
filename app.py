@@ -275,6 +275,31 @@ ETFS_UCITS = {
         "WisdomTree Battery Solutions — WBAT":     "WBAT.L",
         "iShares Physical Gold ETC — IGLN":        "IGLN.L",
     },
+    "🇯🇵 Renta Variable Japón": {
+        "iShares Core MSCI Japan IMI (Acc) — IJPA":  "IJPA.AS",
+        "Vanguard FTSE Japan (Acc) — VJPN":          "VJPN.AS",
+        "Xtrackers MSCI Japan (Acc) — XMJP":         "XMJP.DE",
+    },
+    "🏠 REITs / Inmobiliario": {
+        "iShares European Property Yield (Dist) — IPRP": "IPRP.AS",
+        "iShares Developed Mkts Property Yield — IWDP":  "IWDP.AS",
+        "Xtrackers FTSE EPRA NAREIT Dev. Eur — XREA":    "XREA.DE",
+    },
+    "📦 Materias Primas / Commodities": {
+        "iShares Diversified Commodity Swap (Acc) — CMOD": "CMOD.L",
+        "Invesco Physical Gold ETC — SGLD":                "SGLD.L",
+        "WisdomTree Physical Gold — PHAU":                 "PHAU.L",
+        "iShares Physical Silver ETC — SSLN":              "SSLN.L",
+    },
+    "💵 Mercado Monetario": {
+        "Xtrackers EUR Overnight Rate Swap — XEON":       "XEON.DE",
+        "Amundi Euro Liquidity Short Term — CSH2":         "CSH2.PA",
+    },
+    "📊 Small & Mid Caps": {
+        "iShares MSCI World Small Cap (Acc) — IUSN":      "IUSN.DE",
+        "SPDR MSCI Europe Small Cap (Acc) — ZPRX":        "ZPRX.DE",
+        "iShares MSCI USA Small Cap (Acc) — RUSS":        "RUSS.L",
+    },
 }
 
 
@@ -323,6 +348,26 @@ ETFS_META = {
     "EQQQ.L":  {"ter": 0.30, "dist": "Distribución", "indice": "Nasdaq 100"},
     "WBAT.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "WisdomTree Battery Solutions"},
     "IGLN.L":  {"ter": 0.12, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
+    # Renta Variable Japón
+    "IJPA.AS": {"ter": 0.12, "dist": "Acumulación", "indice": "MSCI Japan IMI"},
+    "VJPN.AS": {"ter": 0.15, "dist": "Acumulación", "indice": "FTSE Japan"},
+    "XMJP.DE": {"ter": 0.09, "dist": "Acumulación", "indice": "MSCI Japan"},
+    # REITs / Inmobiliario
+    "IPRP.AS": {"ter": 0.40, "dist": "Distribución", "indice": "FTSE EPRA/NAREIT Europe Dividend+"},
+    "IWDP.AS": {"ter": 0.59, "dist": "Distribución", "indice": "FTSE EPRA/NAREIT Developed"},
+    "XREA.DE": {"ter": 0.33, "dist": "Acumulación", "indice": "FTSE EPRA/NAREIT Developed Europe"},
+    # Materias Primas / Commodities
+    "CMOD.L":  {"ter": 0.19, "dist": "Acumulación", "indice": "Bloomberg Commodity ex Agri & Livestock Capped"},
+    "SGLD.L":  {"ter": 0.12, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
+    "PHAU.L":  {"ter": 0.39, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
+    "SSLN.L":  {"ter": 0.20, "dist": "Acumulación", "indice": "LBMA Silver Price"},
+    # Mercado Monetario
+    "XEON.DE": {"ter": 0.10, "dist": "Acumulación", "indice": "Solactive EUR Daily Overnight Rate"},
+    "CSH2.PA": {"ter": 0.07, "dist": "Acumulación", "indice": "ICE BofA Euro Government Bill"},
+    # Small & Mid Caps
+    "IUSN.DE": {"ter": 0.35, "dist": "Acumulación", "indice": "MSCI World Small Cap"},
+    "ZPRX.DE": {"ter": 0.30, "dist": "Acumulación", "indice": "MSCI Europe Small Cap"},
+    "RUSS.L":  {"ter": 0.43, "dist": "Acumulación", "indice": "MSCI USA Small Cap"},
 }
 
 # Lookup inverso: ticker → categoría
@@ -3512,14 +3557,56 @@ tr:nth-child(even) td { background:#f8fafc; }
     # ── Fundamentales ─────────────────────────────────────────────────────
     fund_section = ""
     if tipo_activo == "etf":
+        _cat_etf_html = _ETFS_CATEGORIA.get(ticker)
+        _comp_html = obtener_comparativa_etf(_cat_etf_html, ticker) if _cat_etf_html else []
+        _comp_rows_html = ""
+        for _e in _comp_html:
+            _ter_s  = f"{_e['ter']:.2f}%" if _e['ter'] is not None else "—"
+            _aum_s  = f"{_e['aum']/1e9:.1f}B" if _e['aum'] else "—"
+            _r1a_s  = (f"+{_e['rent_1a']:.1f}%" if _e['rent_1a'] >= 0 else f"{_e['rent_1a']:.1f}%") if _e['rent_1a'] is not None else "—"
+            _dist_badge = ('<span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:4px;font-size:11px">Acc</span>'
+                          if _e['dist'] == 'Acumulación' else
+                          '<span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-size:11px">Dist</span>')
+            _bg = 'background:#f0fdf4;font-weight:700' if _e['actual'] else ''
+            _comp_rows_html += (
+                f'<tr style="{_bg}">'
+                f'<td style="font-family:monospace;font-size:11px">{_e["ticker"]}</td>'
+                f'<td>{_ter_s}</td>'
+                f'<td>{_dist_badge}</td>'
+                f'<td style="font-size:11px">{_aum_s}</td>'
+                f'<td>{_r1a_s}</td>'
+                f'<td style="font-size:11px;color:#64748b">{_e["indice"]}</td>'
+                f'</tr>'
+            )
+        _comp_table_html = ""
+        if _comp_rows_html:
+            _cat_label = _cat_etf_html or ""
+            _comp_table_html = (
+                f'<h3 style="margin:12px 0 6px;font-size:0.85rem;color:#1e293b">'
+                f'&#127942; Comparativa &mdash; {_cat_label}</h3>'
+                '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+                '<thead><tr style="background:#1e3a5f;color:white">'
+                '<th style="padding:4px 8px;text-align:left">ETF</th>'
+                '<th style="padding:4px 8px;text-align:left">TER</th>'
+                '<th style="padding:4px 8px;text-align:left">Pol&iacute;tica</th>'
+                '<th style="padding:4px 8px;text-align:left">AUM</th>'
+                '<th style="padding:4px 8px;text-align:left">Rent. 1A</th>'
+                '<th style="padding:4px 8px;text-align:left">&Iacute;ndice</th>'
+                '</tr></thead>'
+                f'<tbody>{_comp_rows_html}</tbody>'
+                '</table>'
+                '<p style="font-size:10px;color:#94a3b8;margin-top:4px">'
+                'Ordenado por TER. &#11088; = ETF analizado.</p>'
+            )
         fund_section = (
             '<div class="card">'
             '<h2>&#128203; Datos Fundamentales</h2>'
-            '<p style="color:#64748b;font-size:0.9rem;margin:0">'
+            '<p style="color:#64748b;font-size:0.9rem;margin:6px 0 8px">'
             '&#9888; <strong>No aplica</strong> &mdash; Los ETFs no tienen an&aacute;lisis fundamental propio '
             '(PER, BPA, capitalizaci&oacute;n, etc.). '
             'Eval&uacute;a el ETF por su &iacute;ndice replicado, TER, AUM y tracking error.'
             '</p>'
+            + _comp_table_html +
             '</div>'
         )
     elif fundamentales:
@@ -4738,6 +4825,52 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             "Evalúa el ETF por su índice replicado, TER, AUM y tracking error.",
             _p(fontSize=8, textColor=colors.HexColor("#64748b"))
         ))
+        _cat_etf_pdf = _ETFS_CATEGORIA.get(ticker)
+        _comp_pdf = obtener_comparativa_etf(_cat_etf_pdf, ticker) if _cat_etf_pdf else []
+        if _comp_pdf:
+            historia.append(Spacer(1, 0.25*cm))
+            _cat_label_pdf = _cat_etf_pdf or ""
+            historia.append(Paragraph(f"Comparativa de categoría — {_cat_label_pdf}", S_H2))
+            historia.append(Spacer(1, 0.12*cm))
+            _comp_hdr_pdf = [
+                Paragraph("ETF",       _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+                Paragraph("TER",       _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+                Paragraph("Política",  _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+                Paragraph("AUM",       _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+                Paragraph("Rent. 1A",  _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+                Paragraph("Índice",    _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
+            ]
+            _comp_rows_pdf = [_comp_hdr_pdf]
+            for _ec in _comp_pdf:
+                _ter_p  = f"{_ec['ter']:.2f}%" if _ec['ter'] is not None else "—"
+                _aum_p  = f"{_ec['aum']/1e9:.1f}B" if _ec['aum'] else "—"
+                _r1a_p  = (f"+{_ec['rent_1a']:.1f}%" if _ec['rent_1a'] >= 0 else f"{_ec['rent_1a']:.1f}%") if _ec['rent_1a'] is not None else "—"
+                _fn_bold = "Helvetica-Bold" if _ec['actual'] else "Helvetica"
+                _indice_short = (_ec['indice'][:28] + '…') if len(_ec.get('indice','')) > 28 else _ec.get('indice','—')
+                _comp_rows_pdf.append([
+                    Paragraph(_ec['ticker'],    _p(fontSize=7, fontName=_fn_bold)),
+                    Paragraph(_ter_p,           _p(fontSize=7, fontName=_fn_bold)),
+                    Paragraph(_ec['dist'],      _p(fontSize=7)),
+                    Paragraph(_aum_p,           _p(fontSize=7)),
+                    Paragraph(_r1a_p,           _p(fontSize=7, fontName=_fn_bold)),
+                    Paragraph(_indice_short,    _p(fontSize=7)),
+                ])
+            # col widths: 2.2 + 1.5 + 2.5 + 1.5 + 2.0 + 8.3 = 18 cm
+            _t_comp_pdf = Table(_comp_rows_pdf, colWidths=[2.2*cm, 1.5*cm, 2.5*cm, 1.5*cm, 2.0*cm, 8.3*cm])
+            _t_comp_pdf.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0), (-1,0), CA),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [BL, GF]),
+                ("BACKGROUND",    (0,1), (-1,-1), colors.HexColor("#f0fdf4")),  # overridden per row below
+                ("GRID",          (0,0), (-1,-1), 0.2, GB),
+                ("TOPPADDING",    (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("LEFTPADDING",   (0,0), (-1,-1), 4),
+            ]))
+            # Highlight fila actual
+            for _ri, _ec in enumerate(_comp_pdf, start=1):
+                if _ec['actual']:
+                    _t_comp_pdf.setStyle(TableStyle([("BACKGROUND", (0,_ri), (-1,_ri), colors.HexColor("#dcfce7"))]))
+            historia.append(_t_comp_pdf)
     elif fundamentales:
         fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
         if fund_items:
@@ -5055,6 +5188,7 @@ def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
+    inicializar_tabla_alertas()  # Crea tabla si no existe (idempotente)
 
     # Header
     col_t, col_u = st.columns([4, 1])
@@ -7035,6 +7169,114 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
                         mime="application/pdf",
                         key="dl_pdf",
                     )
+
+    # ---- ALERTAS DE PRECIO ----
+    with tab_analisis:
+        _u_id = usuario.get("id")
+        # Verificar alertas disparadas con el precio actual
+        if analizado and precio and _u_id:
+            _disp = verificar_y_disparar_alertas(_u_id, ticker_activo, precio)
+            for _da in _disp:
+                _cond_txt = "superó" if _da["condicion"] == "above" else "bajó de"
+                st.toast(f"🔔 ALERTA: {_da['ticker']} {_cond_txt} {float(_da['nivel']):.4f}", icon="🔔")
+                st.warning(
+                    f"**🔔 Alerta disparada:** {_da.get('descripcion') or _da['ticker']} — "
+                    f"precio {_cond_txt} **{float(_da['nivel']):.4f}** "
+                    f"(actual: {precio:.4f})",
+                    icon="🔔"
+                )
+
+        with st.expander("🔔 Alertas de precio", expanded=False):
+            if not _u_id:
+                st.info("Inicia sesión para usar alertas.")
+            else:
+                st.markdown("**Nueva alerta**")
+                _al1, _al2, _al3, _al4 = st.columns([2, 1.5, 1.5, 1])
+                with _al1:
+                    _al_ticker = st.text_input("Ticker", value=ticker_activo if analizado else "",
+                                               key="al_ticker").upper().strip()
+                with _al2:
+                    _al_nivel = st.number_input("Nivel de precio",
+                                                value=float(precio) if (analizado and precio) else 0.0,
+                                                format="%.4f", step=0.01, key="al_nivel")
+                with _al3:
+                    _al_cond = st.selectbox("Condición",
+                                            ["Por encima de (≥)", "Por debajo de (≤)"],
+                                            key="al_cond")
+                with _al4:
+                    st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
+                    _al_btn = st.button("➕ Añadir", key="al_add_btn", use_container_width=True)
+                _al_desc = st.text_input("Descripción (opcional)", key="al_desc",
+                                          placeholder="Ej: Resistencia clave / soporte SMA200")
+
+                if _al_btn:
+                    if not _al_ticker:
+                        st.error("Introduce un ticker.")
+                    elif _al_nivel <= 0:
+                        st.error("El nivel debe ser mayor que 0.")
+                    else:
+                        _al_cond_val = "above" if "encima" in _al_cond else "below"
+                        _al_nombre = nombre if (analizado and _al_ticker == ticker_activo) else _al_ticker
+                        _ok = crear_alerta_precio(_u_id, _al_ticker, _al_nombre,
+                                                  _al_nivel, _al_cond_val, _al_desc)
+                        if _ok:
+                            st.success(f"✅ Alerta creada: {_al_ticker} {'≥' if _al_cond_val=='above' else '≤'} {_al_nivel:.4f}")
+                            st.rerun()
+                        else:
+                            st.error("Error al crear la alerta. Revisa la conexión a BD.")
+
+                st.divider()
+
+                # Niveles sugeridos desde pivots
+                if analizado and _al_ticker == ticker_activo and "estrategia_data" in st.session_state:
+                    _ed_al = st.session_state["estrategia_data"]
+                    _pv_al = _ed_al.get("resultados_pivots", {})
+                    _sug_niveles = []
+                    for _sys_al, _pdata_al in _pv_al.items():
+                        if isinstance(_pdata_al, dict):
+                            for _k_al, _v_al in _pdata_al.items():
+                                if isinstance(_v_al, (int, float)) and _v_al > 0:
+                                    _sug_niveles.append((_k_al, float(_v_al), _sys_al))
+                    if _sug_niveles:
+                        _sug_niveles.sort(key=lambda x: abs(x[1] - precio))
+                        st.markdown("**Niveles sugeridos** (los más próximos al precio actual)")
+                        _sg_cols = st.columns(5)
+                        for _si, (_sk, _sv, _ss) in enumerate(_sug_niveles[:10]):
+                            with _sg_cols[_si % 5]:
+                                _dist_al = (_sv - precio) / precio * 100
+                                _dist_col = "#22c55e" if _dist_al >= 0 else "#ef4444"
+                                st.markdown(
+                                    f'<div style="border:1px solid #e2e8f0;border-radius:6px;'
+                                    f'padding:6px 8px;text-align:center;font-size:11px;margin-bottom:4px">'
+                                    f'<b style="font-size:12px">{_sv:.4f}</b><br>'
+                                    f'<span style="color:#64748b">{_sk}</span><br>'
+                                    f'<span style="color:{_dist_col}">{_dist_al:+.2f}%</span>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+
+                # Alertas activas
+                st.markdown("**Mis alertas activas**")
+                _alertas_all = obtener_alertas_usuario(_u_id, solo_activas=True)
+                if not _alertas_all:
+                    st.caption("Sin alertas activas. Crea una arriba.")
+                else:
+                    _ah = st.columns([1.5, 1.5, 2, 1.5, 1.5, 2, 1])
+                    for _hdr, _txt in zip(_ah, ["Ticker", "Nivel", "Condición", "Tipo", "Creada", "Descripción", ""]):
+                        _hdr.markdown(f"**{_txt}**")
+                    for _aal in _alertas_all:
+                        _ac = st.columns([1.5, 1.5, 2, 1.5, 1.5, 2, 1])
+                        _ac[0].markdown(f"`{_aal['ticker']}`")
+                        _ac[1].markdown(f"{float(_aal['nivel']):.4f}")
+                        _cond_lbl = "Precio ≥ nivel" if _aal["condicion"] == "above" else "Precio ≤ nivel"
+                        _ac[2].markdown(_cond_lbl)
+                        _ac[3].markdown(_aal.get("descripcion") or "—")
+                        _fec = _aal.get("creada_en")
+                        _ac[4].markdown(str(_fec)[:10] if _fec else "—")
+                        _ac[5].markdown("—")
+                        if _ac[6].button("🗑️", key=f"del_al_{_aal['id']}", help="Desactivar alerta"):
+                            desactivar_alerta(_aal["id"])
+                            st.rerun()
 
     # ---- TAB ESTRATEGIA ----
     with tab_estrategia:
