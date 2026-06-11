@@ -2140,6 +2140,554 @@ def obtener_precio_macro(ticker: str):
         return None, None
 
 
+# =============================================================================
+# PESTAÑA RENTA FIJA
+# =============================================================================
+
+@st.cache_data(ttl=1800)
+def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
+    """Tipo spot de la curva AAA Euro Area desde ECB Yield Curve dataset.
+    tenor: '3M','6M','1Y','2Y','3Y','5Y','7Y','10Y','15Y','20Y','30Y'
+    """
+    # ECB YC dataset series key format
+    _map = {
+        "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
+        "2Y": "SR_2Y", "3Y": "SR_3Y", "5Y": "SR_5Y",
+        "7Y": "SR_7Y", "10Y": "SR_10Y", "15Y": "SR_15Y",
+        "20Y": "SR_20Y", "30Y": "SR_30Y",
+    }
+    sr = _map.get(tenor)
+    if not sr:
+        return None
+    series_key = f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}"
+    return obtener_dato_ecb(series_key, flow_ref="YC")
+
+
+@st.cache_data(ttl=1800)
+def _obtener_historico_yc(tenor: str, n_obs: int = 60) -> "pd.Series | None":
+    """Histórico mensual de la curva AAA Euro Area para un tenor dado."""
+    _map = {
+        "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
+        "2Y": "SR_2Y", "5Y": "SR_5Y", "10Y": "SR_10Y", "30Y": "SR_30Y",
+    }
+    sr = _map.get(tenor)
+    if not sr:
+        return None
+    return obtener_historico_ecb("YC", f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}", n_obs)
+
+
+@st.cache_data(ttl=1800)
+def _obtener_tipo_pais_ecb(pais: str, tenor: str = "10Y") -> "float | None":
+    """Tipo gobierno 10Y por país vía ECB IRS (Maastricht criterion rates).
+    pais: 'ES','DE','FR','IT','PT','NL','BE'
+    """
+    # ECB IRS dataset — Maastricht long-term government bond yields
+    # Serie: M.{CC}.EUR.RT.LB.A.A.A207.HSTA  (A207 = long-term govt bond yield)
+    series_key = f"M.{pais}.EUR.RT.LB.A.A.A207.HSTA"
+    val = obtener_dato_ecb(series_key, flow_ref="IRS")
+    if val is not None:
+        return val
+    # Fallback: try alternative series format
+    series_key2 = f"M.{pais}.EUR.RT.LB.X.X.10Y.D.HSTA"
+    return obtener_dato_ecb(series_key2, flow_ref="IRS")
+
+
+def _rf_metric(label: str, valor, suffix: str = "%", delta=None, help_txt: str = ""):
+    """Tarjeta métrica unificada para renta fija."""
+    if valor is None:
+        st.metric(label, "N/D", help=help_txt)
+    else:
+        d_str = None
+        if delta is not None:
+            d_str = f"{delta:+.2f} pp"
+        st.metric(label, f"{valor:.2f}{suffix}", delta=d_str, help=help_txt)
+
+
+def _rf_card(titulo: str, tir: "float|None", plazo: str,
+             color: str = "#1e3a5f", bg: str = "#f0f4ff",
+             descripcion: str = ""):
+    """Tarjeta visual para un instrumento de renta fija."""
+    tir_txt = f"{tir:.2f}%" if tir is not None else "N/D"
+    tir_color = "#16a34a" if (tir or 0) >= 0 else "#dc2626"
+    st.markdown(
+        f'<div style="background:{bg};border-left:4px solid {color};'
+        f'border-radius:8px;padding:12px 16px;margin-bottom:8px">'
+        f'<div style="font-size:11px;color:{color};font-weight:700;'
+        f'text-transform:uppercase;letter-spacing:.5px">{plazo}</div>'
+        f'<div style="font-size:22px;font-weight:800;color:{tir_color}">{tir_txt}</div>'
+        f'<div style="font-size:12px;color:#64748b;margin-top:2px">{titulo}</div>'
+        f'{"<div style=font-size:11px;color:#94a3b8;margin-top:3px>" + descripcion + "</div>" if descripcion else ""}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+
+def pestaña_renta_fija():
+    """Pestaña de Renta Fija: Tesoro ES, curva tipos, prima de riesgo, calculadora."""
+    import plotly.graph_objects as go
+
+    st.markdown("### 💰 Renta Fija — Tesoro Público, Bonos y Letras")
+    st.caption("Tipos de referencia en tiempo real · Fuente: ECB Statistical Data Warehouse · "
+               "Los datos de la curva AAA corresponden a bonos soberanos de máxima calificación "
+               "(Alemania, Países Bajos, Finlandia). Para tipos específicos españoles se indica el origen.")
+
+    # ── Controles de periodo ─────────────────────────────────────────────────
+    _rf_periodo = st.radio(
+        "Periodo histórico",
+        ["1A", "3A", "5A"],
+        horizontal=True,
+        key="rf_periodo",
+        help="Periodo para los gráficos históricos"
+    )
+    _rf_n = {"1A": 12, "3A": 36, "5A": 60}[_rf_periodo]
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 1 — TIPOS DE REFERENCIA BCE
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🏦 Tipos de Referencia del BCE")
+
+    with st.expander("📖 ¿Qué son los tipos del BCE y cómo afectan a tu inversión?", expanded=False):
+        st.markdown("""
+**El BCE fija tres tipos oficiales** que son el punto de partida de toda la renta fija en euros:
+
+- **Tipo de depósito (DFR):** lo que el BCE paga a los bancos por guardar su dinero en Frankfurt. Es el suelo del mercado monetario — ningún banco prestará a otro por menos de lo que le paga el BCE sin riesgo. Es el tipo más relevante para las Letras del Tesoro a corto plazo.
+- **Tipo de refinanciación (MRO):** el tipo al que los bancos piden prestado al BCE a una semana. Marca el «precio oficial» del dinero a corto plazo.
+- **Tipo de facilidad marginal (MLF):** el tipo de emergencia al que los bancos acceden a liquidez de un día para otro. Es el techo del mercado monetario.
+
+**¿Por qué importa al inversor en renta fija?**
+Cuando el BCE sube tipos, los bonos existentes pierden valor (su cupón fijo vale menos en comparación con los nuevos bonos que pagan más). Cuando los baja, los bonos existentes suben. Esta relación inversa entre tipos y precio de los bonos es la regla más fundamental de la renta fija.
+
+*En el ciclo 2022-2024 el BCE subió el DFR del -0,5% al 4,0% en 14 meses — el ciclo de subidas más agresivo de su historia — haciendo que los bonos de largo plazo perdieran hasta un 25% de valor.*
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    _dfr   = obtener_dato_ecb("B.U2.EUR.4F.KR.DFR.LEV")
+    _mro   = obtener_dato_ecb("B.U2.EUR.4F.KR.MRR_FR.LEV")
+    _mlf   = obtener_dato_ecb("B.U2.EUR.4F.KR.MLFR.LEV")
+    _euri3 = obtener_dato_ecb("B.U2.EUR.4F.MM.B.EURIBOR3MD_.HSTA")
+    _euri6 = obtener_dato_ecb("B.U2.EUR.4F.MM.B.EURIBOR6MD_.HSTA")
+
+    _bc1, _bc2, _bc3, _bc4, _bc5 = st.columns(5)
+    with _bc1:
+        _rf_metric("Depósito BCE (DFR)", _dfr, help_txt="Tipo de depósito del BCE — suelo del mercado monetario")
+    with _bc2:
+        _rf_metric("Refinanciación (MRO)", _mro, help_txt="Tipo de refinanciación principal del BCE")
+    with _bc3:
+        _rf_metric("Facilidad Marginal", _mlf, help_txt="Tipo de facilidad marginal de crédito — techo del mercado")
+    with _bc4:
+        _rf_metric("Euribor 3M", _euri3, help_txt="Tipo interbancario a 3 meses — referencia hipotecas y bonos corto")
+    with _bc5:
+        _rf_metric("Euribor 6M", _euri6, help_txt="Tipo interbancario a 6 meses")
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 2 — CURVA DE TIPOS EURO AREA AAA
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 📐 Curva de Tipos — Euro Área (AAA)")
+
+    with st.expander("📖 ¿Qué es la curva de tipos y cómo se interpreta?", expanded=False):
+        st.markdown("""
+**La curva de tipos** representa la relación entre el plazo de un bono y su rentabilidad (TIR).
+En condiciones normales la curva es **ascendente**: a más plazo, más rentabilidad — porque el
+inversor exige más por inmovilizar su dinero durante más tiempo y por asumir más incertidumbre.
+
+**Formas de la curva y su significado económico:**
+
+**1. Curva normal (ascendente):** los tipos a largo son más altos que a corto.
+Señal de confianza en el crecimiento económico futuro. El mercado espera inflación moderada y
+crecimiento. Es la forma «sana» de la curva.
+
+**2. Curva invertida:** los tipos a corto son más altos que a largo.
+Es la más temida por los economistas — históricamente ha precedido a todas las recesiones
+en EE.UU. desde 1970. La lógica: si los inversores aceptan menos rentabilidad a largo plazo
+que a corto, es porque esperan que los tipos caigan en el futuro (lo que ocurre cuando la
+economía se desacelera y el banco central baja tipos). En 2022-2023, la curva americana
+estuvo más invertida que en ningún momento desde 1981.
+
+**3. Curva plana:** tipos similares en todos los plazos.
+Señal de transición — el mercado no tiene convicción sobre la dirección de la economía.
+Suele aparecer antes de un cambio de ciclo.
+
+**4. Curva jorobada (humped):** los tipos de medio plazo son los más altos.
+Situación temporal inusual que refleja expectativas complejas sobre la política monetaria.
+
+**La curva AAA que ves aquí** corresponde a bonos soberanos de máxima calificación de la
+Eurozona (esencialmente Alemania, Países Bajos y Finlandia). Es la referencia «libre de riesgo»
+en euros. Los bonos españoles pagan algo más — esa diferencia es la prima de riesgo.
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    _tenores_curva = ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "15Y", "20Y", "30Y"]
+    _tipos_curva = []
+    for _t in _tenores_curva:
+        _v = _obtener_tipo_ecb_yc(_t)
+        _tipos_curva.append(_v)
+
+    # Métricas rápidas de puntos clave
+    _yc_3m  = _tipos_curva[0]
+    _yc_2y  = _tipos_curva[3]
+    _yc_10y = _tipos_curva[7]
+    _yc_30y = _tipos_curva[10]
+
+    _cc1, _cc2, _cc3, _cc4 = st.columns(4)
+    with _cc1:
+        _rf_metric("AAA 3 meses", _yc_3m, help_txt="Tipo spot a 3 meses — curva AAA Euro Área")
+    with _cc2:
+        _rf_metric("AAA 2 años", _yc_2y, help_txt="Tipo spot a 2 años")
+    with _cc3:
+        _rf_metric("AAA 10 años", _yc_10y, help_txt="Tipo spot a 10 años — referencia bono largo plazo")
+    with _cc4:
+        # Pendiente curva: 10Y - 2Y
+        if _yc_10y is not None and _yc_2y is not None:
+            _pendiente = _yc_10y - _yc_2y
+            _pend_color = "normal" if _pendiente >= 0 else "inverse"
+            st.metric(
+                "Pendiente 10A–2A",
+                f"{_pendiente:+.2f} pp",
+                help="Diferencia entre el tipo a 10 años y a 2 años. "
+                     "Positivo = curva normal. Negativo = curva invertida (señal de alerta recesiva)."
+            )
+        else:
+            _rf_metric("Pendiente 10A–2A", None)
+
+    # Gráfico de la curva
+    _tenores_disp = [_t for _t, _v in zip(_tenores_curva, _tipos_curva) if _v is not None]
+    _valores_disp = [_v for _v in _tipos_curva if _v is not None]
+
+    if len(_valores_disp) >= 3:
+        _fig_curva = go.Figure()
+        _fig_curva.add_trace(go.Scatter(
+            x=_tenores_disp, y=_valores_disp,
+            mode="lines+markers",
+            line=dict(color="#1e3a5f", width=2.5),
+            marker=dict(size=7, color="#1e3a5f"),
+            fill="tozeroy",
+            fillcolor="rgba(30,58,95,0.08)",
+            name="Curva AAA EA",
+            hovertemplate="%{x}: <b>%{y:.2f}%</b><extra></extra>"
+        ))
+        _fig_curva.update_layout(
+            height=260, margin=dict(l=0, r=0, t=20, b=0),
+            xaxis_title="Plazo", yaxis_title="TIR (%)",
+            plot_bgcolor="white", paper_bgcolor="white",
+            yaxis=dict(gridcolor="#f1f5f9"),
+            xaxis=dict(gridcolor="#f1f5f9"),
+            showlegend=False
+        )
+        st.plotly_chart(_fig_curva, use_container_width=True)
+    else:
+        st.info("Datos de curva no disponibles en este momento. Reintentar en unos minutos.")
+
+    # Histórico 10Y
+    _h10y = _obtener_historico_yc("10Y", _rf_n)
+    if _h10y is not None and len(_h10y) > 2:
+        _fig_h10 = go.Figure()
+        _fig_h10.add_trace(go.Scatter(
+            x=_h10y.index, y=_h10y.values,
+            mode="lines", line=dict(color="#1e3a5f", width=1.8),
+            fill="tozeroy", fillcolor="rgba(30,58,95,0.07)",
+            name="AAA 10Y",
+            hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra></extra>"
+        ))
+        _fig_h10.update_layout(
+            height=180, margin=dict(l=0, r=0, t=14, b=0),
+            title=dict(text="Histórico TIR 10 años — AAA Euro Área", font=dict(size=12)),
+            plot_bgcolor="white", paper_bgcolor="white",
+            yaxis=dict(gridcolor="#f1f5f9"),
+            xaxis=dict(gridcolor="#f1f5f9"),
+            showlegend=False
+        )
+        st.plotly_chart(_fig_h10, use_container_width=True)
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 3 — PRIMA DE RIESGO Y COMPARATIVA EUROPEA
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🌍 Comparativa de Tipos Soberanos Europeos — 10 Años")
+
+    with st.expander("📖 ¿Qué es la prima de riesgo y por qué importa?", expanded=False):
+        st.markdown("""
+**La prima de riesgo** (o *spread* soberano) es la diferencia entre la rentabilidad del bono
+a 10 años de un país y la del bono alemán (el Bund), que es el activo «libre de riesgo»
+de referencia en la Eurozona.
+
+**¿Por qué el Bund alemán es la referencia?**
+Alemania tiene la calificación crediticia más alta de Europa (AAA) y la economía más grande
+de la Eurozona. Su bono es el activo más líquido y seguro en euros — el equivalente europeo
+del Treasury estadounidense. Cuando los inversores tienen miedo, compran Bunds (su precio
+sube, su rentabilidad cae). Cuando tienen apetito por el riesgo, los venden para comprar
+activos con más rendimiento.
+
+**Cómo interpretar la prima de riesgo española:**
+- **< 50 pb (puntos básicos):** prima muy baja — el mercado trata la deuda española casi como
+  la alemana. Situación de máxima confianza.
+- **50–100 pb:** prima normal para España — refleja la diferencia estructural entre ambas economías.
+- **100–200 pb:** prima elevada — el mercado empieza a pedir más compensación por el riesgo España.
+  Señal de alerta moderada.
+- **> 300 pb:** zona de crisis — es donde estuvo España en 2012 (llegó a 650 pb). A partir de aquí
+  la sostenibilidad de la deuda empieza a cuestionarse.
+
+**El momento histórico de referencia: julio 2012**
+La prima de riesgo española llegó a 650 puntos básicos. El mercado descontaba una posible
+reestructuración de la deuda. Mario Draghi pronunció su famoso «whatever it takes» y la prima
+cayó en picado. Ese episodio muestra el poder del banco central como prestamista de último
+recurso y por qué la credibilidad del BCE es el ancla del euro.
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    # Países y sus datos
+    _paises_rf = {
+        "🇩🇪 Alemania": "DE",
+        "🇫🇷 Francia":  "FR",
+        "🇪🇸 España":   "ES",
+        "🇮🇹 Italia":   "IT",
+        "🇵🇹 Portugal": "PT",
+        "🇳🇱 Países Bajos": "NL",
+    }
+
+    _tipos_paises = {}
+    for _nombre_p, _cc in _paises_rf.items():
+        _tipos_paises[_nombre_p] = _obtener_tipo_pais_ecb(_cc, "10Y")
+
+    _tipo_de = _tipos_paises.get("🇩🇪 Alemania")
+
+    # Tabla de comparativa
+    _cols_paises = st.columns(len(_paises_rf))
+    for _i, (_nombre_p, _tipo_p) in enumerate(_tipos_paises.items()):
+        with _cols_paises[_i]:
+            if _tipo_p is not None and _tipo_de is not None and _nombre_p != "🇩🇪 Alemania":
+                _spread = (_tipo_p - _tipo_de) * 100  # en puntos básicos
+                _sp_color = "#16a34a" if _spread < 100 else "#d97706" if _spread < 200 else "#dc2626"
+                st.markdown(
+                    f'<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;'
+                    f'border:1px solid #e2e8f0;text-align:center">'
+                    f'<div style="font-size:12px;color:#64748b">{_nombre_p}</div>'
+                    f'<div style="font-size:20px;font-weight:700;color:#1e293b">'
+                    f'{"N/D" if _tipo_p is None else f"{_tipo_p:.2f}%"}</div>'
+                    f'<div style="font-size:11px;color:{_sp_color};font-weight:600">'
+                    f'+{_spread:.0f} pb vs Bund</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f'<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;'
+                    f'border:1px solid #e2e8f0;text-align:center">'
+                    f'<div style="font-size:12px;color:#64748b">{_nombre_p}</div>'
+                    f'<div style="font-size:20px;font-weight:700;color:#1e293b">'
+                    f'{"N/D" if _tipo_p is None else f"{_tipo_p:.2f}%"}</div>'
+                    f'<div style="font-size:11px;color:#94a3b8">Referencia</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    # Prima de riesgo España destacada
+    _tipo_es = _tipos_paises.get("🇪🇸 España")
+    if _tipo_es is not None and _tipo_de is not None:
+        _prima_es = (_tipo_es - _tipo_de) * 100
+        _prima_color = "#16a34a" if _prima_es < 100 else "#d97706" if _prima_es < 200 else "#dc2626"
+        _prima_label = "Baja" if _prima_es < 100 else "Moderada" if _prima_es < 200 else "ELEVADA"
+        st.markdown(
+            f'<div style="background:#fafbfc;border:2px solid {_prima_color};border-radius:10px;'
+            f'padding:14px 20px;margin-top:12px;display:flex;justify-content:space-between;'
+            f'align-items:center">'
+            f'<div><span style="font-size:12px;color:#64748b;font-weight:600">PRIMA DE RIESGO ESPAÑA vs ALEMANIA (10A)</span><br>'
+            f'<span style="font-size:28px;font-weight:800;color:{_prima_color}">{_prima_es:.0f} pb</span>'
+            f'<span style="font-size:13px;color:{_prima_color};margin-left:8px">({_prima_label})</span></div>'
+            f'<div style="font-size:12px;color:#64748b;text-align:right">'
+            f'ES: {_tipo_es:.2f}% · DE: {_tipo_de:.2f}%<br>'
+            f'<span style="font-size:10px">Ref. histórica: máx. 650 pb (jul. 2012)</span></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 4 — LETRAS Y BONOS DEL TESORO (referencia desde curva AAA + spread)
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🏛️ Instrumentos del Tesoro Público Español")
+    st.caption("TIR orientativa basada en tipos AAA Euro Área + spread histórico España. "
+               "Para tipos exactos de la última subasta consultar [Tesoro Público](https://www.tesoro.es).")
+
+    with st.expander("📖 Letras, Bonos y Obligaciones — ¿En qué se diferencian?", expanded=False):
+        st.markdown("""
+El Tesoro Público español emite deuda pública en tres formatos según el plazo:
+
+**📄 Letras del Tesoro (3, 6, 9, 12 y 18 meses)**
+Son instrumentos a corto plazo. Se emiten *al descuento*: compras por menos del valor nominal
+(1.000€) y al vencimiento recibes los 1.000€ completos. La diferencia es tu rentabilidad.
+
+*Ejemplo:* Compras una Letra a 12 meses por 975€ y recibes 1.000€ al vencimiento.
+Tu rentabilidad efectiva es (1.000-975)/975 = 2,56% anual.
+
+Son el equivalente español de los T-bills estadounidenses. Son los instrumentos más seguros
+y líquidos del mercado español — usados por empresas para gestionar tesorería y por inversores
+conservadores que buscan rentabilidad sin riesgo de crédito ni de duración.
+
+**📋 Bonos del Estado (2, 3 y 5 años)**
+Instrumentos a medio plazo. Pagan un *cupón anual fijo* más la devolución del principal
+al vencimiento. Si los tipos suben después de tu compra, el bono pierde valor en mercado
+secundario (aunque si lo mantienes hasta vencimiento recibes exactamente lo prometido).
+
+**📜 Obligaciones del Estado (7, 10, 15, 30 y 50 años)**
+Igual que los bonos pero a largo plazo. Tienen mayor *duración* (sensibilidad a los tipos):
+una subida de 1% en los tipos puede hacer perder un 8-10% en mercado a una obligación a 10 años.
+Son instrumentos para inversores con horizonte muy largo o para quien quiere asegurar
+una rentabilidad fija durante décadas.
+
+**¿Cómo comprar Deuda Pública española?**
+- **Tesoro Directo** (tesoro.es): compra directa sin comisiones intermediarias. Mínimo 1.000€.
+  Puedes mantener hasta vencimiento o vender en mercado secundario.
+- **Banco o broker:** los ofrecen pero suelen cobrar comisiones. Ventaja: más comodidad operativa.
+- **ETFs de renta fija UCITS:** exposición diversificada a bonos soberanos europeos sin
+  vencimiento fijo. Recomendado para carteras de inversión pasiva.
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    # Spread estimado ES vs AAA para ajustar tipos
+    _spread_est = (_prima_es / 100) if (_tipo_es is not None and _tipo_de is not None) else 0.80
+
+    # Instrumentos del Tesoro: plazo, tipo AAA base, descripción
+    _instrumentos = [
+        ("Letra 3M",  "3M",  "Corto plazo al descuento"),
+        ("Letra 6M",  "6M",  "Corto plazo al descuento"),
+        ("Letra 12M", "1Y",  "Corto plazo al descuento"),
+        ("Letra 18M", "1Y",  "Corto plazo al descuento"),
+        ("Bono 2A",   "2Y",  "Cupón anual · medio plazo"),
+        ("Bono 3A",   "3Y",  "Cupón anual · medio plazo"),
+        ("Bono 5A",   "5Y",  "Cupón anual · medio plazo"),
+        ("Oblig. 10A","10Y", "Cupón anual · largo plazo"),
+        ("Oblig. 15A","15Y", "Cupón anual · largo plazo"),
+        ("Oblig. 30A","30Y", "Cupón anual · muy largo plazo"),
+    ]
+
+    _cols_inst = st.columns(5)
+    for _i, (_nombre_inst, _tenor_inst, _desc_inst) in enumerate(_instrumentos):
+        _base = _obtener_tipo_ecb_yc(_tenor_inst)
+        _tir_est = (_base + _spread_est) if _base is not None else None
+        _bg_inst = "#f0fdf4" if "Letra" in _nombre_inst else "#eff6ff" if "Bono" in _nombre_inst else "#faf5ff"
+        _col_inst = "#16a34a" if "Letra" in _nombre_inst else "#1d4ed8" if "Bono" in _nombre_inst else "#7e22ce"
+        with _cols_inst[_i % 5]:
+            _rf_card(_nombre_inst, _tir_est, _desc_inst, color=_col_inst, bg=_bg_inst,
+                     descripcion="TIR orientativa*")
+
+    st.caption("\* TIR orientativa = tipo AAA Euro Área + spread histórico España. Para el tipo exacto de la última subasta consultar Tesoro Directo.")
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 5 — CALCULADORA DE RENTABILIDAD NETA
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🧮 Calculadora de Rentabilidad Neta (IRPF)")
+
+    with st.expander("📖 ¿Cómo tributan los bonos y letras en España?", expanded=False):
+        st.markdown("""
+**Los rendimientos de renta fija tributan en el IRPF como rendimientos del capital mobiliario**,
+integrándose en la base imponible del ahorro. Esto significa que:
+
+- Los intereses (cupones) y el descuento de las Letras tributan cuando se cobran.
+- Las plusvalías por venta antes del vencimiento tributan cuando se venden.
+- Los tipos actuales `[VERIFICAR con normativa del ejercicio en curso]`:
+  - Hasta 6.000€: ~19%
+  - 6.000€ – 50.000€: ~21%
+  - 50.000€ – 200.000€: ~23%
+  - Más de 200.000€: ~27%
+
+**Las minusvalías pueden compensarse** con otras ganancias del ahorro del mismo año o
+de los 4 años siguientes.
+
+**El traspaso NO aplica a renta fija directa** — solo a fondos de inversión. Si vendes
+un bono antes de vencimiento con pérdidas, puedes compensar con ganancias de acciones
+o fondos (con límites). Los ETFs de renta fija tampoco se benefician del régimen de traspaso.
+
+**Ventaja fiscal de las Letras:** al ser al descuento, la rentabilidad es *implícita* —
+no hay retención en origen en la mayoría de casos si se compran en Tesoro Directo.
+        """)
+        st.caption("[VERIFICAR] · Tipos sujetos a cambios legislativos · No constituye asesoramiento fiscal")
+
+    _calc_c1, _calc_c2, _calc_c3 = st.columns(3)
+    with _calc_c1:
+        _calc_importe = st.number_input("Importe invertido (€)", min_value=1000.0,
+                                         max_value=10_000_000.0, value=10000.0,
+                                         step=1000.0, key="rf_calc_imp")
+    with _calc_c2:
+        _calc_tir = st.number_input("TIR anual (%)", min_value=0.0, max_value=20.0,
+                                     value=float(f"{(_yc_10y or 0) + _spread_est:.2f}") if _yc_10y else 3.0,
+                                     step=0.05, format="%.2f", key="rf_calc_tir")
+    with _calc_c3:
+        _calc_plazo = st.selectbox("Plazo", ["3 meses", "6 meses", "1 año", "2 años", "5 años", "10 años"],
+                                    index=2, key="rf_calc_plazo")
+
+    _plazo_map = {"3 meses": 0.25, "6 meses": 0.5, "1 año": 1.0,
+                  "2 años": 2.0, "5 años": 5.0, "10 años": 10.0}
+    _plazo_a = _plazo_map[_calc_plazo]
+    _rend_bruto = _calc_importe * (_calc_tir / 100) * _plazo_a
+    _tipo_irpf = 0.19 if _rend_bruto <= 6000 else 0.21 if _rend_bruto <= 50000 else 0.23
+    _impuestos = _rend_bruto * _tipo_irpf
+    _rend_neto = _rend_bruto - _impuestos
+    _tir_neta = (_rend_neto / _calc_importe / _plazo_a) * 100
+
+    _res1, _res2, _res3, _res4 = st.columns(4)
+    with _res1:
+        st.metric("Rendimiento bruto", f"{_rend_bruto:,.2f} €")
+    with _res2:
+        st.metric(f"IRPF estimado ({_tipo_irpf*100:.0f}%)", f"-{_impuestos:,.2f} €")
+    with _res3:
+        st.metric("Rendimiento neto", f"{_rend_neto:,.2f} €")
+    with _res4:
+        st.metric("TIR neta anual", f"{_tir_neta:.2f}%")
+
+    st.caption("[VERIFICAR] Cálculo orientativo. Tipo IRPF estimado según tramos vigentes (puede variar según comunidad autónoma y situación personal). Consultar con asesor fiscal para cálculo preciso.")
+
+    # ETFs de renta fija UCITS accesibles desde España
+    st.divider()
+    st.markdown("#### 📊 ETFs de Renta Fija UCITS — Accesibles desde España")
+    st.caption("Los ETFs UCITS son la vía más eficiente para exposición diversificada a renta fija sin vencimiento fijo.")
+
+    _etfs_rf = [
+        ("IBGS.AS",  "iShares Spain Govt Bond",       "Bonos soberanos España",         "Gubernamental ES"),
+        ("IBGX.AS",  "iShares Core EUR Govt Bond",    "Bonos soberanos Eurozona",        "Gubernamental EA"),
+        ("IEAG.AS",  "iShares Core EUR Agg Bond",     "Agregado EUR (govt+corp)",        "Agregado EUR"),
+        ("IEGE.AS",  "iShares EUR Govt Bond 1-3yr",   "Bonos corto plazo EA",            "Corto plazo"),
+        ("IBCI.AS",  "iShares EUR Inflation Bond",    "Bonos ligados a inflación EUR",   "Inflación"),
+        ("EMBE.AS",  "iShares EM Govt Bond EUR Hdg",  "Bonos emergentes cubierto EUR",   "Emergentes"),
+    ]
+
+    _etf_cols = st.columns(3)
+    for _ei, (_tick, _nm, _desc, _cat) in enumerate(_etfs_rf):
+        with _etf_cols[_ei % 3]:
+            try:
+                _etf_info = yf.Ticker(_tick).fast_info
+                _etf_price = float(_etf_info.get("lastPrice") or _etf_info.get("regularMarketPrice") or 0)
+                _etf_prev  = float(_etf_info.get("previousClose") or _etf_price)
+                _etf_chg   = ((_etf_price - _etf_prev) / _etf_prev * 100) if _etf_prev else 0
+                _chg_color = "#16a34a" if _etf_chg >= 0 else "#dc2626"
+                _price_str = f"{_etf_price:.2f} €" if _etf_price else "N/D"
+                _chg_str   = f"{_etf_chg:+.2f}%" if _etf_price else ""
+            except Exception:
+                _price_str, _chg_str, _chg_color = "N/D", "", "#94a3b8"
+            st.markdown(
+                f'<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;'
+                f'border:1px solid #e2e8f0;margin-bottom:8px">'
+                f'<div style="font-size:10px;color:#94a3b8;font-weight:600">{_cat}</div>'
+                f'<div style="font-size:13px;font-weight:700;color:#1e293b">{_nm}</div>'
+                f'<code style="font-size:11px">{_tick}</code>'
+                f'<div style="font-size:11px;color:#64748b">{_desc}</div>'
+                f'<div style="font-size:16px;font-weight:700;color:#1e293b;margin-top:4px">'
+                f'{_price_str} <span style="font-size:12px;color:{_chg_color}">{_chg_str}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    st.caption("Precios orientativos via Yahoo Finance · Los ETFs UCITS son los únicos accesibles al minorista español bajo la regulación PRIIPs/MiFID II")
+
+
+
 def pestaña_macro():
     """Pestaña de contexto macroeconómico global."""
     st.markdown("### 🌍 Contexto Macroeconómico Global")
@@ -5324,20 +5872,21 @@ def pantalla_analisis():
                 st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro"]
+    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
 
     tab_objs = st.tabs(tabs_list)
-    tab_analisis  = tab_objs[0]
+    tab_analisis   = tab_objs[0]
     tab_estrategia = tab_objs[1]
-    tab_ia        = tab_objs[2]
-    tab_macro     = tab_objs[3]
+    tab_ia         = tab_objs[2]
+    tab_macro      = tab_objs[3]
+    tab_rf         = tab_objs[4]
 
-    if es_superadmin and len(tab_objs) >= 6:
-        tab_admin = tab_objs[4]
-        tab_ayuda = tab_objs[5]
+    if es_superadmin and len(tab_objs) >= 7:
+        tab_admin = tab_objs[5]
+        tab_ayuda = tab_objs[6]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -5904,49 +6453,92 @@ def pantalla_analisis():
                 st.markdown("### Pivot Points — " + sistema_activo)
             with _ph2:
                 with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("### 📐 Pivot Points — Guía completa para el inversor")
                     st.markdown("""
-**¿Qué son los Pivot Points?**
+**¿Qué son y de dónde vienen los Pivot Points?**
 
-Los Pivot Points son niveles de precio calculados matemáticamente a partir de los datos de la sesión anterior (máximo, mínimo y cierre). Representan zonas donde el mercado ha demostrado interés histórico y donde operadores institucionales y algoritmos concentran órdenes.
+Los Pivot Points nacieron en los corros de las bolsas de Chicago en los años 70 y 80, cuando
+los *floor traders* (operadores en el parqué físico) necesitaban calcular rápidamente, antes
+de que abriera el mercado, los niveles clave del día a partir de los datos de la sesión anterior.
+Sin ordenadores, usaban la fórmula más simple posible: sumar el máximo, el mínimo y el cierre
+del día anterior y dividir entre tres. Ese número — el **Pivot Point (PP)** — era el «centro de
+gravedad» de la sesión pasada, y a partir de él calculaban resistencias (R1, R2, R3) y
+soportes (S1, S2, S3).
 
----
-
-**Cálculo base (sistema Clásico)**
-- **PP** = (H + L + C) / 3 — centro de gravedad de la sesión anterior
-- **R1** = 2×PP − L · **R2** = PP + (H−L) · **R3** = H + 2×(PP−L)
-- **S1** = 2×PP − H · **S2** = PP − (H−L) · **S3** = L − 2×(H−PP)
-
----
-
-**Sistemas disponibles**
-
-| Sistema | Característica |
-|---------|---------------|
-| **Clásico** | Fórmula estándar; máximo consenso de mercado |
-| **Woodie** | Mayor peso al cierre; PP ≠ media H/L/C |
-| **Camarilla** | Niveles muy ceñidos al precio; ideal intradía |
-| **Fibonacci** | Usa ratios 38.2 %, 61.8 %, 100 % sobre el rango |
-| **DeMark** | PP depende de si el cierre fue alcista o bajista |
-| **CPR** | Tres niveles (TC, PP, BC) que miden amplitud esperada del día |
-
----
-
-**Timeframes calculados**
-- **Diario (D1)**: sesión de ayer. Relevante para intradía y swing corto.
-- **Semanal (W)**: semana anterior. Referencia swing 2–5 días.
-- **Mensual (M)**: mes anterior. Niveles macro de alta probabilidad.
-
----
-
-**Interpretación operativa**
-- Precio **sobre el PP** → sesgo alcista; R1 y R2 son objetivos naturales.
-- Precio **bajo el PP** → sesgo bajista; S1 y S2 son los primeros soportes.
-- Un nivel donde el precio ha rebotado en sesiones previas tiene mayor peso estadístico.
-- Los pivots no son señales de entrada por sí solos — actúan como **zonas de atención** donde se evalúa la reacción del precio (volumen, velocidad, estructura de vela).
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+Décadas después, el concepto no solo sobrevive sino que es más relevante que nunca: algoritmos
+de trading institucional, sistemas HFT y plataformas profesionales lo calculan automáticamente,
+lo que convierte esos niveles en *profecías autocumplidas* — funcionan en parte porque todos
+los actores del mercado los conocen y reaccionan ante ellos.
 """)
+                    st.info("**Principio clave:** los Pivot Points no predicen el futuro — identifican zonas donde históricamente el mercado ha tomado decisiones. Tu trabajo es observar *cómo reacciona* el precio cuando llega a esas zonas.")
+                    st.markdown("""
+---
+
+**La fórmula base (sistema Clásico) — paso a paso**
+
+Imagina que ayer una acción cerró con estos datos: Máximo (H) = 25€, Mínimo (L) = 23€, Cierre (C) = 24€.
+
+- **PP** = (25 + 23 + 24) / 3 = **24,00€** → el precio «justo» de referencia de la sesión anterior
+- **R1** = 2×24 − 23 = **25,00€** → primera resistencia (coincide con el máximo de ayer, no es casualidad)
+- **R2** = 24 + (25−23) = **26,00€** → segunda resistencia, rango completo por encima del PP
+- **S1** = 2×24 − 25 = **23,00€** → primer soporte (coincide con el mínimo de ayer)
+- **S2** = 24 − (25−23) = **22,00€** → segundo soporte, rango completo por debajo del PP
+
+La elegancia matemática es que R1 y S1 «recuerdan» el máximo y mínimo de la sesión anterior.
+""")
+                    st.markdown("""
+---
+
+**Los 6 sistemas — cuándo usar cada uno**
+
+| Sistema | Cómo calcula el PP | Mejor para | Característica |
+|---------|-------------------|-----------|---------------|
+| **Clásico** | (H+L+C)/3 | Cualquier activo y plazo | El más universal; máximo consenso |
+| **Woodie** | (H+L+2C)/4 | Activos con cierres significativos | Da doble peso al cierre; PP ≠ media |
+| **Camarilla** | (H+L+C)/3 + ajuste | Intradía y scalping | Niveles muy ceñidos al precio del día |
+| **Fibonacci** | (H+L+C)/3 + ratios Fib | Inversores que ya usan Fibonacci | Niveles en 38.2%, 61.8%, 100% del rango |
+| **DeMark** | Depende de si C>O, C<O o C=O | Mercados con apertura relevante | PP variable según contexto de la sesión |
+| **CPR** | TC=(H+L)/2, BC=PP−(TC−PP) | Traders intradía avanzados | Mide si el día será estrecho o amplio |
+
+Para el **inversor de medio-largo plazo**, el sistema **Clásico** es suficiente y es el que más
+operadores tienen como referencia. Añadir Fibonacci es útil si quieres coherencia con el análisis
+de retrocesos.
+""")
+                    st.markdown("""
+---
+
+**Los timeframes — por qué calcular los mismos niveles en 4 plazos**
+
+Cada timeframe «habla» a un tipo diferente de participante del mercado:
+
+- **Diario:** calculado con la sesión de ayer. Lo siguen traders de intradía y swing corto (1–3 días). El PP diario es el nivel de referencia más operativo para el día actual.
+- **Semanal:** calculado con los datos de la semana anterior (lunes–viernes). Referencia para swing traders con horizonte de días. El PP semanal suele actuar como imán durante toda la semana.
+- **Mensual:** calculado con el mes anterior completo. Lo usan inversores de posición y gestores de fondos para situar niveles macro. Una S2 mensual perdida a la baja es una señal técnica seria.
+- **Anual:** calculado con el año anterior. Nivel de muy largo plazo; usado por analistas institucionales como referencia de valoración técnica estructural.
+
+**Consejo práctico:** cuando el PP diario coincide aproximadamente con el PP semanal, ese nivel tiene doble peso. Si encima hay una confluencia con Fibonacci o una media móvil, es una zona de máxima atención.
+""")
+                    st.markdown("""
+---
+
+**Cómo interpretar el precio en relación al PP**
+
+La posición del precio respecto al PP marca el **sesgo del día**:
+
+- **Precio claramente sobre el PP** → sesgo alcista. El mercado «acepta» precios altos. R1 y R2 son objetivos naturales de subida.
+- **Precio claramente bajo el PP** → sesgo bajista. Los vendedores controlan. S1 y S2 son los primeros soportes a vigilar.
+- **Precio oscilando alrededor del PP** → indecisión. El mercado está buscando dirección. Esperar ruptura con volumen antes de actuar.
+
+**El PP no es una línea mágica** — es una referencia. Lo que importa es la *reacción* del precio cuando llega a ese nivel: ¿rebota con fuerza y volumen? ¿Lo perfora sin resistencia? ¿Oscila sin decisión? La respuesta a esas preguntas tiene más valor que el nivel en sí.
+""")
+                    st.markdown("""
+> ⚠️ **Errores frecuentes con los Pivot Points:**
+>
+> 1. Usarlos como señales de entrada automática sin confirmar con volumen o estructura de vela.
+> 2. Olvidar que en tendencias fuertes el precio puede atravesar R1, R2 y R3 sin parar.
+> 3. No actualizar los niveles — los Pivot Points se recalculan cada sesión/semana/mes.
+""")
+                    st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
             for tf in TIMEFRAMES:
                 render_tabla_pivots(tf, resultados_pivots.get(tf), precio)
 
@@ -5957,46 +6549,75 @@ Los Pivot Points son niveles de precio calculados matemáticamente a partir de l
                     st.markdown("### Confluencias Multi-Timeframe")
                 with _ch2:
                     with st.popover("ℹ️", use_container_width=True):
+                        st.markdown("### 🔗 Confluencias Multi-Timeframe — Guía completa")
                         st.markdown("""
-**¿Qué es una Confluencia?**
+**¿Qué es una confluencia y por qué es tan poderosa?**
 
-Una confluencia es una zona de precio donde **dos o más niveles de pivot de distintos timeframes o sistemas convergen** dentro de un margen de tolerancia. Cuantos más niveles coincidan, mayor es su relevancia técnica.
+Imagina que cinco personas distintas, usando métodos diferentes, llegan de forma independiente
+a la misma conclusión: «el precio de esta acción tiene una zona crítica en torno a 22,50€».
+Eso es exactamente una confluencia técnica.
 
----
+Una confluencia ocurre cuando **dos o más niveles de pivot de diferentes timeframes o sistemas
+de cálculo convergen en la misma zona de precio** (dentro de un margen de tolerancia).
+La clave está en la palabra *independiente*: si el soporte diario clásico, la resistencia
+semanal de Fibonacci y el PP mensual coinciden todos alrededor de 22,50€, es porque
+tres lógicas de cálculo distintas señalan el mismo punto — eso no es casualidad.
 
-**Por qué importan**
-
-Operadores institucionales, algoritmos y traders discrecionales calculan pivots de forma independiente. Cuando múltiples sistemas señalan la misma zona, se acumulan órdenes de distintos actores — convirtiéndola en una barrera más difícil de superar o en un trampolín más potente.
-
----
-
-**Sistema de estrellas**
-
-| Estrellas | Niveles coincidentes | Relevancia |
-|-----------|---------------------|------------|
-| ⭐ | 2 niveles | Notable — merece atención |
-| ⭐⭐ | 3 niveles | Alta — zona de alta probabilidad |
-| ⭐⭐⭐ | 4 o más niveles | Máxima — soporte/resistencia institucional |
-
----
-
-**Implicaciones según tipo**
-
-- **Confluencia de resistencias** (R1+R2+R_semanal…): zona donde el precio probablemente encuentre vendedores. Objetivo de toma de beneficios en largos o posible entrada en cortos con confirmación.
-- **Confluencia de soportes** (S1+S2+S_semanal…): zona de potencial compra. Cuanto más cercana al precio y más ⭐, más relevante para gestionar stop o entrada.
-- **Confluencia mixta** (R de un TF + S de otro): zona de indecisión — el precio puede oscilar dentro del rango antes de definir dirección.
-
----
-
-**Cómo operarlas**
-
-1. **No anticipar**: esperar que el precio llegue a la zona y observar la reacción (volumen, velas de inversión, reducción de momentum en RSI/MACD).
-2. **Stop-loss de referencia**: un cierre por debajo de una confluencia ⭐⭐⭐ tiene mayor implicación bajista que romper una resistencia aislada.
-3. **Combinar señales**: confluencia ⭐⭐⭐ en soporte + RSI < 30 + volumen bajo = escenario técnico de alta probabilidad de rebote. La convergencia entre sistemas es la clave.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+**¿Por qué funciona?**
+Porque miles de operadores, algoritmos y fondos calculan esos niveles de forma automática.
+Cuando el precio llega a esa zona, se acumulan órdenes de actores completamente distintos,
+creando una barrera de oferta o demanda mucho más sólida que cualquier nivel aislado.
 """)
+                        st.info("**Regla de oro:** una confluencia ⭐⭐⭐ en soporte no es una señal de compra automática — es una señal de **máxima atención**. Observa cómo reacciona el precio, el volumen y los indicadores de momentum cuando llegue a esa zona.")
+                        st.markdown("""
+---
+
+**El sistema de estrellas — cómo se calcula**
+
+| Estrellas | Nº de niveles que coinciden | Qué significa en la práctica |
+|-----------|---------------------------|------------------------------|
+| ⭐ | 2 niveles | Zona notable — merece atención pero no es extraordinaria |
+| ⭐⭐ | 3 niveles | Zona de alta probabilidad — soporte/resistencia sólido |
+| ⭐⭐⭐ | 4 o más niveles | Zona institucional — muy difícil de romper sin catalizador |
+
+La «tolerancia» que define si dos niveles «coinciden» es configurable en la app.
+Una tolerancia estrecha (0,1%) solo agrupa niveles muy cercanos; una amplia (0,5%)
+puede agrupar niveles que no son realmente el mismo punto.
+""")
+                        st.markdown("""
+---
+
+**Tipos de confluencias y su implicación**
+
+**Confluencia de resistencias** (varios R1, R2, R_semanal... juntos):
+Zona donde previsiblemente el precio encontrará vendedores.
+- Si el precio llega aquí desde abajo: zona de toma de beneficios para posiciones largas. Esperar para ver si rompe con volumen antes de añadir posición.
+- Si el precio rebota aquí repetidamente: resistencia estructural. Una ruptura definitiva al alza sería una señal alcista muy importante.
+
+**Confluencia de soportes** (varios S1, S2, S_mensual... juntos):
+Zona donde previsiblemente aparecerá demanda que frenará la caída.
+- Si el precio llega aquí desde arriba: zona de posible apoyo. Un rebote con volumen y vela alcista confirma la zona.
+- Si el precio la pierde con cierre por debajo: señal bajista seria — el soporte se ha convertido en resistencia.
+
+**Confluencia mixta** (R de un timeframe + S de otro):
+Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar en el rango antes de definir dirección. Esperar la ruptura.
+""")
+                        st.markdown("""
+---
+
+**Cómo usar las confluencias en la práctica**
+
+1. **Identifica las confluencias más próximas al precio actual** — las más relevantes para las próximas sesiones son las más cercanas.
+
+2. **Espera la reacción, no anticipes** — nunca compres en una confluencia de soporte sin ver primero cómo reacciona el precio. Un soporte roto se convierte en resistencia.
+
+3. **Combina con indicadores de momentum** — la señal más robusta es: confluencia ⭐⭐⭐ + RSI en zona de sobreventa + volumen decreciente en la caída + vela de inversión. Cuantos más factores coincidan, mayor probabilidad.
+
+4. **Usa las confluencias para gestionar el riesgo** — una confluencia ⭐⭐⭐ es un excelente nivel de referencia para colocar un stop-loss. Si el precio cierra por debajo de ella, la tesis de soporte está invalidada.
+
+5. **Recuerda que se recalculan** — las confluencias cambian con cada nueva sesión porque los Pivot Points se actualizan. Lo que hoy es una confluencia ⭐⭐⭐ puede no serlo mañana.
+""")
+                        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
                 for c in confluencias:
                     dist = ((c["precio"] - precio) / precio * 100) if precio else 0
                     dist_str = f"+{dist:.2f}%" if dist >= 0 else f"{dist:.2f}%"
@@ -6013,38 +6634,75 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
                     st.markdown("### Confluencias")
                 with _ch2:
                     with st.popover("ℹ️", use_container_width=True):
+                        st.markdown("### 🔗 Confluencias Multi-Timeframe — Guía completa")
                         st.markdown("""
-**¿Qué es una Confluencia?**
+**¿Qué es una confluencia y por qué es tan poderosa?**
 
-Una confluencia es una zona de precio donde **dos o más niveles de pivot de distintos timeframes o sistemas convergen** dentro de un margen de tolerancia. Cuantos más niveles coincidan, mayor es su relevancia técnica.
+Imagina que cinco personas distintas, usando métodos diferentes, llegan de forma independiente
+a la misma conclusión: «el precio de esta acción tiene una zona crítica en torno a 22,50€».
+Eso es exactamente una confluencia técnica.
 
----
+Una confluencia ocurre cuando **dos o más niveles de pivot de diferentes timeframes o sistemas
+de cálculo convergen en la misma zona de precio** (dentro de un margen de tolerancia).
+La clave está en la palabra *independiente*: si el soporte diario clásico, la resistencia
+semanal de Fibonacci y el PP mensual coinciden todos alrededor de 22,50€, es porque
+tres lógicas de cálculo distintas señalan el mismo punto — eso no es casualidad.
 
-**Por qué importan**
-
-Operadores institucionales, algoritmos y traders discrecionales calculan pivots de forma independiente. Cuando múltiples sistemas señalan la misma zona, se acumulan órdenes de distintos actores — convirtiéndola en una barrera más difícil de superar o en un trampolín más potente.
-
----
-
-**Sistema de estrellas**
-
-| Estrellas | Niveles coincidentes | Relevancia |
-|-----------|---------------------|------------|
-| ⭐ | 2 niveles | Notable — merece atención |
-| ⭐⭐ | 3 niveles | Alta — zona de alta probabilidad |
-| ⭐⭐⭐ | 4 o más niveles | Máxima — soporte/resistencia institucional |
-
----
-
-**Implicaciones según tipo**
-
-- **Confluencia de resistencias**: zona donde el precio probablemente encuentre vendedores.
-- **Confluencia de soportes**: zona de potencial compra con mayor probabilidad de rebote.
-- **Confluencia mixta**: zona de indecisión — esperar definición de dirección.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+**¿Por qué funciona?**
+Porque miles de operadores, algoritmos y fondos calculan esos niveles de forma automática.
+Cuando el precio llega a esa zona, se acumulan órdenes de actores completamente distintos,
+creando una barrera de oferta o demanda mucho más sólida que cualquier nivel aislado.
 """)
+                        st.info("**Regla de oro:** una confluencia ⭐⭐⭐ en soporte no es una señal de compra automática — es una señal de **máxima atención**. Observa cómo reacciona el precio, el volumen y los indicadores de momentum cuando llegue a esa zona.")
+                        st.markdown("""
+---
+
+**El sistema de estrellas — cómo se calcula**
+
+| Estrellas | Nº de niveles que coinciden | Qué significa en la práctica |
+|-----------|---------------------------|------------------------------|
+| ⭐ | 2 niveles | Zona notable — merece atención pero no es extraordinaria |
+| ⭐⭐ | 3 niveles | Zona de alta probabilidad — soporte/resistencia sólido |
+| ⭐⭐⭐ | 4 o más niveles | Zona institucional — muy difícil de romper sin catalizador |
+
+La «tolerancia» que define si dos niveles «coinciden» es configurable en la app.
+Una tolerancia estrecha (0,1%) solo agrupa niveles muy cercanos; una amplia (0,5%)
+puede agrupar niveles que no son realmente el mismo punto.
+""")
+                        st.markdown("""
+---
+
+**Tipos de confluencias y su implicación**
+
+**Confluencia de resistencias** (varios R1, R2, R_semanal... juntos):
+Zona donde previsiblemente el precio encontrará vendedores.
+- Si el precio llega aquí desde abajo: zona de toma de beneficios para posiciones largas. Esperar para ver si rompe con volumen antes de añadir posición.
+- Si el precio rebota aquí repetidamente: resistencia estructural. Una ruptura definitiva al alza sería una señal alcista muy importante.
+
+**Confluencia de soportes** (varios S1, S2, S_mensual... juntos):
+Zona donde previsiblemente aparecerá demanda que frenará la caída.
+- Si el precio llega aquí desde arriba: zona de posible apoyo. Un rebote con volumen y vela alcista confirma la zona.
+- Si el precio la pierde con cierre por debajo: señal bajista seria — el soporte se ha convertido en resistencia.
+
+**Confluencia mixta** (R de un timeframe + S de otro):
+Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar en el rango antes de definir dirección. Esperar la ruptura.
+""")
+                        st.markdown("""
+---
+
+**Cómo usar las confluencias en la práctica**
+
+1. **Identifica las confluencias más próximas al precio actual** — las más relevantes para las próximas sesiones son las más cercanas.
+
+2. **Espera la reacción, no anticipes** — nunca compres en una confluencia de soporte sin ver primero cómo reacciona el precio. Un soporte roto se convierte en resistencia.
+
+3. **Combina con indicadores de momentum** — la señal más robusta es: confluencia ⭐⭐⭐ + RSI en zona de sobreventa + volumen decreciente en la caída + vela de inversión. Cuantos más factores coincidan, mayor probabilidad.
+
+4. **Usa las confluencias para gestionar el riesgo** — una confluencia ⭐⭐⭐ es un excelente nivel de referencia para colocar un stop-loss. Si el precio cierra por debajo de ella, la tesis de soporte está invalidada.
+
+5. **Recuerda que se recalculan** — las confluencias cambian con cada nueva sesión porque los Pivot Points se actualizan. Lo que hoy es una confluencia ⭐⭐⭐ puede no serlo mañana.
+""")
+                        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
                 st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
 
         st.divider()
@@ -6122,159 +6780,273 @@ Operadores institucionales, algoritmos y traders discrecionales calculan pivots 
                 st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Indicadores Técnicos</div>', unsafe_allow_html=True)
             with _ii2:
                 with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("### 📉 Indicadores Técnicos — Guía didáctica completa")
                     st.markdown("""
-**RSI — Relative Strength Index (14 sesiones)**
+Los **indicadores técnicos** son fórmulas matemáticas que transforman el historial de precios
+(y a veces el volumen) en señales visuales que ayudan a interpretar el estado del mercado.
+No predicen el futuro — describen el presente y sugieren probabilidades basadas en
+comportamientos históricos similares.
 
-Mide la velocidad y magnitud de los cambios de precio en una escala de 0 a 100.
-
-**Cálculo:** RSI = 100 − [100 / (1 + (Media ganancias 14 días / Media pérdidas 14 días))]
-
-| Zona | Valor | Interpretación |
-|------|-------|---------------|
-| Sobrecomprado | > 70 | El precio ha subido rápido; posible corrección |
-| Neutro | 30–70 | Sin señal extrema; observar tendencia |
-| Sobrevendido | < 30 | El precio ha caído rápido; posible rebote |
-
-⚠️ En tendencias fuertes el RSI puede permanecer en zona extrema semanas. Siempre confirmar con precio y volumen.
-
----
-
-**MACD — Moving Average Convergence Divergence**
-
-Mide la diferencia entre dos medias exponenciales (EMA 12 y EMA 26). La línea de señal es una EMA 9 del MACD.
-
-- **MACD > Señal** y Histograma positivo → momentum alcista
-- **MACD < Señal** y Histograma negativo → momentum bajista
-- **Cruce alcista** (MACD cruza señal hacia arriba) → señal de compra técnica
-- **Histograma decreciendo** → el impulso se está agotando aunque la tendencia continúe
-
-**Cálculo:** MACD = EMA(12) − EMA(26) · Señal = EMA(9) del MACD · Histograma = MACD − Señal
-
----
-
-**Bandas de Bollinger**
-
-Tres bandas calculadas sobre la SMA 20 ± 2 desviaciones estándar.
-
-- **Banda superior** = SMA20 + 2σ · **Media** = SMA20 · **Inferior** = SMA20 − 2σ
-- Contienen ~95% de los precios bajo distribución normal
-- **%B = 0%** → precio en banda inferior (sobrevendido técnico) · **%B = 100%** → en banda superior (sobrecomprado técnico)
-- **Contracción de bandas** (squeeze) precede movimientos explosivos
-
----
-
-**Parabolic SAR**
-
-Indicador de seguimiento de tendencia con aceleración geométrica.
-
-- **Precio > SAR** → tendencia alcista; el SAR actúa como stop dinámico bajo el precio
-- **Precio < SAR** → tendencia bajista; el SAR actúa como stop dinámico sobre el precio
-- El SAR se mueve más rápido cuanto más tiempo lleva la tendencia (factor de aceleración 0.02–0.20)
-- Útil para gestión de trailing stops, pero genera señales falsas en mercados laterales
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+Hay dos grandes familias: los indicadores de **momentum** (¿con qué fuerza se mueve el precio?)
+y los de **tendencia/volatilidad** (¿en qué dirección y con qué amplitud?).
 """)
+                    st.markdown("---")
+                    st.markdown("#### 📊 RSI — Índice de Fuerza Relativa (14 sesiones)")
+                    st.markdown("""
+El RSI fue creado por J. Welles Wilder en 1978 y publicado en su libro *«New Concepts in
+Technical Trading Systems»*. Es probablemente el indicador de momentum más utilizado del
+mundo por su simplicidad conceptual y su fiabilidad en condiciones extremas.
+
+**¿Qué mide?**
+Compara la magnitud de las subidas recientes con la de las bajadas recientes. Si en los
+últimos 14 días el precio ha subido mucho más de lo que ha bajado, el RSI será alto (el
+activo tiene «fuerza» reciente). Si las bajadas han dominado, el RSI será bajo.
+
+**La fórmula simplificada:**
+RSI = 100 - [100 / (1 + promedio_subidas_14d / promedio_bajadas_14d)]
+
+**Las zonas y su significado real:**
+""")
+                    st.markdown("""
+| RSI | Zona | Lo que indica |
+|-----|------|--------------|
+| > 80 | Sobrecompra extrema | El activo ha subido muy rápido. Señal de agotamiento potencial. No es señal de venta automática — en tendencias alcistas puede permanecer aquí semanas. |
+| 70–80 | Sobrecompra | Precaución para nuevas compras. Esperar corrección antes de entrar. |
+| 55–70 | Zona alcista | Momentum positivo y saludable. La tendencia tiene fuerza. |
+| 45–55 | Zona neutra | Sin señal clara. El mercado está indeciso. |
+| 30–45 | Zona bajista | Momentum negativo. La debilidad domina. |
+| 20–30 | Sobreventa | Posible agotamiento vendedor. Ojo a señales de rebote. |
+| < 20 | Sobreventa extrema | Caída muy intensa. Probable rebote técnico, aunque no necesariamente el suelo definitivo. |
+
+**Las divergencias — la señal más avanzada del RSI:**
+Una divergencia alcista ocurre cuando el precio hace un nuevo mínimo pero el RSI no lo confirma
+(hace un mínimo más alto). Indica que el momentum bajista se está agotando. La divergencia bajista
+es la contraria. Son señales de alerta temprana, no de acción inmediata.
+""")
+                    st.markdown("---")
+                    st.markdown("#### 📈 MACD — Convergencia/Divergencia de Medias Móviles")
+                    st.markdown("""
+El MACD fue desarrollado por Gerald Appel a finales de los años 70. Combina dos medias
+exponenciales para capturar tanto la dirección de la tendencia como su momentum.
+
+**Los tres componentes:**
+- **Línea MACD** = EMA(12) − EMA(26). Positiva cuando la media corta está sobre la larga (tendencia alcista). Negativa en lo contrario.
+- **Línea de señal** = EMA(9) del MACD. La media del propio MACD — suaviza las señales.
+- **Histograma** = MACD − Señal. La diferencia entre ambas líneas. Cuando crece, el momentum aumenta; cuando decrece, el impulso se agota.
+
+**Las señales más usadas:**
+- **Cruce alcista:** MACD cruza la señal hacia arriba → momentum positivo emergente. Más fiable si ocurre por debajo de cero.
+- **Cruce bajista:** MACD cruza la señal hacia abajo → momentum negativo. Más fiable si ocurre por encima de cero.
+- **Histograma decreciente:** aunque la tendencia continúe, el impulso se está agotando. Señal de alerta sin ser señal de giro.
+- **Divergencia MACD/precio:** similar a la del RSI — el precio hace nuevos extremos que el MACD no confirma.
+""")
+                    st.markdown("---")
+                    st.markdown("#### 📏 Bandas de Bollinger")
+                    st.markdown("""
+Desarrolladas por John Bollinger en los años 80, las Bandas de Bollinger son un indicador
+de volatilidad que envuelve el precio entre dos bandas calculadas estadísticamente.
+
+**Cómo se construyen:**
+- **Banda media** = SMA de 20 sesiones (la media del precio en el último mes)
+- **Banda superior** = Banda media + 2 desviaciones estándar
+- **Banda inferior** = Banda media − 2 desviaciones estándar
+
+Bajo una distribución estadística normal, el 95% de los precios caen dentro de las bandas.
+Cuando el precio toca o sale de una banda, está en una situación estadísticamente inusual.
+
+**%B — dónde está el precio dentro de las bandas:**
+- **%B = 100%** → precio exactamente en la banda superior (sobrecompra estadística)
+- **%B = 50%** → precio en la banda media
+- **%B = 0%** → precio exactamente en la banda inferior (sobreventa estadística)
+- **%B negativo o > 100%** → el precio ha salido de las bandas (evento extremo)
+
+**El squeeze de Bollinger:**
+Cuando las bandas se contraen mucho (baja volatilidad), suele preceder un movimiento explosivo.
+No indica la dirección, solo que algo está a punto de moverse con fuerza.
+""")
+                    st.markdown("---")
+                    st.markdown("#### 🔵 Parabolic SAR")
+                    st.markdown("""
+El Parabolic SAR (*Stop And Reverse*) fue también creado por J. Welles Wilder. Es un indicador
+de seguimiento de tendencia que aparece como puntos por encima o por debajo del precio.
+
+**Lectura directa:**
+- **Puntos bajo el precio** → tendencia alcista activa. El SAR marca un stop dinámico que va subiendo con la tendencia.
+- **Puntos sobre el precio** → tendencia bajista activa. El SAR marca un nivel de invalidación que va bajando.
+
+**Cómo funciona el «parabólico»:**
+El SAR se acelera exponencialmente cuanto más dura la tendencia (factor de aceleración que comienza en 0.02 y llega hasta 0.20). Esto hace que los puntos se acerquen cada vez más al precio, provocando eventualmente el «volteo» (el SAR se invierte de lado).
+
+**Su mayor utilidad — el trailing stop:**
+El SAR es excelente para gestionar posiciones en tendencia: a medida que el precio sube, el SAR sube con él, protegiéndote de una reversión. Si el precio cierra por debajo del SAR, la tendencia alcista está invalidada.
+
+**Su mayor limitación:**
+En mercados laterales genera señales falsas continuamente. Solo funciona bien en mercados con tendencia definida.
+""")
+                    st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
         with _ih2:
             _mi1, _mi2 = st.columns([5, 1])
             with _mi1:
                 st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Medias Móviles</div>', unsafe_allow_html=True)
             with _mi2:
                 with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("### 📈 Medias Móviles — Guía didáctica completa")
                     st.markdown("""
-**SMA — Simple Moving Average**
+Las **medias móviles** son uno de los instrumentos más antiguos del análisis técnico y,
+probablemente, los más utilizados por gestores profesionales. Su lógica es engañosamente
+simple: en lugar de mirar el precio de hoy, miramos el promedio de los últimos N precios.
+Esto elimina el ruido diario y revela la tendencia subyacente.
 
-Media aritmética de los N últimos cierres. Trata todos los días por igual.
-
-**Cálculo:** SMA(N) = (C₁ + C₂ + … + Cₙ) / N
-
----
-
-**EMA — Exponential Moving Average**
-
-Promedio ponderado exponencialmente: los cierres recientes tienen más peso. Reacciona más rápido que la SMA al precio.
-
-**Cálculo:** EMA(N) = Cierre × k + EMA_anterior × (1−k), donde k = 2/(N+1)
-
----
-
-**Períodos y referencias institucionales**
-
-| Periodo | Referencia | Uso |
-|---------|-----------|-----|
-| **20** | ~1 mes | Tendencia a corto plazo; Bollinger la usa como base |
-| **50** | ~2,5 meses | La más seguida por fondos para medio plazo |
-| **200** | ~10 meses | Separación bull/bear de largo plazo; ampliamente usada |
-
----
-
-**Señales clave**
-
-- **Precio sobre la media** (↑): tendencia alcista en ese plazo. La media actúa como soporte dinámico.
-- **Precio bajo la media** (↓): tendencia bajista. La media actúa como resistencia dinámica.
-- **Golden Cross**: SMA50 cruza SMA200 hacia arriba → señal alcista de largo plazo.
-- **Death Cross**: SMA50 cruza SMA200 hacia abajo → señal bajista de largo plazo.
-- **Precio muy alejado de la SMA200**: posible mean reversion; el mercado tiende a volver a la media.
-
----
-
-**SMA vs EMA**
-- SMA: más estable, menos señales falsas, más lenta.
-- EMA: más rápida en captar giros, más señales falsas en laterales.
-- Usar EMA en tendencias activas; SMA en mercados volátiles o para niveles de largo plazo.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+La palabra «móvil» significa que cada día se recalcula: entra el precio de hoy y sale el
+más antiguo. La línea resultante «se mueve» suavemente con el precio.
 """)
+                    st.markdown("---")
+                    st.markdown("#### SMA — Media Móvil Simple")
+                    st.markdown("""
+La **SMA** (*Simple Moving Average*) suma los últimos N cierres y los divide entre N.
+Trata cada día con el mismo peso, independientemente de si fue ayer o hace 200 días.
+
+**Ejemplo con SMA(5):** si los últimos 5 cierres son 10, 11, 12, 11, 12 → SMA(5) = 56/5 = 11,2
+
+**Ventaja:** muy estable, pocas señales falsas, fácil de interpretar.
+**Desventaja:** reacciona lentamente a cambios bruscos de precio. En un mercado que gira rápido, la señal llega tarde.
+""")
+                    st.markdown("#### EMA — Media Móvil Exponencial")
+                    st.markdown("""
+La **EMA** (*Exponential Moving Average*) aplica más peso a los precios recientes. El precio
+de ayer importa más que el de hace una semana. Esto la hace más sensible y rápida.
+
+**El multiplicador:** k = 2 / (N + 1). Para EMA(20): k = 2/21 ≈ 0,095.
+Cada día: EMA_hoy = Cierre_hoy × k + EMA_ayer × (1 − k)
+
+**Ventaja:** reacciona antes a los giros del precio.
+**Desventaja:** más señales falsas en mercados laterales porque se «agita» más con el ruido diario.
+
+**¿Cuándo usar SMA y cuándo EMA?**
+- Usa **EMA** para detectar cambios de tendencia rápidos (trading más activo).
+- Usa **SMA** para niveles de largo plazo y como filtro de tendencia principal (inversión).
+""")
+                    st.markdown("---")
+                    st.markdown("#### Los períodos clave y su significado institucional")
+                    st.markdown("""
+No todos los períodos son iguales. Los siguientes están tan extendidos que forman parte de los
+sistemas automáticos de miles de fondos de inversión y algoritmos:
+
+| Período | Plazo aproximado | Por qué importa |
+|---------|----------------|----------------|
+| **SMA 20** | ~1 mes | Base de las Bandas de Bollinger. Tendencia de corto plazo. Muchos traders de swing la usan como primer soporte. |
+| **SMA 50** | ~2,5 meses | La más seguida por fondos para medio plazo. Una pérdida de la SMA50 es la primera señal de debilidad seria. |
+| **SMA 200** | ~10 meses de trading | La referencia definitiva de largo plazo. Divide el universo de inversión en «por encima = bullish» y «por debajo = bearish». |
+| **EMA 12/26** | Corto/medio plazo | Base del cálculo del MACD. Las más usadas en análisis de momentum. |
+
+**Por qué la SMA200 es tan especial:**
+Casi todos los gestores institucionales, fondos de pensiones y sistemas cuantitativos calculan
+la SMA200. Cuando el precio cae hacia ella, aparece demanda institucional de forma casi automática.
+Cuando la pierde, aparece presión vendedora sistemática. Es una referencia que funciona en parte
+porque todos la usan — la profecía autocumplida más potente del análisis técnico.
+""")
+                    st.markdown("---")
+                    st.markdown("#### Las señales más importantes")
+                    st.markdown("""
+**1. Precio vs media — el estado de la tendencia:**
+- Precio sobre la media con la media subiendo → tendencia alcista confirmada en ese plazo. La media actúa como soporte dinámico.
+- Precio bajo la media con la media bajando → tendencia bajista. La media actúa como resistencia dinámica.
+- Precio oscilando alrededor de la media → mercado lateral sin tendencia definida.
+
+**2. Golden Cross — la señal alcista de largo plazo:**
+La SMA50 cruza la SMA200 hacia arriba. Indica que el momentum de medio plazo supera al de largo plazo.
+Históricamente, precede períodos alcistas sostenidos. No funciona como señal de entrada de precisión
+(llega tarde) pero confirma que el régimen de mercado ha cambiado a alcista.
+
+**3. Death Cross — la señal bajista de largo plazo:**
+La SMA50 cruza la SMA200 hacia abajo. El régimen ha pasado a bajista.
+Misma lógica: señal de contexto, no de timing preciso.
+
+**4. Precio muy alejado de la SMA200 (sobreextensión):**
+Un precio un 30% o más por encima de su SMA200 está estadísticamente «lejos de casa».
+Los mercados tienden a volver a sus medias (*mean reversion*). No es señal de venta, pero
+sí de que los retornos esperados desde ese punto son menores que en condiciones normales.
+""")
+                    st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
         with _ih3:
             _vi1, _vi2 = st.columns([5, 1])
             with _vi1:
                 st.markdown('<div class="s-ind-title" style="font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.6px">Volumen</div>', unsafe_allow_html=True)
             with _vi2:
                 with st.popover("ℹ️", use_container_width=True):
+                    st.markdown("### 📦 Volumen — Guía didáctica completa")
                     st.markdown("""
-**Volumen — El indicador que confirma o niega**
+**¿Qué es el volumen y por qué es el indicador más honesto del mercado?**
 
-El volumen es el número de acciones o participaciones negociadas en un periodo. Es el único indicador que no puede ser manipulado con el precio — refleja la convicción real detrás de cada movimiento.
+El volumen es el número total de acciones (o participaciones, contratos, unidades) que han
+cambiado de manos en un período determinado. A diferencia del precio — que puede ser influido
+por un solo operador con mucho capital en un momento de baja liquidez — el volumen refleja la
+*participación real* del mercado. No se puede falsificar: cada transacción tiene un comprador
+y un vendedor, y ambos quedan registrados.
 
----
-
-**Principio básico**
-
-> *"El volumen sigue a la tendencia hasta que la traiciona"*
-
-- **Precio sube + volumen sube** → tendencia alcista con convicción ✅
-- **Precio sube + volumen baja** → subida sin participación; riesgo de corrección ⚠️
-- **Precio baja + volumen sube** → caída con distribución; señal bajista fuerte ❌
-- **Precio baja + volumen baja** → corrección técnica; probable continuación alcista ✅
-
----
-
-**Ratios de actividad**
-
-- **Ratio vs 10d**: compara el volumen de hoy con la media de las últimas 10 sesiones.
-  - > 150%: actividad muy alta — evento o catalizador probable
-  - 80–120%: actividad normal
-  - < 50%: sesión de baja participación — señales menos fiables
-
-- **Ratio vs 3m**: compara con la media de 3 meses (contexto estructural).
-  - Útil para detectar días de acumulación institucional (volumen alto sin movimiento de precio evidente).
-
----
-
-**Clasificaciones**
-
-| Clasificación | Ratio | Implicación |
-|--------------|-------|------------|
-| MUY ALTO | > 200% | Evento significativo; posible cambio de tendencia |
-| ALTO | 130–200% | Confirmación de movimiento |
-| NORMAL | 70–130% | Sesión habitual |
-| BAJO | 40–70% | Baja convicción; desconfiar de rupturas |
-| MUY BAJO | < 40% | Sin participación; esperar |
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
+Por eso los analistas dicen que el volumen es «la gasolina» del mercado. Un movimiento de
+precio sin volumen es como un coche que avanza cuesta abajo — puede ir lejos, pero sin motor
+propio. Un movimiento con volumen alto tiene convicción detrás.
 """)
+                    st.info("**Principio fundamental:** el volumen confirma o niega el movimiento del precio. Nunca analices el precio sin mirar el volumen.")
+                    st.markdown("---")
+                    st.markdown("#### Las 4 combinaciones precio-volumen que debes memorizar")
+                    st.markdown("""
+| Precio | Volumen | Señal | Lo que está pasando |
+|--------|---------|-------|---------------------|
+| ⬆️ Sube | ⬆️ Alto | ✅ Alcista sólida | Los compradores están entrando con convicción. La tendencia tiene combustible. |
+| ⬆️ Sube | ⬇️ Bajo | ⚠️ Alerta | El precio sube pero nadie está comprando con fuerza. La subida puede agotarse pronto. |
+| ⬇️ Baja | ⬆️ Alto | ❌ Bajista seria | Los vendedores están distribuyendo (vendiendo) activamente. Señal de debilidad importante. |
+| ⬇️ Baja | ⬇️ Bajo | ✅ Corrección técnica | El precio cede pero nadie está vendiendo con urgencia. Corrección sana en tendencia alcista. |
+
+La combinación más peligrosa es la segunda: precio subiendo con volumen decreciente es la
+firma clásica de una tendencia alcista que está perdiendo participantes — los inversores que
+compraron antes van vendiendo mientras los nuevos van entrando. Cuando los nuevos se agoten, el
+precio puede caer bruscamente aunque visualmente «todo parecía bien».
+""")
+                    st.markdown("---")
+                    st.markdown("#### Volumen relativo — cómo leer los ratios")
+                    st.markdown("""
+El volumen absoluto (número de acciones) no dice nada por sí solo — hay valores que negocian
+millones de acciones al día y otros que negocian miles. Lo que importa es el volumen de hoy
+*en relación* al volumen habitual: el **volumen relativo**.
+
+**Ratio vs 10 sesiones** (actividad reciente):
+Compara el volumen medio de los últimos 5 días con la media de las últimas 10 sesiones.
+
+| Ratio | Clasificación | Lo que sugiere |
+|-------|--------------|----------------|
+| > 200% | Excepcional | Algo importante está ocurriendo: noticias, resultados, OPA, cambio institucional |
+| 150–200% | Muy alto | Participación elevada; el movimiento del precio tiene mayor credibilidad |
+| 80–150% | Normal | Sesión habitual; señales con fiabilidad estándar |
+| 50–80% | Bajo | Poca participación; cuidado con rupturas técnicas — pueden ser falsas |
+| < 50% | Muy bajo | El mercado está dormido. Esperar antes de actuar sobre señales técnicas |
+
+**Una ruptura de resistencia con volumen bajo es una trampa frecuente.** Los operadores
+experimentados esperan ver volumen significativo para confirmar que la ruptura es real
+y no un movimiento de baja liquidez.
+""")
+                    st.markdown("---")
+                    st.markdown("#### Acumulación y Distribución — el movimiento del dinero inteligente")
+                    st.markdown("""
+Más allá del volumen total, importa *en qué tipo de sesiones* se concentra el volumen:
+¿en días en que el precio sube (acumulación) o en días en que baja (distribución)?
+
+**Acumulación:** el volumen se concentra en sesiones alcistas.
+Indica que los inversores institucionales («dinero inteligente» — fondos, gestores, aseguradoras)
+están comprando posiciones gradualmente, sin querer mover el precio de golpe. Es una señal
+alcista de fondo, aunque el precio no lo muestre todavía de forma dramática.
+
+**Distribución:** el volumen se concentra en sesiones bajistas.
+Los grandes inversores están *vendiendo* sus posiciones mientras los inversores minoristas
+aún compran. Es una señal bajista de fondo. El mercado puede seguir subiendo visualmente
+mientras la distribución ocurre, hasta que los compradores se agotan.
+
+*Esta lógica es la base del Método Wyckoff, desarrollado por Richard Wyckoff a principios
+del siglo XX, y sigue siendo uno de los marcos de análisis más respetados para entender
+el comportamiento institucional en los mercados.*
+""")
+                    st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
         st.markdown(screen_ind_css + f"""
         <div style="display:grid;grid-template-columns:1.1fr 1fr 0.9fr;gap:14px;margin-bottom:0">
@@ -8642,6 +9414,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     # ---- TAB MACRO ----
     with tab_macro:
         pestaña_macro()
+
+    # ---- TAB RENTA FIJA ----
+    with tab_rf:
+        pestaña_renta_fija()
 
     # ---- TAB ADMIN ----
     if es_superadmin and tab_admin:
