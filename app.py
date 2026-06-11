@@ -277,6 +277,61 @@ ETFS_UCITS = {
     },
 }
 
+
+
+# Metadatos estáticos por ticker — TER, política de distribución, índice replicado
+# [VERIFICAR] TER puede actualizarse cuando la gestora lo modifica (infrecuente)
+ETFS_META = {
+    # Renta Variable Global
+    "IWDA.AS": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI World"},
+    "VWRL.AS": {"ter": 0.22, "dist": "Distribución", "indice": "FTSE All-World"},
+    "VWCE.DE": {"ter": 0.22, "dist": "Acumulación", "indice": "FTSE All-World"},
+    "XDWD.DE": {"ter": 0.19, "dist": "Acumulación", "indice": "MSCI World"},
+    "PRNA.PA": {"ter": 0.05, "dist": "Acumulación", "indice": "Solactive GBS Global Markets Large & Mid Cap"},
+    "IUSQ.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI ACWI"},
+    # Renta Variable EEUU
+    "SXR8.DE": {"ter": 0.07, "dist": "Acumulación", "indice": "S&P 500"},
+    "VUSA.AS": {"ter": 0.07, "dist": "Distribución", "indice": "S&P 500"},
+    "IUSA.AS": {"ter": 0.07, "dist": "Distribución", "indice": "S&P 500"},
+    "SPYL.DE": {"ter": 0.03, "dist": "Acumulación", "indice": "S&P 500"},
+    "CNDX.L":  {"ter": 0.33, "dist": "Acumulación", "indice": "Nasdaq 100"},
+    "XNAS.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "Nasdaq 100"},
+    # Renta Variable Europa
+    "CS51.DE": {"ter": 0.10, "dist": "Acumulación", "indice": "Euro Stoxx 50"},
+    "EXSA.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "STOXX Europe 600"},
+    "VEUR.AS": {"ter": 0.12, "dist": "Acumulación", "indice": "FTSE Developed Europe"},
+    "SPEU.DE": {"ter": 0.12, "dist": "Acumulación", "indice": "MSCI Europe"},
+    "CE9.PA":  {"ter": 0.15, "dist": "Acumulación", "indice": "MSCI Europe"},
+    # Renta Variable Emergentes
+    "IS3N.DE": {"ter": 0.18, "dist": "Acumulación", "indice": "MSCI EM IMI"},
+    "VFEM.AS": {"ter": 0.22, "dist": "Acumulación", "indice": "FTSE Emerging Markets"},
+    "PAEM.PA": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI Emerging Markets"},
+    "CNYA.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "MSCI China"},
+    # Renta Fija
+    "IEGA.AS": {"ter": 0.09, "dist": "Acumulación", "indice": "Bloomberg Euro Govt Bond"},
+    "IEAC.AS": {"ter": 0.20, "dist": "Acumulación", "indice": "Bloomberg Euro Corporate Bond"},
+    "VETY.AS": {"ter": 0.07, "dist": "Distribución", "indice": "Bloomberg Euro Govt Float Adj"},
+    "EAGA.PA": {"ter": 0.14, "dist": "Acumulación", "indice": "Bloomberg Euro Aggregate"},
+    "IBTM.L":  {"ter": 0.10, "dist": "Acumulación", "indice": "ICE US Treasury 7-10Y EUR Hdg"},
+    "GHYS.L":  {"ter": 0.50, "dist": "Distribución", "indice": "Markit iBoxx Global HY EUR Hdg"},
+    # Sectoriales / Temáticos
+    "IQQH.DE": {"ter": 0.65, "dist": "Acumulación", "indice": "S&P Global Clean Energy"},
+    "2B76.DE": {"ter": 0.40, "dist": "Acumulación", "indice": "STOXX® Global Automation & Robotics"},
+    "SEMI.L":  {"ter": 0.50, "dist": "Acumulación", "indice": "Solactive Global Semiconductor"},
+    "HEAL.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "STOXX® Global Digital Security"},
+    "IESW.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI World ESG Enhanced Focus"},
+    "EQQQ.L":  {"ter": 0.30, "dist": "Distribución", "indice": "Nasdaq 100"},
+    "WBAT.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "WisdomTree Battery Solutions"},
+    "IGLN.L":  {"ter": 0.12, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
+}
+
+# Lookup inverso: ticker → categoría
+_ETFS_CATEGORIA = {
+    ticker: cat
+    for cat, etfs in ETFS_UCITS.items()
+    for ticker in etfs.values()
+}
+
 # Fallbacks estáticos para índices vía Wikipedia (por si falla la carga dinámica)
 _FALLBACK_SP500 = {"Apple": "AAPL", "Microsoft": "MSFT", "NVIDIA": "NVDA",
                    "Amazon": "AMZN", "Alphabet A": "GOOGL", "Meta": "META",
@@ -4957,6 +5012,45 @@ def render_tabla_pivots(tf_nombre: str, niveles: dict, precio_actual_val: float)
 # PANTALLA PRINCIPAL — ANÁLISIS
 # =============================================================================
 
+
+@st.cache_data(ttl=3600)
+def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
+    """Devuelve lista ordenada por TER de todos los ETFs de la categoría,
+    enriquecidos con AUM y rentabilidad 1 año desde yfinance."""
+    import yfinance as yf
+    etfs_cat = ETFS_UCITS.get(categoria, {})
+    resultado = []
+    for nombre, tkr in etfs_cat.items():
+        meta = ETFS_META.get(tkr, {})
+        ter  = meta.get("ter")
+        dist = meta.get("dist", "—")
+        indice = meta.get("indice", "—")
+        # Nombre corto: parte tras "— "
+        nombre_corto = nombre.split("— ")[-1] if "— " in nombre else nombre
+        aum = None
+        rent_1a = None
+        try:
+            info = yf.Ticker(tkr).info
+            aum  = info.get("totalAssets")
+            hist = yf.Ticker(tkr).history(period="1y")
+            if len(hist) >= 2:
+                rent_1a = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+        except Exception:
+            pass
+        resultado.append({
+            "ticker":       tkr,
+            "nombre_corto": nombre_corto,
+            "ter":          ter,
+            "dist":         dist,
+            "indice":       indice,
+            "aum":          aum,
+            "rent_1a":      rent_1a,
+            "actual":       tkr == ticker_actual,
+        })
+    resultado.sort(key=lambda x: (x["ter"] is None, x["ter"] or 99))
+    return resultado
+
+
 def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
@@ -6782,13 +6876,52 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
         if tipo_activo == "etf":
             st.markdown(
                 '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;'
-                'padding:14px 18px;color:#64748b;font-size:0.9rem">'
+                'padding:10px 16px;color:#64748b;font-size:0.85rem;margin-bottom:12px">'
                 '⚠️ <strong>No aplica</strong> — Los ETFs no tienen análisis fundamental propio '
-                '(PER, BPA, capitalización de empresa, etc.). '
-                'Evalúa el ETF por su índice replicado, TER, AUM y tracking error.'
+                '(PER, BPA, capitalización, etc.). Compara por TER, AUM y rentabilidad histórica.'
                 '</div>',
                 unsafe_allow_html=True
             )
+            # ── Comparativa de categoría ──────────────────────────────────
+            _cat_etf = _ETFS_CATEGORIA.get(ticker_activo)
+            if _cat_etf:
+                st.markdown(f"#### 🏆 Comparativa — {_cat_etf}")
+                _comp = obtener_comparativa_etf(_cat_etf, ticker_activo)
+                # Encabezado
+                _hc = st.columns([2.2, 1, 1, 1.2, 1.4, 1.2])
+                for _col, _lbl in zip(_hc, ["ETF", "TER", "Política", "AUM", "Rentab. 1A", "Índice"]):
+                    _col.markdown(f"<span style='font-size:0.75rem;color:#64748b;font-weight:600'>{_lbl}</span>",
+                                  unsafe_allow_html=True)
+                for _e in _comp:
+                    _bg  = "background:#eff6ff;border-radius:6px;padding:2px 4px" if _e["actual"] else ""
+                    _tag = " ⬅️" if _e["actual"] else ""
+                    _ter_str  = f"{_e['ter']:.2f}%" if _e["ter"] is not None else "—"
+                    _aum_str  = (_fmt_numero(_e["aum"]) if _e["aum"] else "—")
+                    _r1a_str  = (f"{_e['rent_1a']:+.1f}%" if _e["rent_1a"] is not None else "—")
+                    _r1a_col  = "#166534" if (_e["rent_1a"] or 0) > 0 else "#991b1b"
+                    _dist_badge = (
+                        '<span style="background:#dcfce7;color:#166534;font-size:0.7rem;'
+                        'padding:1px 6px;border-radius:10px;font-weight:600">Acc</span>'
+                        if _e["dist"] == "Acumulación" else
+                        '<span style="background:#dbeafe;color:#1e40af;font-size:0.7rem;'
+                        'padding:1px 6px;border-radius:10px;font-weight:600">Dist</span>'
+                    )
+                    _rc = st.columns([2.2, 1, 1, 1.2, 1.4, 1.2])
+                    _rc[0].markdown(
+                        f'<div style="{_bg}"><span style="font-weight:{"700" if _e["actual"] else "400"}'
+                        f';font-size:0.85rem">{_e["nombre_corto"]}{_tag}</span></div>',
+                        unsafe_allow_html=True)
+                    _rc[1].markdown(f'<span style="font-size:0.85rem;font-weight:700;color:#0f172a">{_ter_str}</span>',
+                                    unsafe_allow_html=True)
+                    _rc[2].markdown(_dist_badge, unsafe_allow_html=True)
+                    _rc[3].markdown(f'<span style="font-size:0.82rem">{_aum_str}</span>',
+                                    unsafe_allow_html=True)
+                    _rc[4].markdown(
+                        f'<span style="font-size:0.85rem;font-weight:600;color:{_r1a_col}">{_r1a_str}</span>',
+                        unsafe_allow_html=True)
+                    _rc[5].markdown(f'<span style="font-size:0.75rem;color:#64748b">{_e["indice"]}</span>',
+                                    unsafe_allow_html=True)
+                st.caption("Ordenado por TER (menor = más barato). AUM y rentabilidad 1A desde Yahoo Finance.")
         elif fundamentales:
             fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
