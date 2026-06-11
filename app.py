@@ -3456,7 +3456,18 @@ tr:nth-child(even) td { background:#f8fafc; }
 
     # ── Fundamentales ─────────────────────────────────────────────────────
     fund_section = ""
-    if fundamentales:
+    if tipo_activo == "etf":
+        fund_section = (
+            '<div class="card">'
+            '<h2>&#128203; Datos Fundamentales</h2>'
+            '<p style="color:#64748b;font-size:0.9rem;margin:0">'
+            '&#9888; <strong>No aplica</strong> &mdash; Los ETFs no tienen an&aacute;lisis fundamental propio '
+            '(PER, BPA, capitalizaci&oacute;n, etc.). '
+            'Eval&uacute;a el ETF por su &iacute;ndice replicado, TER, AUM y tracking error.'
+            '</p>'
+            '</div>'
+        )
+    elif fundamentales:
         fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
         if fund_items:
             fund_cards = "".join(
@@ -4665,10 +4676,16 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Spacer(1, 0.1*cm))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
-    if fundamentales:
+    historia.append(Paragraph("Datos Fundamentales", S_H2))
+    if tipo_activo == "etf":
+        historia.append(Paragraph(
+            "No aplica — Los ETFs no tienen análisis fundamental propio (PER, BPA, capitalización, etc.). "
+            "Evalúa el ETF por su índice replicado, TER, AUM y tracking error.",
+            _p(fontSize=8, textColor=colors.HexColor("#64748b"))
+        ))
+    elif fundamentales:
         fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
         if fund_items:
-            historia.append(Paragraph("Datos Fundamentales", S_H2))
             fund_rows, buf_r = [], []
             for k, v in fund_items:
                 buf_r += [Paragraph(k, _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
@@ -6761,8 +6778,18 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
 
 
         # ── Bloque 4: Datos Fundamentales ────────────────────────────────
-        if fundamentales:
-            st.markdown("### Datos Fundamentales")
+        st.markdown("### Datos Fundamentales")
+        if tipo_activo == "etf":
+            st.markdown(
+                '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;'
+                'padding:14px 18px;color:#64748b;font-size:0.9rem">'
+                '⚠️ <strong>No aplica</strong> — Los ETFs no tienen análisis fundamental propio '
+                '(PER, BPA, capitalización de empresa, etc.). '
+                'Evalúa el ETF por su índice replicado, TER, AUM y tracking error.'
+                '</div>',
+                unsafe_allow_html=True
+            )
+        elif fundamentales:
             fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
             cols_f = st.columns(5)
