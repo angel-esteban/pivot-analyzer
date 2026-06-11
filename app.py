@@ -7566,6 +7566,13 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
     # ---- ALERTAS DE PRECIO ----
     with tab_analisis:
         _u_id = usuario.get("id")
+        analizado = "estrategia_data" in st.session_state
+        # Recuperar precio y ticker desde session_state cuando analizado es True
+        if analizado and not "precio" in dir():
+            _ed_al2 = st.session_state.get("estrategia_data", {})
+            precio        = _ed_al2.get("precio", 0.0)
+            ticker_activo = _ed_al2.get("ticker", "")
+            nombre        = _ed_al2.get("nombre", "")
         # Verificar alertas disparadas con el precio actual
         if analizado and precio and _u_id:
             _disp = verificar_y_disparar_alertas(_u_id, ticker_activo, precio)
