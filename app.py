@@ -2144,23 +2144,73 @@ def obtener_precio_macro(ticker: str):
 # PESTAÑA RENTA FIJA
 # =============================================================================
 
+_YC_TENOR_MAP = {
+    "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
+    "2Y": "SR_2Y", "3Y": "SR_3Y", "5Y": "SR_5Y",
+    "7Y": "SR_7Y", "10Y": "SR_10Y", "15Y": "SR_15Y",
+    "20Y": "SR_20Y", "30Y": "SR_30Y",
+}
+
+
 @st.cache_data(ttl=1800)
-def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
-    """Tipo spot de la curva AAA Euro Area desde ECB Yield Curve dataset.
-    tenor: '3M','6M','1Y','2Y','3Y','5Y','7Y','10Y','15Y','20Y','30Y'
+def _obtener_curva_yc_batch() -> dict:
+    """Obtiene TODOS los tenores de la curva AAA Euro Area en UNA sola llamada al ECB API.
+    Devuelve dict: {'3M': 2.35, '1Y': 2.40, ...} — valores en %.
+    Una sola llamada evita rate-limiting cuando hay 11 tenores distintos.
     """
-    # ECB YC dataset series key format
-    _map = {
-        "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
-        "2Y": "SR_2Y", "3Y": "SR_3Y", "5Y": "SR_5Y",
-        "7Y": "SR_7Y", "10Y": "SR_10Y", "15Y": "SR_15Y",
-        "20Y": "SR_20Y", "30Y": "SR_30Y",
-    }
-    sr = _map.get(tenor)
-    if not sr:
-        return None
-    series_key = f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}"
-    return obtener_dato_ecb(series_key, flow_ref="YC")
+    keys_str = "+".join(
+        f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}" for sr in _YC_TENOR_MAP.values()
+    )
+    url = f"https://data-api.ecb.europa.eu/service/data/YC/{keys_str}"
+    try:
+        r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
+        if r.status_code != 200:
+            return {}
+        data = r.json()
+        ds = data["dataSets"][0]
+        series_dict = ds.get("series", {})
+        if not series_dict:
+            return {}
+        # Map series index → tenor
+        # structure.dimensions.series contains the dimension values
+        series_dims = data["structure"]["dimensions"]["series"]
+        # Last dimension is the maturity (position varies; find MATURITY dim)
+        mat_dim_idx = None
+        mat_values = []
+        for idx, dim in enumerate(series_dims):
+            if dim.get("id") == "MATURITY" or "SR_" in str([v.get("id","") for v in dim.get("values",[])]):
+                mat_dim_idx = idx
+                mat_values = [v["id"] for v in dim.get("values", [])]
+                break
+        # Build reverse map: SR_3M → 3M
+        rev_map = {v: k for k, v in _YC_TENOR_MAP.items()}
+        result = {}
+        for series_key, series_data in series_dict.items():
+            obs = series_data.get("observations", {})
+            if not obs:
+                continue
+            last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
+            val = obs[last_key][0]
+            if val is None:
+                continue
+            # Extract maturity from series key index (e.g. "0:0:0:0:0:0:3" → index 3 → SR_5Y)
+            parts = series_key.split(":")
+            if mat_dim_idx is not None and mat_dim_idx < len(parts):
+                mat_idx = int(parts[mat_dim_idx])
+                if mat_idx < len(mat_values):
+                    sr_code = mat_values[mat_idx]
+                    tenor = rev_map.get(sr_code)
+                    if tenor:
+                        result[tenor] = float(val)
+        return result
+    except Exception:
+        return {}
+
+
+def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
+    """Tipo spot de la curva AAA Euro Area (usa caché batch para evitar rate-limiting)."""
+    cache = _obtener_curva_yc_batch()
+    return cache.get(tenor)
 
 
 @st.cache_data(ttl=1800)
@@ -2181,15 +2231,20 @@ def _obtener_tipo_pais_ecb(pais: str, tenor: str = "10Y") -> "float | None":
     """Tipo gobierno 10Y por país vía ECB IRS (Maastricht criterion rates).
     pais: 'ES','DE','FR','IT','PT','NL','BE'
     """
-    # ECB IRS dataset — Maastricht long-term government bond yields
-    # Serie: M.{CC}.EUR.RT.LB.A.A.A207.HSTA  (A207 = long-term govt bond yield)
-    series_key = f"M.{pais}.EUR.RT.LB.A.A.A207.HSTA"
-    val = obtener_dato_ecb(series_key, flow_ref="IRS")
+    # ECB ILM dataset — Maastricht long-term government bond yields (convergence criteria)
+    # Serie: M.{CC}.EUR.RT.LB.A.A207.HSTA
+    series_key = f"M.{pais}.EUR.RT.LB.A.A207.HSTA"
+    val = obtener_dato_ecb(series_key, flow_ref="ILM")
     if val is not None:
         return val
-    # Fallback: try alternative series format
-    series_key2 = f"M.{pais}.EUR.RT.LB.X.X.10Y.D.HSTA"
-    return obtener_dato_ecb(series_key2, flow_ref="IRS")
+    # Fallback 1: ILM alternative key
+    series_key2 = f"M.{pais}.EUR.RT.LB.A.A207.HP"
+    val2 = obtener_dato_ecb(series_key2, flow_ref="ILM")
+    if val2 is not None:
+        return val2
+    # Fallback 2: ECB dataset
+    series_key3 = f"M.{pais}.EUR.RT.LB.A.A207.HSTA"
+    return obtener_dato_ecb(series_key3, flow_ref="ECB")
 
 
 def _rf_metric(label: str, valor, suffix: str = "%", delta=None, help_txt: str = ""):
@@ -2222,14 +2277,116 @@ def _rf_card(titulo: str, tir: "float|None", plazo: str,
     )
 
 
+
+@st.cache_data(ttl=3600)
+def _obtener_tipos_bce_batch() -> dict:
+    """Obtiene tipos BCE y Euribor en UNA sola llamada. Evita rate-limiting."""
+    _series = {
+        "dfr":   "B.U2.EUR.4F.KR.DFR.LEV",
+        "mro":   "B.U2.EUR.4F.KR.MRR_FR.LEV",
+        "mlf":   "B.U2.EUR.4F.KR.MLFR.LEV",
+        "eur3m": "B.U2.EUR.4F.MM.B.EURIBOR3MD_.HSTA",
+        "eur6m": "B.U2.EUR.4F.MM.B.EURIBOR6MD_.HSTA",
+    }
+    result = {}
+    # Try batch first (ECB dataset)
+    keys_str = "+".join(_series.values())
+    for flow in ("ECB", "FM"):
+        try:
+            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{keys_str}"
+            r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            ds = data["dataSets"][0]
+            series_dict = ds.get("series", {})
+            if not series_dict:
+                continue
+            vals = []
+            for sk, sd in sorted(series_dict.items(), key=lambda x: int(x[0].split(":")[0]) if ":" in x[0] else int(x[0])):
+                obs = sd.get("observations", {})
+                if obs:
+                    lk = sorted(obs.keys(), key=lambda x: int(x))[-1]
+                    v = obs[lk][0]
+                    vals.append(float(v) if v is not None else None)
+                else:
+                    vals.append(None)
+            keys_list = list(_series.keys())
+            for i, k in enumerate(keys_list):
+                if i < len(vals) and vals[i] is not None:
+                    result[k] = vals[i]
+            if result:
+                return result
+        except Exception:
+            continue
+    # Fallback: individual calls
+    for name, sk in _series.items():
+        for flow in ("ECB", "FM"):
+            v = obtener_dato_ecb(sk, flow)
+            if v is not None:
+                result[name] = v
+                break
+    return result
+
+
+@st.cache_data(ttl=3600)
+def _obtener_tipos_soberanos_batch() -> dict:
+    """Obtiene tipos soberanos 10Y de 6 países en UNA sola llamada al ECB.
+    Devuelve dict: {'ES': 3.25, 'DE': 2.40, ...}
+    """
+    _paises = ["DE", "FR", "ES", "IT", "PT", "NL"]
+    result = {}
+    keys_str = "+".join(f"M.{p}.EUR.RT.LB.A.A207.HSTA" for p in _paises)
+    for flow in ("ILM", "ECB", "IRS"):
+        try:
+            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{keys_str}"
+            r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            ds = data["dataSets"][0]
+            series_dict = ds.get("series", {})
+            if not series_dict:
+                continue
+            # Map by position
+            sorted_series = sorted(series_dict.items(),
+                                   key=lambda x: int(x[0].split(":")[1]) if ":" in x[0] else 0)
+            for i, (sk, sd) in enumerate(sorted_series):
+                obs = sd.get("observations", {})
+                if obs and i < len(_paises):
+                    lk = sorted(obs.keys(), key=lambda x: int(x))[-1]
+                    v = obs[lk][0]
+                    if v is not None:
+                        result[_paises[i]] = float(v)
+            if result:
+                return result
+        except Exception:
+            continue
+    # Fallback: individual calls
+    for pais in _paises:
+        v = _obtener_tipo_pais_ecb(pais, "10Y")
+        if v is not None:
+            result[pais] = v
+    return result
+
+
 def pestaña_renta_fija():
     """Pestaña de Renta Fija: Tesoro ES, curva tipos, prima de riesgo, calculadora."""
     import plotly.graph_objects as go
 
     st.markdown("### 💰 Renta Fija — Tesoro Público, Bonos y Letras")
-    st.caption("Tipos de referencia en tiempo real · Fuente: ECB Statistical Data Warehouse · "
-               "Los datos de la curva AAA corresponden a bonos soberanos de máxima calificación "
-               "(Alemania, Países Bajos, Finlandia). Para tipos específicos españoles se indica el origen.")
+    _rf_col_h, _rf_col_btn = st.columns([5, 1])
+    with _rf_col_h:
+        st.caption("Tipos de referencia · Fuente: ECB Statistical Data Warehouse (data-api.ecb.europa.eu) · "
+                   "Curva AAA: bonos soberanos de máxima calificación (DE, NL, FI). "
+                   "Los datos se cachean 30–60 min.")
+    with _rf_col_btn:
+        if st.button("🔄 Recargar", key="rf_reload", help="Limpiar caché ECB y recargar datos"):
+            _obtener_curva_yc_batch.clear()
+            _obtener_tipos_bce_batch.clear()
+            _obtener_tipos_soberanos_batch.clear()
+            _obtener_historico_yc.clear()
+            st.rerun()
 
     # ── Controles de periodo ─────────────────────────────────────────────────
     _rf_periodo = st.radio(
@@ -2263,11 +2420,12 @@ Cuando el BCE sube tipos, los bonos existentes pierden valor (su cupón fijo val
         """)
         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
-    _dfr   = obtener_dato_ecb("B.U2.EUR.4F.KR.DFR.LEV")
-    _mro   = obtener_dato_ecb("B.U2.EUR.4F.KR.MRR_FR.LEV")
-    _mlf   = obtener_dato_ecb("B.U2.EUR.4F.KR.MLFR.LEV")
-    _euri3 = obtener_dato_ecb("B.U2.EUR.4F.MM.B.EURIBOR3MD_.HSTA")
-    _euri6 = obtener_dato_ecb("B.U2.EUR.4F.MM.B.EURIBOR6MD_.HSTA")
+    _bce = _obtener_tipos_bce_batch()
+    _dfr   = _bce.get("dfr")
+    _mro   = _bce.get("mro")
+    _mlf   = _bce.get("mlf")
+    _euri3 = _bce.get("eur3m")
+    _euri6 = _bce.get("eur6m")
 
     _bc1, _bc2, _bc3, _bc4, _bc5 = st.columns(5)
     with _bc1:
@@ -2439,7 +2597,7 @@ recurso y por qué la credibilidad del BCE es el ancla del euro.
         """)
         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
-    # Países y sus datos
+    # Países y sus datos — batch call para evitar rate-limiting
     _paises_rf = {
         "🇩🇪 Alemania": "DE",
         "🇫🇷 Francia":  "FR",
@@ -2448,10 +2606,8 @@ recurso y por qué la credibilidad del BCE es el ancla del euro.
         "🇵🇹 Portugal": "PT",
         "🇳🇱 Países Bajos": "NL",
     }
-
-    _tipos_paises = {}
-    for _nombre_p, _cc in _paises_rf.items():
-        _tipos_paises[_nombre_p] = _obtener_tipo_pais_ecb(_cc, "10Y")
+    _batch_sov = _obtener_tipos_soberanos_batch()
+    _tipos_paises = {nombre: _batch_sov.get(cc) for nombre, cc in _paises_rf.items()}
 
     _tipo_de = _tipos_paises.get("🇩🇪 Alemania")
 
