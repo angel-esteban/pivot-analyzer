@@ -2034,6 +2034,46 @@ def pestaña_macro():
 
     st.divider()
 
+    # ── PETRÓLEO ─────────────────────────────────────────────────────────────
+    st.markdown("#### 🛢️ Petróleo — Brent vs WTI")
+    _col_b, _col_w, _col_spread, _col_ng = st.columns(4)
+    _brent_p, _brent_d = obtener_precio_macro("BZ=F")
+    _wti_p,   _wti_d   = obtener_precio_macro("CL=F")
+    _ng_p,    _ng_d    = obtener_precio_macro("NG=F")
+    with _col_b:
+        st.metric("Brent (USD/b)", f"{_brent_p:.2f}" if _brent_p else "—",
+                  delta=f"{_brent_d:+.2f}% (día)" if _brent_d else None,
+                  help="Petróleo Brent futuros. Referencia europea y global del crudo.")
+    with _col_w:
+        st.metric("WTI (USD/b)", f"{_wti_p:.2f}" if _wti_p else "—",
+                  delta=f"{_wti_d:+.2f}% (día)" if _wti_d else None,
+                  help="West Texas Intermediate. Referencia EEUU. Suele cotizar con descuento vs Brent.")
+    with _col_spread:
+        if _brent_p and _wti_p:
+            st.metric("Spread Brent-WTI", f"{(_brent_p - _wti_p):.2f} USD",
+                      help="Diferencial Brent menos WTI. Históricamente 0-5 USD positivo.")
+        else:
+            st.metric("Spread Brent-WTI", "—")
+    with _col_ng:
+        st.metric("Gas Natural (USD)", f"{_ng_p:.3f}" if _ng_p else "—",
+                  delta=f"{_ng_d:+.2f}% (día)" if _ng_d else None,
+                  help="Gas Natural Henry Hub (USD/MMBTU).")
+    with st.spinner("Cargando histórico Petróleo..."):
+        _h_brent = obtener_historico_yf("BZ=F", _yf_period)
+        _h_wti   = obtener_historico_yf("CL=F", _yf_period)
+        _h_ng    = obtener_historico_yf("NG=F", _yf_period)
+    _fig_oil = _macro_chart({"Brent (USD/b)": _h_brent, "WTI (USD/b)": _h_wti},
+                            unidad=" USD/b", fecha_inicio=_fecha_ini, height=250)
+    st.plotly_chart(_fig_oil, use_container_width=True, config={"displayModeBar": False})
+    st.caption("Gas Natural Henry Hub (USD/MMBTU)")
+    _fig_ng = _macro_chart({"Gas Natural": _h_ng}, unidad=" USD", fecha_inicio=_fecha_ini, height=180)
+    _fig_ng.update_traces(line_color="#f59e0b")
+    st.plotly_chart(_fig_ng, use_container_width=True, config={"displayModeBar": False})
+
+    st.divider()
+
+
+
     # ── ÍNDICES Y VOLATILIDAD ────────────────────────────────────────────────
     st.markdown("#### 📉 Índices Bursátiles y Volatilidad")
     tickers_idx = [
