@@ -523,6 +523,123 @@ def db_delete(tabla: str, filtro_col: str, filtro_val):
 
 
 # =============================================================================
+# FUNCIONES DE ALERTAS DE PRECIO (PostgreSQL)
+# =============================================================================
+
+def inicializar_tabla_alertas():
+    """Crea la tabla alertas_precio si no existe (idempotente)."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS alertas_precio (
+                    id          SERIAL PRIMARY KEY,
+                    usuario_id  INTEGER NOT NULL,
+                    ticker      VARCHAR(20) NOT NULL,
+                    nombre      VARCHAR(100),
+                    nivel       NUMERIC(18,6) NOT NULL,
+                    condicion   VARCHAR(10) NOT NULL CHECK (condicion IN ('above','below')),
+                    descripcion TEXT,
+                    activa      BOOLEAN DEFAULT TRUE,
+                    disparada   BOOLEAN DEFAULT FALSE,
+                    creada_en   TIMESTAMP DEFAULT NOW(),
+                    disparada_en TIMESTAMP
+                )
+            """)
+            conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def crear_alerta_precio(usuario_id: int, ticker: str, nombre: str,
+                        nivel: float, condicion: str, descripcion: str = "") -> bool:
+    """Crea una alerta de precio para un usuario. Devuelve True si ok."""
+    try:
+        db_insert("alertas_precio", {
+            "usuario_id":  usuario_id,
+            "ticker":      ticker.upper().strip(),
+            "nombre":      nombre or ticker,
+            "nivel":       nivel,
+            "condicion":   condicion,
+            "descripcion": descripcion or "",
+            "activa":      True,
+            "disparada":   False,
+        })
+        return True
+    except Exception:
+        return False
+
+
+def obtener_alertas_usuario(usuario_id: int, solo_activas: bool = True) -> list:
+    """Devuelve las alertas de un usuario, opcionalmente solo las activas."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor) as cur:
+                if solo_activas:
+                    cur.execute(
+                        "SELECT * FROM alertas_precio WHERE usuario_id=%s AND activa=TRUE ORDER BY creada_en DESC",
+                        [usuario_id]
+                    )
+                else:
+                    cur.execute(
+                        "SELECT * FROM alertas_precio WHERE usuario_id=%s ORDER BY creada_en DESC",
+                        [usuario_id]
+                    )
+                return [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
+def desactivar_alerta(alerta_id: int) -> bool:
+    """Desactiva (borra lógicamente) una alerta por ID."""
+    try:
+        db_update("alertas_precio", {"activa": False}, "id", alerta_id)
+        return True
+    except Exception:
+        return False
+
+
+def verificar_y_disparar_alertas(usuario_id: int, ticker: str, precio: float) -> list:
+    """
+    Comprueba alertas activas del usuario para el ticker dado.
+    Dispara (marca como disparada) las que se han cumplido y las devuelve.
+    """
+    disparadas = []
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=__import__("psycopg2").extras.RealDictCursor) as cur:
+                cur.execute(
+                    """SELECT * FROM alertas_precio
+                       WHERE usuario_id=%s AND ticker=%s AND activa=TRUE AND disparada=FALSE""",
+                    [usuario_id, ticker.upper().strip()]
+                )
+                alertas = [dict(r) for r in cur.fetchall()]
+            for al in alertas:
+                nivel = float(al["nivel"])
+                cond  = al["condicion"]
+                cumplida = (cond == "above" and precio >= nivel) or (cond == "below" and precio <= nivel)
+                if cumplida:
+                    with conn.cursor() as cur2:
+                        cur2.execute(
+                            "UPDATE alertas_precio SET disparada=TRUE, disparada_en=NOW(), activa=FALSE WHERE id=%s",
+                            [al["id"]]
+                        )
+                    conn.commit()
+                    disparadas.append(al)
+        finally:
+            conn.close()
+    except Exception:
+        pass
+    return disparadas
+
+
+# =============================================================================
 # FUNCIONES DE AUTENTICACIÓN
 # =============================================================================
 
@@ -6415,29 +6532,115 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
 
         # ── Bloque 3f: Huecos de Precio ───────────────────────────────────
         st.markdown("### 📊 Huecos de Precio Abiertos")
-        _h_info_md = """
-**¿Qué es un hueco?**
+        with st.expander("📖 ¿Qué son los Huecos de Precio? — Guía didáctica", expanded=False):
+            st.markdown("#### 📊 Huecos de Precio (*Gaps*) — Todo lo que necesitas saber")
+            st.markdown("""
+**¿Qué es exactamente un hueco de precio?**
 
-Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior al máximo de la sesión anterior (hueco alcista) o inferior al mínimo anterior (hueco bajista). Los huecos abiertos actúan como imanes: el mercado tiende a volver a rellenarlos estadísticamente.
+Imagina que un valor cierra el lunes a 10,00 €. El martes, antes de abrir el mercado, llegan
+noticias importantes (resultados empresariales, un evento macro, una noticia sectorial).
+La demanda o la oferta se desplaza tanto que el valor *abre directamente a 10,50 €* — sin que
+ninguna operación se haya ejecutado entre 10,00 € y 10,50 €. Ese vacío en el gráfico, esa
+zona donde *no hubo ninguna transacción*, es un **hueco de precio**.
 
----
+Los huecos son especialmente frecuentes en la apertura del mercado, cuando acumula toda la
+información procesada fuera del horario bursátil. También aparecen en activos con baja
+liquidez o en momentos de alta volatilidad como publicaciones de resultados o decisiones de
+tipos de interés.
+""")
+            st.info("**Regla fundamental:** un hueco es una zona del gráfico donde **no se negoció** en su momento. "
+                    "El mercado tiende a «volver» a esas zonas para que se produzcan esas transacciones pendientes — "
+                    "de ahí la expresión popular *«los huecos se cierran»*.")
+            st.markdown("---")
+            st.markdown("#### 🔼 Huecos Alcistas — Soporte potencial")
+            st.markdown("""
+Se forman cuando el precio de **apertura** de una sesión es **superior** al máximo de la sesión anterior.
+El precio «saltó hacia arriba» sin pasar por esa zona intermedia.
 
-**Tipos**
-- 🔼 **Alcista**: zona de soporte potencial. El precio subió dejando un vacío por debajo.
-- 🔽 **Bajista**: zona de resistencia potencial. El precio cayó dejando un vacío por encima.
+**¿Por qué actúan como soporte?**
+Piénsalo así: todos los que compraron antes del hueco ganaron dinero de golpe. Si el precio
+vuelve a bajar hacia esa zona, esos mismos inversores — que en su momento no pudieron comprar
+más barato — pueden volver a comprar con convicción. Esa demanda latente convierte la zona
+del hueco en un suelo natural.
 
----
+**Ejemplo real:** una empresa publica resultados excelentes después del cierre. Al día siguiente
+abre un 4% por encima. Semanas después, si el precio retrocede hacia esa zona, muchos inversores
+que se perdieron la subida inicial entrarán comprando, frenando la caída.
+""")
+            st.markdown("#### 🔽 Huecos Bajistas — Resistencia potencial")
+            st.markdown("""
+Se forman cuando el precio de **apertura** cae **por debajo** del mínimo de la sesión anterior.
+El precio «cayó en caída libre» saltándose esa zona.
 
-**Distancia**
-- Positiva (+): el precio actual está *por encima* de la zona del hueco.
-- Negativa (−): el precio actual está *por debajo* de la zona del hueco.
+**¿Por qué actúan como resistencia?**
+Todos los que compraron justo antes del hueco bajista quedaron «atrapados» con pérdidas.
+Cuando el precio sube de vuelta hacia esa zona, su impulso natural es vender para «recuperar»
+lo perdido, lo que genera presión vendedora. Esa oferta latente convierte la zona en un techo.
 
----
+**Ejemplo real:** un profit warning hace que una acción abra un 6% por debajo del cierre anterior.
+Cuando semanas después el precio intenta recuperarse hacia esa zona, los inversores que compraron
+antes de la caída venderán para «salir sin pérdidas», dificultando la subida.
+""")
+            st.markdown("---")
+            st.markdown("#### 📐 Cómo leer las métricas de cada hueco")
+            col_h1, col_h2, col_h3 = st.columns(3)
+            with col_h1:
+                st.markdown("""
+**Zona del hueco (rango)**
 
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-"""
-        with st.expander("ℹ️ Huecos de Precio", expanded=False):
-            st.markdown(_h_info_md)
+Los dos precios que delimitan el hueco:
+el mínimo y el máximo de esa zona vacía.
+El hueco está «cerrado» cuando el precio
+cotiza dentro de ese rango.
+""")
+            with col_h2:
+                st.markdown("""
+**Tamaño (%)**
+
+Anchura del hueco expresada en porcentaje.
+Huecos grandes (>3%) son más significativos
+y tienen más fuerza como soporte/resistencia.
+Huecos pequeños (<0,5%) tienen menos
+relevancia técnica.
+""")
+            with col_h3:
+                st.markdown("""
+**Distancia (%)**
+
+Qué tan lejos está el precio actual del hueco.
+- Positiva (+): precio por encima del hueco.
+  Si es alcista → hueco por debajo como soporte.
+- Negativa (−): precio por debajo del hueco.
+  Si es bajista → hueco por encima como resistencia.
+""")
+            st.markdown("---")
+            st.markdown("#### ⏱️ El factor tiempo: ¿cuánto llevan abiertos?")
+            st.markdown("""
+Un hueco abierto hace **pocas sesiones** es más «fresco» y probablemente aún esté en la memoria
+del mercado — mayor probabilidad de que actúe como soporte/resistencia próxima.
+
+Un hueco abierto hace **muchos meses** puede haber perdido relevancia operativa si el precio
+ha desarrollado muchas estructuras por encima o por debajo. Sin embargo, cuando el precio
+llega a esa zona por primera vez, puede desencadenar reacciones importantes porque muchos
+sistemas automáticos lo tienen identificado.
+
+La herramienta muestra huecos de los últimos **252 días hábiles** (aprox. 1 año), ordenados
+por distancia al precio actual — de los más próximos a los más lejanos.
+""")
+            st.markdown("---")
+            st.markdown("#### ⚠️ Limitaciones importantes que debes conocer")
+            st.warning("""
+**Los huecos NO siempre se cierran.**
+Aunque la estadística histórica muestra que la mayoría de huecos acaban cerrándose,
+hay huecos que permanecen abiertos durante años (especialmente huecos de ruptura en
+activos muy alcistas). Tratar un hueco como una garantía de movimiento es un error.
+
+**El contexto importa más que el hueco:**
+Un hueco alcista puede no actuar como soporte si la tendencia de fondo es bajista,
+si hay noticias negativas, o si el volumen en la zona fue muy bajo.
+Úsalo como un nivel de *atención*, no como una señal de acción automática.
+""")
+            st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
         if huecos_abiertos:
             _h_cols = st.columns(min(len(huecos_abiertos), 3))
@@ -6474,6 +6677,196 @@ Un hueco (*gap*) ocurre cuando el precio de apertura de una sesión es superior 
 
         # ── Bloque: Diagnóstico Técnico ───────────────────────────────────
         st.markdown("### 📝 Diagnóstico Técnico")
+
+        with st.expander("📖 ¿Cómo funciona el Diagnóstico Técnico? — Guía didáctica completa", expanded=False):
+            st.markdown("#### 🧭 El Diagnóstico Técnico: un cuadro de mandos para el inversor")
+            st.markdown("""
+El **Diagnóstico Técnico** no es una bola de cristal — es un sistema de verificación estructurado que
+analiza el mismo activo desde **6 ángulos diferentes**, cada uno midiendo una dimensión distinta
+del comportamiento del precio. La lógica es simple: si la mayoría de los ángulos apuntan en la misma
+dirección, la señal tiene más solidez. Si se contradicen, el mercado está enviando señales mixtas y
+conviene ser más prudente.
+
+Piénsalo como el diagnóstico médico de una revisión completa: un solo indicador en zona de riesgo
+no implica necesariamente un problema, pero si cinco de los seis indican lo mismo, la señal es mucho
+más difícil de ignorar.
+""")
+            st.markdown("---")
+
+            # Component descriptions in 2 columns
+            _dc1, _dc2 = st.columns(2)
+
+            with _dc1:
+                st.markdown("##### 🏔️ Componente 1 — Máximos Históricos (ATH)")
+                st.markdown("""
+El **ATH** (*All-Time High*) es el precio más alto que ha alcanzado un activo en toda su historia.
+Su distancia al precio actual es uno de los indicadores más potentes de análisis técnico.
+
+**¿Por qué es tan relevante el ATH?**
+Cuando un activo alcanza nuevos máximos históricos, *no hay vendedores atrapados*.
+Todos los que compraron en cualquier momento de la historia están en beneficio. Esto elimina
+la presión vendedora de quienes esperaban «recuperar» su inversión, creando un entorno
+técnicamente muy favorable para continuar subiendo.
+
+**Extensión de Fibonacci 127.2%:**
+Cuando el precio supera el ATH, el siguiente objetivo técnico de referencia se calcula
+con la extensión de Fibonacci del 127.2% sobre el rango del último ciclo bajista previo
+al ATH. Es un nivel de proyección, no una garantía.
+
+**Cómo interpretarlo:**
+- Precio cerca del ATH (< 5% de distancia): zona de máxima atención. La ruptura puede ser explosiva.
+- Precio muy por debajo del ATH (> 30%): el activo necesita recuperar mucho terreno antes de estar en «modo subida libre».
+""")
+                st.markdown("##### 📈 Componente 2 — Media Móvil 200 Sesiones (MM200)")
+                st.markdown("""
+La **Media Móvil de 200 sesiones** (aproximadamente 10 meses de cotización) es el indicador
+de tendencia más seguido por gestores institucionales, fondos de pensiones y análisis cuantitativo
+en todo el mundo.
+
+**¿Qué mide exactamente?**
+Calcula el precio medio de cierre de las últimas 200 sesiones. Su pendiente indica la dirección
+de la tendencia de largo plazo; la posición del precio respecto a ella indica el régimen actual.
+
+**La regla de los dos estados:**
+- **Precio sobre MM200 con pendiente alcista:** tendencia alcista de largo plazo confirmada. Los retrocesos son oportunidades de compra para inversores con horizonte de meses.
+- **Precio bajo MM200 con pendiente bajista:** tendencia bajista de largo plazo. Los rebotes son oportunidades de venta para operadores más ágiles.
+
+**La distancia importa:**
+Un precio un 30% por encima de su MM200 está «sobreextendido». Aunque la tendencia sea alcista,
+la probabilidad de una corrección hacia la media es alta. No es una señal de venta, pero sí una
+señal de *no comprar agresivamente*.
+""")
+                st.markdown("##### 🎯 Componente 3 — Resistencias Estructurales")
+                st.markdown("""
+Las **resistencias y soportes estructurales** son niveles de precio donde históricamente el mercado
+ha reaccionado de forma repetida. Son zonas donde la oferta o la demanda han sido especialmente
+intensas en el pasado.
+
+**¿De dónde vienen estos niveles?**
+Se calculan a partir de los sistemas de pivots (clásico, Fibonacci, Camarilla, Woodie, DeMark)
+analizando los precios históricos. Cuando varios sistemas independientes coinciden en el mismo
+nivel, ese nivel se considera **reforzado** — tiene más probabilidad de actuar como soporte o resistencia.
+
+**Cómo leer la posición en rango:**
+- Si el precio está cerca de una **resistencia reforzada**: el precio puede frenar o retroceder.
+  Romperla al alza con volumen es una señal alcista poderosa.
+- Si el precio está cerca de un **soporte reforzado**: zona donde la demanda puede aparecer.
+  Perderlo a la baja con volumen es una señal bajista seria.
+""")
+
+            with _dc2:
+                st.markdown("##### 🌀 Componente 4 — Fibonacci")
+                st.markdown("""
+Los **niveles de Fibonacci** en trading se basan en la observación de que los precios tienden
+a retroceder en proporciones matemáticas específicas (23.6%, 38.2%, 50%, 61.8%, 78.6%) antes
+de reanudar su tendencia principal.
+
+**¿De dónde viene esto?**
+La secuencia de Fibonacci (0, 1, 1, 2, 3, 5, 8, 13, 21...) genera ratios como 0.618, 0.382 o 0.236
+que aparecen recurrentemente en la naturaleza y, según la observación técnica, también en los mercados.
+Más allá de la explicación teórica, su poder real viene de la **profecía autocumplida**: millones de
+traders los usan, lo que hace que los precios reaccionen en esos niveles.
+
+**El swing relevante:**
+El sistema detecta el swing más significativo de los últimos 252 días (el máximo y mínimo más amplios)
+y calcula los niveles de retroceso entre ambos extremos.
+
+**Escenarios clave:**
+- **Retroceso al 61.8%:** el nivel más «mágico» del Fibonacci, conocido como la «ratio áurea». Un rebote aquí es muy seguido por la comunidad técnica.
+- **Retroceso al 78.6%:** zona de «último cartucho». Si el precio cede este nivel, generalmente el swing completo está en riesgo.
+- **Extensiones 127.2% y 161.8%:** objetivos de precio cuando el precio supera el máximo del swing y busca nuevos territorios.
+""")
+                st.markdown("##### 📉 Componente 5 — RSI (Índice de Fuerza Relativa)")
+                st.markdown("""
+El **RSI** (*Relative Strength Index*) fue creado por J. Welles Wilder en 1978 y es uno de los
+indicadores de momentum más utilizados del mundo. Mide la velocidad y magnitud de los movimientos
+de precio recientes, oscilando entre 0 y 100.
+
+**La fórmula simplificada:**
+Compara el promedio de subidas de los últimos 14 días con el promedio de bajadas. Un RSI alto
+indica que las subidas han dominado con fuerza; un RSI bajo, que las bajadas han sido intensas.
+
+**Las 7 zonas del RSI:**
+- **RSI > 80:** Sobrecompra extrema — el activo ha subido muy rápido. Señal de agotamiento potencial.
+- **RSI 70-80:** Sobrecompra — precaución para nuevas compras.
+- **RSI 55-70:** Zona alcista — momentum positivo, tendencia saludable.
+- **RSI 45-55:** Zona neutra — sin señal clara.
+- **RSI 30-45:** Zona bajista — momentum negativo.
+- **RSI 20-30:** Sobreventa — posible agotamiento vendedor.
+- **RSI < 20:** Sobreventa extrema — caída muy intensa, posible rebote técnico.
+
+**Las divergencias — la señal más potente:**
+Una *divergencia alcista* ocurre cuando el precio hace un mínimo más bajo pero el RSI hace un
+mínimo más alto. Indica que el momentum bajista se está agotando aunque el precio siga cayendo.
+La *divergencia bajista* es la contraria: precio sube a nuevos máximos pero el RSI no los confirma.
+Las divergencias son señales de alerta temprana — no predicen el giro exacto, pero avisan de que
+el movimiento actual pierde fuerza interna.
+""")
+                st.markdown("##### 📦 Componente 6 — Volumen Relativo y Acumulación/Distribución")
+                st.markdown("""
+El **volumen** es «la munición» del mercado. Un movimiento de precio con alto volumen tiene
+mucha más credibilidad que el mismo movimiento con volumen escaso.
+
+**Volumen relativo (5d vs 20d):**
+Compara el volumen medio de las últimas 5 sesiones con el de las últimas 20 sesiones.
+Un ratio > 150% indica que el interés reciente es inusualmente alto — algo está pasando.
+Un ratio < 50% indica mercado dormido, con pocas manos activas.
+
+**Acumulación vs. Distribución:**
+Analiza si el volumen está dominado por sesiones alcistas (acumulación — los grandes inversores
+están comprando) o bajistas (distribución — los grandes inversores están vendiendo).
+
+- **Acumulación:** el dinero «inteligente» (fondos, institucionales) está entrando. Señal alcista de fondo.
+- **Distribución:** el dinero «inteligente» está saliendo mientras los minoristas aún compran. Señal bajista de fondo.
+
+*El análisis de acumulación/distribución es una de las técnicas del Método Wyckoff, desarrollado
+por Richard Wyckoff a principios del siglo XX y aún vigente como marco de análisis institucional.*
+""")
+
+            st.markdown("---")
+            st.markdown("#### 🎯 La Puntuación Técnica Integrada — cómo se calcula")
+            st.markdown("""
+La **Puntuación Técnica** (0-10) agrega los 6 componentes en una única métrica ponderada.
+Cada componente tiene un peso diferente según su relevancia estadística:
+""")
+            _pw1, _pw2, _pw3 = st.columns(3)
+            with _pw1:
+                st.markdown("""
+| Componente | Peso |
+|---|---|
+| MM200 | 20% |
+| RSI | 20% |
+| ATH | 15% |
+""")
+            with _pw2:
+                st.markdown("""
+| Componente | Peso |
+|---|---|
+| Fibonacci | 15% |
+| Resistencias | 15% |
+| Volumen | 15% |
+""")
+            with _pw3:
+                st.markdown("""
+**Interpretación:**
+- **≥ 6.5** → Señal alcista
+- **3.5 – 6.5** → Señal neutral
+- **≤ 3.5** → Señal bajista
+
+La convicción (0-6) mide
+cuántos componentes
+apuntan en la dirección
+de la señal mayoritaria.
+""")
+            st.warning("""
+**Importante — el Diagnóstico Técnico no es una señal de compra/venta:**
+Todos los componentes de este diagnóstico son indicadores *rezagados* o *contemporáneos* — describen
+lo que **ha ocurrido**, no lo que **ocurrirá**. Una puntuación alta indica que las condiciones técnicas
+*actuales* son favorables según el análisis histórico, pero el futuro depende de factores que ningún
+indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportamiento de grandes inversores.
+Úsalo como un filtro de contexto, no como un oráculo.
+""")
+            st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
         # ── Componente 1: Máximos Históricos ─────────────────────────────
         if analisis_ath:
