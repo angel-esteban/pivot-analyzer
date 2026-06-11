@@ -1736,24 +1736,77 @@ def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
 
 @st.cache_data(ttl=3600)
 def obtener_euribor_12m() -> float | None:
-    """Euribor 12M (1 año) — ECB Data Portal FM flow.
-    Clave correcta: EURIBOR1YD_ (no EURIBOR12MD_). Frecuencia mensual."""
+    """Euribor 12M — scrape de euribor-rates.eu (tabla diaria/semanal).
+    ECB FM API (EURIBOR1YD_) dejó de devolver datos — migrado a fuente web."""
     try:
-        url = "https://data-api.ecb.europa.eu/service/data/FM/M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA"
-        r = requests.get(url,
-                         params={"lastNObservations": 1, "format": "jsondata"},
-                         timeout=15)
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+        r = requests.get("https://www.euribor-rates.eu/current-euribor-rates.asp",
+                         headers=headers, timeout=15)
         if r.status_code != 200:
             return None
-        data = r.json()
-        ds = data["dataSets"][0]
-        obs = (list(ds["series"].values())[0]["observations"]
-               if "series" in ds else ds["observations"])
-        if not obs:
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        if not table:
             return None
-        last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
-        val = obs[last_key][0]
-        return float(val) if val is not None else None
+        for row in table.find_all("tr"):
+            cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+            if cells and "12" in cells[0]:
+                # cells[1] = latest value, e.g. "2.866 %"
+                val_str = cells[1].replace("%", "").replace(",", ".").strip()
+                return float(val_str)
+        return None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_historico_euribor_12m(n_months: int = 24) -> "pd.Series | None":
+    """Serie histórica mensual Euribor 12M — euribor-rates.eu/en/euribor-rates-by-year/."""
+    try:
+        import datetime
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+        registros = {}
+        current_year = datetime.datetime.now().year
+        years_needed = (n_months // 12) + 2
+        for yr in range(current_year, current_year - years_needed, -1):
+            url = f"https://www.euribor-rates.eu/en/euribor-rates-by-year/{yr}/"
+            r = requests.get(url, headers=headers, timeout=12)
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.text, "html.parser")
+            table = soup.find("table")
+            if not table:
+                continue
+            rows = table.find_all("tr")
+            # Find column index for "Euribor 12 months"
+            header = [c.get_text(strip=True) for c in rows[0].find_all(["th", "td"])]
+            try:
+                col_idx = next(i for i, h in enumerate(header) if "12" in h)
+            except StopIteration:
+                continue
+            for row in rows[1:]:
+                cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+                if len(cells) <= col_idx:
+                    continue
+                try:
+                    # Date format: "12/1/2025" → M/D/YYYY
+                    date = pd.to_datetime(cells[0], format="%m/%d/%Y", errors="coerce")
+                    if pd.isna(date):
+                        date = pd.to_datetime(cells[0], errors="coerce")
+                    if pd.isna(date):
+                        continue
+                    val_str = cells[col_idx].replace("%", "").replace(",", ".").strip()
+                    registros[date] = float(val_str)
+                except (ValueError, IndexError):
+                    continue
+            if len(registros) >= n_months:
+                break
+        if not registros:
+            return None
+        serie = pd.Series(registros).sort_index()
+        return serie.tail(n_months)
     except Exception:
         return None
 
@@ -1918,7 +1971,7 @@ def pestaña_macro():
     # Gráfico histórico — Tipos
     with st.spinner("Cargando histórico tipos..."):
         h_dfr      = obtener_historico_ecb("ECB", "B.U2.EUR.4F.KR.DFR.LEV", _n_obs)
-        h_euribor  = obtener_historico_ecb("FM", "M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA", _n_obs)
+        h_euribor  = obtener_historico_euribor_12m(_n_obs)
         h_fedfunds = obtener_historico_bis(_n_obs)
         h_us10y    = obtener_historico_yf("^TNX", _yf_period)
 
@@ -7774,45 +7827,69 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         file_name = _dl_file,
                         mime      = _dl_mime,
                         key       = "dl_est_informe",
+                        use_container_width=True,
                     )
-            # Disclaimer
-            st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-            st.markdown(
-                '<p style="font-size:0.75rem;color:#9ca3af;text-align:center;'
-                'border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px">'
-                'An\u00e1lisis educativo y orientativo \u00b7 Las puntuaciones se calculan '
-                'autom\u00e1ticamente a partir de indicadores t\u00e9cnicos y fundamentales. '
-                'No constituyen asesoramiento personalizado de inversi\u00f3n en el sentido '
-                'de MiFID II / RD 217/2008. Para asesoramiento personalizado, contactar '
-                'con una EAF o entidad autorizada por CNMV.</p>',
-                unsafe_allow_html=True
-            )
+                    _ts_val = st.session_state.get("est_inf_ts", "")
+                    if _ts_val:
+                        st.caption(f"Generado: {_ts_val}")
 
-    # ---- TAB ANALISIS IA (proxima version) ----
+    # ---- TAB IA ----
     with tab_ia:
-        st.markdown("## \U0001f916 An\u00e1lisis IA")
-        st.info("**Esta funcionalidad est\u00e1 en desarrollo y estar\u00e1 disponible en una versi\u00f3n pr\u00f3xima.**")
+        st.info("🤖 Análisis IA — próximamente disponible.")
 
     # ---- TAB MACRO ----
     with tab_macro:
         pestaña_macro()
 
-    # ---- TAB ADMIN (solo superadmin) ----
-    if tab_admin is not None:
+    # ---- TAB ADMIN ----
+    if es_superadmin and tab_admin:
         with tab_admin:
-            st.markdown("## ⚙️ Administración de Usuarios")
-            st.info("**Panel de administración disponible solo para superadministradores.**")
+            panel_admin()
 
     # ---- TAB AYUDA ----
     with tab_ayuda:
-        st.markdown("## 📖 Ayuda")
-        st.info("**Sección de ayuda en construcción.**")
+        st.markdown("### Guía rápida de Pivot Points")
+        st.markdown("""
+**Pivot Point (PP)** — Nivel de equilibrio calculado con datos de la sesión anterior (máx, mín, cierre).
+
+**Resistencias (R1-R4)** — Por encima del PP. El precio tiende a frenarse o rebotar.
+
+**Soportes (S1-S4)** — Por debajo del PP. Zonas de posible rebote al alza.
+
+**Confluencia** — Cuando niveles de distintos timeframes coinciden. Mayor fiabilidad.
+
+---
+**Sistemas disponibles:**
+- **Clásico** — El más universal. Base para todos los demás.
+- **Woodie** — Doble peso al cierre. Mejor en días con gap.
+- **Camarilla** — 8 niveles muy cerca del precio. Operativa intradía.
+- **DeMark** — Condicional según dirección del día anterior.
+- **Fibonacci** — Usa ratios 0.382, 0.618, 1.000. Correcciones en tendencia.
+- **Mid-Points** — Niveles intermedios entre los Clásicos. Lateralizaciones.
+
+---
+**Semáforo global:**
+- 🟢 Verde (≥65%) — Sesgo técnico positivo
+- 🟡 Amarillo (40-65%) — Sin sesgo claro
+- 🔴 Rojo (<40%) — Sesgo técnico negativo
+
+Factores: Precio vs PP Diario · RSI · MACD · Bollinger %B · Volumen · Parabolic SAR
+
+---
+*Análisis educativo. No constituye asesoramiento de inversión regulado bajo MiFID II (Directiva 2014/65/UE).*
+        """)
+
 
 # =============================================================================
 # PUNTO DE ENTRADA
 # =============================================================================
 
-if "usuario" not in st.session_state:
-    pantalla_login()
-else:
-    pantalla_analisis()
+def main():
+    if "usuario" not in st.session_state:
+        pantalla_login()
+    else:
+        pantalla_analisis()
+
+
+if __name__ == "__main__":
+    main()
