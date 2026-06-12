@@ -2473,79 +2473,114 @@ def obtener_euribor_6m() -> "float | None":
 
 @st.cache_data(ttl=86400)
 def obtener_tipos_bce_ecb() -> dict:
-    """Tipos clave BCE (DFR, MRO, MLF) — scraping tabla histórica ecb.europa.eu.
-    Devuelve {'dfr': float, 'mro': float, 'mlf': float} vigentes en la fecha actual.
-    El BCE actualiza esta página cada vez que cambia los tipos (~8 veces/año).
+    """Tipos clave BCE (DFR, MRO, MLF) — vigentes en la fecha actual.
+    Fuente primaria: ECB Data API (FM dataset).
+    Fallback: scraping tabla HTML ecb.europa.eu.
+    Aplica filtro eff_date <= today para ignorar tipos anunciados pero no vigentes.
+    Retorna {'dfr': float, 'mro': float, 'mlf': float}.
     """
-    try:
-        import datetime
+    import datetime
+
+    today = datetime.date.today()
+
+    def _via_api() -> dict:
+        """ECB Data API — fiable, datos estructurados con fecha de vigencia."""
+        _base = "https://data-api.ecb.europa.eu/service/data/FM"
+        _series = {
+            "dfr": "B.U2.EUR.4F.KR.DFR.LEV",
+            "mro": "B.U2.EUR.4F.KR.MRR_FR.LEV",
+            "mlf": "B.U2.EUR.4F.KR.MLFR.LEV",
+        }
+        _result = {}
+        for _key, _sid in _series.items():
+            _url = f"{_base}/{_sid}?format=jsondata&lastNObservations=5"
+            _r = requests.get(_url, timeout=12,
+                              headers={"Accept": "application/json"})
+            if _r.status_code != 200:
+                continue
+            _d = _r.json()
+            _time_vals = [
+                v["id"]
+                for v in _d["structure"]["dimensions"]["observation"][0]["values"]
+            ]
+            _obs = _d["dataSets"][0]["series"]["0:0:0:0:0:0:0"]["observations"]
+            # Pick most recent eff_date <= today
+            _best_date = None
+            _best_val  = None
+            for _k, _v in _obs.items():
+                _t = datetime.date.fromisoformat(_time_vals[int(_k)])
+                if _t <= today and (_best_date is None or _t > _best_date):
+                    _best_date = _t
+                    _best_val  = _v[0]
+            if _best_val is not None:
+                _result[_key] = float(_best_val)
+        return _result
+
+    def _via_scraping() -> dict:
+        """Fallback: scraping tabla HTML oficial BCE."""
         from bs4 import BeautifulSoup
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        url = ("https://www.ecb.europa.eu/stats/policy_and_exchange_rates/"
-               "key_ecb_interest_rates/html/index.en.html")
-        r = requests.get(url, headers=headers, timeout=15)
-        if r.status_code != 200:
-            return {}
-        soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.find("table")
-        if not table:
-            return {}
-        month_map = {
+        _month_map = {
             "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
             "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
         }
-        today = datetime.date.today()
-        current_year = None
-        best_date = None
-        best = {}
-        for row in table.find_all("tr"):
-            cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
-            cells = [c for c in cells if c]
-            # 6-cell row: [year, date, dfr, mro_fixed, mro_variable, mlf]
-            # 5-cell row: [date, dfr, mro_fixed, mro_variable, mlf] (year inherited)
-            if len(cells) >= 6 and cells[0].isdigit():
-                current_year = int(cells[0])
-                date_raw, dfr_raw, mro_raw, mlf_raw = cells[1], cells[2], cells[3], cells[5]
-            elif len(cells) == 5 and current_year:
-                date_raw, dfr_raw, mro_raw, mlf_raw = cells[0], cells[1], cells[2], cells[4]
+        _hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        _url  = ("https://www.ecb.europa.eu/stats/policy_and_exchange_rates/"
+                 "key_ecb_interest_rates/html/index.en.html")
+        _r = requests.get(_url, headers=_hdrs, timeout=15)
+        if _r.status_code != 200:
+            return {}
+        _soup  = BeautifulSoup(_r.text, "html.parser")
+        _table = _soup.find("table")
+        if not _table:
+            return {}
+        _best_date, _best, _cur_year = None, {}, None
+        for _row in _table.find_all("tr"):
+            _cells = [c.get_text(strip=True) for c in _row.find_all(["th", "td"])]
+            _cells = [c for c in _cells if c]
+            if len(_cells) >= 6 and _cells[0].isdigit():
+                _cur_year = int(_cells[0])
+                _dr, _dfr, _mro, _mlf = _cells[1], _cells[2], _cells[3], _cells[5]
+            elif len(_cells) >= 5 and _cur_year:
+                _dr, _dfr, _mro, _mlf = _cells[0], _cells[1], _cells[2], _cells[4]
             else:
                 continue
-            # Parse "17 Jun." or "5 Feb." — strip footnote digits
-            date_raw_clean = re.sub(r"\d+$", "", date_raw).strip()
-            parts = date_raw_clean.split()
-            if len(parts) < 2:
+            _dr_clean = re.sub(r"\d+$", "", _dr).strip()
+            _parts = _dr_clean.split()
+            if len(_parts) < 2:
                 continue
             try:
-                day = int(parts[0])
-                mon_str = parts[1].rstrip(".")
-                month = month_map.get(mon_str) or month_map.get(parts[1])
-                if not month:
+                _day   = int(_parts[0])
+                _month = _month_map.get(_parts[1].rstrip("."))
+                if not _month:
                     continue
-                eff_date = datetime.date(current_year, month, day)
+                _eff = datetime.date(_cur_year, _month, _day)
             except (ValueError, KeyError, TypeError):
                 continue
-            if eff_date <= today:
-                if best_date is None or eff_date > best_date:
-                    best_date = eff_date
+            if _eff <= today and (_best_date is None or _eff > _best_date):
+                _best_date = _eff
+                for _k, _raw in [("dfr", _dfr), ("mro", _mro), ("mlf", _mlf)]:
                     try:
-                        best["dfr"] = float(dfr_raw.replace("−", "-").replace(",", "."))
+                        _best[_k] = float(_raw.replace("\u2212", "-").replace("−", "-").replace(",", "."))
                     except ValueError:
                         pass
-                    try:
-                        best["mro"] = float(mro_raw.replace("−", "-").replace(",", "."))
-                    except ValueError:
-                        pass
-                    try:
-                        best["mlf"] = float(mlf_raw.replace("−", "-").replace(",", "."))
-                    except ValueError:
-                        pass
-        if not best:
-            raise RuntimeError("BCE: tipos no encontrados")
-        return best
-    except RuntimeError:
-        raise
-    except Exception as _exc:
-        raise RuntimeError(f"BCE scraping: {_exc}") from _exc
+        return _best
+
+    # ── Intentar API primero, scraping como fallback ─────────────────────────
+    try:
+        _res = _via_api()
+        if len(_res) == 3:
+            return _res
+    except Exception:
+        pass
+
+    try:
+        _res = _via_scraping()
+        if _res:
+            return _res
+    except Exception:
+        pass
+
+    raise RuntimeError("BCE: no se pudieron obtener tipos (API y scraping fallaron)")
 
 
 @st.cache_data(ttl=86400)
