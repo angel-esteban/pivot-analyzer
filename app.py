@@ -2144,81 +2144,67 @@ def obtener_precio_macro(ticker: str):
 # PESTAÑA RENTA FIJA
 # =============================================================================
 
-_YC_TENOR_MAP = {
-    "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
-    "2Y": "SR_2Y", "3Y": "SR_3Y", "5Y": "SR_5Y",
-    "7Y": "SR_7Y", "10Y": "SR_10Y", "15Y": "SR_15Y",
-    "20Y": "SR_20Y", "30Y": "SR_30Y",
+# Tenores confirmados con datos en el ECB YC API.
+# SR_6M, SR_2Y, SR_5Y, SR_7Y, SR_10Y, SR_30Y devuelven serie vacía en el API actual.
+_YC_TENORES_DISPONIBLES = {
+    "3M": "SR_3M",
+    "1Y": "SR_1Y",
+    "3Y": "SR_3Y",
+    "15Y": "SR_15Y",
+    "20Y": "SR_20Y",
 }
 
 
 @st.cache_data(ttl=1800)
-def _obtener_curva_yc_batch() -> dict:
-    """Obtiene TODOS los tenores de la curva AAA Euro Area en UNA sola llamada al ECB API.
-    Devuelve dict: {'3M': 2.35, '1Y': 2.40, ...} — valores en %.
-    Una sola llamada evita rate-limiting cuando hay 11 tenores distintos.
-    """
-    keys_str = "+".join(
-        f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}" for sr in _YC_TENOR_MAP.values()
-    )
-    url = f"https://data-api.ecb.europa.eu/service/data/YC/{keys_str}"
-    try:
-        r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
-        if r.status_code != 200:
-            return {}
-        data = r.json()
-        ds = data["dataSets"][0]
-        series_dict = ds.get("series", {})
-        if not series_dict:
-            return {}
-        # Map series index → tenor
-        # structure.dimensions.series contains the dimension values
-        series_dims = data["structure"]["dimensions"]["series"]
-        # Last dimension is the maturity (position varies; find MATURITY dim)
-        mat_dim_idx = None
-        mat_values = []
-        for idx, dim in enumerate(series_dims):
-            if dim.get("id") == "MATURITY" or "SR_" in str([v.get("id","") for v in dim.get("values",[])]):
-                mat_dim_idx = idx
-                mat_values = [v["id"] for v in dim.get("values", [])]
-                break
-        # Build reverse map: SR_3M → 3M
-        rev_map = {v: k for k, v in _YC_TENOR_MAP.items()}
-        result = {}
-        for series_key, series_data in series_dict.items():
-            obs = series_data.get("observations", {})
-            if not obs:
-                continue
-            last_key = sorted(obs.keys(), key=lambda x: int(x))[-1]
-            val = obs[last_key][0]
-            if val is None:
-                continue
-            # Extract maturity from series key index (e.g. "0:0:0:0:0:0:3" → index 3 → SR_5Y)
-            parts = series_key.split(":")
-            if mat_dim_idx is not None and mat_dim_idx < len(parts):
-                mat_idx = int(parts[mat_dim_idx])
-                if mat_idx < len(mat_values):
-                    sr_code = mat_values[mat_idx]
-                    tenor = rev_map.get(sr_code)
-                    if tenor:
-                        result[tenor] = float(val)
-        return result
-    except Exception:
-        return {}
-
-
 def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
-    """Tipo spot de la curva AAA Euro Area (usa caché batch para evitar rate-limiting)."""
-    cache = _obtener_curva_yc_batch()
-    return cache.get(tenor)
+    """Tipo spot curva AAA Euro Area para un tenor.
+    Tenores con datos directos: 3M, 1Y, 3Y, 15Y, 20Y.
+    Para el resto usa interpolación lineal sobre los puntos disponibles.
+    """
+    # Tenores en años para interpolación
+    _tenor_years = {
+        "3M": 0.25, "6M": 0.5,
+        "1Y": 1.0, "2Y": 2.0, "3Y": 3.0,
+        "5Y": 5.0, "7Y": 7.0, "10Y": 10.0,
+        "15Y": 15.0, "20Y": 20.0, "30Y": 30.0,
+    }
+    target_yr = _tenor_years.get(tenor)
+    if target_yr is None:
+        return None
+    # Direct lookup first
+    sr = _YC_TENORES_DISPONIBLES.get(tenor)
+    if sr is not None:
+        return obtener_dato_ecb(f"B.U2.EUR.4F.G_N_A.SV_C_YM.{sr}", flow_ref="YC")
+    # Interpolate from available points
+    pts = []
+    for t, s in _YC_TENORES_DISPONIBLES.items():
+        v = obtener_dato_ecb(f"B.U2.EUR.4F.G_N_A.SV_C_YM.{s}", flow_ref="YC")
+        if v is not None:
+            pts.append((_tenor_years[t], v))
+    if len(pts) < 2:
+        return None
+    pts.sort()
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    # Linear interpolation / flat extrapolation
+    if target_yr <= xs[0]:
+        return ys[0]
+    if target_yr >= xs[-1]:
+        return ys[-1]
+    for i in range(len(xs) - 1):
+        if xs[i] <= target_yr <= xs[i + 1]:
+            frac = (target_yr - xs[i]) / (xs[i + 1] - xs[i])
+            return ys[i] + frac * (ys[i + 1] - ys[i])
+    return None
 
 
 @st.cache_data(ttl=1800)
 def _obtener_historico_yc(tenor: str, n_obs: int = 60) -> "pd.Series | None":
     """Histórico mensual de la curva AAA Euro Area para un tenor dado."""
+    # Tenores con datos disponibles en ECB YC API: 3M, 1Y, 3Y, 15Y, 20Y
     _map = {
-        "3M": "SR_3M", "6M": "SR_6M", "1Y": "SR_1Y",
-        "2Y": "SR_2Y", "5Y": "SR_5Y", "10Y": "SR_10Y", "30Y": "SR_30Y",
+        "3M": "SR_3M", "1Y": "SR_1Y",
+        "3Y": "SR_3Y", "15Y": "SR_15Y", "20Y": "SR_20Y",
     }
     sr = _map.get(tenor)
     if not sr:
@@ -2279,94 +2265,222 @@ def _rf_card(titulo: str, tir: "float|None", plazo: str,
 
 
 @st.cache_data(ttl=3600)
-def _obtener_tipos_bce_batch() -> dict:
-    """Obtiene tipos BCE y Euribor en UNA sola llamada. Evita rate-limiting."""
-    _series = {
-        "dfr":   "B.U2.EUR.4F.KR.DFR.LEV",
-        "mro":   "B.U2.EUR.4F.KR.MRR_FR.LEV",
-        "mlf":   "B.U2.EUR.4F.KR.MLFR.LEV",
-        "eur3m": "B.U2.EUR.4F.MM.B.EURIBOR3MD_.HSTA",
-        "eur6m": "B.U2.EUR.4F.MM.B.EURIBOR6MD_.HSTA",
-    }
+def obtener_euribor_3m() -> "float | None":
+    """Euribor 3M diario — scrape de euribor-rates.eu (misma fuente que 12M)."""
+    try:
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+        r = requests.get("https://www.euribor-rates.eu/current-euribor-rates.asp",
+                         headers=headers, timeout=15)
+        if r.status_code != 200:
+            return None
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return None
+        for row in table.find_all("tr"):
+            cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+            if cells and "3" in cells[0] and "month" in cells[0].lower():
+                val_str = cells[1].replace("%", "").replace(",", ".").strip()
+                return float(val_str)
+        return None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_euribor_6m() -> "float | None":
+    """Euribor 6M diario — scrape de euribor-rates.eu."""
+    try:
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+        r = requests.get("https://www.euribor-rates.eu/current-euribor-rates.asp",
+                         headers=headers, timeout=15)
+        if r.status_code != 200:
+            return None
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return None
+        for row in table.find_all("tr"):
+            cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+            if cells and "6" in cells[0] and "month" in cells[0].lower():
+                val_str = cells[1].replace("%", "").replace(",", ".").strip()
+                return float(val_str)
+        return None
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def obtener_tipos_bce_ecb() -> dict:
+    """Tipos clave BCE (DFR, MRO, MLF) — scraping tabla histórica ecb.europa.eu.
+    Devuelve {'dfr': float, 'mro': float, 'mlf': float} vigentes en la fecha actual.
+    El BCE actualiza esta página cada vez que cambia los tipos (~8 veces/año).
+    """
+    try:
+        import datetime
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        url = ("https://www.ecb.europa.eu/stats/policy_and_exchange_rates/"
+               "key_ecb_interest_rates/html/index.en.html")
+        r = requests.get(url, headers=headers, timeout=15)
+        if r.status_code != 200:
+            return {}
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return {}
+        month_map = {
+            "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+            "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+        }
+        today = datetime.date.today()
+        current_year = None
+        best_date = None
+        best = {}
+        for row in table.find_all("tr"):
+            cells = [c.get_text(strip=True) for c in row.find_all(["th", "td"])]
+            cells = [c for c in cells if c]
+            # 6-cell row: [year, date, dfr, mro_fixed, mro_variable, mlf]
+            # 5-cell row: [date, dfr, mro_fixed, mro_variable, mlf] (year inherited)
+            if len(cells) >= 6 and cells[0].isdigit():
+                current_year = int(cells[0])
+                date_raw, dfr_raw, mro_raw, mlf_raw = cells[1], cells[2], cells[3], cells[5]
+            elif len(cells) == 5 and current_year:
+                date_raw, dfr_raw, mro_raw, mlf_raw = cells[0], cells[1], cells[2], cells[4]
+            else:
+                continue
+            # Parse "17 Jun." or "5 Feb." — strip footnote digits
+            date_raw_clean = re.sub(r"\d+$", "", date_raw).strip()
+            parts = date_raw_clean.split()
+            if len(parts) < 2:
+                continue
+            try:
+                day = int(parts[0])
+                mon_str = parts[1].rstrip(".")
+                month = month_map.get(mon_str) or month_map.get(parts[1])
+                if not month:
+                    continue
+                eff_date = datetime.date(current_year, month, day)
+            except (ValueError, KeyError, TypeError):
+                continue
+            if eff_date <= today:
+                if best_date is None or eff_date > best_date:
+                    best_date = eff_date
+                    try:
+                        best["dfr"] = float(dfr_raw.replace("−", "-").replace(",", "."))
+                    except ValueError:
+                        pass
+                    try:
+                        best["mro"] = float(mro_raw.replace("−", "-").replace(",", "."))
+                    except ValueError:
+                        pass
+                    try:
+                        best["mlf"] = float(mlf_raw.replace("−", "-").replace(",", "."))
+                    except ValueError:
+                        pass
+        return best
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=3600)
+def obtener_yields_soberanos_eurostat() -> dict:
+    """Yields soberanos 10Y (criterio Maastricht) vía API Eurostat IRT_LT_MCBY_M.
+    Devuelve {'ES': 3.45, 'DE': 3.00, 'FR': 3.73, 'IT': 3.82, 'PT': 3.43, 'NL': 3.15}.
+    Datos mensuales con retraso ~1-2 meses respecto al mercado.
+    """
+    paises = ["ES", "DE", "FR", "IT", "PT", "NL"]
     result = {}
-    # Try batch first (ECB dataset)
-    keys_str = "+".join(_series.values())
-    for flow in ("ECB", "FM"):
+    base = ("https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/"
+            "data/IRT_LT_MCBY_M")
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    for cc in paises:
         try:
-            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{keys_str}"
-            r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
+            r = requests.get(base, params={"geo": cc, "lastTimePeriod": 1},
+                             headers=headers, timeout=12)
             if r.status_code != 200:
                 continue
             data = r.json()
-            ds = data["dataSets"][0]
-            series_dict = ds.get("series", {})
-            if not series_dict:
-                continue
-            vals = []
-            for sk, sd in sorted(series_dict.items(), key=lambda x: int(x[0].split(":")[0]) if ":" in x[0] else int(x[0])):
-                obs = sd.get("observations", {})
-                if obs:
-                    lk = sorted(obs.keys(), key=lambda x: int(x))[-1]
-                    v = obs[lk][0]
-                    vals.append(float(v) if v is not None else None)
-                else:
-                    vals.append(None)
-            keys_list = list(_series.keys())
-            for i, k in enumerate(keys_list):
-                if i < len(vals) and vals[i] is not None:
-                    result[k] = vals[i]
-            if result:
-                return result
+            vals = list(data.get("value", {}).values())
+            if vals and vals[0] is not None:
+                result[cc] = float(vals[0])
         except Exception:
             continue
-    # Fallback: individual calls
-    for name, sk in _series.items():
-        for flow in ("ECB", "FM"):
-            v = obtener_dato_ecb(sk, flow)
-            if v is not None:
-                result[name] = v
-                break
     return result
 
 
 @st.cache_data(ttl=3600)
-def _obtener_tipos_soberanos_batch() -> dict:
-    """Obtiene tipos soberanos 10Y de 6 países en UNA sola llamada al ECB.
-    Devuelve dict: {'ES': 3.25, 'DE': 2.40, ...}
+def obtener_depositos_mir(n_obs: int = 48) -> dict:
+    """Tipos medios de depósitos de hogares en España y Euro Área — ECB MIR.
+    Devuelve dict con claves:
+      'es_overnight', 'es_1y', 'es_1_2y', 'es_2y_plus',
+      'ea_overnight', 'ea_1y', 'ea_1_2y', 'ea_2y_plus',
+      'hist_es_1y'  (pd.Series mensual),
+      'hist_ea_1y'  (pd.Series mensual),
+      'fecha'       (str YYYY-MM del dato más reciente)
     """
-    _paises = ["DE", "FR", "ES", "IT", "PT", "NL"]
+    import pandas as pd
+    base = "https://data-api.ecb.europa.eu/service/data/MIR/"
+    h = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    series_map = {
+        "es_overnight": "M.ES.B.L21.A.R.A.2250.EUR.N",
+        "es_1y":        "M.ES.B.L22.F.R.A.2250.EUR.N",
+        "es_1_2y":      "M.ES.B.L22.G.R.A.2250.EUR.N",
+        "es_2y_plus":   "M.ES.B.L22.H.R.A.2250.EUR.N",
+        "ea_overnight": "M.U2.B.L21.A.R.A.2250.EUR.N",
+        "ea_1y":        "M.U2.B.L22.F.R.A.2250.EUR.N",
+        "ea_1_2y":      "M.U2.B.L22.G.R.A.2250.EUR.N",
+        "ea_2y_plus":   "M.U2.B.L22.H.R.A.2250.EUR.N",
+    }
     result = {}
-    keys_str = "+".join(f"M.{p}.EUR.RT.LB.A.A207.HSTA" for p in _paises)
-    for flow in ("ILM", "ECB", "IRS"):
+    latest_date = None
+    for name, key in series_map.items():
         try:
-            url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{keys_str}"
-            r = requests.get(url, params={"lastNObservations": 1, "format": "jsondata"}, timeout=20)
+            r = requests.get(f"{base}{key}",
+                             params={"lastNObservations": n_obs, "format": "jsondata"},
+                             headers=h, timeout=12)
             if r.status_code != 200:
                 continue
             data = r.json()
-            ds = data["dataSets"][0]
-            series_dict = ds.get("series", {})
+            series_dict = data["dataSets"][0].get("series", {})
             if not series_dict:
                 continue
-            # Map by position
-            sorted_series = sorted(series_dict.items(),
-                                   key=lambda x: int(x[0].split(":")[1]) if ":" in x[0] else 0)
-            for i, (sk, sd) in enumerate(sorted_series):
-                obs = sd.get("observations", {})
-                if obs and i < len(_paises):
-                    lk = sorted(obs.keys(), key=lambda x: int(x))[-1]
-                    v = obs[lk][0]
-                    if v is not None:
-                        result[_paises[i]] = float(v)
-            if result:
-                return result
+            obs = list(series_dict.values())[0].get("observations", {})
+            if not obs:
+                continue
+            time_dim = data["structure"]["dimensions"]["observation"][0]
+            time_vals = time_dim.get("values", [])
+            # Last observation — spot value
+            last_k = sorted(obs.keys(), key=int)[-1]
+            val = obs[last_k][0]
+            if val is not None:
+                result[name] = float(val)
+            # Date label
+            date_label = time_vals[int(last_k)]["id"] if int(last_k) < len(time_vals) else None
+            if date_label and latest_date is None:
+                latest_date = date_label
+            # Historical series for ES and EA ≤1Y
+            if name in ("es_1y", "ea_1y"):
+                hist = {}
+                for k, v_arr in obs.items():
+                    if v_arr[0] is not None:
+                        try:
+                            idx = int(k)
+                            if idx < len(time_vals):
+                                hist[time_vals[idx]["id"]] = float(v_arr[0])
+                        except Exception:
+                            pass
+                if hist:
+                    s = pd.Series(hist)
+                    s.index = pd.to_datetime(s.index, format="%Y-%m")
+                    s = s.sort_index()
+                    result[f"hist_{name}"] = s
         except Exception:
             continue
-    # Fallback: individual calls
-    for pais in _paises:
-        v = _obtener_tipo_pais_ecb(pais, "10Y")
-        if v is not None:
-            result[pais] = v
+    if latest_date:
+        result["fecha"] = latest_date
     return result
 
 
@@ -2377,14 +2491,21 @@ def pestaña_renta_fija():
     st.markdown("### 💰 Renta Fija — Tesoro Público, Bonos y Letras")
     _rf_col_h, _rf_col_btn = st.columns([5, 1])
     with _rf_col_h:
-        st.caption("Tipos de referencia · Fuente: ECB Statistical Data Warehouse (data-api.ecb.europa.eu) · "
-                   "Curva AAA: bonos soberanos de máxima calificación (DE, NL, FI). "
-                   "Los datos se cachean 30–60 min.")
+        st.caption(
+            "Tipos BCE: ecb.europa.eu (oficial) · "
+            "Euribor: euribor-rates.eu · "
+            "Curva AAA: ECB data-api (tenores 3M, 1Y, 3Y, 15Y, 20Y) · "
+            "Soberanos 10Y: Eurostat IRT_LT_MCBY_M (mensual, retraso ~1-2 meses) · "
+            "Caché 60 min."
+        )
     with _rf_col_btn:
-        if st.button("🔄 Recargar", key="rf_reload", help="Limpiar caché ECB y recargar datos"):
-            _obtener_curva_yc_batch.clear()
-            _obtener_tipos_bce_batch.clear()
-            _obtener_tipos_soberanos_batch.clear()
+        if st.button("🔄 Recargar", key="rf_reload", help="Limpiar caché y recargar datos"):
+            _obtener_tipo_ecb_yc.clear()
+            obtener_tipos_bce_ecb.clear()
+            obtener_yields_soberanos_eurostat.clear()
+            obtener_euribor_3m.clear()
+            obtener_euribor_6m.clear()
+            obtener_depositos_mir.clear()
             _obtener_historico_yc.clear()
             st.rerun()
 
@@ -2420,12 +2541,12 @@ Cuando el BCE sube tipos, los bonos existentes pierden valor (su cupón fijo val
         """)
         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
-    _bce = _obtener_tipos_bce_batch()
+    _bce   = obtener_tipos_bce_ecb()
     _dfr   = _bce.get("dfr")
     _mro   = _bce.get("mro")
     _mlf   = _bce.get("mlf")
-    _euri3 = _bce.get("eur3m")
-    _euri6 = _bce.get("eur6m")
+    _euri3 = obtener_euribor_3m()
+    _euri6 = obtener_euribor_6m()
 
     _bc1, _bc2, _bc3, _bc4, _bc5 = st.columns(5)
     with _bc1:
@@ -2478,38 +2599,37 @@ en euros. Los bonos españoles pagan algo más — esa diferencia es la prima de
         """)
         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
-    _tenores_curva = ["3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "15Y", "20Y", "30Y"]
-    _tipos_curva = []
-    for _t in _tenores_curva:
-        _v = _obtener_tipo_ecb_yc(_t)
-        _tipos_curva.append(_v)
+    # Tenores disponibles directamente: 3M, 1Y, 3Y, 15Y, 20Y
+    # Los demás se interpolan linealmente sobre esos 5 puntos
+    _tenores_curva = ["3M", "1Y", "3Y", "15Y", "20Y"]
+    _tipos_curva = [_obtener_tipo_ecb_yc(_t) for _t in _tenores_curva]
 
     # Métricas rápidas de puntos clave
-    _yc_3m  = _tipos_curva[0]
-    _yc_2y  = _tipos_curva[3]
-    _yc_10y = _tipos_curva[7]
-    _yc_30y = _tipos_curva[10]
+    _yc_3m  = _tipos_curva[0]   # 3M
+    _yc_1y  = _tipos_curva[1]   # 1Y
+    _yc_3y  = _tipos_curva[2]   # 3Y
+    _yc_15y = _tipos_curva[3]   # 15Y
 
     _cc1, _cc2, _cc3, _cc4 = st.columns(4)
     with _cc1:
         _rf_metric("AAA 3 meses", _yc_3m, help_txt="Tipo spot a 3 meses — curva AAA Euro Área")
     with _cc2:
-        _rf_metric("AAA 2 años", _yc_2y, help_txt="Tipo spot a 2 años")
+        _rf_metric("AAA 1 año", _yc_1y, help_txt="Tipo spot a 1 año")
     with _cc3:
-        _rf_metric("AAA 10 años", _yc_10y, help_txt="Tipo spot a 10 años — referencia bono largo plazo")
+        _rf_metric("AAA 3 años", _yc_3y, help_txt="Tipo spot a 3 años")
     with _cc4:
-        # Pendiente curva: 10Y - 2Y
-        if _yc_10y is not None and _yc_2y is not None:
-            _pendiente = _yc_10y - _yc_2y
-            _pend_color = "normal" if _pendiente >= 0 else "inverse"
+        # Pendiente curva: 15Y - 3M (proxy de pendiente largo-corto)
+        if _yc_15y is not None and _yc_3m is not None:
+            _pendiente = _yc_15y - _yc_3m
             st.metric(
-                "Pendiente 10A–2A",
+                "Pendiente 15A–3M",
                 f"{_pendiente:+.2f} pp",
-                help="Diferencia entre el tipo a 10 años y a 2 años. "
-                     "Positivo = curva normal. Negativo = curva invertida (señal de alerta recesiva)."
+                help="Diferencia entre el tipo a 15 años y a 3 meses. "
+                     "Positivo = curva normal (inclinada). Negativo = curva invertida (señal de alerta recesiva). "
+                     "Datos ECB YC AAA (disponibles: 3M, 1Y, 3Y, 15Y, 20Y)."
             )
         else:
-            _rf_metric("Pendiente 10A–2A", None)
+            _rf_metric("Pendiente 15A–3M", None)
 
     # Gráfico de la curva
     _tenores_disp = [_t for _t, _v in zip(_tenores_curva, _tipos_curva) if _v is not None]
@@ -2539,20 +2659,20 @@ en euros. Los bonos españoles pagan algo más — esa diferencia es la prima de
     else:
         st.info("Datos de curva no disponibles en este momento. Reintentar en unos minutos.")
 
-    # Histórico 10Y
-    _h10y = _obtener_historico_yc("10Y", _rf_n)
+    # Histórico 3Y (referencia: 10Y no disponible en ECB YC API, 3Y es el punto medio disponible)
+    _h10y = _obtener_historico_yc("3Y", _rf_n)
     if _h10y is not None and len(_h10y) > 2:
         _fig_h10 = go.Figure()
         _fig_h10.add_trace(go.Scatter(
             x=_h10y.index, y=_h10y.values,
             mode="lines", line=dict(color="#1e3a5f", width=1.8),
             fill="tozeroy", fillcolor="rgba(30,58,95,0.07)",
-            name="AAA 10Y",
+            name="AAA 3Y",
             hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra></extra>"
         ))
         _fig_h10.update_layout(
             height=180, margin=dict(l=0, r=0, t=14, b=0),
-            title=dict(text="Histórico TIR 10 años — AAA Euro Área", font=dict(size=12)),
+            title=dict(text="Histórico TIR 3 años — AAA Euro Área", font=dict(size=12)),
             plot_bgcolor="white", paper_bgcolor="white",
             yaxis=dict(gridcolor="#f1f5f9"),
             xaxis=dict(gridcolor="#f1f5f9"),
@@ -2606,7 +2726,7 @@ recurso y por qué la credibilidad del BCE es el ancla del euro.
         "🇵🇹 Portugal": "PT",
         "🇳🇱 Países Bajos": "NL",
     }
-    _batch_sov = _obtener_tipos_soberanos_batch()
+    _batch_sov = obtener_yields_soberanos_eurostat()
     _tipos_paises = {nombre: _batch_sov.get(cc) for nombre, cc in _paises_rf.items()}
 
     _tipo_de = _tipos_paises.get("🇩🇪 Alemania")
@@ -2748,6 +2868,149 @@ una rentabilidad fija durante décadas.
         "hasta **10–20 pb** en episodios de volatilidad. "
         "Para el tipo exacto de la última subasta: "
         "[Tesoro Público — Resultado últimas subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)"
+    )
+
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 6 — DEPÓSITOS BANCARIOS
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🏧 Depósitos Bancarios — Tipos medios hogares")
+
+    with st.expander("📖 Depósitos: seguridad, rentabilidad y lo que los bancos no te cuentan", expanded=False):
+        st.markdown("""
+**¿Qué es un depósito a plazo?**
+Un contrato por el que entregas tu dinero a un banco durante un plazo acordado a cambio de un tipo
+de interés fijo. Al vencimiento, el banco te devuelve el capital más los intereses. Es el producto
+más seguro del sistema financiero, pero también suele ser el que menor rentabilidad ofrece.
+
+**¿Por qué los bancos españoles pagan menos que la media europea?**
+Los datos del BCE (ECB MIR) muestran que los bancos españoles pagan sistemáticamente *menos* que
+la media del Euro Área en depósitos. Razón estructural: alta concentración bancaria (los cinco
+grandes tienen >70% del mercado), escasa competencia en precios y exceso de liquidez procedente
+del ahorro post-COVID. El inversor informado puede comparar con ofertas de bancos europeos
+accesibles desde España (N26, Trade Republic, Raisin).
+
+**Garantía de depósitos (FGD)**
+El Fondo de Garantía de Depósitos cubre hasta **€100.000 por titular y entidad**. Para cuentas
+conjuntas el límite aplica a cada titular. Importante: el límite es *por entidad*, no por cuenta —
+tener tres cuentas en el mismo banco no amplía la cobertura más allá de los €100.000.
+
+**Fiscalidad — igual que los bonos**
+Los intereses de depósitos tributan como rendimientos del capital mobiliario en la base imponible
+del ahorro: 19% hasta €6.000, 21% de €6.000 a €50.000, 23% de €50.000 a €200.000 y 27% sobre
+€200.000. `[VERIFICAR]` tramos y tipos para el ejercicio fiscal actual.
+
+**Depósitos vs bonos: ¿cuánto cuesta la seguridad?**
+En el ciclo actual, un bono AAA a 1 año ofrece ~75-100 pb más que el depósito medio español
+al mismo plazo. La diferencia es el *coste de la conveniencia*: el depósito no fluctúa de precio,
+no requiere broker, y tiene garantía explícita. Para el inversor con horizonte corto y sin
+capacidad de asumir variaciones de precio, esos 75 pb pueden no justificar el cambio.
+Para el inversor con horizonte medio, los bonos del Tesoro superan a los depósitos tanto en
+rentabilidad como en diversificación de riesgo contraparte.
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    _dep = obtener_depositos_mir(_rf_n)
+    _dep_fecha = _dep.get("fecha", "N/D")
+
+    # Métricas comparativas ES vs EA
+    st.markdown(f"**Tipos nuevos depósitos hogares** · Dato: {_dep_fecha} · Fuente: ECB MIR (media bancos)")
+    _d1, _d2, _d3, _d4 = st.columns(4)
+    _dep_rows = [
+        ("Overnight",   "es_overnight", "ea_overnight"),
+        ("Hasta 1 año", "es_1y",        "ea_1y"),
+        ("1–2 años",    "es_1_2y",      "ea_1_2y"),
+        ("Más de 2A",   "es_2y_plus",   "ea_2y_plus"),
+    ]
+    for _col, (_label, _es_key, _ea_key) in zip([_d1, _d2, _d3, _d4], _dep_rows):
+        _v_es = _dep.get(_es_key)
+        _v_ea = _dep.get(_ea_key)
+        with _col:
+            _es_txt = f"{_v_es:.2f}%" if _v_es is not None else "N/D"
+            _ea_txt = f"{_v_ea:.2f}%" if _v_ea is not None else "N/D"
+            # Color delta ES vs EA
+            _delta_color = "#dc2626"  # red if ES < EA
+            if _v_es is not None and _v_ea is not None:
+                _diff = _v_es - _v_ea
+                _delta_color = "#16a34a" if _diff >= 0 else "#dc2626"
+                _delta_txt = f"{_diff:+.2f} pp vs EA"
+            else:
+                _delta_txt = ""
+            st.markdown(
+                f'<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;'
+                f'border-left:4px solid #0ea5e9;margin-bottom:4px">'
+                f'<div style="font-size:11px;color:#64748b;font-weight:600">{_label}</div>'
+                f'<div style="font-size:19px;font-weight:800;color:#1e293b">🇪🇸 {_es_txt}</div>'
+                f'<div style="font-size:12px;color:#94a3b8">EA avg {_ea_txt}</div>'
+                f'{"<div style=font-size:11px;color:" + _delta_color + ";font-weight:600>" + _delta_txt + "</div>" if _delta_txt else ""}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    # Comparativa: depósito 1Y vs bono 1Y AAA
+    _dep_1y_es = _dep.get("es_1y")
+    _bono_1y   = _obtener_tipo_ecb_yc("1Y")
+    _dfr_val   = _bce.get("dfr") if "_bce" in dir() else obtener_tipos_bce_ecb().get("dfr")
+    if _dep_1y_es is not None and (_bono_1y is not None or _dfr_val is not None):
+        st.markdown("")
+        _cx1, _cx2, _cx3 = st.columns(3)
+        with _cx1:
+            _rf_metric("Depósito ≤1A (🇪🇸 media)", _dep_1y_es,
+                       help_txt="Tipo medio de nuevos depósitos a plazo hasta 1 año en bancos españoles (BCE MIR)")
+        with _cx2:
+            if _bono_1y is not None:
+                _rf_metric("Bono AAA 1A (curva)", _bono_1y,
+                           help_txt="Tipo spot curva AAA Euro Área a 1 año (ECB YC)")
+        with _cx3:
+            if _bono_1y is not None and _dep_1y_es is not None:
+                _gap = _bono_1y - _dep_1y_es
+                _gap_color = "#16a34a" if _gap >= 0 else "#dc2626"
+                st.markdown(
+                    f'<div style="background:#fefce8;border-radius:8px;padding:10px 12px;'
+                    f'border-left:4px solid #eab308">'
+                    f'<div style="font-size:11px;color:#64748b;font-weight:600">Coste de oportunidad</div>'
+                    f'<div style="font-size:19px;font-weight:800;color:{_gap_color}">{_gap:+.2f} pp</div>'
+                    f'<div style="font-size:11px;color:#78716c">Bono AAA vs depósito ES</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    # Gráfico histórico — evolución depósito ≤1Y España vs Euro Área
+    _hist_es = _dep.get("hist_es_1y")
+    _hist_ea = _dep.get("hist_ea_1y")
+    if _hist_es is not None and len(_hist_es) > 3:
+        _fig_dep = go.Figure()
+        _fig_dep.add_trace(go.Scatter(
+            x=_hist_es.index, y=_hist_es.values,
+            mode="lines", name="🇪🇸 España",
+            line=dict(color="#dc2626", width=2),
+            hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra>España</extra>"
+        ))
+        if _hist_ea is not None and len(_hist_ea) > 3:
+            _fig_dep.add_trace(go.Scatter(
+                x=_hist_ea.index, y=_hist_ea.values,
+                mode="lines", name="🇪🇺 Euro Área",
+                line=dict(color="#2563eb", width=2, dash="dot"),
+                hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra>Euro Área</extra>"
+            ))
+        _fig_dep.update_layout(
+            height=200, margin=dict(l=0, r=0, t=18, b=0),
+            title=dict(text="Evolución tipo depósito ≤1 año hogares (BCEuro MIR)", font=dict(size=12)),
+            plot_bgcolor="white", paper_bgcolor="white",
+            yaxis=dict(gridcolor="#f1f5f9", ticksuffix="%"),
+            xaxis=dict(gridcolor="#f1f5f9"),
+            legend=dict(orientation="h", y=1.15),
+            showlegend=True
+        )
+        st.plotly_chart(_fig_dep, use_container_width=True)
+
+    st.caption(
+        "Tipos medios de *nuevos* depósitos de hogares en bancos españoles y Euro Área · "
+        "Fuente: BCE MIR (ECB data-api.ecb.europa.eu) · Dato mensual · "
+        "Garantía FGD: **€100.000 por titular y entidad** · "
+        "Tributación IRPF: igual que bonos y letras (base imponible del ahorro) `[VERIFICAR]`"
     )
 
     st.divider()
