@@ -3052,7 +3052,7 @@ no hay retención en origen en la mayoría de casos si se compran en Tesoro Dire
                                          step=1000.0, key="rf_calc_imp")
     with _calc_c2:
         _calc_tir = st.number_input("TIR anual (%)", min_value=0.0, max_value=20.0,
-                                     value=float(f"{(_yc_10y or 0) + _spread_est:.2f}") if _yc_10y else 3.0,
+                                     value=float(f"{(_yc_3y or 0) + _spread_est:.2f}") if _yc_3y else 3.0,
                                      step=0.05, format="%.2f", key="rf_calc_tir")
     with _calc_c3:
         _calc_plazo = st.selectbox("Plazo", ["3 meses", "6 meses", "1 año", "2 años", "5 años", "10 años"],
