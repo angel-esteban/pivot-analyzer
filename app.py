@@ -553,6 +553,165 @@ def inicializar_tabla_alertas():
         conn.close()
 
 
+# =============================================================================
+# DATA JOBS — Control de extracción diaria de datos estables
+# =============================================================================
+
+def inicializar_tabla_data_jobs():
+    """Crea la tabla data_jobs si no existe. Idempotente."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS data_jobs (
+                        job_name     TEXT PRIMARY KEY,
+                        last_run     TIMESTAMPTZ,
+                        status       TEXT DEFAULT 'never',
+                        triggered_by INTEGER,
+                        duration_ms  INTEGER,
+                        error_msg    TEXT
+                    )
+                """)
+                for jname in ('job_pre12', 'job_post12'):
+                    cur.execute(
+                        "INSERT INTO data_jobs (job_name) VALUES (%s) "
+                        "ON CONFLICT (job_name) DO NOTHING",
+                        (jname,)
+                    )
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def _job_corre_hoy(job_name: str) -> bool:
+    """True si el job ya corrió hoy en hora Madrid."""
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import datetime as _dt
+        hoy = _dt.now(ZoneInfo("Europe/Madrid")).date()
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT last_run FROM data_jobs WHERE job_name = %s",
+                    (job_name,)
+                )
+                row = cur.fetchone()
+                if not row or row[0] is None:
+                    return False
+                return row[0].astimezone(ZoneInfo("Europe/Madrid")).date() == hoy
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def _marcar_job(job_name: str, user_id: int, status: str = "ok",
+                duration_ms: int = None, error_msg: str = None):
+    """Registra ejecución del job en DB."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE data_jobs
+                       SET last_run = NOW(), status = %s,
+                           triggered_by = %s, duration_ms = %s, error_msg = %s
+                       WHERE job_name = %s""",
+                    (status, user_id, duration_ms, error_msg, job_name)
+                )
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def _run_job_pre12(user_id: int):
+    """
+    Background: calienta caché de tipos BCE, curva YC, yields soberanos,
+    depósitos MIR y depósitos de bancos. Se ejecuta en thread daemon.
+    """
+    import time
+    t0 = time.time()
+    try:
+        obtener_tipos_bce_ecb()
+        for _t in ("3M", "1Y", "3Y", "15Y", "20Y"):
+            _obtener_tipo_ecb_yc(_t)
+        obtener_yields_soberanos_eurostat()
+        obtener_depositos_mir()
+        obtener_depositos_bancos_espana()
+        _marcar_job("job_pre12", user_id, "ok", int((time.time() - t0) * 1000))
+    except Exception as _e:
+        _marcar_job("job_pre12", user_id, "error",
+                    int((time.time() - t0) * 1000), str(_e)[:200])
+
+
+def _run_job_post12(user_id: int):
+    """
+    Background: calienta caché de Euríbor 3M, 6M y 12M.
+    Solo se lanza a partir de las 12:00 Madrid (publicación EMMI ~11:30).
+    """
+    import time
+    t0 = time.time()
+    try:
+        obtener_euribor_3m()
+        obtener_euribor_6m()
+        obtener_euribor_12m()
+        _marcar_job("job_post12", user_id, "ok", int((time.time() - t0) * 1000))
+    except Exception as _e:
+        _marcar_job("job_post12", user_id, "error",
+                    int((time.time() - t0) * 1000), str(_e)[:200])
+
+
+def verificar_y_lanzar_jobs(user_id: int):
+    """
+    Comprueba qué jobs de datos estables deben lanzarse hoy y los lanza
+    en threads daemon. Se llama al inicio de pantalla_analisis() en cada rerun.
+    Usa st.session_state para no relanzar en cada rerun de Streamlit.
+    """
+    import threading
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+
+    now_m = _dt.now(ZoneInfo("Europe/Madrid"))
+
+    # ── job_pre12: BCE tipos, curva YC, yields soberanos, depósitos ─────────
+    if (not st.session_state.get("_job_pre12_lanzado")
+            and not _job_corre_hoy("job_pre12")):
+        st.session_state["_job_pre12_lanzado"] = True
+        threading.Thread(
+            target=_run_job_pre12, args=(user_id,), daemon=True
+        ).start()
+
+    # ── job_post12: Euríbor — solo a partir de las 12:00 Madrid ─────────────
+    if (now_m.hour >= 12
+            and not st.session_state.get("_job_post12_lanzado")
+            and not _job_corre_hoy("job_post12")):
+        st.session_state["_job_post12_lanzado"] = True
+        threading.Thread(
+            target=_run_job_post12, args=(user_id,), daemon=True
+        ).start()
+
+
+def estado_jobs() -> dict:
+    """Retorna el estado actual de los jobs para mostrar en UI."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT job_name, last_run, status, duration_ms FROM data_jobs")
+                return {r[0]: {"last_run": r[1], "status": r[2], "duration_ms": r[3]}
+                        for r in cur.fetchall()}
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+
+
 def crear_alerta_precio(usuario_id: int, ticker: str, nombre: str,
                         nivel: float, condicion: str, descripcion: str = "") -> bool:
     """Crea una alerta de precio para un usuario. Devuelve True si ok."""
@@ -1951,7 +2110,7 @@ def obtener_dato_ecb(series_key: str, flow_ref: str = "FM"):
     return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_euribor_12m() -> float | None:
     """Euribor 12M — scrape de euribor-rates.eu (tabla diaria/semanal).
     ECB FM API (EURIBOR1YD_) dejó de devolver datos — migrado a fuente web."""
@@ -2155,7 +2314,7 @@ _YC_TENORES_DISPONIBLES = {
 }
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
     """Tipo spot curva AAA Euro Area para un tenor.
     Tenores con datos directos: 3M, 1Y, 3Y, 15Y, 20Y.
@@ -2198,7 +2357,7 @@ def _obtener_tipo_ecb_yc(tenor: str) -> "float | None":
     return None
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=86400)
 def _obtener_historico_yc(tenor: str, n_obs: int = 60) -> "pd.Series | None":
     """Histórico mensual de la curva AAA Euro Area para un tenor dado."""
     # Tenores con datos disponibles en ECB YC API: 3M, 1Y, 3Y, 15Y, 20Y
@@ -2264,7 +2423,7 @@ def _rf_card(titulo: str, tir: "float|None", plazo: str,
 
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_euribor_3m() -> "float | None":
     """Euribor 3M diario — scrape de euribor-rates.eu (misma fuente que 12M)."""
     try:
@@ -2288,7 +2447,7 @@ def obtener_euribor_3m() -> "float | None":
         return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_euribor_6m() -> "float | None":
     """Euribor 6M diario — scrape de euribor-rates.eu."""
     try:
@@ -2312,7 +2471,7 @@ def obtener_euribor_6m() -> "float | None":
         return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_tipos_bce_ecb() -> dict:
     """Tipos clave BCE (DFR, MRO, MLF) — scraping tabla histórica ecb.europa.eu.
     Devuelve {'dfr': float, 'mro': float, 'mlf': float} vigentes en la fecha actual.
@@ -2385,7 +2544,7 @@ def obtener_tipos_bce_ecb() -> dict:
         return {}
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_yields_soberanos_eurostat() -> dict:
     """Yields soberanos 10Y (criterio Maastricht) vía API Eurostat IRT_LT_MCBY_M.
     Devuelve {'ES': 3.45, 'DE': 3.00, 'FR': 3.73, 'IT': 3.82, 'PT': 3.43, 'NL': 3.15}.
@@ -2411,7 +2570,7 @@ def obtener_yields_soberanos_eurostat() -> dict:
     return result
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def obtener_depositos_mir(n_obs: int = 48) -> dict:
     """Tipos medios de depósitos de hogares en España y Euro Área — ECB MIR.
     Devuelve dict con claves:
@@ -2481,6 +2640,94 @@ def obtener_depositos_mir(n_obs: int = 48) -> dict:
             continue
     if latest_date:
         result["fecha"] = latest_date
+    return result
+
+
+@st.cache_data(ttl=86400)
+def obtener_depositos_bancos_espana() -> dict:
+    """
+    Scrape tipos de depósito en tiempo real de entidades accesibles.
+    Retorna dict con datos de MyInvestor y Pibank (scraping vía HTML estático).
+    """
+    import re as _re
+    from datetime import date as _date
+    result: dict = {"fecha": _date.today().isoformat(), "entidades": {}}
+    _hdr = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "es-ES,es;q=0.9",
+    }
+
+    # ── MyInvestor ──────────────────────────────────────────────────────
+    try:
+        import requests as _req
+        r = _req.get(
+            "https://myinvestor.es/depositos/", headers=_hdr, timeout=12
+        )
+        _txt = r.text
+        # Pattern: "Depósito 1 mes ... X,XX % TAE"
+        _pat = _re.compile(
+            r"Dep[oó]sito\s+(?:a\s+)?(\d+\s+(?:mes|meses|a[ñn]o|a[ñn]os))"
+            r".*?(\d+[,\.]\d+)\s*%\s*TAE",
+            _re.DOTALL | _re.IGNORECASE,
+        )
+        _matches = _pat.findall(_txt)
+        _rates = {}
+        for _plazo, _tae in _matches:
+            _plazo_clean = _plazo.strip().lower()
+            _tae_f = float(_tae.replace(",", "."))
+            if _plazo_clean not in _rates:
+                _rates[_plazo_clean] = _tae_f
+        result["entidades"]["myinvestor"] = {
+            "nombre": "MyInvestor",
+            "producto": "Depósito a plazo fijo",
+            "tipo_medida": "TAE",
+            "rates": _rates,
+            "url": "https://myinvestor.es/depositos/",
+            "fgd": True,
+            "ok": bool(_rates),
+            "notas": "Depósito respaldado por Andy Asset Management · FGD España",
+        }
+    except Exception:
+        result["entidades"]["myinvestor"] = {
+            "nombre": "MyInvestor", "ok": False,
+            "url": "https://myinvestor.es/depositos/",
+            "rates": {}, "fgd": True, "producto": "Depósito a plazo fijo",
+        }
+
+    # ── Pibank ──────────────────────────────────────────────────────────
+    try:
+        r2 = _req.get(
+            "https://www.pibank.es/deposito/", headers=_hdr, timeout=12
+        )
+        _txt2 = r2.text
+        _tins = _re.findall(r"(\d+[,\.]\d+)\s*%\s*TIN", _txt2)
+        _taes = _re.findall(r"(\d+[,\.]\d+)\s*%\s*TAE", _txt2)
+        _pb_rates = {}
+        if _tins:
+            _pb_rates["12 meses (TIN)"] = float(_tins[0].replace(",", "."))
+        if _taes:
+            _pb_rates["12 meses (TAE)"] = float(_taes[0].replace(",", "."))
+        result["entidades"]["pibank"] = {
+            "nombre": "Pibank",
+            "producto": "Depósito Online 12M",
+            "tipo_medida": "TIN/TAE",
+            "rates": _pb_rates,
+            "url": "https://www.pibank.es/deposito/",
+            "fgd": True,
+            "ok": bool(_pb_rates),
+            "notas": "Filial de Banco Pichincha España · FGD España",
+        }
+    except Exception:
+        result["entidades"]["pibank"] = {
+            "nombre": "Pibank", "ok": False,
+            "url": "https://www.pibank.es/deposito/",
+            "rates": {}, "fgd": True, "producto": "Depósito Online 12M",
+        }
+
     return result
 
 
@@ -2916,7 +3163,13 @@ rentabilidad como en diversificación de riesgo contraparte.
     _dep_fecha = _dep.get("fecha", "N/D")
 
     # Métricas comparativas ES vs EA
-    st.markdown(f"**Tipos nuevos depósitos hogares** · Dato: {_dep_fecha} · Fuente: ECB MIR (media bancos)")
+    st.markdown(
+        f"**Tipos medios nuevos depósitos hogares** · Dato: {_dep_fecha} · "
+        f"Fuente: [BCE — Estadística de Tipos de Interés de IFM]"
+        f"(https://www.ecb.europa.eu/stats/financial_markets_and_interest_rates/"
+        f"bank_interest_rates/mfi_interest_rates/html/index.en.html) "
+        f"(MIR · *MFI Interest Rate Statistics*)"
+    )
     _d1, _d2, _d3, _d4 = st.columns(4)
     _dep_rows = [
         ("Overnight",   "es_overnight", "ea_overnight"),
@@ -3007,11 +3260,126 @@ rentabilidad como en diversificación de riesgo contraparte.
         st.plotly_chart(_fig_dep, use_container_width=True)
 
     st.caption(
-        "Tipos medios de *nuevos* depósitos de hogares en bancos españoles y Euro Área · "
-        "Fuente: BCE MIR (ECB data-api.ecb.europa.eu) · Dato mensual · "
+        "**Fuente:** BCE *MFI Interest Rate Statistics* (MIR) — "
+        "Estadística oficial del Banco Central Europeo sobre tipos de interés de instituciones financieras monetarias. "
+        "Publicación mensual con retraso de ~6-8 semanas. Refleja el tipo medio ponderado pagado por el conjunto de bancos en "
+        "*nuevas operaciones* (no saldos vivos) de depósitos de hogares. "
+        "Acceso directo: [ecb.europa.eu › MFI Interest Rates](https://www.ecb.europa.eu/stats/financial_markets_and_interest_rates/bank_interest_rates/mfi_interest_rates/html/index.en.html) · "
         "Garantía FGD: **€100.000 por titular y entidad** · "
-        "Tributación IRPF: igual que bonos y letras (base imponible del ahorro) `[VERIFICAR]`"
+        "Fiscalidad: igual que bonos y letras (IRPF, base del ahorro) `[VERIFICAR tramos vigentes]`"
     )
+
+
+    # ── Comparativa por entidad — datos en tiempo real ──────────────────
+    st.markdown("#### 🏦 Tipos por entidad — muestra en tiempo real")
+    st.caption(
+        "Scraping de entidades con página HTML estática. "
+        "Para bancos grandes (BBVA, Santander, CaixaBank) consultar sus webs o comparadores."
+    )
+
+    _bancos_data = obtener_depositos_bancos_espana()
+    _b_fecha_str = _bancos_data.get("fecha", "")
+    _entidades = _bancos_data.get("entidades", {})
+
+    # ── Cards de entidades scrapeadas ──
+    _bc_cols = st.columns(len(_entidades)) if _entidades else []
+    for _bc_col, (_ek, _ev) in zip(_bc_cols, _entidades.items()):
+        with _bc_col:
+            _ev_ok = _ev.get("ok", False)
+            _ev_name = _ev.get("nombre", _ek)
+            _ev_prod = _ev.get("producto", "")
+            _ev_url = _ev.get("url", "#")
+            _ev_rates = _ev.get("rates", {})
+            _ev_fgd = _ev.get("fgd", False)
+            _ev_notas = _ev.get("notas", "")
+            if _ev_ok and _ev_rates:
+                _rates_html = "".join(
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'padding:2px 0;font-size:12px">'
+                    f'<span style="color:#64748b">{_plazo.title()}</span>'
+                    f'<span style="font-weight:700;color:#1e293b">{_tae:.2f}%</span>'
+                    f"</div>"
+                    for _plazo, _tae in sorted(
+                        _ev_rates.items(),
+                        key=lambda x: x[0]
+                    )
+                )
+                _fgd_badge = (
+                    '<span style="background:#dcfce7;color:#16a34a;font-size:10px;'
+                    'padding:1px 5px;border-radius:3px;font-weight:600">FGD ✓</span>'
+                    if _ev_fgd else ""
+                )
+                st.markdown(
+                    f'<div style="background:#f8fafc;border-radius:10px;padding:12px 14px;'
+                    f'border:1px solid #e2e8f0">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'margin-bottom:6px">'
+                    f'<a href="{_ev_url}" target="_blank" style="font-weight:800;font-size:14px;'
+                    f'color:#0f172a;text-decoration:none">{_ev_name} ↗</a>'
+                    f'{_fgd_badge}</div>'
+                    f'<div style="font-size:11px;color:#64748b;margin-bottom:8px">{_ev_prod}</div>'
+                    f'{_rates_html}'
+                    f'<div style="font-size:10px;color:#94a3b8;margin-top:6px">{_ev_notas}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f'<div style="background:#fef9c3;border-radius:10px;padding:12px 14px;'
+                    f'border:1px solid #fde047">'
+                    f'<div style="font-weight:700;color:#0f172a">{_ev_name}</div>'
+                    f'<div style="font-size:12px;color:#854d0e">Datos no disponibles — '
+                    f'<a href="{_ev_url}" target="_blank">ver web ↗</a></div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+    if _b_fecha_str:
+        st.caption(f"📅 Scraping ejecutado: {_b_fecha_str} · Recarga la página para actualizar")
+
+    st.markdown("")
+
+    # ── Referencia bancos no scrapeables + agregadores ──
+    with st.expander("📋 Referencia de entidades — dónde consultar sus tipos", expanded=False):
+        st.markdown("""
+**Entidades digitales con depósitos o cuentas remuneradas accesibles desde España:**
+
+| Entidad | Producto | Notas | Enlace |
+|---|---|---|---|
+| **Trade Republic** | Cuenta de valores (interés en efectivo) | ~2–3% variable · No es depósito bancario clásico · Protección bajo sistema alemán | [Ver tipos](https://traderepublic.com/es-es) |
+| **EVO Banco** | Cuenta Digital | Tasa variable · Sin plazo fijo · FGD España | [Ver cuenta](https://www.evobanco.com/cuenta-digital/) |
+| **Openbank** | Cuenta Ahorro Online | Variable · Filial de Santander | [Ver cuenta](https://www.openbank.es/ahorro/cuenta-ahorro-online) |
+| **ING** | Cuenta Naranja | Variable · Sin plazo fijo | [Ver cuenta](https://www.ing.es/cuenta-naranja) |
+| **Bankinter** | Depósito Bankinter | Varios plazos · FGD España | [Ver depósitos](https://www.bankinter.com/web/particulares/depositos-bancarios) |
+| **Raisin** | Marketplace depósitos europeos | Acceso a depósitos de bancos de toda la UE (FGD local) | [raisin.es](https://www.raisin.es/) |
+
+**Grandes bancos** (Santander, BBVA, CaixaBank, Sabadell): publican sus tipos en sus webs pero 
+son páginas JS-rendered. Históricamente ofrecen tipos inferiores a la media BCE-MIR por su 
+posición de mercado dominante (~70% del sector).
+
+**Para comparativa actualizada completa:**
+        """)
+        _agg1, _agg2, _agg3 = st.columns(3)
+        with _agg1:
+            st.markdown(
+                "[HelpMyCash → depósitos](https://www.helpmycash.com/depositos-bancarios/)  \n"
+                "Comparativa actualizada diariamente"
+            )
+        with _agg2:
+            st.markdown(
+                "[iAhorro → depósitos](https://www.iahorro.com/ahorro/depositos/)  \n"
+                "Comparativa actualizada diariamente"
+            )
+        with _agg3:
+            st.markdown(
+                "[Raisin.es → depósitos EU](https://www.raisin.es/)  \n"
+                "Hasta 3.5%+ en bancos europeos con FGD UE"
+            )
+        st.caption(
+            "Los tipos mostrados en estas referencias son orientativos y pueden variar. "
+            "Verificar condiciones (importe mínimo, cancelación anticipada, renovación automática) "
+            "antes de contratar. FGD España: €100.000/titular/entidad."
+        )
+
 
     st.divider()
 
@@ -6289,6 +6657,8 @@ def pantalla_analisis():
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
     inicializar_tabla_alertas()  # Crea tabla si no existe (idempotente)
+    inicializar_tabla_data_jobs()  # Crea tabla data_jobs si no existe
+    verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede
 
     # Header
     col_t, col_u = st.columns([4, 1])
