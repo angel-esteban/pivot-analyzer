@@ -2539,9 +2539,13 @@ def obtener_tipos_bce_ecb() -> dict:
                         best["mlf"] = float(mlf_raw.replace("−", "-").replace(",", "."))
                     except ValueError:
                         pass
+        if not best:
+            raise RuntimeError("BCE: tipos no encontrados")
         return best
-    except Exception:
-        return {}
+    except RuntimeError:
+        raise
+    except Exception as _exc:
+        raise RuntimeError(f"BCE scraping: {_exc}") from _exc
 
 
 @st.cache_data(ttl=86400)
@@ -2788,7 +2792,10 @@ Cuando el BCE sube tipos, los bonos existentes pierden valor (su cupón fijo val
         """)
         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
 
-    _bce   = obtener_tipos_bce_ecb()
+    try:
+        _bce = obtener_tipos_bce_ecb()
+    except Exception:
+        _bce = {}
     _dfr   = _bce.get("dfr")
     _mro   = _bce.get("mro")
     _mlf   = _bce.get("mlf")
@@ -3205,7 +3212,7 @@ rentabilidad como en diversificación de riesgo contraparte.
     # Comparativa: depósito 1Y vs bono 1Y AAA
     _dep_1y_es = _dep.get("es_1y")
     _bono_1y   = _obtener_tipo_ecb_yc("1Y")
-    _dfr_val   = _bce.get("dfr") if "_bce" in dir() else obtener_tipos_bce_ecb().get("dfr")
+    _dfr_val   = _bce.get("dfr") if _bce else ({} if True else obtener_tipos_bce_ecb()).get("dfr")
     if _dep_1y_es is not None and (_bono_1y is not None or _dfr_val is not None):
         st.markdown("")
         _cx1, _cx2, _cx3 = st.columns(3)
