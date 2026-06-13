@@ -9682,7 +9682,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             _cons    = ed["consenso_dir"]
             _precio  = ed["precio"]
 
-            try: _yield   = float(_info.get("dividendYield", 0) or 0) * 100
+            try:
+                _yr = float(_info.get("dividendYield", 0) or 0)
+                # yfinance devuelve dividendYield ya en % (ej: 4.85) o como decimal (0.0485)
+                _yield = _yr if _yr > 1.0 else _yr * 100
             except: _yield = 0.0
             try: _payout  = float(_info.get("payoutRatio",   0) or 0) * 100
             except: _payout = 0.0
@@ -9690,6 +9693,32 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             except: _pe = 0.0
             try: _beta    = float(_info.get("beta",          1) or 1)
             except: _beta = 1.0
+            # Campos adicionales dividendos/valoración
+            try: _div_rate   = float(_info.get("dividendRate",      0) or 0)
+            except: _div_rate = 0.0
+            try: _eps_ttm    = float(_info.get("trailingEps",       0) or 0)
+            except: _eps_ttm = 0.0
+            try: _eps_fwd    = float(_info.get("forwardEps",        0) or 0)
+            except: _eps_fwd = 0.0
+            try: _pe_fwd     = float(_info.get("forwardPE",         0) or 0)
+            except: _pe_fwd = 0.0
+            try: _tgt_mean   = float(_info.get("targetMeanPrice",   0) or 0)
+            except: _tgt_mean = 0.0
+            try: _tgt_high   = float(_info.get("targetHighPrice",   0) or 0)
+            except: _tgt_high = 0.0
+            try: _tgt_low    = float(_info.get("targetLowPrice",    0) or 0)
+            except: _tgt_low = 0.0
+            try: _last_div   = float(_info.get("lastDividendValue", 0) or 0)
+            except: _last_div = 0.0
+            import datetime as _dt
+            try:
+                _exdiv_ts = _info.get("exDividendDate") or _info.get("lastDividendDate")
+                _exdiv_str = _dt.datetime.fromtimestamp(int(_exdiv_ts)).strftime("%d %b %Y") if _exdiv_ts else "—"
+            except: _exdiv_str = "—"
+            try:
+                _earn_ts  = _info.get("earningsTimestamp")
+                _earn_str = _dt.datetime.fromtimestamp(int(_earn_ts)).strftime("%d %b %Y") if _earn_ts else "—"
+            except: _earn_str = "—"
             try: _52h     = float(_info.get("fiftyTwoWeekHigh", _precio) or _precio)
             except: _52h = _precio
             try: _52l     = float(_info.get("fiftyTwoWeekLow",  _precio) or _precio)
@@ -10181,6 +10210,77 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                             unsafe_allow_html=True
                         )
                     st.markdown('</div>', unsafe_allow_html=True)
+
+            # ── Datos adicionales Yahoo Finance — solo para Dividendos ────────────────
+            if _est_sel == "💰 Dividendos":
+                st.markdown("")
+                st.markdown("#### 📊 Datos de valoración y dividendo")
+                _da1, _da2, _da3, _da4 = st.columns(4)
+                with _da1:
+                    if _div_rate > 0:
+                        st.metric("Dividendo/acción (€/año)", f"{_div_rate:.2f} €",
+                                  help="Dividendo anual declarado por acción (yfinance: dividendRate)")
+                    if _last_div > 0:
+                        st.caption(f"Último pago: {_last_div:.3f} €/acción")
+                with _da2:
+                    if _eps_ttm != 0:
+                        _cov = (_div_rate / _eps_ttm * 100) if _eps_ttm > 0 else 0
+                        st.metric("BPA TTM (€)", f"{_eps_ttm:.2f} €",
+                                  help="Beneficio Por Acción últimos 12 meses (trailingEps)")
+                        if _cov > 0:
+                            st.caption(f"Cobertura dividendo: {_cov:.0f}% del BPA")
+                with _da3:
+                    if _eps_fwd != 0:
+                        st.metric("BPA Forward (€)", f"{_eps_fwd:.2f} €",
+                                  help="Beneficio Por Acción estimado próximo año (forwardEps)")
+                    if _pe_fwd > 0:
+                        st.metric("P/E Forward", f"{_pe_fwd:.1f}x",
+                                  help="Precio/Beneficio sobre estimaciones futuras (forwardPE)")
+                with _da4:
+                    if _tgt_mean > 0:
+                        _upside = (_tgt_mean / _precio - 1) * 100 if _precio > 0 else 0
+                        _delta_str = f"{_upside:+.1f}% potencial"
+                        st.metric("Precio objetivo analistas", f"{_tgt_mean:.2f} €",
+                                  delta=_delta_str,
+                                  help=f"Consenso analistas · Rango: {_tgt_low:.2f}€ – {_tgt_high:.2f}€")
+
+                _db1, _db2, _db3, _db4 = st.columns(4)
+                with _db1:
+                    st.markdown(
+                        f'<div style="background:#f0fdf4;border-radius:8px;padding:10px 12px;'
+                        f'border-left:3px solid #16a34a">'
+                        f'<div style="font-size:11px;color:#64748b;font-weight:600">📅 Fecha ex-dividendo</div>'
+                        f'<div style="font-size:15px;font-weight:700;color:#15803d">{_exdiv_str}</div>'
+                        f'</div>', unsafe_allow_html=True)
+                with _db2:
+                    st.markdown(
+                        f'<div style="background:#eff6ff;border-radius:8px;padding:10px 12px;'
+                        f'border-left:3px solid #3b82f6">'
+                        f'<div style="font-size:11px;color:#64748b;font-weight:600">📢 Próx. resultados</div>'
+                        f'<div style="font-size:15px;font-weight:700;color:#1d4ed8">{_earn_str}</div>'
+                        f'</div>', unsafe_allow_html=True)
+                with _db3:
+                    if _tgt_mean > 0 and _precio > 0:
+                        _yield_tgt = (_div_rate / _tgt_mean * 100) if _div_rate > 0 and _tgt_mean > 0 else 0
+                        st.markdown(
+                            f'<div style="background:#fef9c3;border-radius:8px;padding:10px 12px;'
+                            f'border-left:3px solid #eab308">'
+                            f'<div style="font-size:11px;color:#64748b;font-weight:600">🎯 Yield sobre precio objetivo</div>'
+                            f'<div style="font-size:15px;font-weight:700;color:#854d0e">'
+                            f'{"N/D" if _yield_tgt == 0 else f"{_yield_tgt:.2f}%"}</div>'
+                            f'<div style="font-size:10px;color:#92400e">Al precio objetivo de analistas</div>'
+                            f'</div>', unsafe_allow_html=True)
+                with _db4:
+                    if _tgt_high > 0 and _tgt_low > 0:
+                        st.markdown(
+                            f'<div style="background:#faf5ff;border-radius:8px;padding:10px 12px;'
+                            f'border-left:3px solid #8b5cf6">'
+                            f'<div style="font-size:11px;color:#64748b;font-weight:600">📐 Rango objetivos</div>'
+                            f'<div style="font-size:13px;font-weight:700;color:#6d28d9">'
+                            f'{_tgt_low:.2f}€ — {_tgt_high:.2f}€</div>'
+                            f'<div style="font-size:10px;color:#7c3aed">Mín · Máx analistas</div>'
+                            f'</div>', unsafe_allow_html=True)
+                st.caption("Fuente: Yahoo Finance (yfinance) · Datos orientativos, verificar en web de la compañía antes de operar")
 
             # ── Exportar informe de estrategia ────────────────────────────────────────
             st.divider()
