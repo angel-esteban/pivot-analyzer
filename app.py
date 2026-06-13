@@ -7383,10 +7383,11 @@ def pestaña_cartera():
                             pl_a = pos["pl_abs"]
                             pl_p = pos["pl_pct"]
                             va   = pos["valor_actual"]
+                            _edit_key = f"_edit_pos_{pos['id']}"
 
                             with st.container():
-                                cols = st.columns([2, 1, 1, 1, 1, 1, 0.5] if tipo_key == "dividendos"
-                                                  else [2, 1, 1, 1, 1, 0.5])
+                                cols = st.columns([2, 1, 1, 1, 1, 1, 0.5, 0.5] if tipo_key == "dividendos"
+                                                  else [2, 1, 1, 1, 1, 0.5, 0.5])
                                 with cols[0]:
                                     st.markdown(
                                         f"**{pos['ticker']}**"
@@ -7410,13 +7411,88 @@ def pestaña_cartera():
                                     with cols[5]:
                                         yoc = pos.get("yield_coste", 0)
                                         st.metric("Yield/coste", f"{yoc:.2f}%")
-                                # Botón eliminar posición
+                                # Botones editar / eliminar
+                                with cols[-2]:
+                                    if st.button("✏️", key=f"edit_pos_{pos['id']}",
+                                                 help="Editar esta posición"):
+                                        current = st.session_state.get(_edit_key, False)
+                                        st.session_state[_edit_key] = not current
+                                        st.rerun()
                                 with cols[-1]:
                                     if st.button("🗑️", key=f"del_pos_{pos['id']}",
                                                  help="Eliminar esta posición"):
                                         eliminar_posicion(pos["id"], cid)
                                         st.session_state["_cartera_precios_cache"] = {}
                                         st.rerun()
+
+                            # ── Formulario de edición inline ───────────────
+                            if st.session_state.get(_edit_key, False):
+                                with st.container():
+                                    st.markdown(
+                                        f"<div style='background:#f0f4ff;border-left:3px solid #4f46e5;"
+                                        f"padding:12px 16px;border-radius:6px;margin-bottom:8px;'>"
+                                        f"✏️ <b>Editando {pos['ticker']}</b></div>",
+                                        unsafe_allow_html=True
+                                    )
+                                    with st.form(key=f"form_edit_pos_{pos['id']}"):
+                                        ef1, ef2 = st.columns(2)
+                                        with ef1:
+                                            _e_nom = st.text_input(
+                                                "Nombre",
+                                                value=pos.get("nombre_valor", ""),
+                                                key=f"e_nom_{pos['id']}"
+                                            )
+                                        ef3, ef4, ef5 = st.columns(3)
+                                        with ef3:
+                                            _e_nac = st.number_input(
+                                                "Nº acciones",
+                                                min_value=0.0001,
+                                                value=float(pos["num_acciones"]),
+                                                step=1.0, format="%.4f",
+                                                key=f"e_nac_{pos['id']}"
+                                            )
+                                        with ef4:
+                                            _e_pc = st.number_input(
+                                                "Precio medio de compra",
+                                                min_value=0.0001,
+                                                value=float(pos["precio_compra"]),
+                                                step=0.01, format="%.4f",
+                                                key=f"e_pc_{pos['id']}"
+                                            )
+                                        with ef5:
+                                            _mon_opts = ["EUR", "USD", "GBP", "CHF"]
+                                            _mon_idx  = _mon_opts.index(pos.get("moneda", "EUR"))                                                         if pos.get("moneda", "EUR") in _mon_opts else 0
+                                            _e_mon = st.selectbox(
+                                                "Moneda", _mon_opts, index=_mon_idx,
+                                                key=f"e_mon_{pos['id']}"
+                                            )
+                                        _e_notas = st.text_input(
+                                            "Notas", value=pos.get("notas", ""),
+                                            key=f"e_notas_{pos['id']}"
+                                        )
+                                        _ec1, _ec2 = st.columns([1, 4])
+                                        with _ec1:
+                                            save_ok = st.form_submit_button(
+                                                "💾 Guardar", type="primary"
+                                            )
+                                        with _ec2:
+                                            cancel_ok = st.form_submit_button("✖ Cancelar")
+
+                                        if save_ok:
+                                            res = añadir_posicion(
+                                                cid, pos["ticker"], _e_nom.strip(),
+                                                _e_nac, _e_pc, _e_mon, _e_notas.strip()
+                                            )
+                                            if res:
+                                                st.session_state[_edit_key] = False
+                                                st.session_state["_cartera_precios_cache"] = {}
+                                                st.rerun()
+                                            else:
+                                                st.error("No se pudo guardar.")
+                                        if cancel_ok:
+                                            st.session_state[_edit_key] = False
+                                            st.rerun()
+
                         st.markdown("---")
 
                     # ── Formulario añadir / editar posición ────────────────
