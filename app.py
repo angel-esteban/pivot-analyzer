@@ -7421,15 +7421,79 @@ def pestaña_cartera():
 
                     # ── Formulario añadir / editar posición ────────────────
                     with st.expander("➕ Añadir / actualizar posición", expanded=not bool(posiciones)):
+                        st.caption("Si el ticker ya existe en la cartera, sus datos se actualizarán.")
+
+                        # ── Selector de mercado/ticker (fuera del form para que sea reactivo) ──
+                        _mercado_key = f"mercado_pos_{cid}"
+                        _ticker_key  = f"ticker_pos_{cid}"
+                        _nom_key     = f"nomv_pos_{cid}"
+
+                        _mercado_pos = st.selectbox(
+                            "🗂️ Índice / Mercado",
+                            ["✏️ Escribir manualmente",
+                             "🇪🇸 IBEX 35", "🌍 Eurostoxx 50",
+                             "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+                             "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+                             "📊 ETFs UCITS"],
+                            key=_mercado_key,
+                            help="Elige un índice para seleccionar de la lista, o 'Escribir manualmente' para cualquier ticker de Yahoo Finance."
+                        )
+
+                        _nombre_auto = ""
+                        if _mercado_pos == "✏️ Escribir manualmente":
+                            _tkr_sel = st.text_input(
+                                "🔎 Ticker",
+                                value=st.session_state.get(_ticker_key, ""),
+                                placeholder="Ej. NTGY.MC, AAPL, IWDA.AS",
+                                key=f"tkr_manual_{cid}",
+                                help="Símbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=París · .L=Londres · .AS=Ámsterdam"
+                            ).upper().strip()
+                            st.session_state[_ticker_key] = _tkr_sel
+
+                        elif _mercado_pos == "📊 ETFs UCITS":
+                            _col_cat, _col_etf = st.columns([1, 2])
+                            with _col_cat:
+                                _cat_etf = st.selectbox("📂 Categoría ETF", list(ETFS_UCITS.keys()),
+                                                         key=f"cat_etf_{cid}")
+                            with _col_etf:
+                                _etfs_cat = ETFS_UCITS[_cat_etf]
+                                _etf_nom  = st.selectbox("🔎 ETF", list(_etfs_cat.keys()),
+                                                          key=f"etf_nom_{cid}")
+                                _tkr_sel  = _etfs_cat[_etf_nom]
+                                _nombre_auto = _etf_nom.split("— ")[-1] if "— " in _etf_nom else _etf_nom
+                            st.caption(f"Ticker seleccionado: `{_tkr_sel}`")
+                            st.session_state[_ticker_key] = _tkr_sel
+
+                        else:
+                            with st.spinner(f"Cargando valores de {_mercado_pos}..."):
+                                _tickers_pos = obtener_tickers_mercado(_mercado_pos)
+                            if _tickers_pos:
+                                _nom_sel = st.selectbox(
+                                    f"🔎 Valor — {_mercado_pos}",
+                                    list(_tickers_pos.keys()),
+                                    key=f"nom_sel_{cid}"
+                                )
+                                _tkr_sel     = _tickers_pos[_nom_sel]
+                                _nombre_auto = _nom_sel
+                                st.caption(f"Ticker: `{_tkr_sel}`")
+                                st.session_state[_ticker_key] = _tkr_sel
+                            else:
+                                st.warning("No se pudieron cargar los tickers. Introduce el ticker manualmente.")
+                                _tkr_sel = st.text_input("🔎 Ticker", value="",
+                                                          key=f"tkr_fallback_{cid}").upper().strip()
+                                st.session_state[_ticker_key] = _tkr_sel
+
+                        st.markdown("---")
+
+                        # ── Form: datos de la posición ──────────────────────
                         with st.form(key=f"form_pos_{cid}"):
-                            st.caption("Si el ticker ya existe en la cartera, sus datos se actualizarán.")
+                            _tkr_form  = st.session_state.get(_ticker_key, "")
+                            if _tkr_form:
+                                st.markdown(f"**Ticker seleccionado:** `{_tkr_form}`")
                             fp1, fp2 = st.columns(2)
                             with fp1:
-                                _tkr = st.text_input("Ticker (Yahoo Finance)",
-                                                      placeholder="Ej. NTGY.MC, AAPL, IWDA.AS",
-                                                      key=f"tkr_{cid}")
-                            with fp2:
                                 _nom_v = st.text_input("Nombre (opcional)",
+                                                        value=_nombre_auto,
                                                         placeholder="Ej. Naturgy Energy",
                                                         key=f"nomv_{cid}")
                             fp3, fp4, fp5 = st.columns(3)
@@ -7447,10 +7511,11 @@ def pestaña_cartera():
                             _notas = st.text_input("Notas (opcional)", key=f"notas_{cid}")
                             ok = st.form_submit_button("Guardar posición", type="primary")
                             if ok:
-                                if not _tkr.strip():
-                                    st.error("El ticker es obligatorio.")
+                                _tkr_submit = st.session_state.get(_ticker_key, "").strip().upper()
+                                if not _tkr_submit:
+                                    st.error("Selecciona o introduce un ticker antes de guardar.")
                                 else:
-                                    res = añadir_posicion(cid, _tkr.strip().upper(),
+                                    res = añadir_posicion(cid, _tkr_submit,
                                                           _nom_v.strip(), _nac, _pc,
                                                           _mon, _notas.strip())
                                     if res:
