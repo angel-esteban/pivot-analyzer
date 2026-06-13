@@ -2808,6 +2808,121 @@ def pestaña_renta_fija():
     st.divider()
 
     # ════════════════════════════════════════════════════════════════════════
+    # BLOQUE 4 — LETRAS Y BONOS DEL TESORO (referencia desde curva AAA + spread)
+    # ════════════════════════════════════════════════════════════════════════
+    st.markdown("#### 🏛️ Instrumentos del Tesoro Público Español")
+    st.caption(
+        "Las TIR mostradas son **rendimientos de mercado secundario** (curva AAA Euro Área + spread España-Alemania estimado). "
+        "El mercado secundario refleja el precio al que se negocian bonos ya emitidos, "
+        "no el tipo marginal de la última subasta primaria. "
+        "En condiciones normales la diferencia entre ambos es de **1–5 puntos básicos**; "
+        "en momentos de estrés puede ampliarse a 10–20 pb."
+    )
+    st.info(
+        "🏛️ **Para los tipos exactos de la última subasta primaria** consulta la página oficial: "
+        "[tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)",
+        icon=None
+    )
+
+    with st.expander("📖 Letras, Bonos y Obligaciones — ¿En qué se diferencian?", expanded=False):
+        st.markdown("""
+El Tesoro Público español emite deuda pública en tres formatos según el plazo:
+
+**📄 Letras del Tesoro (3, 6, 9, 12 y 18 meses)**
+Son instrumentos a corto plazo. Se emiten *al descuento*: compras por menos del valor nominal
+(1.000€) y al vencimiento recibes los 1.000€ completos. La diferencia es tu rentabilidad.
+
+*Ejemplo:* Compras una Letra a 12 meses por 975€ y recibes 1.000€ al vencimiento.
+Tu rentabilidad efectiva es (1.000-975)/975 = 2,56% anual.
+
+Son el equivalente español de los T-bills estadounidenses. Son los instrumentos más seguros
+y líquidos del mercado español — usados por empresas para gestionar tesorería y por inversores
+conservadores que buscan rentabilidad sin riesgo de crédito ni de duración.
+
+**📋 Bonos del Estado (2, 3 y 5 años)**
+Instrumentos a medio plazo. Pagan un *cupón anual fijo* más la devolución del principal
+al vencimiento. Si los tipos suben después de tu compra, el bono pierde valor en mercado
+secundario (aunque si lo mantienes hasta vencimiento recibes exactamente lo prometido).
+
+**📜 Obligaciones del Estado (7, 10, 15, 30 y 50 años)**
+Igual que los bonos pero a largo plazo. Tienen mayor *duración* (sensibilidad a los tipos):
+una subida de 1% en los tipos puede hacer perder un 8-10% en mercado a una obligación a 10 años.
+Son instrumentos para inversores con horizonte muy largo o para quien quiere asegurar
+una rentabilidad fija durante décadas.
+
+**¿Cómo comprar Deuda Pública española?**
+- **Tesoro Directo** (tesoro.es): compra directa sin comisiones intermediarias. Mínimo 1.000€.
+  Puedes mantener hasta vencimiento o vender en mercado secundario.
+- **Banco o broker:** los ofrecen pero suelen cobrar comisiones. Ventaja: más comodidad operativa.
+- **ETFs de renta fija UCITS:** exposición diversificada a bonos soberanos europeos sin
+  vencimiento fijo. Recomendado para carteras de inversión pasiva.
+        """)
+        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
+
+    # Spread estimado ES vs AAA — fetch sovereign yields (cached)
+    _sov_b4 = obtener_yields_soberanos_eurostat()
+    _tipo_es_b4 = _sov_b4.get("ES")
+    _tipo_de_b4 = _sov_b4.get("DE")
+    _spread_est = (_tipo_es_b4 - _tipo_de_b4) if (_tipo_es_b4 is not None and _tipo_de_b4 is not None) else 0.80
+
+    st.markdown("**📄 Letras del Tesoro**")
+    _letras = [
+        ("Letra 3M",  "3M",  "Corto plazo al descuento"),
+        ("Letra 6M",  "6M",  "Corto plazo al descuento"),
+        ("Letra 12M", "1Y",  "Corto plazo al descuento"),
+        ("Letra 18M", "1Y",  "Corto plazo al descuento"),
+    ]
+    _cols_letras = st.columns(4)
+    for _i_l, (_nombre_l, _tenor_l, _desc_l) in enumerate(_letras):
+        _base_l = _obtener_tipo_ecb_yc(_tenor_l)
+        _tir_l = (_base_l + _spread_est) if _base_l is not None else None
+        with _cols_letras[_i_l]:
+            _rf_card(_nombre_l, _tir_l, _desc_l, color="#16a34a", bg="#f0fdf4",
+                     descripcion="Mdo. secundario*")
+
+    st.divider()
+
+    st.markdown("**📋 Bonos del Estado**")
+    _bonos = [
+        ("Bono 2A", "2Y", "Cupón anual · medio plazo"),
+        ("Bono 3A", "3Y", "Cupón anual · medio plazo"),
+        ("Bono 5A", "5Y", "Cupón anual · medio plazo"),
+    ]
+    _cols_bonos = st.columns(3)
+    for _i_b, (_nombre_b, _tenor_b, _desc_b) in enumerate(_bonos):
+        _base_b = _obtener_tipo_ecb_yc(_tenor_b)
+        _tir_b = (_base_b + _spread_est) if _base_b is not None else None
+        with _cols_bonos[_i_b]:
+            _rf_card(_nombre_b, _tir_b, _desc_b, color="#1d4ed8", bg="#eff6ff",
+                     descripcion="Mdo. secundario*")
+
+    st.divider()
+
+    st.markdown("**📜 Obligaciones del Estado**")
+    _obligs = [
+        ("Oblig. 10A", "10Y", "Cupón anual · largo plazo"),
+        ("Oblig. 15A", "15Y", "Cupón anual · largo plazo"),
+        ("Oblig. 30A", "30Y", "Cupón anual · muy largo plazo"),
+    ]
+    _cols_obligs = st.columns(3)
+    for _i_o, (_nombre_o, _tenor_o, _desc_o) in enumerate(_obligs):
+        _base_o = _obtener_tipo_ecb_yc(_tenor_o)
+        _tir_o = (_base_o + _spread_est) if _base_o is not None else None
+        with _cols_obligs[_i_o]:
+            _rf_card(_nombre_o, _tir_o, _desc_o, color="#7e22ce", bg="#faf5ff",
+                     descripcion="Mdo. secundario*")
+
+    st.caption(
+        "\* Fuente: mercado secundario — curva AAA Euro Área (BCE) + spread España-Alemania en tiempo real. "
+        "Diferencia típica con el tipo marginal de subasta primaria: **1–5 pb** en condiciones normales, "
+        "hasta **10–20 pb** en episodios de volatilidad. "
+        "Para el tipo exacto de la última subasta: "
+        "[Tesoro Público — Resultado últimas subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)"
+    )
+
+    st.divider()
+
+    # ════════════════════════════════════════════════════════════════════════
     # BLOQUE 1 — TIPOS DE REFERENCIA BCE
     # ════════════════════════════════════════════════════════════════════════
     st.markdown("#### 🏦 Tipos de Referencia del BCE")
@@ -3072,95 +3187,6 @@ recurso y por qué la credibilidad del BCE es el ancla del euro.
 
     st.divider()
 
-    # ════════════════════════════════════════════════════════════════════════
-    # BLOQUE 4 — LETRAS Y BONOS DEL TESORO (referencia desde curva AAA + spread)
-    # ════════════════════════════════════════════════════════════════════════
-    st.markdown("#### 🏛️ Instrumentos del Tesoro Público Español")
-    st.caption(
-        "Las TIR mostradas son **rendimientos de mercado secundario** (curva AAA Euro Área + spread España-Alemania estimado). "
-        "El mercado secundario refleja el precio al que se negocian bonos ya emitidos, "
-        "no el tipo marginal de la última subasta primaria. "
-        "En condiciones normales la diferencia entre ambos es de **1–5 puntos básicos**; "
-        "en momentos de estrés puede ampliarse a 10–20 pb."
-    )
-    st.info(
-        "🏛️ **Para los tipos exactos de la última subasta primaria** consulta la página oficial: "
-        "[tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)",
-        icon=None
-    )
-
-    with st.expander("📖 Letras, Bonos y Obligaciones — ¿En qué se diferencian?", expanded=False):
-        st.markdown("""
-El Tesoro Público español emite deuda pública en tres formatos según el plazo:
-
-**📄 Letras del Tesoro (3, 6, 9, 12 y 18 meses)**
-Son instrumentos a corto plazo. Se emiten *al descuento*: compras por menos del valor nominal
-(1.000€) y al vencimiento recibes los 1.000€ completos. La diferencia es tu rentabilidad.
-
-*Ejemplo:* Compras una Letra a 12 meses por 975€ y recibes 1.000€ al vencimiento.
-Tu rentabilidad efectiva es (1.000-975)/975 = 2,56% anual.
-
-Son el equivalente español de los T-bills estadounidenses. Son los instrumentos más seguros
-y líquidos del mercado español — usados por empresas para gestionar tesorería y por inversores
-conservadores que buscan rentabilidad sin riesgo de crédito ni de duración.
-
-**📋 Bonos del Estado (2, 3 y 5 años)**
-Instrumentos a medio plazo. Pagan un *cupón anual fijo* más la devolución del principal
-al vencimiento. Si los tipos suben después de tu compra, el bono pierde valor en mercado
-secundario (aunque si lo mantienes hasta vencimiento recibes exactamente lo prometido).
-
-**📜 Obligaciones del Estado (7, 10, 15, 30 y 50 años)**
-Igual que los bonos pero a largo plazo. Tienen mayor *duración* (sensibilidad a los tipos):
-una subida de 1% en los tipos puede hacer perder un 8-10% en mercado a una obligación a 10 años.
-Son instrumentos para inversores con horizonte muy largo o para quien quiere asegurar
-una rentabilidad fija durante décadas.
-
-**¿Cómo comprar Deuda Pública española?**
-- **Tesoro Directo** (tesoro.es): compra directa sin comisiones intermediarias. Mínimo 1.000€.
-  Puedes mantener hasta vencimiento o vender en mercado secundario.
-- **Banco o broker:** los ofrecen pero suelen cobrar comisiones. Ventaja: más comodidad operativa.
-- **ETFs de renta fija UCITS:** exposición diversificada a bonos soberanos europeos sin
-  vencimiento fijo. Recomendado para carteras de inversión pasiva.
-        """)
-        st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
-
-    # Spread estimado ES vs AAA para ajustar tipos
-    _spread_est = (_prima_es / 100) if (_tipo_es is not None and _tipo_de is not None) else 0.80
-
-    # Instrumentos del Tesoro: plazo, tipo AAA base, descripción
-    _instrumentos = [
-        ("Letra 3M",  "3M",  "Corto plazo al descuento"),
-        ("Letra 6M",  "6M",  "Corto plazo al descuento"),
-        ("Letra 12M", "1Y",  "Corto plazo al descuento"),
-        ("Letra 18M", "1Y",  "Corto plazo al descuento"),
-        ("Bono 2A",   "2Y",  "Cupón anual · medio plazo"),
-        ("Bono 3A",   "3Y",  "Cupón anual · medio plazo"),
-        ("Bono 5A",   "5Y",  "Cupón anual · medio plazo"),
-        ("Oblig. 10A","10Y", "Cupón anual · largo plazo"),
-        ("Oblig. 15A","15Y", "Cupón anual · largo plazo"),
-        ("Oblig. 30A","30Y", "Cupón anual · muy largo plazo"),
-    ]
-
-    _cols_inst = st.columns(5)
-    for _i, (_nombre_inst, _tenor_inst, _desc_inst) in enumerate(_instrumentos):
-        _base = _obtener_tipo_ecb_yc(_tenor_inst)
-        _tir_est = (_base + _spread_est) if _base is not None else None
-        _bg_inst = "#f0fdf4" if "Letra" in _nombre_inst else "#eff6ff" if "Bono" in _nombre_inst else "#faf5ff"
-        _col_inst = "#16a34a" if "Letra" in _nombre_inst else "#1d4ed8" if "Bono" in _nombre_inst else "#7e22ce"
-        with _cols_inst[_i % 5]:
-            _rf_card(_nombre_inst, _tir_est, _desc_inst, color=_col_inst, bg=_bg_inst,
-                     descripcion="Mdo. secundario*")
-
-    st.caption(
-        "\* Fuente: mercado secundario — curva AAA Euro Área (BCE) + spread España-Alemania en tiempo real. "
-        "Diferencia típica con el tipo marginal de subasta primaria: **1–5 pb** en condiciones normales, "
-        "hasta **10–20 pb** en episodios de volatilidad. "
-        "Para el tipo exacto de la última subasta: "
-        "[Tesoro Público — Resultado últimas subastas](https://www.tesoro.es/deuda-publica/subastas/resultado-ultimas-subastas)"
-    )
-
-
-    st.divider()
 
     # ════════════════════════════════════════════════════════════════════════
     # BLOQUE 6 — DEPÓSITOS BANCARIOS
