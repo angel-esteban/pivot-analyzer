@@ -3051,11 +3051,13 @@ en euros. Los bonos españoles pagan algo más — esa diferencia es la prima de
             name="Curva AAA EA",
             hovertemplate="%{x}: <b>%{y:.2f}%</b><extra></extra>"
         ))
+        _curva_y_min = max(0, min(_valores_disp) - 0.5)
+        _curva_y_max = max(_valores_disp) + 0.3
         _fig_curva.update_layout(
             height=260, margin=dict(l=0, r=0, t=20, b=0),
             xaxis_title="Plazo", yaxis_title="TIR (%)",
             plot_bgcolor="white", paper_bgcolor="white",
-            yaxis=dict(gridcolor="#f1f5f9"),
+            yaxis=dict(gridcolor="#f1f5f9", range=[_curva_y_min, _curva_y_max]),
             xaxis=dict(gridcolor="#f1f5f9"),
             showlegend=False
         )
@@ -3074,11 +3076,13 @@ en euros. Los bonos españoles pagan algo más — esa diferencia es la prima de
             name="AAA 3Y",
             hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra></extra>"
         ))
+        _h10_min = max(0, float(_h10y.min()) - 0.5)
+        _h10_max = float(_h10y.max()) + 0.3
         _fig_h10.update_layout(
             height=180, margin=dict(l=0, r=0, t=14, b=0),
             title=dict(text="Histórico TIR 3 años — AAA Euro Área", font=dict(size=12)),
             plot_bgcolor="white", paper_bgcolor="white",
-            yaxis=dict(gridcolor="#f1f5f9"),
+            yaxis=dict(gridcolor="#f1f5f9", range=[_h10_min, _h10_max]),
             xaxis=dict(gridcolor="#f1f5f9"),
             showlegend=False
         )
@@ -3316,11 +3320,16 @@ rentabilidad como en diversificación de riesgo contraparte.
                 line=dict(color="#2563eb", width=2, dash="dot"),
                 hovertemplate="%{x|%b %Y}: <b>%{y:.2f}%</b><extra>Euro Área</extra>"
             ))
+        _dep_vals_all = list(_hist_es.values)
+        if _hist_ea is not None and len(_hist_ea) > 3:
+            _dep_vals_all += list(_hist_ea.values)
+        _dep_y_min = max(0, min(_dep_vals_all) - 0.5)
+        _dep_y_max = max(_dep_vals_all) + 0.3
         _fig_dep.update_layout(
             height=200, margin=dict(l=0, r=0, t=18, b=0),
             title=dict(text="Evolución tipo depósito ≤1 año hogares (BCEuro MIR)", font=dict(size=12)),
             plot_bgcolor="white", paper_bgcolor="white",
-            yaxis=dict(gridcolor="#f1f5f9", ticksuffix="%"),
+            yaxis=dict(gridcolor="#f1f5f9", ticksuffix="%", range=[_dep_y_min, _dep_y_max]),
             xaxis=dict(gridcolor="#f1f5f9"),
             legend=dict(orientation="h", y=1.15),
             showlegend=True
