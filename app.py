@@ -3326,12 +3326,12 @@ rentabilidad como en diversificación de riesgo contraparte.
         _dep_y_min = max(0, min(_dep_vals_all) - 0.5)
         _dep_y_max = max(_dep_vals_all) + 0.3
         _fig_dep.update_layout(
-            height=200, margin=dict(l=0, r=0, t=18, b=0),
+            height=200, margin=dict(l=0, r=0, t=18, b=45),
             title=dict(text="Evolución tipo depósito ≤1 año hogares (BCEuro MIR)", font=dict(size=12)),
             plot_bgcolor="white", paper_bgcolor="white",
             yaxis=dict(gridcolor="#f1f5f9", ticksuffix="%", range=[_dep_y_min, _dep_y_max]),
             xaxis=dict(gridcolor="#f1f5f9"),
-            legend=dict(orientation="h", y=1.15),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.38, xanchor="center", x=0.5),
             showlegend=True
         )
         st.plotly_chart(_fig_dep, use_container_width=True)
@@ -4763,7 +4763,7 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
 # DATOS FUNDAMENTALES
 # =============================================================================
 
-def bloque_fundamentales(info: dict, tipo: str = "accion"):
+def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
     """
     Retorna dict con datos fundamentales según tipo (accion / etf).
     """
@@ -4785,8 +4785,12 @@ def bloque_fundamentales(info: dict, tipo: str = "accion"):
             "EV/EBITDA": _fmt_ratio(info.get("enterpriseToEbitda")),
             "BPA (TTM)": _fmt_precio(info.get("trailingEps")),
             "BPA forward": _fmt_precio(info.get("forwardEps")),
-            "Dividendo": _fmt_precio(info.get("dividendRate")),
-            "Rentab. dividendo": _fmt_pct(info.get("dividendYield")),
+            "Dividendo": _fmt_precio(div_ttm if div_ttm else info.get("dividendRate")),
+            "Rentab. dividendo": (
+                _fmt_pct(div_ttm / (info.get("currentPrice") or info.get("regularMarketPrice") or 1))
+                if div_ttm and (info.get("currentPrice") or info.get("regularMarketPrice"))
+                else _fmt_pct(info.get("dividendYield"))
+            ),
             "Beta": _fmt_ratio(info.get("beta")),
             "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
             "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
@@ -6893,6 +6897,23 @@ def render_tabla_pivots(tf_nombre: str, niveles: dict, precio_actual_val: float)
 
 
 @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
+def calcular_div_ttm(ticker: str) -> float:
+    """Dividendo anual real (TTM): suma de pagos reales en los últimos 12 meses.
+    Evita el error de Yahoo Finance que suma 4 pagos aunque la empresa pague 3 veces al año."""
+    try:
+        import pandas as pd
+        t = yf.Ticker(ticker)
+        divs = t.dividends
+        if divs is None or len(divs) == 0:
+            return 0.0
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=12)
+        ttm = float(divs[divs.index >= cutoff].sum())
+        return ttm if ttm > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
 def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
     """Devuelve lista ordenada por TER de todos los ETFs de la categoría,
     enriquecidos con AUM y rentabilidad 1 año desde yfinance."""
@@ -7461,7 +7482,8 @@ def pantalla_analisis():
 
 
             # ---- FUNDAMENTALES ----
-            fundamentales = bloque_fundamentales(info, tipo_activo)
+            div_ttm = calcular_div_ttm(ticker_activo)
+            fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm)
 
             # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
             st.session_state["estrategia_data"] = {
@@ -7490,6 +7512,7 @@ def pantalla_analisis():
                 "analisis_rsi":    analisis_rsi,
                 "analisis_vol":    analisis_vol,
                 "puntuacion_tec":  puntuacion_tec,
+                "div_ttm":         div_ttm,
             }
 
         # ======== LAYOUT PRINCIPAL ========
@@ -9943,9 +9966,14 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             _precio  = ed["precio"]
 
             try:
-                _yr = float(_info.get("dividendYield", 0) or 0)
-                # yfinance devuelve dividendYield ya en % (ej: 4.85) o como decimal (0.0485)
-                _yield = _yr if _yr > 1.0 else _yr * 100
+                # Dividendo TTM desde historial real (evita error de Yahoo sumando 4 pagos)
+                _div_ttm_ed = float(ed.get("div_ttm") or 0.0)
+                _precio_ed  = float(ed.get("precio") or 0)
+                if _div_ttm_ed > 0 and _precio_ed > 0:
+                    _yield = _div_ttm_ed / _precio_ed * 100
+                else:
+                    _yr = float(_info.get("dividendYield", 0) or 0)
+                    _yield = _yr if _yr > 1.0 else _yr * 100
             except: _yield = 0.0
             try: _payout  = float(_info.get("payoutRatio",   0) or 0) * 100
             except: _payout = 0.0
@@ -9953,9 +9981,8 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             except: _pe = 0.0
             try: _beta    = float(_info.get("beta",          1) or 1)
             except: _beta = 1.0
-            # Campos adicionales dividendos/valoración
-            try: _div_rate   = float(_info.get("dividendRate",      0) or 0)
-            except: _div_rate = 0.0
+            # Campos adicionales dividendos/valoración — dividendo TTM desde historial real
+            _div_rate = float(ed.get("div_ttm") or 0.0) or float(_info.get("dividendRate", 0) or 0)
             try: _eps_ttm    = float(_info.get("trailingEps",       0) or 0)
             except: _eps_ttm = 0.0
             try: _eps_fwd    = float(_info.get("forwardEps",        0) or 0)
