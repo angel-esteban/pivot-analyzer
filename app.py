@@ -9762,7 +9762,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _y_show   = _yield if _yield_ok else 0
                 c = []
                 c.append(_criterio(2 if _y_show >= 3.5 else 1 if _y_show >= 2 else 0,
-                    f"Dividend yield {_y_show:.1f}%" + (" ⚠️ dato dudoso" if not _yield_ok and _yield > 0 else ""),
+                    f"Dividend yield {_y_show:.1f}%" + (f" ⚠️ dato dudoso (proveedor: {_yield:.1f}%)" if not _yield_ok and _yield > 0 else ""),
                     "≥3.5% atractivo · 2-3.5% aceptable · <2% insuficiente"))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
@@ -9834,7 +9834,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     "Acumulación (OBV/Volumen)",
                     _div_txt_alc()))
                 c.append(_criterio(2 if 0 < _yield < 25 and _yield >= 2 else 1 if _yield > 0 else 0,
-                    f"Yield {_yield:.1f}%" if _yield < 25 else "Yield (dato dudoso)",
+                    f"Yield {_yield:.1f}%" if _yield < 25 else f"Yield ⚠️ dato dudoso (proveedor: {_yield:.1f}%)",
                     "El dividendo remunera la espera"))
                 return c
 
@@ -9920,7 +9920,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     _y_ok = 0 < _yield < 25
                     _yv   = _yield if _y_ok else 0
                     if not _y_ok and _yield > 0:
-                        puntos.append("⚠️ El yield que muestra el proveedor de datos parece anómalo — verifica el dividendo real en la web de la empresa.")
+                        puntos.append(f"⚠️ El yield que muestra el proveedor de datos parece anómalo ({_yield:.1f}%) — verifica el dividendo real en la web de la empresa.")
                     if _yv >= 3.5:
                         puntos.append(f"✅ Yield del {_yv:.1f}% por encima del umbral de interés para estrategia de rentas.")
                     elif _yv > 0:
