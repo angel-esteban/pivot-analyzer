@@ -799,6 +799,263 @@ def verificar_y_disparar_alertas(usuario_id: int, ticker: str, precio: float) ->
 
 
 # =============================================================================
+# CARTERA — TABLAS, CRUD Y HELPERS
+# =============================================================================
+
+def inicializar_tabla_carteras():
+    """Crea las tablas carteras y cartera_posiciones si no existen (idempotente)."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS carteras (
+                        id          SERIAL PRIMARY KEY,
+                        usuario_id  INTEGER NOT NULL,
+                        tipo        VARCHAR(20) NOT NULL
+                                    CHECK (tipo IN ('dividendos','crecimiento','indexada')),
+                        nombre      VARCHAR(100) NOT NULL,
+                        descripcion TEXT DEFAULT '',
+                        created_at  TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS cartera_posiciones (
+                        id             SERIAL PRIMARY KEY,
+                        cartera_id     INTEGER NOT NULL REFERENCES carteras(id) ON DELETE CASCADE,
+                        ticker         VARCHAR(20) NOT NULL,
+                        nombre_valor   VARCHAR(200) DEFAULT '',
+                        num_acciones   NUMERIC(15,4) NOT NULL,
+                        precio_compra  NUMERIC(15,4) NOT NULL,
+                        moneda         VARCHAR(10) DEFAULT 'EUR',
+                        notas          TEXT DEFAULT '',
+                        created_at     TIMESTAMP DEFAULT NOW(),
+                        updated_at     TIMESTAMP DEFAULT NOW(),
+                        UNIQUE (cartera_id, ticker)
+                    )
+                """)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def crear_cartera(usuario_id: int, tipo: str, nombre: str, descripcion: str = "") -> dict | None:
+    """Crea una cartera. Devuelve el registro creado o None si ya hay 3 del mismo tipo."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM carteras WHERE usuario_id=%s AND tipo=%s",
+                    [usuario_id, tipo]
+                )
+                count = cur.fetchone()[0]
+                if count >= 3:
+                    return None  # límite alcanzado
+                cur.execute(
+                    """INSERT INTO carteras (usuario_id, tipo, nombre, descripcion)
+                       VALUES (%s,%s,%s,%s) RETURNING id, usuario_id, tipo, nombre, descripcion, created_at""",
+                    [usuario_id, tipo, nombre, descripcion]
+                )
+                row = cur.fetchone()
+            conn.commit()
+            return {"id": row[0], "usuario_id": row[1], "tipo": row[2],
+                    "nombre": row[3], "descripcion": row[4], "created_at": row[5]}
+        finally:
+            conn.close()
+    except Exception:
+        return None
+
+
+def obtener_carteras_usuario(usuario_id: int, tipo: str | None = None,
+                              superadmin: bool = False) -> list:
+    """Devuelve carteras del usuario (o todas si superadmin=True)."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                if superadmin:
+                    if tipo:
+                        cur.execute(
+                            "SELECT id,usuario_id,tipo,nombre,descripcion,created_at "
+                            "FROM carteras WHERE tipo=%s ORDER BY usuario_id,created_at",
+                            [tipo]
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT id,usuario_id,tipo,nombre,descripcion,created_at "
+                            "FROM carteras ORDER BY usuario_id,created_at"
+                        )
+                else:
+                    if tipo:
+                        cur.execute(
+                            "SELECT id,usuario_id,tipo,nombre,descripcion,created_at "
+                            "FROM carteras WHERE usuario_id=%s AND tipo=%s ORDER BY created_at",
+                            [usuario_id, tipo]
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT id,usuario_id,tipo,nombre,descripcion,created_at "
+                            "FROM carteras WHERE usuario_id=%s ORDER BY tipo,created_at",
+                            [usuario_id]
+                        )
+                cols = ["id","usuario_id","tipo","nombre","descripcion","created_at"]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
+def eliminar_cartera(cartera_id: int, usuario_id: int, superadmin: bool = False) -> bool:
+    """Elimina una cartera y sus posiciones (CASCADE). Verifica ownership salvo superadmin."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                if superadmin:
+                    cur.execute("DELETE FROM carteras WHERE id=%s", [cartera_id])
+                else:
+                    cur.execute(
+                        "DELETE FROM carteras WHERE id=%s AND usuario_id=%s",
+                        [cartera_id, usuario_id]
+                    )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def añadir_posicion(cartera_id: int, ticker: str, nombre_valor: str,
+                    num_acciones: float, precio_compra: float,
+                    moneda: str = "EUR", notas: str = "") -> bool:
+    """Añade o actualiza (upsert) una posición en la cartera."""
+    try:
+        ticker = ticker.upper().strip()
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO cartera_posiciones
+                        (cartera_id, ticker, nombre_valor, num_acciones, precio_compra, moneda, notas)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (cartera_id, ticker)
+                    DO UPDATE SET
+                        nombre_valor  = EXCLUDED.nombre_valor,
+                        num_acciones  = EXCLUDED.num_acciones,
+                        precio_compra = EXCLUDED.precio_compra,
+                        moneda        = EXCLUDED.moneda,
+                        notas         = EXCLUDED.notas,
+                        updated_at    = NOW()
+                """, [cartera_id, ticker, nombre_valor, num_acciones,
+                      precio_compra, moneda, notas])
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def obtener_posiciones_cartera(cartera_id: int) -> list:
+    """Devuelve todas las posiciones de una cartera ordenadas por ticker."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, cartera_id, ticker, nombre_valor,
+                           num_acciones, precio_compra, moneda, notas, created_at
+                    FROM cartera_posiciones
+                    WHERE cartera_id=%s
+                    ORDER BY ticker
+                """, [cartera_id])
+                cols = ["id","cartera_id","ticker","nombre_valor",
+                        "num_acciones","precio_compra","moneda","notas","created_at"]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
+def eliminar_posicion(posicion_id: int, cartera_id: int) -> bool:
+    """Elimina una posición verificando que pertenece a la cartera indicada."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM cartera_posiciones WHERE id=%s AND cartera_id=%s",
+                    [posicion_id, cartera_id]
+                )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def enriquecer_posiciones_con_precios(posiciones: list) -> list:
+    """Añade precio_actual, valor_actual, pl_abs, pl_pct y div_ttm a cada posición.
+    Hace una llamada yfinance por ticker (con caché de sesión para no repetir)."""
+    if not posiciones:
+        return []
+    if "_cartera_precios_cache" not in st.session_state:
+        st.session_state["_cartera_precios_cache"] = {}
+    cache = st.session_state["_cartera_precios_cache"]
+    result = []
+    for pos in posiciones:
+        tkr = pos["ticker"]
+        if tkr not in cache:
+            try:
+                t = yf.Ticker(tkr)
+                info = t.info
+                precio_actual = (info.get("currentPrice")
+                                 or info.get("regularMarketPrice")
+                                 or info.get("previousClose"))
+                # Dividendo TTM desde historial real
+                import pandas as pd
+                divs = t.dividends
+                ttm_div = 0.0
+                if divs is not None and len(divs) > 0:
+                    cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=12)
+                    ttm_div = float(divs[divs.index >= cutoff].sum())
+                cache[tkr] = {"precio_actual": precio_actual, "div_ttm": ttm_div}
+            except Exception:
+                cache[tkr] = {"precio_actual": None, "div_ttm": 0.0}
+        datos = cache[tkr]
+        precio_actual = datos["precio_actual"]
+        num = float(pos["num_acciones"])
+        pc  = float(pos["precio_compra"])
+        enriquecida = dict(pos)
+        enriquecida["precio_actual"] = precio_actual
+        if precio_actual is not None:
+            enriquecida["valor_compra"]  = num * pc
+            enriquecida["valor_actual"]  = num * precio_actual
+            enriquecida["pl_abs"]        = num * (precio_actual - pc)
+            enriquecida["pl_pct"]        = (precio_actual / pc - 1) * 100 if pc > 0 else 0.0
+            enriquecida["div_ttm"]       = datos["div_ttm"]
+            enriquecida["ingreso_div"]   = num * datos["div_ttm"]
+            enriquecida["yield_coste"]   = (datos["div_ttm"] / pc * 100) if pc > 0 else 0.0
+        else:
+            enriquecida["valor_compra"]  = num * pc
+            enriquecida["valor_actual"]  = None
+            enriquecida["pl_abs"]        = None
+            enriquecida["pl_pct"]        = None
+            enriquecida["div_ttm"]       = datos["div_ttm"]
+            enriquecida["ingreso_div"]   = None
+            enriquecida["yield_coste"]   = (datos["div_ttm"] / pc * 100) if pc > 0 else 0.0
+        result.append(enriquecida)
+    return result
+
+
+# =============================================================================
 # FUNCIONES DE AUTENTICACIÓN
 # =============================================================================
 
@@ -6951,12 +7208,269 @@ def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
     return resultado
 
 
+
+def pestaña_cartera():
+    """Pestaña de gestión de carteras personales del usuario."""
+    usuario = st.session_state["usuario"]
+    uid     = usuario["id"]
+    es_superadmin = usuario.get("rol") == "superadmin"
+
+    inicializar_tabla_carteras()
+
+    st.markdown("## 📁 Mis Carteras")
+    st.caption(
+        "Registra tus posiciones y sigue su evolución en tiempo real. "
+        "Cada usuario puede tener hasta 3 carteras por tipo (máx. 9 en total). "
+        "Los datos de precio se obtienen de Yahoo Finance."
+    )
+
+    TIPOS = {
+        "dividendos":  ("💰 Dividendos",   "#16a34a", "#f0fdf4"),
+        "crecimiento": ("📈 Crecimiento",   "#1d4ed8", "#eff6ff"),
+        "indexada":    ("🗂️ Indexada",       "#7e22ce", "#faf5ff"),
+    }
+
+    tab_div, tab_cre, tab_idx = st.tabs([
+        "💰 Dividendos", "📈 Crecimiento", "🗂️ Indexada"
+    ])
+
+    def _color_pl(val):
+        if val is None: return "#64748b"
+        return "#16a34a" if val >= 0 else "#dc2626"
+
+    def _fmt_eur(v, decimals=2):
+        if v is None: return "N/D"
+        return f"{v:,.{decimals}f} €"
+
+    def _fmt_pct_c(v):
+        if v is None: return "N/D"
+        sign = "+" if v >= 0 else ""
+        return f"{sign}{v:.2f}%"
+
+    def _metric_card(label, value, color="#1e293b", bg="#f8fafc", sub=None):
+        sub_html = f'<div style="font-size:11px;color:#64748b;margin-top:2px">{sub}</div>' if sub else ""
+        st.markdown(
+            f'<div style="background:{bg};border-radius:8px;padding:10px 14px;'
+            f'border:1px solid #e2e8f0">'
+            f'<div style="font-size:11px;color:#64748b;font-weight:600">{label}</div>'
+            f'<div style="font-size:19px;font-weight:800;color:{color}">{value}</div>'
+            f'{sub_html}</div>',
+            unsafe_allow_html=True
+        )
+
+    def _render_tipo(tipo_key, tab_obj):
+        etiqueta, color_tipo, bg_tipo = TIPOS[tipo_key]
+        with tab_obj:
+            carteras = obtener_carteras_usuario(uid, tipo=tipo_key, superadmin=es_superadmin)
+
+            # ── Crear nueva cartera ────────────────────────────────────────
+            n_actuales = len(carteras)
+            st.markdown(f"#### {etiqueta}")
+            col_hdr, col_btn = st.columns([5, 1])
+            with col_btn:
+                if n_actuales < 3:
+                    if st.button("➕ Nueva", key=f"btn_nueva_{tipo_key}",
+                                 help=f"Crear cartera de {etiqueta}"):
+                        st.session_state[f"_crear_{tipo_key}"] = True
+
+            if st.session_state.get(f"_crear_{tipo_key}"):
+                with st.form(key=f"form_crear_{tipo_key}"):
+                    st.markdown("**Nueva cartera**")
+                    _nom = st.text_input("Nombre", placeholder=f"Ej. {etiqueta} principal",
+                                         key=f"nom_{tipo_key}")
+                    _desc = st.text_input("Descripción (opcional)", key=f"desc_{tipo_key}")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        submitted = st.form_submit_button("Crear", type="primary")
+                    with c2:
+                        cancelled = st.form_submit_button("Cancelar")
+                if submitted and _nom.strip():
+                    res = crear_cartera(uid, tipo_key, _nom.strip(), _desc.strip())
+                    if res:
+                        st.session_state[f"_crear_{tipo_key}"] = False
+                        st.session_state["_cartera_precios_cache"] = {}
+                        st.rerun()
+                    else:
+                        st.error("No se pudo crear (¿ya tienes 3 de este tipo?).")
+                elif cancelled:
+                    st.session_state[f"_crear_{tipo_key}"] = False
+                    st.rerun()
+
+            if not carteras:
+                st.info(f"No tienes carteras de {etiqueta} todavía. Pulsa **➕ Nueva** para crear una.")
+                return
+
+            # ── Una pestaña por cartera ────────────────────────────────────
+            tab_labels = [c["nombre"] for c in carteras]
+            cartera_tabs = st.tabs(tab_labels) if len(carteras) > 1 else [st.container()]
+            for c_idx, (cartera, c_tab) in enumerate(zip(carteras, cartera_tabs)):
+                cid = cartera["id"]
+                with c_tab:
+                    # Encabezado + botón eliminar cartera
+                    hdr_col, del_col = st.columns([6, 1])
+                    with hdr_col:
+                        st.markdown(f"**{cartera['nombre']}**"
+                                    + (f" — *{cartera['descripcion']}*" if cartera.get("descripcion") else ""))
+                    with del_col:
+                        if st.button("🗑️", key=f"del_c_{cid}",
+                                     help="Eliminar esta cartera y todas sus posiciones"):
+                            st.session_state[f"_confirm_del_c_{cid}"] = True
+
+                    if st.session_state.get(f"_confirm_del_c_{cid}"):
+                        st.warning("¿Eliminar esta cartera y TODAS sus posiciones? Esta acción no se puede deshacer.")
+                        cc1, cc2 = st.columns(2)
+                        with cc1:
+                            if st.button("Sí, eliminar", key=f"confirm_del_c_{cid}", type="primary"):
+                                eliminar_cartera(cid, uid, superadmin=es_superadmin)
+                                st.session_state[f"_confirm_del_c_{cid}"] = False
+                                st.session_state["_cartera_precios_cache"] = {}
+                                st.rerun()
+                        with cc2:
+                            if st.button("Cancelar", key=f"cancel_del_c_{cid}"):
+                                st.session_state[f"_confirm_del_c_{cid}"] = False
+                                st.rerun()
+
+                    # ── Posiciones ─────────────────────────────────────────
+                    posiciones_raw = obtener_posiciones_cartera(cid)
+                    posiciones = enriquecer_posiciones_con_precios(posiciones_raw)
+
+                    # ── Resumen ────────────────────────────────────────────
+                    if posiciones:
+                        val_compra  = sum(p["valor_compra"] for p in posiciones)
+                        val_actual  = sum(p["valor_actual"] for p in posiciones if p["valor_actual"] is not None)
+                        pl_total    = val_actual - val_compra if val_actual else None
+                        pl_pct_tot  = (val_actual / val_compra - 1) * 100 if (val_actual and val_compra) else None
+
+                        st.markdown("##### Resumen")
+                        if tipo_key == "dividendos":
+                            ing_anual = sum(p["ingreso_div"] for p in posiciones if p["ingreso_div"] is not None)
+                            yoc_pond  = (ing_anual / val_compra * 100) if val_compra > 0 else 0.0
+                            m1, m2, m3, m4, m5 = st.columns(5)
+                            with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
+                            with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
+                            with m3: _metric_card("P&L total",
+                                                   _fmt_eur(pl_total) if pl_total is not None else "N/D",
+                                                   color=_color_pl(pl_total), bg="#f8fafc",
+                                                   sub=_fmt_pct_c(pl_pct_tot))
+                            with m4: _metric_card("Ingreso div. anual", _fmt_eur(ing_anual),
+                                                   color="#16a34a", bg="#f0fdf4")
+                            with m5: _metric_card("Yield sobre coste", f"{yoc_pond:.2f}%",
+                                                   color="#16a34a", bg="#f0fdf4")
+                        elif tipo_key == "crecimiento":
+                            m1, m2, m3 = st.columns(3)
+                            with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
+                            with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
+                            with m3: _metric_card("P&L total",
+                                                   _fmt_eur(pl_total) if pl_total is not None else "N/D",
+                                                   color=_color_pl(pl_total), bg="#f8fafc",
+                                                   sub=_fmt_pct_c(pl_pct_tot))
+                        else:  # indexada
+                            m1, m2, m3 = st.columns(3)
+                            with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
+                            with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
+                            with m3: _metric_card("P&L total",
+                                                   _fmt_eur(pl_total) if pl_total is not None else "N/D",
+                                                   color=_color_pl(pl_total), bg="#f8fafc",
+                                                   sub=_fmt_pct_c(pl_pct_tot))
+
+                        st.markdown("---")
+                        # ── Tabla de posiciones ────────────────────────────
+                        st.markdown("##### Posiciones")
+                        for pos in posiciones:
+                            pc = float(pos["precio_compra"])
+                            na = float(pos["num_acciones"])
+                            pa = pos["precio_actual"]
+                            pl_a = pos["pl_abs"]
+                            pl_p = pos["pl_pct"]
+                            va   = pos["valor_actual"]
+
+                            with st.container():
+                                cols = st.columns([2, 1, 1, 1, 1, 1, 0.5] if tipo_key == "dividendos"
+                                                  else [2, 1, 1, 1, 1, 0.5])
+                                with cols[0]:
+                                    st.markdown(
+                                        f"**{pos['ticker']}**"
+                                        + (f" — {pos['nombre_valor']}" if pos.get("nombre_valor") else "")
+                                    )
+                                    if pos.get("notas"):
+                                        st.caption(pos["notas"])
+                                with cols[1]:
+                                    st.metric("Acciones", f"{na:,.2f}")
+                                with cols[2]:
+                                    st.metric("P. Compra", f"{pc:.2f} {pos.get('moneda','EUR')}")
+                                with cols[3]:
+                                    st.metric("P. Actual",
+                                              f"{pa:.2f} {pos.get('moneda','EUR')}" if pa else "N/D")
+                                with cols[4]:
+                                    pl_str = (_fmt_eur(pl_a) + " / " + _fmt_pct_c(pl_p)
+                                              if pl_a is not None else "N/D")
+                                    st.metric("P&L", pl_str,
+                                              delta=_fmt_pct_c(pl_p) if pl_p is not None else None)
+                                if tipo_key == "dividendos":
+                                    with cols[5]:
+                                        yoc = pos.get("yield_coste", 0)
+                                        st.metric("Yield/coste", f"{yoc:.2f}%")
+                                # Botón eliminar posición
+                                with cols[-1]:
+                                    if st.button("🗑️", key=f"del_pos_{pos['id']}",
+                                                 help="Eliminar esta posición"):
+                                        eliminar_posicion(pos["id"], cid)
+                                        st.session_state["_cartera_precios_cache"] = {}
+                                        st.rerun()
+                        st.markdown("---")
+
+                    # ── Formulario añadir / editar posición ────────────────
+                    with st.expander("➕ Añadir / actualizar posición", expanded=not bool(posiciones)):
+                        with st.form(key=f"form_pos_{cid}"):
+                            st.caption("Si el ticker ya existe en la cartera, sus datos se actualizarán.")
+                            fp1, fp2 = st.columns(2)
+                            with fp1:
+                                _tkr = st.text_input("Ticker (Yahoo Finance)",
+                                                      placeholder="Ej. NTGY.MC, AAPL, IWDA.AS",
+                                                      key=f"tkr_{cid}")
+                            with fp2:
+                                _nom_v = st.text_input("Nombre (opcional)",
+                                                        placeholder="Ej. Naturgy Energy",
+                                                        key=f"nomv_{cid}")
+                            fp3, fp4, fp5 = st.columns(3)
+                            with fp3:
+                                _nac = st.number_input("Nº acciones / participaciones",
+                                                        min_value=0.0001, value=1.0, step=1.0,
+                                                        format="%.4f", key=f"nac_{cid}")
+                            with fp4:
+                                _pc = st.number_input("Precio medio de compra",
+                                                       min_value=0.0001, value=10.0, step=0.01,
+                                                       format="%.4f", key=f"pc_{cid}")
+                            with fp5:
+                                _mon = st.selectbox("Moneda", ["EUR","USD","GBP","CHF"],
+                                                     key=f"mon_{cid}")
+                            _notas = st.text_input("Notas (opcional)", key=f"notas_{cid}")
+                            ok = st.form_submit_button("Guardar posición", type="primary")
+                            if ok:
+                                if not _tkr.strip():
+                                    st.error("El ticker es obligatorio.")
+                                else:
+                                    res = añadir_posicion(cid, _tkr.strip().upper(),
+                                                          _nom_v.strip(), _nac, _pc,
+                                                          _mon, _notas.strip())
+                                    if res:
+                                        st.session_state["_cartera_precios_cache"] = {}
+                                        st.rerun()
+                                    else:
+                                        st.error("No se pudo guardar la posición.")
+
+    _render_tipo("dividendos",  tab_div)
+    _render_tipo("crecimiento", tab_cre)
+    _render_tipo("indexada",    tab_idx)
+
+
 def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
     inicializar_tabla_alertas()  # Crea tabla si no existe (idempotente)
     inicializar_tabla_data_jobs()  # Crea tabla data_jobs si no existe
+    inicializar_tabla_carteras()   # Crea tablas carteras y posiciones si no existen
     verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede
 
     # Header
@@ -6976,7 +7490,7 @@ def pantalla_analisis():
                 st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija"]
+    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
@@ -6987,10 +7501,11 @@ def pantalla_analisis():
     tab_ia         = tab_objs[2]
     tab_macro      = tab_objs[3]
     tab_rf         = tab_objs[4]
+    tab_cartera    = tab_objs[5]
 
-    if es_superadmin and len(tab_objs) >= 7:
-        tab_admin = tab_objs[5]
-        tab_ayuda = tab_objs[6]
+    if es_superadmin and len(tab_objs) >= 8:
+        tab_admin = tab_objs[6]
+        tab_ayuda = tab_objs[7]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -10674,6 +11189,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     # ---- TAB RENTA FIJA ----
     with tab_rf:
         pestaña_renta_fija()
+
+    with tab_cartera:
+        pestaña_cartera()
 
     # ---- TAB ADMIN ----
     if es_superadmin and tab_admin:
