@@ -5547,9 +5547,86 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
            border-bottom:2px solid #2563eb; display:inline-block; }
 .footer { text-align:center; font-size:11px; color:#94a3b8;
           padding:14px 32px; border-top:1px solid #e2e8f0; }
+.datos-section { padding:14px 20px; background:#f8fafc;
+                 border-top:2px solid #f1f5f9; }
+.datos-lbl { font-size:10px; font-weight:700; color:#1e3a5f;
+             text-transform:uppercase; letter-spacing:.6px;
+             margin-bottom:10px; padding-bottom:5px;
+             border-bottom:2px solid #16a34a; display:inline-block; }
+.datos-grid { display:grid; grid-template-columns:repeat(4,1fr);
+              gap:10px; margin-bottom:10px; }
+.datos-card { background:white; border-radius:8px; padding:10px 12px;
+              border:1px solid #e2e8f0; }
+.datos-card-lbl { font-size:10px; color:#64748b; margin-bottom:3px; }
+.datos-card-val { font-size:16px; font-weight:700; color:#1e3a5f; }
+.datos-card-sub { font-size:10px; color:#94a3b8; margin-top:2px; }
+.datos-dates { display:grid; grid-template-columns:repeat(2,1fr);
+               gap:10px; margin-top:10px; }
+.datos-date-card { background:white; border-radius:8px; padding:9px 12px;
+                   border:1px solid #e2e8f0; display:flex;
+                   align-items:center; gap:10px; }
+.datos-date-icon { font-size:20px; }
+.datos-date-lbl  { font-size:10px; color:#64748b; }
+.datos-date-val  { font-size:13px; font-weight:700; color:#1e3a5f; }
 @media print { body { background:white; }
   .strat-block { box-shadow:none; border:1px solid #e2e8f0; } }
 """
+
+    # ── Helper: bloque datos extra dividendos ──────────────────────────────
+    def _html_datos_extra(de: dict) -> str:
+        cur  = de.get("currency", "EUR")
+        sym  = "€" if cur == "EUR" else "$" if cur == "USD" else cur
+        div_r = de.get("div_rate",  0.0)
+        eps_t = de.get("eps_ttm",   0.0)
+        eps_f = de.get("eps_fwd",   0.0)
+        pe_f  = de.get("pe_fwd",    0.0)
+        t_mn  = de.get("tgt_mean",  0.0)
+        t_hi  = de.get("tgt_high",  0.0)
+        t_lo  = de.get("tgt_low",   0.0)
+        yld   = de.get("yield_pct", 0.0)
+        exdiv = de.get("exdiv_str", "—")
+        earn  = de.get("earn_str",  "—")
+
+        def card(lbl, val, sub=""):
+            sub_html = f'<div class="datos-card-sub">{sub}</div>' if sub else ""
+            return (
+                f'<div class="datos-card">'
+                f'<div class="datos-card-lbl">{lbl}</div>'
+                f'<div class="datos-card-val">{val}</div>'
+                f'{sub_html}'
+                f'</div>'
+            )
+
+        def date_card(icon, lbl, val):
+            return (
+                f'<div class="datos-date-card">'
+                f'<div class="datos-date-icon">{icon}</div>'
+                f'<div>'
+                f'<div class="datos-date-lbl">{lbl}</div>'
+                f'<div class="datos-date-val">{val}</div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        cards = (
+            card("Dividendo/Acción", f"{sym}{div_r:.2f}")
+            + card("BPA TTM", f"{sym}{eps_t:.2f}", "Beneficio real")
+            + card("BPA Forward", f"{sym}{eps_f:.2f}", f"P/E Fwd: {pe_f:.1f}x" if pe_f else "")
+            + card("Precio Objetivo", f"{sym}{t_mn:.2f}", f"Rango: {sym}{t_lo:.2f} – {sym}{t_hi:.2f}")
+        )
+        dates = (
+            date_card("📅", "Fecha ex-dividendo", exdiv)
+            + date_card("📊", "Próximos resultados", earn)
+            + date_card("💰", "Yield actual", f"{yld:.2f}%")
+            + date_card("🎯", "Yield sobre objetivo", f"{(div_r/t_mn*100):.2f}%" if t_mn else "—")
+        )
+        return (
+            f'  <div class="datos-section">\n'
+            f'    <div class="datos-lbl">&#128200; Datos de dividendo y valoración</div>\n'
+            f'    <div class="datos-grid">{cards}</div>\n'
+            f'    <div class="datos-dates">{dates}</div>\n'
+            f'  </div>\n'
+        )
 
     # ── Bloques por estrategia ────────────────────────────────────────────
     bloques = ""
@@ -5560,6 +5637,7 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         puntos      = est["puntos"]
         rec         = est["rec"]
         popover_md  = est["popover_md"]
+        datos_extra = est.get("datos_extra", {})
 
         # Score
         total  = sum(ok for _, ok in criterios)
@@ -5617,7 +5695,8 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
             f'    <div class="exp-lbl">&#128218; Descripción detallada de la estrategia</div>\n'
             f'    {exp_html}\n'
             f'  </div>\n'
-            f'</div>\n'
+            + (_html_datos_extra(datos_extra) if datos_extra else '')
+            + f'</div>\n'
         )
 
     return (
@@ -5692,9 +5771,59 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
                         ("🟢", ""), ("🟡", ""), ("🔴", ""), ("⚪", ""),
                         ("📊", ""), ("💰", ""), ("📈", ""), ("🏷️", ""),
                         ("🚀", ""), ("🔄", ""), ("🛡️", ""), ("📖", ""),
-                        ("🌍", ""), ("📉", ""), ("💡", ""), ("🎯", "")]:
+                        ("🌍", ""), ("📉", ""), ("💡", ""), ("🎯", ""),
+                        # Puntuación y tipografía extendida
+                        ("—", " - "),   # em-dash —
+                        ("–", "-"),      # en-dash –
+                        ("‒", "-"),      # figura de guión
+                        ("―", "-"),      # barra horizontal
+                        ("→", "->"),     # flecha derecha →
+                        ("←", "<-"),     # flecha izquierda ←
+                        ("↑", "^"),      # flecha arriba ↑
+                        ("↓", "v"),      # flecha abajo ↓
+                        ("⇒", "=>"),     # flecha doble =>
+                        ("≥", ">="),     # mayor o igual ≥
+                        ("≤", "<="),     # menor o igual ≤
+                        ("≈", "~"),      # aproximadamente ≈
+                        ("×", "x"),      # multiplicacion ×
+                        ("÷", "/"),      # division ÷
+                        ("•", "-"),      # viñeta •
+                        ("·", "."),      # punto medio ·
+                        ("…", "..."),    # puntos suspensivos …
+                        ("“", '"'),      # comilla doble izq "
+                        ("”", '"'),      # comilla doble der "
+                        ("‘", "'"),      # comilla simple izq '
+                        ("’", "'"),      # comilla simple der '
+                        ("€", "EUR"),    # euro €
+                        ("£", "GBP"),    # libra £
+                        ("¥", "JPY"),    # yen ¥
+                        ("±", "+/-"),    # mas-menos ±
+                        ("²", "2"),      # superindice 2 ²
+                        ("³", "3"),      # superindice 3 ³
+                        ("½", "1/2"),    # un medio ½
+                        ("¼", "1/4"),    # un cuarto ¼
+                        ("⅓", "1/3"),    # un tercio ⅓
+                        ("°", "deg"),    # grado °
+                        ("‰", "‰"),     # por mil — mantener si <256 else replace
+                        ("®", "(R)"),    # marca registrada ®
+                        ("™", "(TM)"),   # trademark ™
+                        ("©", "(C)"),    # copyright ©
+                        ("∆", "delta"),  # delta matemática Δ
+                        ("α", "alpha"),  # alpha α
+                        ("β", "beta"),   # beta β
+                        ("σ", "sigma"),  # sigma σ
+                        ("μ", "mu"),     # mu μ
+                        ("∞", "inf"),    # infinito ∞
+                        ("≠", "!="),     # distinto ≠
+                        ("−", "-"),      # signo menos matemático −
+                        ("×", "x"),      # × redundante pero seguro
+                        ("‹", "<"),      # guillemet <
+                        ("›", ">"),      # guillemet >
+                        ("📅", ""), ("📊", ""), ("🎯", ""), ("💵", ""),
+                        ("📋", ""), ("⚡", ""), ("🔑", ""), ("💡", ""),
+                        ]:
             s = s.replace(em, rep)
-        return "".join(c if ord(c) < 256 else "??" for c in s).strip()
+        return "".join(c if ord(c) < 256 else "?" for c in s).strip()
 
     def _esc(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -5761,12 +5890,13 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
 
     # ── Bloque por estrategia ─────────────────────────────────────────────
     for est in estrategias:
-        est_nombre = _strip(est["nombre"])
-        color_rl   = colors.HexColor(est["color"])
-        criterios  = est["criterios"]
-        puntos     = est["puntos"]
-        rec        = _strip(est.get("rec") or "")
-        popover_md = est.get("popover_md", "")
+        est_nombre  = _strip(est["nombre"])
+        color_rl    = colors.HexColor(est["color"])
+        criterios   = est["criterios"]
+        puntos      = est["puntos"]
+        rec         = _strip(est.get("rec") or "")
+        popover_md  = est.get("popover_md", "")
+        datos_extra = est.get("datos_extra", {})
 
         total  = sum(ok for _, ok in criterios)
         maxpts = len(criterios) * 2
@@ -5873,6 +6003,77 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
             historia.append(Paragraph(_esc(content), S_EXP_P))
 
         historia.append(Spacer(1, 0.4*cm))
+
+        # ── Datos extra dividendos ────────────────────────────────────────
+        if datos_extra:
+            cur   = datos_extra.get("currency", "EUR")
+            sym   = ""    # currency shown via cur label below
+            div_r = datos_extra.get("div_rate",  0.0)
+            eps_t = datos_extra.get("eps_ttm",   0.0)
+            eps_f = datos_extra.get("eps_fwd",   0.0)
+            pe_f  = datos_extra.get("pe_fwd",    0.0)
+            t_mn  = datos_extra.get("tgt_mean",  0.0)
+            t_hi  = datos_extra.get("tgt_high",  0.0)
+            t_lo  = datos_extra.get("tgt_low",   0.0)
+            yld   = datos_extra.get("yield_pct", 0.0)
+            exdiv = datos_extra.get("exdiv_str", "-")
+            earn  = datos_extra.get("earn_str",  "-")
+
+            S_DE_H  = _p(fontName="Helvetica-Bold", fontSize=7,  textColor=VE,
+                         spaceBefore=4, spaceAfter=4)
+            S_DE_LB = _p(fontName="Helvetica",      fontSize=6.5,textColor=colors.HexColor("#64748b"))
+            S_DE_VL = _p(fontName="Helvetica-Bold", fontSize=10, textColor=CA)
+            S_DE_SB = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#94a3b8"))
+
+            def _de_cell(label, val, sub=""):
+                items = [Paragraph(label, S_DE_LB), Paragraph(val, S_DE_VL)]
+                if sub:
+                    items.append(Paragraph(sub, S_DE_SB))
+                return items
+
+            yield_on_tgt = f"{(div_r/t_mn*100):.2f}%" if t_mn else "-"
+            row1 = [
+                _de_cell("Dividendo/Acc.", f"{div_r:.2f} {cur}"),
+                _de_cell("BPA TTM",        f"{eps_t:.2f} {cur}", "Beneficio real"),
+                _de_cell("BPA Forward",    f"{eps_f:.2f} {cur}",
+                         f"P/E Fwd: {pe_f:.1f}x" if pe_f else ""),
+                _de_cell("Precio Objetivo",f"{t_mn:.2f} {cur}",
+                         f"Rango: {t_lo:.2f} - {t_hi:.2f}"),
+            ]
+            row2 = [
+                _de_cell("Fecha ex-div.",  exdiv),
+                _de_cell("Prox. resultados", earn),
+                _de_cell("Yield actual",   f"{yld:.2f}%"),
+                _de_cell("Yield/Objetivo", yield_on_tgt),
+            ]
+
+            historia.append(Paragraph("DATOS DE DIVIDENDO Y VALORACION", S_DE_H))
+            tbl1 = Table([row1], colWidths=[4.5*cm]*4)
+            tbl1.setStyle(TableStyle([
+                ("VALIGN",       (0,0),(-1,-1),"TOP"),
+                ("LEFTPADDING",  (0,0),(-1,-1), 8),
+                ("RIGHTPADDING", (0,0),(-1,-1), 8),
+                ("TOPPADDING",   (0,0),(-1,-1), 6),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+                ("BACKGROUND",   (0,0),(-1,-1), GF),
+                ("BOX",          (0,0),(-1,-1), 0.5, GB),
+                ("INNERGRID",    (0,0),(-1,-1), 0.5, GB),
+            ]))
+            tbl2 = Table([row2], colWidths=[4.5*cm]*4)
+            tbl2.setStyle(TableStyle([
+                ("VALIGN",       (0,0),(-1,-1),"TOP"),
+                ("LEFTPADDING",  (0,0),(-1,-1), 8),
+                ("RIGHTPADDING", (0,0),(-1,-1), 8),
+                ("TOPPADDING",   (0,0),(-1,-1), 6),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+                ("BACKGROUND",   (0,0),(-1,-1), GF),
+                ("BOX",          (0,0),(-1,-1), 0.5, GB),
+                ("INNERGRID",    (0,0),(-1,-1), 0.5, GB),
+            ]))
+            historia.append(tbl1)
+            historia.append(Spacer(1, 0.15*cm))
+            historia.append(tbl2)
+            historia.append(Spacer(1, 0.4*cm))
 
     # ── Pie de página ────────────────────────────────────────────────────
     historia.append(HRFlowable(width="100%", thickness=0.5, color=GB,
@@ -10305,13 +10506,30 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         _c_dl, _f_dl = _estrategias[_k_dl]
                         _crit_dl     = _f_dl()
                         _pts_dl, _rc_dl = _interpretar(_k_dl)
+                        _datos_extra_dl = {}
+                        if _k_dl == "💰 Dividendos":
+                            _datos_extra_dl = {
+                                "div_rate":  _div_rate,
+                                "eps_ttm":   _eps_ttm,
+                                "eps_fwd":   _eps_fwd,
+                                "pe_fwd":    _pe_fwd,
+                                "tgt_mean":  _tgt_mean,
+                                "tgt_high":  _tgt_high,
+                                "tgt_low":   _tgt_low,
+                                "last_div":  _last_div,
+                                "exdiv_str": _exdiv_str,
+                                "earn_str":  _earn_str,
+                                "yield_pct": _yield,
+                                "currency":  _info.get("currency", "EUR"),
+                            }
                         _est_dl_data.append({
-                            "nombre":     _k_dl,
-                            "color":      _c_dl,
-                            "criterios":  _crit_dl,
-                            "puntos":     _pts_dl,
-                            "rec":        _rc_dl,
-                            "popover_md": _est_popover.get(_k_dl, ""),
+                            "nombre":      _k_dl,
+                            "color":       _c_dl,
+                            "criterios":   _crit_dl,
+                            "puntos":      _pts_dl,
+                            "rec":         _rc_dl,
+                            "popover_md":  _est_popover.get(_k_dl, ""),
+                            "datos_extra": _datos_extra_dl,
                         })
                     with st.spinner("Generando..."):
                         if _fmt_est == "HTML":
