@@ -5617,8 +5617,8 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         dates = (
             date_card("📅", "Fecha ex-dividendo", exdiv)
             + date_card("📊", "Próximos resultados", earn)
-            + date_card("💰", "Yield actual", f"{yld:.2f}%")
-            + date_card("🎯", "Yield sobre objetivo", f"{(div_r/t_mn*100):.2f}%" if t_mn else "—")
+            + date_card("💰", "Yield (rentabilidad) actual", f"{yld:.2f}%")
+            + date_card("🎯", "Yield (rentabilidad) sobre objetivo", f"{(div_r/t_mn*100):.2f}%" if t_mn else "—")
         )
         return (
             f'  <div class="datos-section">\n'
@@ -6043,8 +6043,8 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
             row2 = [
                 _de_cell("Fecha ex-div.",  exdiv),
                 _de_cell("Prox. resultados", earn),
-                _de_cell("Yield actual",   f"{yld:.2f}%"),
-                _de_cell("Yield/Objetivo", yield_on_tgt),
+                _de_cell("Yield (rentabilidad) actual",   f"{yld:.2f}%"),
+                _de_cell("Yield (rent.)/Objetivo", yield_on_tgt),
             ]
 
             historia.append(Paragraph("DATOS DE DIVIDENDO Y VALORACION", S_DE_H))
@@ -9544,33 +9544,33 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 "💰 Dividendos": """
 **💰 Estrategia de Dividendos — Rentas a largo plazo**
 
-Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto de menor precio relativo. El dividendo remunera la espera; el precio de entrada determina el yield real que percibirás.
+Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto de menor precio relativo. El dividendo remunera la espera; el precio de entrada determina el yield (rentabilidad) real que percibirás.
 
 ---
 
 **Orden de análisis (de mayor a menor peso):**
 
-**1. Dividend Yield** *(criterio de selección)*
+**1. Dividend yield (rent. por dividendo)** *(criterio de selección)*
 - ≥ 3.5%: atractivo para estrategia de rentas
 - 2–3.5%: aceptable si el crecimiento del dividendo es sólido
 - < 2%: insuficiente como estrategia de rentas pura
-- *Punto clave: el yield mejora automáticamente cuando el precio cae. Comprar en correcciones aumenta la rentabilidad sin que la empresa cambie nada.*
+- *Punto clave: el yield (rentabilidad) mejora automáticamente cuando el precio cae. Comprar en correcciones aumenta la rentabilidad sin que la empresa cambie nada.*
 
 **2. Payout Ratio** *(sostenibilidad del pago)*
 - < 60%: dividendo muy sostenible; hay margen para crecer
 - 60–75%: sostenible pero sin holgura; vigilar tendencia de beneficios
 - > 75%: frágil; un trimestre malo puede recortar el dividendo
-- *Un dividendo alto pero insostenible es una trampa. El recorte de dividendo destruye el yield y el precio simultáneamente.*
+- *Un dividendo alto pero insostenible es una trampa. El recorte de dividendo destruye el yield (rentabilidad) y el precio simultáneamente.*
 
 **3. Posición en rango 52 semanas** *(precio de entrada)*
 - < 35% del rango: zona de valor; precio deprimido históricamente
-- 35–65%: zona neutra; yield razonable pero no óptimo
-- > 65%: cerca de máximos; el yield es el más bajo del año
-- *Comprar cerca de mínimos anuales puede mejorar el yield efectivo un 20–40% respecto a comprar en máximos.*
+- 35–65%: zona neutra; yield (rentabilidad) razonable pero no óptimo
+- > 65%: cerca de máximos; el yield (rentabilidad) es el más bajo del año
+- *Comprar cerca de mínimos anuales puede mejorar el yield (rentabilidad) efectivo un 20–40% respecto a comprar en máximos.*
 
 **4. SMA200** *(confirmación de valor)*
 - Precio bajo SMA200: zona de compra histórica para largo plazo
-- Precio sobre SMA200: mercado ya ha revalorizado; el yield es más bajo
+- Precio sobre SMA200: mercado ya ha revalorizado; el yield (rentabilidad) es más bajo
 - *La SMA200 actúa como referencia del "precio justo a largo plazo". Por debajo es donde los gestores de fondos de renta encuentran valor.*
 
 **5. RSI** *(timing de entrada)*
@@ -9585,7 +9585,7 @@ Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto
 ---
 
 **Momento óptimo de entrada**
-Todos los criterios alineados: yield ≥ 3.5% + precio bajo SMA200 + RSI < 45 + soporte reforzado activo + divergencia alcista OBV. Ese setup aparece pocas veces al año por valor — cuando aparece, es el punto de máxima asimetría riesgo/recompensa para rentas.
+Todos los criterios alineados: yield (rentabilidad) ≥ 3.5% + precio bajo SMA200 + RSI < 45 + soporte reforzado activo + divergencia alcista OBV. Ese setup aparece pocas veces al año por valor — cuando aparece, es el punto de máxima asimetría riesgo/recompensa para rentas.
 
 ---
 *Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
@@ -9674,7 +9674,7 @@ Comprar participaciones en negocios de calidad a precios que ofrezcan un margen 
 - Beta > 1.3: volátil; el margen de seguridad debe ser mayor para compensar
 - *El valor no implica necesariamente baja volatilidad, pero los activos defensivos permiten mantener la posición psicológicamente durante el periodo de reconocimiento del valor.*
 
-**5. Dividend yield** *(colchón de retorno)*
+**5. Dividend yield (rent. por dividendo)** *(colchón de retorno)*
 - Dividendo > 0: la espera tiene retribución mientras el mercado reconoce el valor
 - Payout sostenible: el dividendo no compromete la inversión en el negocio
 - *El dividendo no es un criterio de selección en valor, pero actúa como seguro: si el mercado tarda en reconocer el valor, el dividendo compensa la espera.*
@@ -9992,7 +9992,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _y_show   = _yield if _yield_ok else 0
                 c = []
                 c.append(_criterio(2 if _y_show >= 3.5 else 1 if _y_show >= 2 else 0,
-                    f"Dividend yield {_y_show:.1f}%" + (f" ⚠️ dato dudoso (proveedor: {_yield:.1f}%)" if not _yield_ok and _yield > 0 else ""),
+                    f"Dividend yield (rent. por dividendo) {_y_show:.1f}%" + (f" ⚠️ dato dudoso (proveedor: {_yield:.1f}%)" if not _yield_ok and _yield > 0 else ""),
                     "≥3.5% atractivo · 2-3.5% aceptable · <2% insuficiente"))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
@@ -10064,7 +10064,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     "Acumulación (OBV/Volumen)",
                     _div_txt_alc()))
                 c.append(_criterio(2 if 0 < _yield < 25 and _yield >= 2 else 1 if _yield > 0 else 0,
-                    f"Yield {_yield:.1f}%" if _yield < 25 else f"Yield ⚠️ dato dudoso (proveedor: {_yield:.1f}%)",
+                    f"Yield (rentabilidad) {_yield:.1f}%" if _yield < 25 else f"Yield (rentabilidad) ⚠️ dato dudoso (proveedor: {_yield:.1f}%)",
                     "El dividendo remunera la espera"))
                 return c
 
@@ -10150,14 +10150,14 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     _y_ok = 0 < _yield < 25
                     _yv   = _yield if _y_ok else 0
                     if not _y_ok and _yield > 0:
-                        puntos.append(f"⚠️ El yield que muestra el proveedor de datos parece anómalo ({_yield:.1f}%) — verifica el dividendo real en la web de la empresa.")
+                        puntos.append(f"⚠️ El yield (rentabilidad) que muestra el proveedor de datos parece anómalo ({_yield:.1f}%) — verifica el dividendo real en la web de la empresa.")
                     if _yv >= 3.5:
-                        puntos.append(f"✅ Yield del {_yv:.1f}% por encima del umbral de interés para estrategia de rentas.")
+                        puntos.append(f"✅ Yield (rentabilidad) del {_yv:.1f}% por encima del umbral de interés para estrategia de rentas.")
                     elif _yv > 0:
-                        puntos.append(f"⚠️ Yield del {_yv:.1f}% — retorno por dividendo modesto para estrategia de rentas pura.")
+                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yv:.1f}% — retorno por dividendo modesto para estrategia de rentas pura.")
                     if _sma200 > 0 and _precio > _sma200:
                         gap = (_precio / _sma200 - 1) * 100
-                        puntos.append(f"❌ Precio un {gap:.1f}% sobre SMA200 — no es zona de valor. Esperar retroceso hacia {_sma200:.2f}€ mejora significativamente el yield efectivo de entrada.")
+                        puntos.append(f"❌ Precio un {gap:.1f}% sobre SMA200 — no es zona de valor. Esperar retroceso hacia {_sma200:.2f}€ mejora significativamente el yield (rentabilidad) efectivo de entrada.")
                     elif _sma200 > 0:
                         puntos.append(f"✅ Precio bajo SMA200 — compras en zona de valor histórico.")
                     if _pos52 > 70:
@@ -10171,15 +10171,15 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     if _pos52 > 65 and _sma200 > 0 and _precio > _sma200:
                         _gap = (_precio / _sma200 - 1) * 100
                         rec = (f"No es el momento óptimo. Precio un {_gap:.1f}% sobre SMA200 y en zona alta del rango anual — "
-                               f"el yield efectivo es el más bajo del año. Zona de espera: SMA200 ({_sma200:.2f}€) con RSI < 45. "
-                               f"Si el precio retrocede ahí, el yield efectivo mejoraría aproximadamente un {_gap:.0f}%.")
+                               f"el yield (rentabilidad) efectivo es el más bajo del año. Zona de espera: SMA200 ({_sma200:.2f}€) con RSI < 45. "
+                               f"Si el precio retrocede ahí, el yield (rentabilidad) efectivo mejoraría aproximadamente un {_gap:.0f}%.")
                     elif _pos52 > 60 or (_sma200 > 0 and _precio > _sma200):
                         rec = (f"Zona subóptima para entrada completa. Considera una posición parcial (30-40%) ahora "
                                f"y reserva capital para promediar si el precio retrocede hacia SMA200 ({_sma200:.2f}€) o RSI baja de 45.")
                     elif _rsi < 40 and _niv_soporte and _div_alc:
                         rec = (f"Setup óptimo activo: RSI en sobreventa ({_rsi:.0f}), soporte técnico presente y divergencia alcista confirmada. "
                                f"Entrada escalonada en 2-3 tramos. Stop por debajo del soporte identificado. "
-                               f"La combinación yield + precio bajo + señal técnica es el escenario de máxima asimetría.")
+                               f"La combinación yield (rentabilidad) + precio bajo + señal técnica es el escenario de máxima asimetría.")
                     elif _rsi < 45 and _niv_soporte:
                         rec = (f"Condiciones razonables. RSI en {_rsi:.0f} con soporte técnico activo. "
                                f"Entrada parcial (50%) con stop bajo soporte. Reservar capital para mejorar precio medio "
@@ -10242,7 +10242,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                f"Si los fundamentales aguantan, entrada escalonada en 3 tramos con stop bajo soporte.")
                     elif _pe > 0 and _pe < 18 and _pos52 < 55:
                         rec = (f"Candidato moderado. PER {_pe:.1f}x razonable pero el precio no está en descuento máximo. "
-                               f"Revisar tendencia de BPA y FCF yield. Entrada parcial posible con stop técnico claro.")
+                               f"Revisar tendencia de BPA y FCF yield (rentabilidad). Entrada parcial posible con stop técnico claro.")
                     elif _pe <= 0:
                         rec = ("Sin datos de PER disponibles — imposible evaluar el margen de seguridad fundamental. "
                                "Profundizar en valoración por FCF o EV/EBITDA antes de considerar la posición.")
@@ -10466,7 +10466,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         st.markdown(
                             f'<div style="background:#fef9c3;border-radius:8px;padding:10px 12px;'
                             f'border-left:3px solid #eab308">'
-                            f'<div style="font-size:11px;color:#64748b;font-weight:600">🎯 Yield sobre precio objetivo</div>'
+                            f'<div style="font-size:11px;color:#64748b;font-weight:600">🎯 Yield (rentabilidad) sobre precio objetivo</div>'
                             f'<div style="font-size:15px;font-weight:700;color:#854d0e">'
                             f'{"N/D" if _yield_tgt == 0 else f"{_yield_tgt:.2f}%"}</div>'
                             f'<div style="font-size:10px;color:#92400e">Al precio objetivo de analistas</div>'
