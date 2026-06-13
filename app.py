@@ -8863,8 +8863,15 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         delta=f"+{_r['dist_resist']:.2f}%" if _r["dist_resist"] else None,
                         help=f"Nivel pivot + media móvil: {_rs.get('pivot','')}"
                     )
+                elif _esc_r == "sin_resistencia":
+                    st.metric(
+                        "Resistencia reforzada", "No aplica",
+                        help="El precio supera todos los niveles estructurales reforzados — "
+                             "no hay techo técnico visible sobre el precio actual."
+                    )
                 else:
-                    st.metric("Resistencia reforzada", "—", help="Sin resistencia identificada sobre el precio")
+                    st.metric("Resistencia reforzada", "No aplica",
+                              help="Sin resistencia reforzada identificada sobre el precio")
             with _c3r:
                 if _r["pos_rango_pct"] is not None:
                     st.metric(
@@ -8872,8 +8879,21 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         f"{_r['pos_rango_pct']:.0f}%",
                         help="% de posición entre el soporte y la resistencia más cercanos (0%=soporte, 100%=resistencia)"
                     )
+                elif _esc_r == "sin_resistencia":
+                    st.metric(
+                        "Posición en rango", "No aplica",
+                        help="Precio por encima de todos los niveles estructurales conocidos. "
+                             "No hay referencia de resistencia para calcular el rango."
+                    )
+                elif _esc_r == "sin_soporte":
+                    st.metric(
+                        "Posición en rango", "No aplica",
+                        help="Precio por debajo de todos los niveles estructurales conocidos. "
+                             "No hay referencia de soporte para calcular el rango."
+                    )
                 else:
-                    st.metric("Posición en rango", "—", help="Insuficientes niveles para calcular el rango")
+                    st.metric("Posición en rango", "No aplica",
+                              help="Insuficientes niveles para calcular el rango")
 
             st.markdown(
                 f'<div style="background:{_bg_r};border-left:4px solid {_brd_r};'
