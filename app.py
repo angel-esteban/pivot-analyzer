@@ -6981,8 +6981,11 @@ def pantalla_analisis():
         # ── Fila 2: Ticker (depende del mercado seleccionado) ──────────────
         if mercado_sel == "✏️ Escribir manualmente":
             ticker_input = st.text_input(
-                "🔎 Ticker", value="NTGY.MC", placeholder="NTGY.MC, AAPL, SXR8.DE...",
-                help="Símbolo del activo en Yahoo Finance. Ejemplos: NTGY.MC (Naturgy), "
+                "🔎 Ticker",
+                value=st.session_state.get("ultimo_ticker", ""),
+                placeholder="Introduzca un ticker. Ejemplo: REP.MC",
+                key="ticker_manual_input",
+                help="Símbolo del activo en Yahoo Finance. Ejemplos: REP.MC (Repsol), "
                      "IBE.MC (Iberdrola), AAPL (Apple), SXR8.DE (ETF S&P 500 iShares). "
                      "Sufijos: .MC = Madrid · .DE = Xetra · .PA = París · .L = Londres · .AS = Ámsterdam"
             ).upper().strip()
@@ -7336,122 +7339,123 @@ def pantalla_analisis():
 
         st.divider()
 
-        # ---- CALCULAR PIVOTS ----
-        resultados_pivots = calcular_todos_pivots(hist, sistema_activo)
-        pivots_diario = resultados_pivots.get("Diario")
+        # ---- CALCULAR PIVOTS + INDICADORES + ANÁLISIS TÉCNICO ----
+        with st.spinner("Calculando análisis técnico..."):
+            resultados_pivots = calcular_todos_pivots(hist, sistema_activo)
+            pivots_diario = resultados_pivots.get("Diario")
 
-        # ---- INDICADORES ----
-        cierre_serie = hist["Close"]
-        rsi_val = calcular_rsi(cierre_serie)
-        macd_val, macd_señal, macd_hist_val = calcular_macd(cierre_serie)
-        bb_sup, bb_med, bb_inf, pct_b = calcular_bollinger(cierre_serie)
-        medias = calcular_sma_ema(cierre_serie)
-        sar_val, sar_tend = calcular_sar(hist)
+            # ---- INDICADORES ----
+            cierre_serie = hist["Close"]
+            rsi_val = calcular_rsi(cierre_serie)
+            macd_val, macd_señal, macd_hist_val = calcular_macd(cierre_serie)
+            bb_sup, bb_med, bb_inf, pct_b = calcular_bollinger(cierre_serie)
+            medias = calcular_sma_ema(cierre_serie)
+            sar_val, sar_tend = calcular_sar(hist)
 
-        indicadores_dict = {
-            "RSI (14)": f"{rsi_val}" + (" 🔴 Sobrecomprado" if rsi_val > 70 else " 🟢 Sobrevendido" if rsi_val < 30 else " ⚪ Neutro"),
-            "MACD": f"{macd_val:.4f}",
-            "MACD Señal": f"{macd_señal:.4f}",
-            "MACD Histograma": f"{macd_hist_val:.4f}" + (" ↑" if macd_hist_val > 0 else " ↓"),
-            "Bollinger Superior": f"{bb_sup:.4f}",
-            "Bollinger Media": f"{bb_med:.4f}",
-            "Bollinger Inferior": f"{bb_inf:.4f}",
-            "Bollinger %B": f"{pct_b:.1f}%",
-            "Parabolic SAR": f"{sar_val:.4f} ({sar_tend})",
-        }
-        for p, (sma, ema) in sorted(medias.items()):
-            pos_sma = "↑" if precio > sma else "↓"
-            pos_ema = "↑" if precio > ema else "↓"
-            indicadores_dict[f"SMA {p}"] = f"{sma:.4f} {pos_sma}"
-            indicadores_dict[f"EMA {p}"] = f"{ema:.4f} {pos_ema}"
+            indicadores_dict = {
+                "RSI (14)": f"{rsi_val}" + (" 🔴 Sobrecomprado" if rsi_val > 70 else " 🟢 Sobrevendido" if rsi_val < 30 else " ⚪ Neutro"),
+                "MACD": f"{macd_val:.4f}",
+                "MACD Señal": f"{macd_señal:.4f}",
+                "MACD Histograma": f"{macd_hist_val:.4f}" + (" ↑" if macd_hist_val > 0 else " ↓"),
+                "Bollinger Superior": f"{bb_sup:.4f}",
+                "Bollinger Media": f"{bb_med:.4f}",
+                "Bollinger Inferior": f"{bb_inf:.4f}",
+                "Bollinger %B": f"{pct_b:.1f}%",
+                "Parabolic SAR": f"{sar_val:.4f} ({sar_tend})",
+            }
+            for p, (sma, ema) in sorted(medias.items()):
+                pos_sma = "↑" if precio > sma else "↓"
+                pos_ema = "↑" if precio > ema else "↓"
+                indicadores_dict[f"SMA {p}"] = f"{sma:.4f} {pos_sma}"
+                indicadores_dict[f"EMA {p}"] = f"{ema:.4f} {pos_ema}"
 
-        # ---- VOLUMEN ----
-        vol_data = analisis_volumen(hist)
+            # ---- VOLUMEN ----
+            vol_data = analisis_volumen(hist)
 
-        # ---- SEMÁFORO ----
-        color_sem, pct_sem, factores_sem = calcular_semaforo(
-            precio, pivots_diario, rsi_val, macd_val, macd_señal,
-            bb_sup, bb_inf, vol_data, sar_tend
-        )
+            # ---- SEMÁFORO ----
+            color_sem, pct_sem, factores_sem = calcular_semaforo(
+                precio, pivots_diario, rsi_val, macd_val, macd_señal,
+                bb_sup, bb_inf, vol_data, sar_tend
+            )
 
-        # ---- CONFLUENCIAS ----
-        confluencias = detectar_confluencias(resultados_pivots, tolerancia=tol_activa)
+            # ---- CONFLUENCIAS ----
+            confluencias = detectar_confluencias(resultados_pivots, tolerancia=tol_activa)
 
-        # ---- CONVERGENCIA TÉCNICA ----
-        niveles_reforzados, señales_dir, consenso_dir = calcular_convergencia_tecnica(
-            resultados_pivots, medias, precio,
-            rsi_val, macd_val, macd_señal, macd_hist_val, sar_tend, pct_b,
-            tolerancia=tol_activa
-        )
+            # ---- CONVERGENCIA TÉCNICA ----
+            niveles_reforzados, señales_dir, consenso_dir = calcular_convergencia_tecnica(
+                resultados_pivots, medias, precio,
+                rsi_val, macd_val, macd_señal, macd_hist_val, sar_tend, pct_b,
+                tolerancia=tol_activa
+            )
 
-        # ---- DIVERGENCIAS TÉCNICAS ----
-        divergencias_tecnicas = detectar_divergencias(hist)
+            # ---- DIVERGENCIAS TÉCNICAS ----
+            divergencias_tecnicas = detectar_divergencias(hist)
 
-        # ---- HUECOS DE PRECIO ----
-        huecos_abiertos = detectar_huecos(hist)
+            # ---- HUECOS DE PRECIO ----
+            huecos_abiertos = detectar_huecos(hist)
 
-        # ---- MÁXIMOS HISTÓRICOS (ATH) ----
-        hist_maximo = obtener_hist_maximo(ticker_activo)
-        analisis_ath = analizar_maximos_historicos(hist_maximo, precio, nombre)
+            # ---- MÁXIMOS HISTÓRICOS (ATH) ----
+            hist_maximo = obtener_hist_maximo(ticker_activo)
+            analisis_ath = analizar_maximos_historicos(hist_maximo, precio, nombre)
 
-        # ---- SMA200 GIRO / TENDENCIA ----
-        analisis_sma200 = analizar_sma200(hist, precio, nombre)
+            # ---- SMA200 GIRO / TENDENCIA ----
+            analisis_sma200 = analizar_sma200(hist, precio, nombre)
 
-        # ---- RESISTENCIAS ESTRUCTURALES ----
-        analisis_resist = analizar_resistencias_estructurales(
-            niveles_reforzados, precio, nombre
-        )
+            # ---- RESISTENCIAS ESTRUCTURALES ----
+            analisis_resist = analizar_resistencias_estructurales(
+                niveles_reforzados, precio, nombre
+            )
 
-        # ---- FIBONACCI RETRACEMENT/EXTENSIÓN ----
-        analisis_fibo = analizar_fibonacci(hist, precio, nombre)
+            # ---- FIBONACCI RETRACEMENT/EXTENSIÓN ----
+            analisis_fibo = analizar_fibonacci(hist, precio, nombre)
 
-        # ---- RSI ZONA / TENDENCIA / DIVERGENCIA ----
-        analisis_rsi = analizar_rsi(hist, precio, nombre)
+            # ---- RSI ZONA / TENDENCIA / DIVERGENCIA ----
+            analisis_rsi = analizar_rsi(hist, precio, nombre)
 
-        # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
-        analisis_vol = analizar_volumen(hist, nombre)
+            # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
+            analisis_vol = analizar_volumen(hist, nombre)
 
-        # ---- PUNTUACIÓN TÉCNICA INTEGRADA ----
-        puntuacion_tec = calcular_puntuacion_tecnica(
-            analisis_ath, analisis_sma200, analisis_resist,
-            analisis_fibo, analisis_rsi, analisis_vol
-        )
-
-
-
+            # ---- PUNTUACIÓN TÉCNICA INTEGRADA ----
+            puntuacion_tec = calcular_puntuacion_tecnica(
+                analisis_ath, analisis_sma200, analisis_resist,
+                analisis_fibo, analisis_rsi, analisis_vol
+            )
 
 
-        # ---- FUNDAMENTALES ----
-        fundamentales = bloque_fundamentales(info, tipo_activo)
 
-        # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
-        st.session_state["estrategia_data"] = {
-            "ticker":        ticker_activo,
-            "nombre":        nombre,
-            "precio":        precio,
-            "tipo_activo":   tipo_activo,
-            "info":          info,
-            "hist":          hist,
-            "medias":        medias,
-            "rsi_val":       rsi_val,
-            "macd_hist_val": macd_hist_val,
-            "macd_val":      macd_val,
-            "macd_señal":    macd_señal,
-            "consenso_dir":  consenso_dir,
-            "divergencias":  divergencias_tecnicas,
-            "niveles_ref":   niveles_reforzados,
-            "sar_tend":      sar_tend,
-            "pct_b":         pct_b,
-            "ts":            ts_str,
-            "huecos":        huecos_abiertos,
-            "analisis_ath":    analisis_ath,
-            "analisis_sma200": analisis_sma200,
-            "analisis_resist": analisis_resist,
-            "analisis_fibo":   analisis_fibo,
-            "analisis_rsi":    analisis_rsi,
-            "analisis_vol":    analisis_vol,
-            "puntuacion_tec":  puntuacion_tec,
-        }
+
+
+            # ---- FUNDAMENTALES ----
+            fundamentales = bloque_fundamentales(info, tipo_activo)
+
+            # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
+            st.session_state["estrategia_data"] = {
+                "ticker":        ticker_activo,
+                "nombre":        nombre,
+                "precio":        precio,
+                "tipo_activo":   tipo_activo,
+                "info":          info,
+                "hist":          hist,
+                "medias":        medias,
+                "rsi_val":       rsi_val,
+                "macd_hist_val": macd_hist_val,
+                "macd_val":      macd_val,
+                "macd_señal":    macd_señal,
+                "consenso_dir":  consenso_dir,
+                "divergencias":  divergencias_tecnicas,
+                "niveles_ref":   niveles_reforzados,
+                "sar_tend":      sar_tend,
+                "pct_b":         pct_b,
+                "ts":            ts_str,
+                "huecos":        huecos_abiertos,
+                "analisis_ath":    analisis_ath,
+                "analisis_sma200": analisis_sma200,
+                "analisis_resist": analisis_resist,
+                "analisis_fibo":   analisis_fibo,
+                "analisis_rsi":    analisis_rsi,
+                "analisis_vol":    analisis_vol,
+                "puntuacion_tec":  puntuacion_tec,
+            }
 
         # ======== LAYOUT PRINCIPAL ========
 
