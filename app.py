@@ -1490,6 +1490,7 @@ def pantalla_login():
                         user = login_usuario(username, password)
                     if user:
                         st.session_state["usuario"] = user
+                        st.session_state["_post_login_loading"] = True
                         st.rerun()
                     else:
                         st.error("Usuario o contraseña incorrectos, o cuenta desactivada.")
@@ -1641,29 +1642,21 @@ def obtener_historico_yf(ticker: str, period: str = "2y") -> "pd.Series | None":
 
 
 @st.cache_data(ttl=3600)
-def obtener_hist_maximo(ticker: str) -> "pd.DataFrame | None":
-    """Descarga el histórico máximo disponible (period='max') para detectar ATH reales.
+def obtener_hist_maximo(ticker: str, _v: int = 2) -> "pd.DataFrame | None":
+    """Descarga histórico de 15 años para detectar ATH reales.
 
-    Sanity check: si el ATH del histórico completo supera 10x el precio actual
-    (indicativo de datos pre-split sin ajustar en Yahoo Finance), se descarta y
-    se usa el histórico de 10 años, que suele estar correctamente ajustado.
+    Usamos period='15y' en lugar de 'max' porque Yahoo Finance devuelve datos
+    pre-split sin ajustar correctamente en el histórico completo para algunos
+    tickers (ej: COL.MC). 15 años cubre suficientemente el ATH significativo
+    de cualquier valor del mercado español y tiene datos de calidad fiable.
+    El parámetro _v fuerza invalidación de caché al cambiar su valor.
     """
     try:
         t = yf.Ticker(ticker)
-        hist_max = t.history(period="max", auto_adjust=True)
-        if hist_max.empty or len(hist_max) < 50:
+        hist = t.history(period="15y", auto_adjust=True)
+        if hist.empty or len(hist) < 50:
             return None
-
-        # ── Sanity check: ATH no debería ser >10x el precio actual ───────
-        precio_actual = float(hist_max["Close"].iloc[-1])
-        ath_max = float(hist_max["High"].max())
-        if precio_actual > 0 and ath_max > precio_actual * 10:
-            # Datos históricos con precios no ajustados → usar 10 años
-            hist_10y = t.history(period="10y", auto_adjust=True)
-            if not hist_10y.empty and len(hist_10y) >= 50:
-                return hist_10y
-
-        return hist_max
+        return hist
     except Exception:
         return None
 
@@ -12362,9 +12355,58 @@ Factores: Precio vs PP Diario · RSI · MACD · Bollinger %B · Volumen · Parab
 # PUNTO DE ENTRADA
 # =============================================================================
 
+def _pantalla_cargando():
+    """Pantalla de transición post-login — evita el flash del layout de login."""
+    import time
+    st.markdown(
+        """
+        <style>
+        #MainMenu,footer,[data-testid="stToolbar"],[data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],.stDeployButton { display:none !important; }
+        [data-testid="stAppViewContainer"] {
+            background: #f1f5f9 !important;
+        }
+        .block-container { padding: 0 !important; }
+        </style>
+        <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;
+             background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
+             display:flex;flex-direction:column;align-items:center;
+             justify-content:center;gap:20px;z-index:99999">
+          <div style="background:rgba(255,255,255,0.12);border-radius:14px;
+               padding:18px;box-shadow:0 4px 24px rgba(0,0,0,0.3)">
+            <span style="font-size:2.4rem">📊</span>
+          </div>
+          <div style="color:#fff;font-size:1.4rem;font-weight:800;
+               letter-spacing:-0.02em">PivotAnalyzer</div>
+          <div style="color:#93c5fd;font-size:0.85rem;font-weight:400">
+               Cargando análisis financiero...</div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
+                 animation:bounce 1.2s ease-in-out infinite"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
+                 animation:bounce 1.2s ease-in-out 0.2s infinite"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
+                 animation:bounce 1.2s ease-in-out 0.4s infinite"></div>
+          </div>
+        </div>
+        <style>
+        @keyframes bounce {
+            0%,80%,100% { transform:translateY(0); opacity:0.5; }
+            40%          { transform:translateY(-8px); opacity:1; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    time.sleep(0.6)
+
+
 def main():
     if "usuario" not in st.session_state:
         pantalla_login()
+    elif st.session_state.pop("_post_login_loading", False):
+        _pantalla_cargando()
+        st.rerun()
     else:
         pantalla_analisis()
 
