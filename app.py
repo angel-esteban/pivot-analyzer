@@ -1642,13 +1642,28 @@ def obtener_historico_yf(ticker: str, period: str = "2y") -> "pd.Series | None":
 
 @st.cache_data(ttl=3600)
 def obtener_hist_maximo(ticker: str) -> "pd.DataFrame | None":
-    """Descarga el histórico máximo disponible (period='max') para detectar ATH reales."""
+    """Descarga el histórico máximo disponible (period='max') para detectar ATH reales.
+
+    Sanity check: si el ATH del histórico completo supera 10x el precio actual
+    (indicativo de datos pre-split sin ajustar en Yahoo Finance), se descarta y
+    se usa el histórico de 10 años, que suele estar correctamente ajustado.
+    """
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period="max", auto_adjust=True)
-        if hist.empty or len(hist) < 50:
+        hist_max = t.history(period="max", auto_adjust=True)
+        if hist_max.empty or len(hist_max) < 50:
             return None
-        return hist
+
+        # ── Sanity check: ATH no debería ser >10x el precio actual ───────
+        precio_actual = float(hist_max["Close"].iloc[-1])
+        ath_max = float(hist_max["High"].max())
+        if precio_actual > 0 and ath_max > precio_actual * 10:
+            # Datos históricos con precios no ajustados → usar 10 años
+            hist_10y = t.history(period="10y", auto_adjust=True)
+            if not hist_10y.empty and len(hist_10y) >= 50:
+                return hist_10y
+
+        return hist_max
     except Exception:
         return None
 
