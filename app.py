@@ -47,38 +47,229 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# CSS personalizado — optimizado para móvil
+# CSS profesional — Inter font + design system coherente
 st.markdown("""
 <style>
-    .main > div { padding: 0.5rem 0.5rem; }
-    .block-container { padding: 0.5rem 0.5rem 2rem; max-width: 900px; }
-    h1 { font-size: 1.4rem !important; color: #1F4E79; }
-    h2 { font-size: 1.1rem !important; color: #2E75B6; margin-top: 0.8rem; }
-    h3 { font-size: 0.95rem !important; color: #1F4E79; }
-    .stMetric { background: #F0F4F8; border-radius: 8px; padding: 0.4rem; }
-    .semaforo-verde { color: #2E7D32; font-weight: bold; font-size: 1.1rem; }
-    .semaforo-amarillo { color: #F57F17; font-weight: bold; font-size: 1.1rem; }
-    .semaforo-rojo { color: #C62828; font-weight: bold; font-size: 1.1rem; }
-    .nivel-r { color: #C62828; font-family: monospace; }
-    .nivel-s { color: #2E7D32; font-family: monospace; }
-    .nivel-pp { color: #1565C0; font-family: monospace; }
-    .confluencia { background: #FFF9C4; border-left: 3px solid #F57F17; padding: 2px 6px; }
-    div[data-testid="metric-container"] { background: #F0F4F8; border-radius: 8px; }
-    [data-testid="stMetricValue"] { font-size: 1.25rem !important; line-height: 1.3 !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
-    [data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
-    /* Datos Fundamentales + Indicadores Técnicos + Volumen — valores pequeños, títulos más grandes */
+    /* ── FUENTE ─────────────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    html, body, [class*="css"], .stMarkdown, .stText, p, span, div {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    }
+
+    /* ── OCULTAR CHROME DE STREAMLIT ───────────────────────────── */
+    #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    .stDeployButton { display: none !important; }
+    header[data-testid="stHeader"] { background: transparent !important; height: 0 !important; }
+
+    /* ── LAYOUT ─────────────────────────────────────────────────── */
+    [data-testid="stAppViewContainer"] { background: #f1f5f9 !important; }
+    .main > div { padding: 0 !important; }
+    .block-container {
+        padding: 0 1.25rem 2rem !important;
+        max-width: 1100px !important;
+    }
+
+    /* ── TIPOGRAFÍA ─────────────────────────────────────────────── */
+    h1 {
+        font-size: 1.45rem !important; font-weight: 800 !important;
+        color: #0f172a !important; letter-spacing: -0.02em !important;
+        margin-bottom: 0.1rem !important;
+    }
+    h2 {
+        font-size: 1.05rem !important; font-weight: 700 !important;
+        color: #1e293b !important; margin-top: 1.2rem !important;
+        letter-spacing: -0.01em !important;
+    }
+    h3 {
+        font-size: 0.92rem !important; font-weight: 600 !important;
+        color: #334155 !important;
+    }
+    p, .stMarkdown p { font-size: 0.88rem !important; color: #374151 !important; line-height: 1.6 !important; }
+
+    /* ── TABS — barra de navegación ─────────────────────────────── */
+    [data-testid="stTabs"] > div:first-child {
+        background: #ffffff !important;
+        border-bottom: 1.5px solid #e2e8f0 !important;
+        border-radius: 0 !important;
+        padding: 0 0.5rem !important;
+        position: sticky !important; top: 0 !important; z-index: 100 !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+        gap: 0 !important;
+        margin-bottom: 0.25rem !important;
+    }
+    button[data-baseweb="tab"] {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2.5px solid transparent !important;
+        border-radius: 0 !important;
+        color: #64748b !important;
+        font-size: 0.78rem !important; font-weight: 500 !important;
+        padding: 0.65rem 0.85rem !important;
+        margin: 0 !important;
+        transition: all 0.15s ease !important;
+        white-space: nowrap !important;
+    }
+    button[data-baseweb="tab"]:hover {
+        color: #2563eb !important;
+        background: #eff6ff !important;
+        border-bottom-color: #93c5fd !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #2563eb !important;
+        border-bottom: 2.5px solid #2563eb !important;
+        font-weight: 700 !important;
+        background: transparent !important;
+    }
+    [data-testid="stTabContent"] { padding-top: 0.75rem !important; }
+
+    /* ── MÉTRICAS ───────────────────────────────────────────────── */
+    div[data-testid="metric-container"] {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 10px !important;
+        padding: 0.7rem 0.9rem !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+        transition: box-shadow 0.15s ease !important;
+    }
+    div[data-testid="metric-container"]:hover {
+        box-shadow: 0 3px 10px rgba(0,0,0,0.09) !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important; font-weight: 700 !important;
+        line-height: 1.3 !important; color: #0f172a !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.68rem !important; font-weight: 600 !important;
+        text-transform: uppercase !important; letter-spacing: 0.06em !important;
+        color: #64748b !important;
+    }
+    [data-testid="stMetricDelta"] { font-size: 0.72rem !important; font-weight: 600 !important; }
     .fund-metrics [data-testid="stMetricValue"],
-    .ind-metrics [data-testid="stMetricValue"] { font-size: 0.95rem !important; line-height: 1.2 !important; font-weight: 600 !important; }
+    .ind-metrics  [data-testid="stMetricValue"] {
+        font-size: 0.9rem !important; font-weight: 700 !important; line-height: 1.2 !important;
+    }
     .fund-metrics [data-testid="stMetricLabel"],
-    .ind-metrics [data-testid="stMetricLabel"] { font-size: 0.82rem !important; font-weight: 500 !important; color: #374151 !important; }
-    /* Valores de selectbox y number_input más grandes */
+    .ind-metrics  [data-testid="stMetricLabel"] {
+        font-size: 0.67rem !important; font-weight: 600 !important; color: #64748b !important;
+    }
+
+    /* ── BOTONES ────────────────────────────────────────────────── */
+    .stButton > button {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.82rem !important; font-weight: 600 !important;
+        border-radius: 7px !important;
+        padding: 0.38rem 0.9rem !important;
+        border: 1.5px solid #e2e8f0 !important;
+        background: #ffffff !important; color: #374151 !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+        transition: all 0.15s ease !important;
+        width: 100% !important;
+    }
+    .stButton > button:hover {
+        border-color: #2563eb !important; color: #2563eb !important;
+        background: #eff6ff !important; box-shadow: 0 2px 6px rgba(37,99,235,0.12) !important;
+    }
+    .stButton > button[kind="primary"] {
+        background: #2563eb !important; color: #ffffff !important;
+        border-color: #2563eb !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: #1d4ed8 !important; border-color: #1d4ed8 !important;
+        box-shadow: 0 2px 8px rgba(37,99,235,0.3) !important;
+    }
+
+    /* ── INPUTS ─────────────────────────────────────────────────── */
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input {
+        font-size: 0.9rem !important; border-radius: 7px !important;
+        border: 1.5px solid #e2e8f0 !important;
+        background: #ffffff !important; color: #0f172a !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stNumberInput"] input:focus {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
+        outline: none !important;
+    }
+
+    /* ── SELECTBOX ──────────────────────────────────────────────── */
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        border-radius: 7px !important; border: 1.5px solid #e2e8f0 !important;
+        background: #ffffff !important; font-size: 0.88rem !important;
+        transition: border-color 0.15s ease !important;
+    }
     [data-testid="stSelectbox"] div[data-baseweb="select"] span,
-    [data-testid="stSelectbox"] div[data-baseweb="select"] div { font-size: 1.05rem !important; }
-    [data-testid="stNumberInput"] input { font-size: 1.05rem !important; }
-    .stButton button { width: 100%; }
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div {
+        font-size: 0.88rem !important;
+    }
+
+    /* ── EXPANDERS ──────────────────────────────────────────────── */
+    [data-testid="stExpander"] {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important; border-radius: 10px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+        margin-bottom: 0.5rem !important; overflow: hidden !important;
+    }
+    [data-testid="stExpander"] summary {
+        font-weight: 600 !important; font-size: 0.86rem !important;
+        color: #1e293b !important; padding: 0.65rem 1rem !important;
+    }
+    [data-testid="stExpander"] summary:hover {
+        background: #f8fafc !important;
+    }
+
+    /* ── FORMS ──────────────────────────────────────────────────── */
+    [data-testid="stForm"] {
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important; border-radius: 10px !important;
+        padding: 1rem 1rem 0.5rem !important;
+    }
+
+    /* ── DIVIDERS ───────────────────────────────────────────────── */
+    hr { border-color: #e2e8f0 !important; margin: 0.6rem 0 !important; }
+
+    /* ── ALERTS ─────────────────────────────────────────────────── */
+    [data-testid="stAlert"] { border-radius: 8px !important; font-size: 0.85rem !important; }
+
+    /* ── CAPTIONS ───────────────────────────────────────────────── */
+    [data-testid="stCaptionContainer"], .stCaption {
+        font-size: 0.73rem !important; color: #94a3b8 !important;
+    }
+
+    /* ── DATAFRAMES ─────────────────────────────────────────────── */
+    [data-testid="stDataFrame"] {
+        border-radius: 10px !important; overflow: hidden !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    }
+
+    /* ── SCROLLBAR ──────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* ── CLASES SEMÁNTICAS (sin cambio funcional) ───────────────── */
+    .semaforo-verde    { color: #16a34a; font-weight: 700; font-size: 1.05rem; }
+    .semaforo-amarillo { color: #d97706; font-weight: 700; font-size: 1.05rem; }
+    .semaforo-rojo     { color: #dc2626; font-weight: 700; font-size: 1.05rem; }
+    .nivel-r  { color: #dc2626; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+    .nivel-s  { color: #16a34a; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+    .nivel-pp { color: #2563eb; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+    .confluencia {
+        background: #fef9c3; border-left: 3px solid #d97706;
+        padding: 2px 8px; border-radius: 3px;
+    }
+
+    /* ── MOBILE ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-        .block-container { padding: 0.3rem 0.2rem 2rem; }
+        .block-container { padding: 0 0.4rem 2rem !important; }
+        button[data-baseweb="tab"] { font-size: 0.7rem !important; padding: 0.55rem 0.5rem !important; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -464,11 +655,44 @@ def obtener_tickers_mercado(mercado: str) -> dict:
 
 
 # =============================================================================
-# CONEXIÓN NEON (PostgreSQL) — via psycopg2
+# CONEXIÓN NEON (PostgreSQL) — connection pool via psycopg2
+# @st.cache_resource mantiene el pool vivo entre reruns (no se destruye en cada interacción)
 # =============================================================================
 
+@st.cache_resource
+def _get_db_pool():
+    """Pool de conexiones persistente. Se crea una sola vez por sesión de servidor."""
+    from psycopg2 import pool as pg_pool
+    return pg_pool.ThreadedConnectionPool(
+        minconn=1,
+        maxconn=8,
+        dsn=st.secrets["DATABASE_URL"],
+        connect_timeout=10,
+    )
+
 def get_db_connection():
-    return psycopg2.connect(st.secrets["DATABASE_URL"])
+    """Obtiene una conexión del pool. Devolver siempre con release_db_connection()."""
+    pool = _get_db_pool()
+    try:
+        conn = pool.getconn()
+        # Verificar que la conexión sigue viva; si no, psycopg2 la descartará
+        if conn.closed:
+            pool.putconn(conn, close=True)
+            conn = pool.getconn()
+        return conn
+    except Exception:
+        # Fallback: conexión directa si el pool falla
+        return psycopg2.connect(st.secrets["DATABASE_URL"])
+
+def release_db_connection(conn):
+    """Devuelve la conexión al pool (no la cierra)."""
+    try:
+        _get_db_pool().putconn(conn)
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def db_select(tabla: str, filtros: dict = None):
     conn = get_db_connection()
@@ -482,8 +706,11 @@ def db_select(tabla: str, filtros: dict = None):
                 params = list(filtros.values())
             cur.execute(query, params)
             return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def db_insert(tabla: str, datos: dict):
     conn = get_db_connection()
@@ -495,8 +722,11 @@ def db_insert(tabla: str, datos: dict):
             cur.execute(query, list(datos.values()))
             conn.commit()
             return [dict(cur.fetchone())]
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def db_update(tabla: str, datos: dict, filtro_col: str, filtro_val):
     conn = get_db_connection()
@@ -507,8 +737,11 @@ def db_update(tabla: str, datos: dict, filtro_col: str, filtro_val):
             cur.execute(query, list(datos.values()) + [filtro_val])
             conn.commit()
             return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def db_delete(tabla: str, filtro_col: str, filtro_val):
     conn = get_db_connection()
@@ -518,8 +751,11 @@ def db_delete(tabla: str, filtro_col: str, filtro_val):
             cur.execute(query, [filtro_val])
             conn.commit()
             return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 
 # =============================================================================
@@ -550,7 +786,7 @@ def inicializar_tabla_alertas():
     except Exception:
         pass
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 
 # =============================================================================
@@ -581,7 +817,7 @@ def inicializar_tabla_data_jobs():
                     )
                 conn.commit()
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         pass
 
@@ -604,7 +840,7 @@ def _job_corre_hoy(job_name: str) -> bool:
                     return False
                 return row[0].astimezone(ZoneInfo("Europe/Madrid")).date() == hoy
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return False
 
@@ -625,7 +861,7 @@ def _marcar_job(job_name: str, user_id: int, status: str = "ok",
                 )
                 conn.commit()
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         pass
 
@@ -707,7 +943,7 @@ def estado_jobs() -> dict:
                 return {r[0]: {"last_run": r[1], "status": r[2], "duration_ms": r[3]}
                         for r in cur.fetchall()}
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return {}
 
@@ -749,7 +985,7 @@ def obtener_alertas_usuario(usuario_id: int, solo_activas: bool = True) -> list:
                     )
                 return [dict(r) for r in cur.fetchall()]
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return []
 
@@ -792,7 +1028,7 @@ def verificar_y_disparar_alertas(usuario_id: int, ticker: str, precio: float) ->
                     conn.commit()
                     disparadas.append(al)
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         pass
     return disparadas
@@ -836,7 +1072,7 @@ def inicializar_tabla_carteras():
                 """)
             conn.commit()
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         pass
 
@@ -864,7 +1100,7 @@ def crear_cartera(usuario_id: int, tipo: str, nombre: str, descripcion: str = ""
             return {"id": row[0], "usuario_id": row[1], "tipo": row[2],
                     "nombre": row[3], "descripcion": row[4], "created_at": row[5]}
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return None
 
@@ -904,7 +1140,7 @@ def obtener_carteras_usuario(usuario_id: int, tipo: str | None = None,
                 cols = ["id","usuario_id","tipo","nombre","descripcion","created_at"]
                 return [dict(zip(cols, r)) for r in cur.fetchall()]
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return []
 
@@ -925,7 +1161,7 @@ def eliminar_cartera(cartera_id: int, usuario_id: int, superadmin: bool = False)
             conn.commit()
             return True
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return False
 
@@ -956,7 +1192,7 @@ def añadir_posicion(cartera_id: int, ticker: str, nombre_valor: str,
             conn.commit()
             return True
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return False
 
@@ -978,7 +1214,7 @@ def obtener_posiciones_cartera(cartera_id: int) -> list:
                         "num_acciones","precio_compra","moneda","notas","created_at"]
                 return [dict(zip(cols, r)) for r in cur.fetchall()]
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return []
 
@@ -996,7 +1232,7 @@ def eliminar_posicion(posicion_id: int, cartera_id: int) -> bool:
             conn.commit()
             return True
         finally:
-            conn.close()
+            release_db_connection(conn)
     except Exception:
         return False
 
@@ -1087,16 +1323,34 @@ def login_usuario(username: str, password: str):
 
 
 def pantalla_login():
-    st.markdown("## 📊 PivotAnalyzer")
-    st.markdown("*Análisis técnico multi-timeframe con Pivot Points*")
-    st.divider()
+    # Espacio superior
+    st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 1.6, 1])
     with col2:
-        st.markdown("### Acceso")
-        username = st.text_input("Usuario", placeholder="tu_usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password", key="login_pass")
-        if st.button("🔐 Entrar", type="primary"):
+        # Tarjeta de login
+        st.markdown(
+            '''<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;
+                padding:36px 32px 28px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+              <div style="text-align:center;margin-bottom:24px;">
+                <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);
+                    display:inline-flex;align-items:center;justify-content:center;
+                    width:52px;height:52px;border-radius:12px;font-size:1.6rem;margin-bottom:12px">📊</div>
+                <div style="font-size:1.4rem;font-weight:800;color:#0f172a;
+                    letter-spacing:-0.02em;margin-bottom:3px">PivotAnalyzer</div>
+                <div style="font-size:0.78rem;color:#64748b;font-weight:400">
+                    Análisis financiero multi-método</div>
+              </div>
+            </div>''',
+            unsafe_allow_html=True
+        )
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        username = st.text_input("Usuario", placeholder="Introduce tu usuario", key="login_user")
+        password = st.text_input("Contraseña", type="password",
+                                  placeholder="Introduce tu contraseña", key="login_pass")
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        if st.button("Entrar →", type="primary", use_container_width=True):
             if username and password:
                 with st.spinner("Verificando..."):
                     user = login_usuario(username, password)
@@ -1108,8 +1362,12 @@ def pantalla_login():
             else:
                 st.warning("Introduce usuario y contraseña.")
 
-    st.markdown("---")
-    st.caption("Análisis educativo. No constituye asesoramiento de inversión (MiFID II).")
+        st.markdown(
+            '''<div style="text-align:center;margin-top:20px;font-size:0.7rem;color:#94a3b8">
+            Análisis educativo · No constituye asesoramiento de inversión (MiFID II)
+            </div>''',
+            unsafe_allow_html=True
+        )
 
 
 # =============================================================================
@@ -7240,12 +7498,21 @@ def pestaña_cartera():
 
     def _fmt_eur(v, decimals=2):
         if v is None: return "N/D"
-        return f"{v:,.{decimals}f} €"
+        s = f"{v:,.{decimals}f}"
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{s} €"
+
+    def _fmt_eu(v, decimals=2, suffix=""):
+        """Formato europeo: punto de miles, coma decimal."""
+        if v is None: return "N/D"
+        s = f"{v:,.{decimals}f}"
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{s}{suffix}"
 
     def _fmt_pct_c(v):
         if v is None: return "N/D"
         sign = "+" if v >= 0 else ""
-        return f"{sign}{v:.2f}%"
+        return f"{sign}{v:.2f}%".replace(".", ",")
 
     def _metric_card(label, value, color="#1e293b", bg="#f8fafc", sub=None):
         sub_html = f'<div style="font-size:11px;color:#64748b;margin-top:2px">{sub}</div>' if sub else ""
@@ -7354,7 +7621,7 @@ def pestaña_cartera():
                                                    sub=_fmt_pct_c(pl_pct_tot))
                             with m4: _metric_card("Ingreso div. anual", _fmt_eur(ing_anual),
                                                    color="#16a34a", bg="#f0fdf4")
-                            with m5: _metric_card("Yield sobre coste", f"{yoc_pond:.2f}%",
+                            with m5: _metric_card("Yield sobre coste", f"{yoc_pond:.2f}%".replace(".",","),
                                                    color="#16a34a", bg="#f0fdf4")
                         elif tipo_key == "crecimiento":
                             m1, m2, m3 = st.columns(3)
@@ -7396,12 +7663,12 @@ def pestaña_cartera():
                                     if pos.get("notas"):
                                         st.caption(pos["notas"])
                                 with cols[1]:
-                                    st.metric("Acciones", f"{na:,.2f}")
+                                    st.metric("Acciones", _fmt_eu(na, 2))
                                 with cols[2]:
-                                    st.metric("P. Compra", f"{pc:.2f} {pos.get('moneda','EUR')}")
+                                    st.metric("P. Compra", _fmt_eu(pc, 2, f" {pos.get('moneda','EUR')}"))
                                 with cols[3]:
                                     st.metric("P. Actual",
-                                              f"{pa:.2f} {pos.get('moneda','EUR')}" if pa else "N/D")
+                                              _fmt_eu(pa, 2, f" {pos.get('moneda','EUR')}") if pa else "N/D")
                                 with cols[4]:
                                     pl_str = (_fmt_eur(pl_a) + " / " + _fmt_pct_c(pl_p)
                                               if pl_a is not None else "N/D")
@@ -7410,7 +7677,7 @@ def pestaña_cartera():
                                 if tipo_key == "dividendos":
                                     with cols[5]:
                                         yoc = pos.get("yield_coste", 0)
-                                        st.metric("Yield/coste", f"{yoc:.2f}%")
+                                        st.metric("Yield/coste", f"{yoc:.2f}%".replace(".",","))
                                 # Botones editar / eliminar
                                 with cols[-2]:
                                     if st.button("✏️", key=f"edit_pos_{pos['id']}",
@@ -7614,21 +7881,50 @@ def pantalla_analisis():
     inicializar_tabla_carteras()   # Crea tablas carteras y posiciones si no existen
     verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede
 
-    # Header
-    col_t, col_u = st.columns([4, 1])
-    with col_t:
-        st.markdown("## 📊 PivotAnalyzer")
-    with col_u:
-        st.markdown(f"*{usuario.get('nombre', usuario.get('username'))}*")
-        bcol1, bcol2 = st.columns(2)
-        with bcol1:
-            if st.button("Salir", key="logout"):
-                del st.session_state["usuario"]
-                st.rerun()
-        with bcol2:
-            if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
-                st.cache_data.clear()
-                st.rerun()
+    # Header profesional
+    _uname = usuario.get("nombre", usuario.get("username", ""))
+    _rol   = usuario.get("rol", "")
+    _rol_badge = {
+        "superadmin": ('<span style="background:#7c3aed;color:#fff;font-size:10px;'
+                       'padding:2px 7px;border-radius:20px;font-weight:700">ADMIN</span>'),
+        "admin":      ('<span style="background:#0369a1;color:#fff;font-size:10px;'
+                       'padding:2px 7px;border-radius:20px;font-weight:700">ADMIN</span>'),
+    }.get(_rol, "")
+
+    st.markdown(
+        f'''<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
+            padding:14px 20px 12px;border-radius:0 0 12px 12px;
+            margin:-0px -1.25rem 1rem;display:flex;align-items:center;
+            justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.18);">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="background:rgba(255,255,255,0.12);border-radius:8px;
+                        padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
+            <div>
+              <div style="color:#fff;font-size:1.05rem;font-weight:800;
+                          letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
+              <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
+                Análisis financiero multi-método</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="text-align:right;">
+              <div style="color:#e2e8f0;font-size:0.78rem;font-weight:600">{_uname}</div>
+              <div style="margin-top:2px">{_rol_badge}</div>
+            </div>
+          </div>
+        </div>''',
+        unsafe_allow_html=True
+    )
+
+    _hc1, _hc2, _hc3 = st.columns([6, 1, 1])
+    with _hc2:
+        if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
+            st.cache_data.clear()
+            st.rerun()
+    with _hc3:
+        if st.button("⏻ Salir", key="logout"):
+            del st.session_state["usuario"]
+            st.rerun()
 
     # Navegación
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera"]
