@@ -196,11 +196,27 @@ st.markdown("""
         background: #2563eb !important; color: #ffffff !important;
         border-color: #2563eb !important;
     }
+    .stButton > button[kind="primary"] p,
+    .stButton > button[kind="primary"] span,
+    [data-testid="baseButton-primary"] p,
+    [data-testid="baseButton-primary"] span,
+    [data-testid="stFormSubmitButton"] > button p,
+    [data-testid="stFormSubmitButton"] > button span {
+        color: #ffffff !important;
+    }
     .stButton > button[kind="primary"]:hover,
     [data-testid="baseButton-primary"]:hover,
     [data-testid="stFormSubmitButton"] > button:hover {
         background: #1d4ed8 !important; border-color: #1d4ed8 !important;
         box-shadow: 0 2px 8px rgba(37,99,235,0.3) !important; color: #ffffff !important;
+    }
+    .stButton > button[kind="primary"]:hover p,
+    .stButton > button[kind="primary"]:hover span,
+    [data-testid="baseButton-primary"]:hover p,
+    [data-testid="baseButton-primary"]:hover span,
+    [data-testid="stFormSubmitButton"] > button:hover p,
+    [data-testid="stFormSubmitButton"] > button:hover span {
+        color: #ffffff !important;
     }
 
     /* ── INPUTS ─────────────────────────────────────────────────── */
