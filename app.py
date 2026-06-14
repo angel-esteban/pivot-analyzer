@@ -1323,51 +1323,80 @@ def login_usuario(username: str, password: str):
 
 
 def pantalla_login():
-    # Espacio superior
-    st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
+    # CSS específico del login — card unificada, sin "Press Enter to apply"
+    st.markdown("""
+    <style>
+        /* Ocultar el hint "Press Enter to apply" en los inputs del login */
+        [data-testid="InputInstructions"] { display: none !important; }
+        /* Label de los inputs más compacto */
+        .login-col [data-testid="stTextInput"] label {
+            font-size: 0.82rem !important; font-weight: 600 !important;
+            color: #374151 !important; margin-bottom: 2px !important;
+        }
+        .login-col [data-testid="stTextInput"] input {
+            border-radius: 8px !important; border: 1.5px solid #e2e8f0 !important;
+            padding: 0.55rem 0.75rem !important; font-size: 0.92rem !important;
+            background: #f8fafc !important;
+        }
+        .login-col [data-testid="stTextInput"] input:focus {
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
+            background: #fff !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1.6, 1])
+    st.markdown("<div style='height:5vh'></div>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.4, 1])
     with col2:
-        # Tarjeta de login
+        st.markdown('<div class="login-col">', unsafe_allow_html=True)
+        # ── Tarjeta unificada (logo + form) ──────────────────────
         st.markdown(
             '''<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;
-                padding:36px 32px 28px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-              <div style="text-align:center;margin-bottom:24px;">
-                <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);
+                padding:36px 32px 8px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+              <div style="text-align:center;margin-bottom:28px;">
+                <div style="background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 100%);
                     display:inline-flex;align-items:center;justify-content:center;
-                    width:52px;height:52px;border-radius:12px;font-size:1.6rem;margin-bottom:12px">📊</div>
-                <div style="font-size:1.4rem;font-weight:800;color:#0f172a;
-                    letter-spacing:-0.02em;margin-bottom:3px">PivotAnalyzer</div>
+                    width:56px;height:56px;border-radius:14px;font-size:1.7rem;
+                    margin-bottom:14px;box-shadow:0 4px 12px rgba(29,78,216,0.35)">📊</div>
+                <div style="font-size:1.5rem;font-weight:800;color:#0f172a;
+                    letter-spacing:-0.02em;line-height:1.1;margin-bottom:4px">PivotAnalyzer</div>
                 <div style="font-size:0.78rem;color:#64748b;font-weight:400">
                     Análisis financiero multi-método</div>
               </div>
             </div>''',
             unsafe_allow_html=True
         )
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        username = st.text_input("Usuario", placeholder="Introduce tu usuario", key="login_user")
-        password = st.text_input("Contraseña", type="password",
-                                  placeholder="Introduce tu contraseña", key="login_pass")
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-        if st.button("Entrar →", type="primary", use_container_width=True):
-            if username and password:
-                with st.spinner("Verificando..."):
-                    user = login_usuario(username, password)
-                if user:
-                    st.session_state["usuario"] = user
-                    st.rerun()
+        # ── Inputs dentro de st.form (elimina "Press Enter to apply") ──
+        with st.form("form_login", clear_on_submit=False):
+            username = st.text_input("Usuario", placeholder="Introduce tu usuario",
+                                     key="login_user")
+            password = st.text_input("Contraseña", type="password",
+                                     placeholder="Introduce tu contraseña", key="login_pass")
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("Entrar →", type="primary",
+                                              use_container_width=True)
+            if submitted:
+                if username and password:
+                    with st.spinner("Verificando..."):
+                        user = login_usuario(username, password)
+                    if user:
+                        st.session_state["usuario"] = user
+                        st.rerun()
+                    else:
+                        st.error("Usuario o contraseña incorrectos, o cuenta desactivada.")
                 else:
-                    st.error("Usuario o contraseña incorrectos, o cuenta desactivada.")
-            else:
-                st.warning("Introduce usuario y contraseña.")
+                    st.warning("Introduce usuario y contraseña.")
 
         st.markdown(
-            '''<div style="text-align:center;margin-top:20px;font-size:0.7rem;color:#94a3b8">
+            '''<div style="text-align:center;margin-top:16px;margin-bottom:8px;
+                font-size:0.7rem;color:#94a3b8">
             Análisis educativo · No constituye asesoramiento de inversión (MiFID II)
             </div>''',
             unsafe_allow_html=True
         )
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
