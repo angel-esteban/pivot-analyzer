@@ -7628,7 +7628,9 @@ def pestaña_cartera():
     uid     = usuario["id"]
     es_superadmin = usuario.get("rol") == "superadmin"
 
-    inicializar_tabla_carteras()
+    # Carteras ya inicializadas en pantalla_analisis(); evitar query duplicada
+    if not st.session_state.get("_app_init_done"):
+        inicializar_tabla_carteras()
 
     st.markdown("## 📁 Mis Carteras")
     st.caption(
@@ -8032,10 +8034,13 @@ def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
-    inicializar_tabla_alertas()  # Crea tabla si no existe (idempotente)
-    inicializar_tabla_data_jobs()  # Crea tabla data_jobs si no existe
-    inicializar_tabla_carteras()   # Crea tablas carteras y posiciones si no existen
-    verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede
+    # Inicialización única por sesión: evita queries innecesarias en cada rerun
+    if not st.session_state.get("_app_init_done"):
+        inicializar_tabla_alertas()
+        inicializar_tabla_data_jobs()
+        inicializar_tabla_carteras()
+        st.session_state["_app_init_done"] = True
+    verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede (guarded internamente)
 
     # Header profesional
     _uname = usuario.get("nombre", usuario.get("username", ""))
