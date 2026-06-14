@@ -6927,6 +6927,31 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     S_CP   = _p(fontName="Helvetica-Bold", fontSize=7.5,textColor=CA)
     S_CN   = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#64748b"))
 
+    # ── Helper: section header con barra azul izquierda (equivalente a _sh()) ─
+    def _pdf_sh(texto, hist):
+        """PDF equivalent of _sh(): renders a section header with a blue left bar."""
+        _txt = texto
+        for em in ("🚦","📐","🔗","⚡","🔀","📊","📝","💡","📈","🏦","📉","🔍","⭐","🧭","📋"):
+            _txt = _txt.replace(em, "").strip()
+        s_hdr = _p(fontName="Helvetica-Bold", fontSize=9, textColor=CA,
+                   leftIndent=0, spaceBefore=0, spaceAfter=0)
+        row = [[None, Paragraph(_txt, s_hdr)]]
+        t = Table(row, colWidths=[0.2*cm, None])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (0, 0), CM),
+            ("BACKGROUND",    (1, 0), (1, 0), CCL),
+            ("LEFTPADDING",   (0, 0), (0, 0), 0),
+            ("RIGHTPADDING",  (0, 0), (0, 0), 0),
+            ("LEFTPADDING",   (1, 0), (1, 0), 7),
+            ("RIGHTPADDING",  (1, 0), (1, 0), 4),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        hist.append(Spacer(1, 0.15*cm))
+        hist.append(t)
+        hist.append(Spacer(1, 0.1*cm))
+
     ahora   = datetime.now().strftime("%d/%m/%Y %H:%M")
     historia = []
 
@@ -7000,7 +7025,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Spacer(1, 0.3*cm))
 
     # ── SEMÁFORO ──────────────────────────────────────────────────────────
-    historia.append(Paragraph("Semáforo Global", S_H2))
+    _pdf_sh("🚦 Semáforo Global", historia)
     badge_t = Table(
         [[Paragraph(SEM_DOT, _p(fontName="Helvetica-Bold", fontSize=24, alignment=TA_CENTER))],
          [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
@@ -7052,7 +7077,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Spacer(1, 0.35*cm))
 
     # ── PIVOT POINTS MULTI-COLUMNA ────────────────────────────────────────
-    historia.append(Paragraph(f"Pivot Points — Sistema {sistema}", S_H2))
+    _pdf_sh(f"📐 Pivot Points — Sistema {sistema}", historia)
 
     NIV = ["R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
     PW  = 90    # ancho por columna pivot (pt)  — 4×90 + 150 = 510 pt = 18 cm
@@ -7130,7 +7155,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Spacer(1, 0.3*cm))
 
     # ── INDICADORES | MEDIAS | VOLUMEN (tres columnas) ────────────────────
-    historia.append(Paragraph("Indicadores Técnicos y Volumen", S_H2))
+    _pdf_sh("📊 Indicadores Técnicos y Volumen", historia)
 
     def _kv_ts(cws):
         """Tabla etiqueta-valor con estilo uniforme."""
@@ -7198,7 +7223,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     # ── CONVERGENCIA TÉCNICA ────────────────────────────────────────────────
     if niveles_reforzados or señales_dir or consenso_dir:
-        historia.append(Paragraph("Convergencia Tecnica", S_H2))
+        _pdf_sh("🔀 Convergencia Técnica", historia)
 
         # Niveles reforzados
         if niveles_reforzados:
@@ -7259,7 +7284,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
     # ── DIVERGENCIAS TÉCNICAS ────────────────────────────────────────────────
     if divergencias_tecnicas:
-        historia.append(Paragraph("Divergencias Tecnicas", S_H2))
+        _pdf_sh("⚡ Divergencias Técnicas", historia)
         _dv_alc = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
         _dv_baj = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
 
@@ -7295,7 +7320,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Spacer(1, 0.1*cm))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
-    historia.append(Paragraph("Datos Fundamentales", S_H2))
+    _pdf_sh("🏦 Datos Fundamentales", historia)
     if tipo_activo == "etf":
         historia.append(Paragraph(
             "No aplica — Los ETFs no tienen análisis fundamental propio (PER, BPA, capitalización, etc.). "
@@ -7307,7 +7332,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         if _comp_pdf:
             historia.append(Spacer(1, 0.25*cm))
             _cat_label_pdf = _cat_etf_pdf or ""
-            historia.append(Paragraph(f"Comparativa de categoría — {_cat_label_pdf}", S_H2))
+            _pdf_sh(f"📊 Comparativa de categoría — {_cat_label_pdf}", historia)
             historia.append(Spacer(1, 0.12*cm))
             _comp_hdr_pdf = [
                 Paragraph("ETF",       _p(fontSize=7, textColor=colors.white, fontName="Helvetica-Bold")),
@@ -7374,7 +7399,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     # ── Huecos de precio ──────────────────────────────────────────────────
     if huecos:
         historia.append(Spacer(1, 0.3*cm))
-        historia.append(Paragraph("Huecos de Precio Abiertos", S_H2))
+        _pdf_sh("📊 Huecos de Precio Abiertos", historia)
         historia.append(Spacer(1, 0.15*cm))
 
         _hue_data = [["Tipo", "Zona", "Tamano", "Distancia", "Fecha", "Dias"]]
@@ -7422,7 +7447,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     _tiene_diag = any(a is not None for _, a in _componentes_diag_pdf)
     if _tiene_diag or puntuacion_tec:
         historia.append(Spacer(1, 0.3*cm))
-        historia.append(Paragraph("Diagnostico Tecnico", S_H2))
+        _pdf_sh("📝 Diagnóstico Técnico", historia)
 
         _dt_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
                    for h in ["Componente", "Escenario", "Narrativa"]]
@@ -9038,6 +9063,53 @@ def pantalla_analisis():
 
         # ── Bloque 1: Semáforo horizontal (ancho completo) ───────────────
         _sh("🚦 Semáforo Global")
+        with st.expander("💡 ¿Qué mide el Semáforo Global? — Diferencia con el Diagnóstico Técnico", expanded=False):
+            st.markdown("""
+#### 🚦 Semáforo Global: el pulso técnico a corto plazo
+
+El **Semáforo Global** responde a una pregunta muy concreta: *¿qué están diciendo los indicadores técnicos
+ahora mismo, en los próximos 1 a 5 días de sesión?* Es una foto instantánea del momentum, no una valoración
+estructural del activo.
+
+Para calcularlo, el sistema evalúa **6 factores binarios** (cada uno puntúa positivo o negativo):
+
+| Factor | ¿Qué mide? | Verde si… |
+|--------|-----------|-----------|
+| **RSI** | Presión compradora/vendedora | RSI > 50 (momentum alcista) |
+| **MACD** | Convergencia/divergencia de medias | MACD > línea de señal |
+| **Precio vs SMA20** | Tendencia muy corto plazo | Precio por encima de su media de 20 sesiones |
+| **Precio vs SMA50** | Tendencia corto plazo | Precio por encima de su media de 50 sesiones |
+| **SAR Parabólico** | Dirección de la tendencia activa | SAR en modo alcista (puntos bajo el precio) |
+| **Volumen relativo** | Convicción detrás del movimiento | Volumen actual > media de 20 sesiones |
+
+El **porcentaje** indica cuántos factores son positivos (100% = los 6 en verde). El **color** agrupa:
+- 🟢 **Verde**: ≥67% de factores positivos — momento técnico favorable
+- 🟡 **Amarillo**: 33-66% — señales mixtas, prudencia
+- 🔴 **Rojo**: ≤33% — momento técnico deteriorado
+
+---
+
+#### 📝 ¿En qué se diferencia del Diagnóstico Técnico?
+
+Son dos instrumentos que responden preguntas distintas y se complementan:
+
+| | 🚦 Semáforo Global | 📝 Diagnóstico Técnico |
+|--|-------------------|----------------------|
+| **Pregunta** | ¿Cómo están los indicadores *ahora*? | ¿En qué fase del ciclo técnico está el valor? |
+| **Horizonte** | 1–5 sesiones | Semanas a meses |
+| **Qué mide** | Momentum técnico puntual | Posición estructural en el ciclo |
+| **Factores** | 6 indicadores binarios (RSI, MACD, SAR…) | 6 dimensiones: distancia a ATH, SMA200, Fibonacci, posición 52 semanas… |
+| **Escala** | Rojo / Amarillo / Verde + % | Score numérico 0–10 |
+
+**Ejemplo práctico:** Un valor puede tener Diagnóstico Técnico alto (8/10 — posición estructural sólida)
+pero Semáforo rojo puntualmente (5 sesiones de corrección dentro de la tendencia alcista). Eso no es
+contradictorio — significa que el valor está bien posicionado estructuralmente pero atraviesa un momento
+de debilidad a corto plazo.
+
+> ⚠️ **Ni el Semáforo ni el Diagnóstico son señales de compra/venta.** Son herramientas de contexto
+> que ayudan a entender el estado técnico del activo. La decisión de inversión requiere integrar también
+> análisis fundamental, macro y gestión del riesgo personal.
+""")
         emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
         css_class = f"semaforo-{color_sem}"
 
