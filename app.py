@@ -7743,6 +7743,20 @@ def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
 # =============================================================================
 
 @st.cache_data(ttl=3600)
+def _sh(titulo: str) -> None:
+    """Renderiza un título de sección estilizado en la pantalla de Análisis Técnico."""
+    st.markdown(
+        f'''<div style="display:flex;align-items:center;gap:10px;
+            padding:9px 16px;margin:18px 0 10px;
+            background:linear-gradient(90deg,#eff6ff 0%,transparent 100%);
+            border-left:4px solid #1d4ed8;border-radius:0 8px 8px 0;">
+          <span style="font-size:16px;font-weight:800;color:#0f172a;
+                       letter-spacing:-0.02em;line-height:1">{titulo}</span>
+        </div>''',
+        unsafe_allow_html=True
+    )
+
+
 def _mini_analisis_cartera(ticker: str) -> dict:
     """Descarga 1 año de histórico y calcula RSI, SMA200, pos 52W, OBV slope."""
     try:
@@ -9023,7 +9037,7 @@ def pantalla_analisis():
             )
 
         # ── Bloque 1: Semáforo horizontal (ancho completo) ───────────────
-        st.markdown("### Semáforo Global")
+        _sh("🚦 Semáforo Global")
         emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
         css_class = f"semaforo-{color_sem}"
 
@@ -9077,7 +9091,7 @@ def pantalla_analisis():
         with col_piv:
             _ph1, _ph2 = st.columns([6, 1])
             with _ph1:
-                st.markdown("### Pivot Points — " + sistema_activo)
+                _sh("📐 Pivot Points — " + sistema_activo)
             with _ph2:
                 with st.popover("ℹ️", use_container_width=True):
                     st.markdown("### 📐 Pivot Points — Guía completa para el inversor")
@@ -9173,7 +9187,7 @@ La posición del precio respecto al PP marca el **sesgo del día**:
             if confluencias:
                 _ch1, _ch2 = st.columns([5, 1])
                 with _ch1:
-                    st.markdown("### Confluencias Multi-Timeframe")
+                    _sh("🔗 Confluencias Multi-Timeframe")
                 with _ch2:
                     with st.popover("ℹ️", use_container_width=True):
                         st.markdown("### 🔗 Confluencias Multi-Timeframe — Guía completa")
@@ -9258,7 +9272,7 @@ Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar 
             else:
                 _ch1, _ch2 = st.columns([5, 1])
                 with _ch1:
-                    st.markdown("### Confluencias")
+                    _sh("🔗 Confluencias")
                 with _ch2:
                     with st.popover("ℹ️", use_container_width=True):
                         st.markdown("### 🔗 Confluencias Multi-Timeframe — Guía completa")
@@ -9694,7 +9708,7 @@ el comportamiento institucional en los mercados.*
         # ── Bloque 3e: Divergencias Técnicas ─────────────────────────────
         _dv_h1, _dv_h2 = st.columns([6, 1])
         with _dv_h1:
-            st.markdown("### ⚡ Divergencias Técnicas")
+            _sh("⚡ Divergencias Técnicas")
         with _dv_h2:
             with st.popover("ℹ️", use_container_width=True):
                 st.markdown("""
@@ -9818,7 +9832,7 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
         # ── Bloque 3d: Convergencia Técnica ──────────────────────────────
         _cv_h1, _cv_h2 = st.columns([6, 1])
         with _cv_h1:
-            st.markdown("### 🔀 Convergencia Técnica")
+            _sh("🔀 Convergencia Técnica")
         with _cv_h2:
             with st.popover("ℹ️", use_container_width=True):
                 st.markdown("""
@@ -9932,7 +9946,7 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
         st.divider()
 
         # ── Bloque 3f: Huecos de Precio ───────────────────────────────────
-        st.markdown("### 📊 Huecos de Precio Abiertos")
+        _sh("📊 Huecos de Precio Abiertos")
         with st.expander("📖 ¿Qué son los Huecos de Precio? — Guía didáctica", expanded=False):
             st.markdown("#### 📊 Huecos de Precio (*Gaps*) — Todo lo que necesitas saber")
             st.markdown("""
@@ -10077,7 +10091,7 @@ si hay noticias negativas, o si el volumen en la zona fue muy bajo.
         st.divider()
 
         # ── Bloque: Diagnóstico Técnico ───────────────────────────────────
-        st.markdown("### 📝 Diagnóstico Técnico")
+        _sh("📝 Diagnóstico Técnico")
 
         with st.expander("📖 ¿Cómo funciona el Diagnóstico Técnico? — Guía didáctica completa", expanded=False):
             st.markdown("#### 🧭 El Diagnóstico Técnico: un cuadro de mandos para el inversor")
