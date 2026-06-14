@@ -189,13 +189,18 @@ st.markdown("""
         border-color: #2563eb !important; color: #2563eb !important;
         background: #eff6ff !important; box-shadow: 0 2px 6px rgba(37,99,235,0.12) !important;
     }
-    .stButton > button[kind="primary"] {
+    .stButton > button[kind="primary"],
+    [data-testid="baseButton-primary"],
+    [data-testid="stFormSubmitButton"] > button,
+    [data-testid="stFormSubmitButton"] > button[kind="primary"] {
         background: #2563eb !important; color: #ffffff !important;
         border-color: #2563eb !important;
     }
-    .stButton > button[kind="primary"]:hover {
+    .stButton > button[kind="primary"]:hover,
+    [data-testid="baseButton-primary"]:hover,
+    [data-testid="stFormSubmitButton"] > button:hover {
         background: #1d4ed8 !important; border-color: #1d4ed8 !important;
-        box-shadow: 0 2px 8px rgba(37,99,235,0.3) !important;
+        box-shadow: 0 2px 8px rgba(37,99,235,0.3) !important; color: #ffffff !important;
     }
 
     /* ── INPUTS ─────────────────────────────────────────────────── */
