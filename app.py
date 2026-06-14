@@ -5303,6 +5303,75 @@ def analisis_volumen(hist: pd.DataFrame):
 # SEMÁFORO GLOBAL
 # =============================================================================
 
+def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list) -> str:
+    """
+    Genera texto interpretativo en lenguaje natural para el semáforo global.
+    Detecta condiciones de veto (RSI extremo, SAR contradictorio, volumen seco).
+    """
+    n_pos = sum(1 for _, _, s in factores_sem if s >= 0.75)
+    n_tot = len(factores_sem)
+
+    # Bloque principal según color y score
+    base = f"**{n_pos} de {n_tot} factores técnicos positivos.**"
+    if color_sem == "verde":
+        if pct_sem >= 85:
+            interp = (f"{base} Momentum alcista sólido a corto plazo: la mayoría de "
+                      "indicadores apuntan en la misma dirección. Contexto técnico favorable "
+                      "para posiciones largas en las próximas sesiones.")
+        elif pct_sem >= 65:
+            interp = (f"{base} Sesgo alcista predominante, aunque no todos los factores "
+                      "confirman. Entrada viable con gestión de riesgo; revisar los factores "
+                      "en amarillo/rojo antes de actuar.")
+        else:
+            interp = (f"{base} Verde ajustado: más factores positivos que negativos, "
+                      "pero por poco margen. Interpretar con cautela.")
+    elif color_sem == "amarillo":
+        interp = (f"{base} Señales mixtas — sin dirección técnica clara. "
+                  "No es el momento óptimo para nuevas entradas: los indicadores se "
+                  "contradicen entre sí. Mejor esperar que la mayoría se alinee antes "
+                  "de tomar posición.")
+    else:  # rojo
+        if pct_sem <= 20:
+            interp = (f"{base} Presión vendedora dominante: casi todos los indicadores "
+                      "técnicos están en negativo. Evitar entradas largas hasta que el "
+                      "panorama mejore.")
+        else:
+            interp = (f"{base} Predominio bajista a corto plazo. Más factores en negativo "
+                      "que en positivo. Gestionar stops si hay posición abierta.")
+
+    # Detección de condiciones de veto
+    avisos = []
+    for fac, desc, score in factores_sem:
+        if fac == "RSI":
+            if "Sobrecomprado" in desc:
+                avisos.append(
+                    "⚠️ **RSI sobrecomprado:** el valor ha subido mucho en muy poco tiempo. "
+                    "Aunque el semáforo sea verde, comprar ahora implica el riesgo de entrar "
+                    "justo antes de un retroceso. Considera esperar a que el RSI baje de 65.")
+            elif "Sobrevendido" in desc:
+                avisos.append(
+                    "⚠️ **RSI sobrevendido:** posible rebote técnico cercano, pero no "
+                    "garantizado. Un RSI bajo puede seguir bajando si el contexto macro o "
+                    "fundamental es negativo. Señal de alerta, no de entrada automática.")
+        if fac == "Parabolic SAR" and "bajista" in desc.lower() and color_sem == "verde":
+            avisos.append(
+                "⚠️ **SAR bajista con semáforo verde:** la tendencia estructural del SAR "
+                "contradice el momentum puntual. Indica que los otros factores son "
+                "positivos en el muy corto plazo, pero la tendencia de fondo no acompaña. "
+                "Mayor riesgo de que la señal verde sea un rebote dentro de una caída.")
+        if fac == "Volumen" and score == 0:
+            avisos.append(
+                "⚠️ **Volumen bajo:** el movimiento de precio no tiene respaldo de "
+                "actividad compradora/vendedora real. Los movimientos sin volumen son "
+                "menos fiables — pueden revertirse fácilmente en la siguiente sesión.")
+
+    resultado = interp
+    if avisos:
+        resultado += "\n\n" + "\n\n".join(avisos)
+    resultado += "\n\n*Horizonte de este semáforo: próximas **1–5 sesiones**. No refleja la tendencia de medio ni largo plazo.*"
+    return resultado
+
+
 def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
                       bb_sup, bb_inf, vol_data, sar_tendencia):
     """
@@ -5502,6 +5571,24 @@ def detectar_tipo_activo(info: dict) -> str:
 # =============================================================================
 # GENERACIÓN DE INFORME HTML (multi-columna)
 # =============================================================================
+
+def _sem_interp_html(color_sem: str, pct_sem: float,
+                     factores_sem: list, sem_color: str) -> str:
+    """HTML para la interpretación contextual del semáforo en el informe."""
+    interp = _interpretacion_semaforo(color_sem, pct_sem, factores_sem)
+    # Convert markdown bold (**text**) to <b>text</b>
+    import re as _re
+    interp_html = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", interp)
+    # Convert italic (*text*) to <i>text</i>
+    interp_html = _re.sub(r"\*(.+?)\*", r"<i>\1</i>", interp_html)
+    interp_html = interp_html.replace("\n\n", "<br><br>")
+    bg = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
+    return (
+        f'<div style="border-left:4px solid {sem_color};background:{bg};' 
+        f'border-radius:0 8px 8px 0;padding:12px 16px;margin-top:12px;' 
+        f'font-size:12px;line-height:1.6;color:#374151">{interp_html}</div>\n'
+    )
+
 
 def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: float,
                           cambio: float, cambio_pct: float, h52, l52, currency: str,
@@ -6040,7 +6127,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div class="sem-pct">{pct_semaforo:.0f}%</div>\n'
         f'</div>\n'
         f'<div class="fac-grid">{fac_cards}</div>\n'
-        f'</div>\n</div>\n'
+        f'</div>\n'
+        + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color) +
+        f'</div>\n'
 
         # Pivots: 4 columnas paralelas + confluencias
         f'<div class="card">\n'
@@ -8967,6 +9056,18 @@ def pantalla_analisis():
                 f'{tarjetas_html}</div>',
                 unsafe_allow_html=True
             )
+
+        # ── Interpretación contextual del semáforo ────────────────────────
+        _borde = {"verde": "#16a34a", "amarillo": "#ca8a04", "rojo": "#dc2626"}.get(color_sem, "#94a3b8")
+        _fondo = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
+        _interp_txt = _interpretacion_semaforo(color_sem, pct_sem, factores_sem)
+        st.markdown(
+            f'<div style="border-left:4px solid {_borde};background:{_fondo};'
+            f'border-radius:0 8px 8px 0;padding:12px 16px;margin-top:10px">',
+            unsafe_allow_html=True
+        )
+        st.markdown(_interp_txt)
+        st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
 
