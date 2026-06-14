@@ -4884,9 +4884,10 @@ def detectar_divergencias(hist, n_sesiones=60):
                 "tipo": "OBV", "direccion": "alcista", "emoji": "🟢",
                 "fuerza": "fuerte",
                 "descripcion": (
-                    "OBV acumula mientras el precio cae. "
-                    "El dinero institucional compra la debilidad — "
-                    "divergencia alcista de alta relevancia."
+                    "El precio baja, pero el volumen neto sube: se están comprando más acciones de las que "
+                    "parece. Grandes inversores (fondos, instituciones) están acumulando posiciones mientras "
+                    "el precio cae. Históricamente, cuando el dinero grande compra en la debilidad, "
+                    "el precio suele girar al alza. Señal de alta relevancia."
                 ),
             })
         elif ps > th and os_ < -th:
@@ -4894,9 +4895,10 @@ def detectar_divergencias(hist, n_sesiones=60):
                 "tipo": "OBV", "direccion": "bajista", "emoji": "🔴",
                 "fuerza": "fuerte",
                 "descripcion": (
-                    "OBV distribuye mientras el precio sube. "
-                    "Salida de manos fuertes bajo la subida — "
-                    "divergencia bajista de alta relevancia."
+                    "El precio sube, pero el volumen neto baja: se están vendiendo más acciones de las que "
+                    "parece. Grandes inversores están deshaciendo posiciones mientras el precio sube "
+                    "empujado por compradores menores. La subida no tiene respaldo real — "
+                    "señal de aviso de alta relevancia."
                 ),
             })
     except Exception:
@@ -5390,6 +5392,12 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "País": info.get("country", "—"),
             "Moneda": info.get("currency", "—"),
             "Capitalización": _fmt_numero(info.get("marketCap")),
+            "Acciones emitidas": _fmt_numero(info.get("sharesOutstanding")),
+            "Free Float": (
+                f"{info['floatShares'] / info['sharesOutstanding'] * 100:.1f}%"
+                if info.get("floatShares") and info.get("sharesOutstanding")
+                else "no disponible"
+            ),
             "PER": _fmt_ratio(info.get("trailingPE")),
             "PER forward": _fmt_ratio(info.get("forwardPE")),
             "P/Ventas": _fmt_ratio(info.get("priceToSalesTrailing12Months")),
@@ -5771,7 +5779,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             '</div>'
         )
     elif fundamentales:
-        fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+        fund_items = [(k, v) for k, v in fundamentales.items() if v not in ("—", "")]
         if fund_items:
             fund_cards = "".join(
                 f'<div class="fund-card">'
@@ -7234,7 +7242,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     _t_comp_pdf.setStyle(TableStyle([("BACKGROUND", (0,_ri), (-1,_ri), colors.HexColor("#dcfce7"))]))
             historia.append(_t_comp_pdf)
     elif fundamentales:
-        fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+        fund_items = [(k, v) for k, v in fundamentales.items() if v not in ("—", "")]
         if fund_items:
             fund_rows, buf_r = [], []
             for k, v in fund_items:
@@ -9355,12 +9363,14 @@ Compara la pendiente del precio con la pendiente del volumen usando regresión l
 
 **🏦 OBV (On-Balance Volume) vs Precio**
 
-El OBV suma el volumen en días alcistas y lo resta en días bajistas. Captura el flujo neto de dinero antes de que el precio lo refleje.
+El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del volumen: suma el volumen de cada día en que el precio sube, y lo resta cada día en que el precio baja. El resultado es una línea que refleja si, en conjunto, hay más dinero entrando o saliendo del valor.
 
-- **Alcista**: precio en nuevos mínimos, pero el OBV aguanta o sube → dinero institucional acumulando en silencio.
-- **Bajista**: precio en nuevos máximos, pero el OBV baja → distribución encubierta; los grandes operadores están vendiendo mientras el precio sube.
+**¿Por qué es útil?** Porque los grandes inversores (fondos de inversión, instituciones) no pueden comprar o vender millones de acciones de golpe sin mover el precio. Lo hacen poco a poco, a lo largo de días o semanas. Ese flujo queda registrado en el volumen antes de que el precio lo refleje abiertamente.
 
-*Considerada la divergencia de mayor calidad: el dinero inteligente deja huella en el volumen antes que en el precio.*
+- **Divergencia alcista** (señal positiva): el precio baja o se mantiene bajo, pero el OBV sube → hay más compras de las que el precio sugiere. Alguien grande está comprando mientras el precio cae. Históricamente, el precio tiende a seguir al OBV hacia arriba.
+- **Divergencia bajista** (señal de aviso): el precio sube, pero el OBV baja → hay más ventas de las que el precio sugiere. Grandes inversores están vendiendo mientras el precio sube, sostenido por compradores menores. El precio puede seguir subiendo días o semanas, pero la base se está debilitando.
+
+*El OBV es la huella que deja el dinero grande antes de que el precio se mueva. Por eso se considera la divergencia de mayor calidad entre los indicadores técnicos.*
 
 ---
 
@@ -10483,7 +10493,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                     unsafe_allow_html=True)
                 st.caption("Ordenado por TER (menor = más barato). AUM y rentabilidad 1A desde Yahoo Finance.")
         elif fundamentales:
-            fund_items = [(k, v) for k, v in fundamentales.items() if v != "—"]
+            fund_items = [(k, v) for k, v in fundamentales.items() if v not in ("—", "")]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
             cols_f = st.columns(5)
             for i, (k, v) in enumerate(fund_items):
@@ -10792,7 +10802,7 @@ Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto
 - RSI > 65: sobrecomprado; esperar retroceso para mejorar precio medio
 
 **6. Divergencias y soportes** *(confirmación técnica)*
-- Divergencia alcista OBV activa: dinero institucional acumulando → señal de suelo
+- Divergencia alcista OBV activa: el precio baja pero el volumen neto sube → grandes inversores comprando en silencio, señal de posible suelo
 - Soporte pivot+media próximo: colchón estructural; referencia natural para stop
 
 ---
@@ -11040,10 +11050,10 @@ Detecta cuándo reducir o cerrar una posición larga existente. Los criterios so
 - SAR pasa de alcista a bajista (precio cruza debajo del SAR): señal técnica directa de cambio de tendencia; señal de reducción o cierre
 - SAR aún alcista con RSI alto: la tendencia sigue; solo vigilar
 
-**6. OBV** *(flujo de dinero institucional)*
-- OBV decreciente mientras el precio sube o se mantiene: distribución silenciosa; la señal de salida más relevante
-- OBV paralelo al precio: flujo neutral; no hay distribución activa
-- *El OBV distribuyendo es el equivalente del OBV acumulando en la señal de compra. El dinero institucional se mueve antes que el precio.*
+**6. OBV** *(flujo de dinero: ¿quién compra y quién vende realmente?)*
+- OBV decreciente mientras el precio sube o se mantiene: el volumen neto está bajando aunque el precio no lo muestre. Los grandes inversores están vendiendo poco a poco mientras el precio sube. Es la señal de salida más relevante de todo el análisis técnico.
+- OBV paralelo al precio: el volumen acompaña al precio con normalidad. No hay señales de venta encubierta.
+- *Clave para no iniciados: si el OBV baja mientras el precio sube, significa que hay más ventas de las que parece. Los grandes inversores venden a quienes compran confiados por la subida. El precio puede aguantar días o semanas, pero el soporte real se está erosionando.*
 
 ---
 
@@ -11278,7 +11288,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     f"RSI {_rsi:.0f}",
                     f"{'Sin sobrecompra técnica ✅' if _rsi < 50 else 'Aceptable ⚠️' if _rsi < 60 else 'Técnicamente caro ❌'}"))
                 c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
-                    "Acumulación (OBV/Volumen)",
+                    "OBV / Volumen neto",
                     _div_txt_alc()))
                 c.append(_criterio(2 if 0 < _yield < 25 and _yield >= 2 else 1 if _yield > 0 else 0,
                     f"Yield (rentabilidad) {_yield:.1f}%" if _yield < 25 else f"Yield (rentabilidad) ⚠️ dato dudoso (proveedor: {_yield:.1f}%)",
@@ -11354,7 +11364,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     f"{'Cerca de máximos anuales ✅' if _pos52 > 85 else 'Zona alta ⚠️' if _pos52 > 70 else 'No en zona de salida ❌'}"))
                 c.append(_criterio(2 if _obvs < -0.001 else 1 if _obvs < 0.001 else 0,
                     "OBV",
-                    f"{'Distribuyendo — salida institucional ✅' if _obvs < -0.001 else 'Neutro ⚠️' if _obvs < 0.001 else 'Acumulando ❌'}"))
+                    f"{'Volumen neto bajando — posibles ventas encubiertas ✅' if _obvs < -0.001 else 'Volumen neutro ⚠️' if _obvs < 0.001 else 'Volumen neto subiendo — posibles compras encubiertas ❌'}"))
                 c.append(_criterio(2 if _cons[0] == "bajista" else 1 if _cons[0] == "neutro" else 0,
                     f"Consenso: {_cons[2]}",
                     "Indicadores virados a bajista"))
@@ -11537,7 +11547,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     if _pos52 > 85:
                         puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual — precio cerca de máximos. Asimetría riesgo/recompensa desfavorable.")
                     if _obvs < -0.001:
-                        puntos.append("✅ OBV distribuyendo — el dinero institucional está saliendo bajo la subida.")
+                        puntos.append("✅ OBV: el volumen neto está bajando mientras el precio sube — grandes inversores vendiendo bajo la subida.")
                     if not puntos:
                         puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
                     if _div_rsi_baj or _div_mcd_baj or (_obvs < -0.001):
