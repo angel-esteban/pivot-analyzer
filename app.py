@@ -734,16 +734,23 @@ def _get_db_pool():
 def get_db_connection():
     """Obtiene una conexión del pool. Devolver siempre con release_db_connection()."""
     pool = _get_db_pool()
-    try:
-        conn = pool.getconn()
-        # Verificar que la conexión sigue viva; si no, psycopg2 la descartará
-        if conn.closed:
-            pool.putconn(conn, close=True)
+    for _attempt in range(3):
+        try:
             conn = pool.getconn()
-        return conn
-    except Exception:
-        # Fallback: conexión directa si el pool falla
-        return psycopg2.connect(st.secrets["DATABASE_URL"])
+            if conn.closed:
+                pool.putconn(conn, close=True)
+                continue
+            # Ping activo: detecta conexiones muertas por idle timeout del servidor
+            conn.cursor().execute("SELECT 1")
+            return conn
+        except Exception:
+            # Conexión muerta — descartarla del pool y reintentar
+            try:
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
+    # Fallback: conexión directa si el pool falla repetidamente
+    return psycopg2.connect(st.secrets["DATABASE_URL"])
 
 def release_db_connection(conn):
     """Devuelve la conexión al pool (no la cierra)."""
