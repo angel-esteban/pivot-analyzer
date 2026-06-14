@@ -1117,11 +1117,29 @@ def inicializar_tabla_carteras():
                         id          SERIAL PRIMARY KEY,
                         usuario_id  INTEGER NOT NULL,
                         tipo        VARCHAR(20) NOT NULL
-                                    CHECK (tipo IN ('dividendos','crecimiento','indexada')),
+                                    CHECK (tipo IN ('dividendos','crecimiento','indexada','swing')),
                         nombre      VARCHAR(100) NOT NULL,
                         descripcion TEXT DEFAULT '',
                         created_at  TIMESTAMP DEFAULT NOW()
                     )
+                """)
+                # Migración: ampliar CHECK si 'swing' aún no está permitido
+                cur.execute("""
+                    DO $$
+                    DECLARE r RECORD;
+                    BEGIN
+                        FOR r IN
+                            SELECT conname FROM pg_constraint c
+                            JOIN pg_class t ON c.conrelid = t.oid
+                            WHERE t.relname = 'carteras' AND c.contype = 'c'
+                              AND pg_get_constraintdef(c.oid) NOT LIKE '%%swing%%'
+                              AND pg_get_constraintdef(c.oid) LIKE '%%tipo%%'
+                        LOOP
+                            EXECUTE 'ALTER TABLE carteras DROP CONSTRAINT ' || quote_ident(r.conname);
+                            ALTER TABLE carteras ADD CONSTRAINT carteras_tipo_check
+                              CHECK (tipo IN (''dividendos'',''crecimiento'',''indexada'',''swing''));
+                        END LOOP;
+                    END $$
                 """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS cartera_posiciones (
@@ -7630,6 +7648,228 @@ def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
 
 
 
+
+# =============================================================================
+# ANÁLISIS RÁPIDO PARA CARTERAS — señal de compra (dividendos) y venta (swing)
+# =============================================================================
+
+@st.cache_data(ttl=3600)
+def _mini_analisis_cartera(ticker: str) -> dict:
+    """Descarga 1 año de histórico y calcula RSI, SMA200, pos 52W, OBV slope."""
+    try:
+        import yfinance as yf
+        import numpy as _np
+        hist = yf.Ticker(ticker).history(period="1y")
+        if hist.empty or len(hist) < 30:
+            return {}
+        close = hist["Close"]
+        vol   = hist["Volume"]
+        precio = float(close.iloc[-1])
+        # RSI 14
+        delta = close.diff()
+        gain  = delta.clip(lower=0).rolling(14).mean()
+        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        rs    = gain / loss.replace(0, 1e-10)
+        rsi   = float(100 - 100 / (1 + rs.iloc[-1]))
+        # SMAs
+        sma50  = float(close.rolling(50).mean().iloc[-1])  if len(close) >= 50  else None
+        sma200 = float(close.rolling(200).mean().iloc[-1]) if len(close) >= 200 else None
+        # Posición en rango 52W (0–100 %)
+        h52    = float(close.max()); l52 = float(close.min())
+        pos52w = (precio - l52) / (h52 - l52) * 100 if h52 > l52 else 50.0
+        # OBV slope normalizado (últimas 40 sesiones)
+        obv    = (_np.sign(close.diff()) * vol).fillna(0).cumsum()
+        x40    = _np.arange(min(40, len(obv)))
+        obv40  = obv.values[-min(40, len(obv)):].astype(float)
+        obv_s  = _np.polyfit(x40, obv40, 1)[0] / (abs(float(obv40.mean())) + 1e-10)
+        # MACD histograma (12-26-9)
+        ema12  = close.ewm(span=12).mean()
+        ema26  = close.ewm(span=26).mean()
+        macd_l = ema12 - ema26
+        signal = macd_l.ewm(span=9).mean()
+        hist_m = macd_l - signal
+        macd_trend = "bajando" if hist_m.iloc[-1] < hist_m.iloc[-3] else "subiendo"
+        return {
+            "precio":     precio,
+            "rsi":        rsi,
+            "sma50":      sma50,
+            "sma200":     sma200,
+            "pos52w":     pos52w,
+            "h52":        h52,
+            "l52":        l52,
+            "obv_slope":  obv_s,
+            "macd_trend": macd_trend,
+            "dist_sma200": (precio / sma200 - 1) * 100 if sma200 else None,
+            "dist_sma50":  (precio / sma50  - 1) * 100 if sma50  else None,
+        }
+    except Exception:
+        return {}
+
+
+def _semaforo_html(emoji: str, label: str, valor: str, texto: str) -> str:
+    return (
+        f'<div style="border-left:4px solid '
+        f'{"#16a34a" if emoji=="🟢" else "#ca8a04" if emoji=="🟡" else "#dc2626"};'
+        f'padding:10px 14px;margin:8px 0;background:#f8fafc;border-radius:0 8px 8px 0">'
+        f'<div style="font-size:13px;font-weight:700;margin-bottom:4px">'
+        f'{emoji} {label} — <span style="font-weight:400">{valor}</span></div>'
+        f'<div style="font-size:12px;color:#374151;line-height:1.5">{texto}</div>'
+        f'</div>'
+    )
+
+
+def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
+                                 yield_coste: float):
+    """Muestra análisis didáctico de entrada para cartera de dividendos."""
+    st.markdown(
+        f'<div style="background:linear-gradient(90deg,#f0fdf4,#dcfce7);'
+        f'border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin-bottom:12px">'
+        f'<span style="font-size:15px;font-weight:800">🔍 Análisis de entrada — {ticker}</span>'
+        f'<span style="font-size:12px;color:#16a34a;margin-left:10px">Cartera Dividendos</span>'
+        f'</div>', unsafe_allow_html=True
+    )
+    with st.spinner(f"Descargando datos de {ticker}…"):
+        d = _mini_analisis_cartera(ticker)
+    if not d:
+        st.warning("No se pudieron obtener datos de mercado para este valor.")
+        return
+
+    rsi = d["rsi"]; pos52 = d["pos52w"]; dist = d["dist_sma200"]; obv = d["obv_slope"]
+    precio = d["precio"]
+
+    # ── Puntuación ──────────────────────────────────────────────────────────
+    sc = []
+    # RSI
+    if rsi < 40:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobreventa ({rsi:.1f}). El valor ha caído más de lo que su impulso interno justifica — históricamente un buen punto de entrada. No es garantía de subida inmediata, pero el riesgo de comprar cerca de máximos es bajo.")
+    elif rsi < 60: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona neutral ({rsi:.1f}). El valor no está ni sobrecomprado ni sobrevendido. Entrada aceptable si el resto de indicadores acompañan, pero sin urgencia especial.")
+    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho recientemente. Para el inversor en dividendos esto es relevante: comprar más caro significa una rentabilidad por dividendo menor. Es preferible esperar un retroceso que mejore el precio de entrada.")
+    sc.append(rsi_s)
+
+    # Posición 52W
+    if pos52 < 35:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% inferior de su rango anual — cerca de mínimos del año. Para un inversor en dividendos esto es positivo: el mismo dividendo se compra más barato, lo que mejora la rentabilidad por dividendo (yield on cost).")
+    elif pos52 < 65: p52_e="🟡"; p52_s=1; p52_t=(f"Posición media en el rango anual ({pos52:.0f}%). Ni caro ni barato en términos históricos recientes. Entrada neutra.")
+    else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual — cerca de máximos del año. Comprar en este punto reduce la rentabilidad por dividendo (se paga más por el mismo dividendo). Mejor esperar un retroceso o promediar a la baja.")
+    sc.append(p52_s)
+
+    # SMA200
+    if dist is not None:
+        if dist < -5:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de su media de largo plazo (SMA200). La SMA200 es la referencia de precio 'justo' de largo plazo. Comprar por debajo de ella equivale a comprar con descuento estructural — exactamente lo que busca el inversor en dividendos para maximizar el yield.")
+        elif dist < 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está prácticamente en la SMA200 (distancia: {dist:+.1f}%). Zona neutral — ni descuento ni sobrevalor respecto a la media histórica. Es una entrada razonable.")
+        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor cotiza muy por encima de su media de largo plazo puede indicar euforia o sobreextensión. Para el inversor en dividendos, más precio = menos yield. No es el momento óptimo.")
+        sc.append(s2_s)
+    else:
+        s2_e="⚪"; s2_t="No hay suficientes datos para calcular la media de 200 sesiones (valor demasiado reciente)."; dist=0
+
+    # OBV
+    if obv > 0.001:    obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está subiendo: hay más compras que ventas en términos de volumen. Esto indica que el dinero grande está acumulando posiciones, aunque el precio no lo refleje todavía. Es una señal positiva para el inversor de largo plazo: si los grandes compran, es que ven valor.")
+    elif obv > -0.001: obv_e="🟡"; obv_s=1; obv_t=("El volumen neto (OBV) está en zona neutral: las compras y ventas se compensan. No hay señal clara en ninguna dirección desde el análisis de volumen.")
+    else:              obv_e="🔴"; obv_s=0; obv_t=("El volumen neto (OBV) está bajando: hay más ventas que compras en términos de volumen. Aunque el precio puede no caer todavía, el dinero grande está saliendo. Para el inversor en dividendos esto es una señal de cautela: mejor esperar a que el volumen muestre señales de acumulación antes de incrementar posición.")
+    sc.append(obv_s)
+
+    # ── Veredicto global ─────────────────────────────────────────────────────
+    avg = sum(sc) / (len(sc) * 2)
+    if avg >= 0.6:   verd="🟢 MOMENTO FAVORABLE"; vbg="#f0fdf4"; vc="#16a34a"
+    elif avg >= 0.35: verd="🟡 MOMENTO NEUTRAL";   vbg="#fefce8"; vc="#ca8a04"
+    else:            verd="🔴 MOMENTO DESFAVORABLE"; vbg="#fef2f2"; vc="#dc2626"
+
+    st.markdown(
+        f'<div style="background:{vbg};border:2px solid {vc};border-radius:10px;'
+        f'padding:12px 18px;margin:12px 0;text-align:center">'
+        f'<span style="font-size:16px;font-weight:900;color:{vc}">{verd}</span>'
+        f'<div style="font-size:11px;color:#6b7280;margin-top:4px">'
+        f'Precio actual: {precio:.2f} · Precio compra: {precio_compra:.2f} · '
+        f'Yield/coste actual: {yield_coste:.2f}%</div></div>', unsafe_allow_html=True
+    )
+
+    st.markdown("**Detalle por indicador:**")
+    st.markdown(_semaforo_html(rsi_e, "RSI (Fuerza relativa)", f"{rsi:.1f}", rsi_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(p52_e, "Posición en rango 52 semanas", f"{pos52:.0f}% del rango anual", p52_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(s2_e, "Distancia a SMA200 (media largo plazo)", f"{dist:+.1f}%" if dist else "sin datos", s2_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(obv_e, "OBV — flujo neto de volumen", "acumulando" if obv>0.001 else "distribuyendo" if obv<-0.001 else "neutro", obv_t), unsafe_allow_html=True)
+
+    st.caption("⚠️ Análisis educativo generado automáticamente. No constituye recomendación de inversión bajo MiFID II. Confirma siempre con análisis propio antes de tomar decisiones.")
+
+
+def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
+                                  pl_pct: float):
+    """Muestra análisis didáctico de salida para cartera swing trading."""
+    st.markdown(
+        f'<div style="background:linear-gradient(90deg,#fff7ed,#ffedd5);'
+        f'border:1px solid #fdba74;border-radius:10px;padding:14px 18px;margin-bottom:12px">'
+        f'<span style="font-size:15px;font-weight:800">🔍 Análisis de salida — {ticker}</span>'
+        f'<span style="font-size:12px;color:#ea580c;margin-left:10px">Cartera Swing Trading</span>'
+        f'</div>', unsafe_allow_html=True
+    )
+    with st.spinner(f"Descargando datos de {ticker}…"):
+        d = _mini_analisis_cartera(ticker)
+    if not d:
+        st.warning("No se pudieron obtener datos de mercado para este valor.")
+        return
+
+    rsi = d["rsi"]; pos52 = d["pos52w"]; dist = d["dist_sma200"]
+    obv = d["obv_slope"]; macd = d["macd_trend"]; precio = d["precio"]
+
+    # ── Puntuación (invertida: señales bajistas puntúan positivo para SALIR) ─
+    sc = []
+
+    # RSI (alto = señal de venta)
+    if rsi > 65:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho en poco tiempo y el impulso comprador empieza a agotarse. En swing trading, el RSI > 65 es una de las señales más fiables para reducir o cerrar posición antes de que llegue el retroceso.")
+    elif rsi > 50: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona media-alta ({rsi:.1f}). El valor tiene momentum alcista todavía, pero sin señal de agotamiento claro. Mantener posición con stop ajustado; vigilar si el RSI sigue subiendo hacia 70.")
+    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI bajo ({rsi:.1f}). El momentum bajista sugiere que el valor puede seguir cayendo. Si ya tienes pérdidas, revisa si el stop está bien colocado. Si tienes ganancias y el RSI ha caído desde 70+, puede ser señal de que el swing ya ha completado su recorrido.")
+    sc.append(rsi_s)
+
+    # Posición 52W (alta = cerca de máximos = momento de reducir)
+    if pos52 > 75:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual — muy cerca de máximos. En swing trading, los máximos del año son resistencias naturales donde los vendedores tienden a aparecer. Es un nivel donde reducir o cerrar tiene sentido técnico.")
+    elif pos52 > 50: p52_e="🟡"; p52_s=1; p52_t=(f"Posición en la mitad superior del rango anual ({pos52:.0f}%). El precio tiene espacio antes de llegar a máximos anuales. Mantener con vigilancia, especialmente si el RSI también está alto.")
+    else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor está en la mitad inferior del rango anual ({pos52:.0f}%). No hay señal técnica de agotamiento por posición. Si la operación ya está en pérdidas, evalúa si la tesis de entrada sigue vigente.")
+    sc.append(p52_s)
+
+    # SMA200 (muy por encima = extensión = riesgo de reversión)
+    if dist is not None:
+        if dist > 15:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor se aleja tanto de su media de largo plazo, las probabilidades de reversión a la media aumentan. En swing trading, esta extensión es un aviso claro de que el movimiento puede estar agotado.")
+        elif dist > 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está un {dist:.1f}% por encima de la SMA200. Señal moderada de extensión. El precio podría seguir subiendo, pero el margen de seguridad se reduce. Ajustar stop.")
+        elif dist > -5:  s2_e="🟡"; s2_s=1; s2_t=(f"El precio está cerca de la SMA200 (distancia: {dist:+.1f}%). La media actúa como soporte/resistencia dinámico. Zona neutral para decidir.")
+        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de la SMA200. El valor está en zona de debilidad estructural. Si el swing ya generó ganancias, considerar cierre. Si está en pérdidas, la tendencia de fondo no acompaña.")
+        sc.append(s2_s)
+    else:
+        s2_e="⚪"; s2_t="Sin datos suficientes para SMA200."; dist=0
+
+    # OBV (bajando = distribución = señal de venta)
+    if obv < -0.001:   obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está bajando mientras el precio sube o se mantiene: los grandes inversores están vendiendo sus posiciones. Esta divergencia entre precio y volumen es la señal más relevante para cerrar un swing. El precio puede aguantar unos días más, pero la base compradora se está erosionando.")
+    elif obv < 0.001:  obv_e="🟡"; obv_s=1; obv_t=("El OBV está en zona neutral. Las compras y las ventas se compensan. No hay una señal clara de distribución masiva, pero tampoco hay flujo comprador fuerte. Mantener con atención.")
+    else:              obv_e="🔴"; obv_s=0; obv_t=("El OBV sigue subiendo — el dinero grande aún está comprando. No hay señal de distribución. La posición puede tener más recorrido.")
+    sc.append(obv_s)
+
+    # MACD histograma (bajando = momentum se agota)
+    if macd == "bajando":   mc_e="🟢"; mc_s=2; mc_t=("El histograma MACD está bajando: el momentum alcista se está desacelerando. En swing trading, el MACD que pierde fuerza antes de que el precio corrija es una señal de alerta temprana. Momento de ajustar el stop o reducir posición.")
+    else:                   mc_e="🔴"; mc_s=0; mc_t=("El histograma MACD sigue subiendo: el momentum alcista está activo. No hay señal de agotamiento por MACD. La tendencia de corto plazo sigue siendo favorable.")
+    sc.append(mc_s)
+
+    # ── Veredicto ────────────────────────────────────────────────────────────
+    avg = sum(sc) / (len(sc) * 2)
+    if avg >= 0.6:    verd="🟢 REDUCIR / CERRAR POSICIÓN"; vbg="#fff7ed"; vc="#ea580c"
+    elif avg >= 0.35: verd="🟡 VIGILAR — ajustar stop";    vbg="#fefce8"; vc="#ca8a04"
+    else:             verd="🔴 MANTENER — sin señales de salida"; vbg="#f0fdf4"; vc="#16a34a"
+
+    pl_str = f"{pl_pct:+.1f}%" if pl_pct is not None else "N/D"
+    st.markdown(
+        f'<div style="background:{vbg};border:2px solid {vc};border-radius:10px;'
+        f'padding:12px 18px;margin:12px 0;text-align:center">'
+        f'<span style="font-size:16px;font-weight:900;color:{vc}">{verd}</span>'
+        f'<div style="font-size:11px;color:#6b7280;margin-top:4px">'
+        f'Precio actual: {precio:.2f} · Precio compra: {precio_compra:.2f} · '
+        f'P&L: {pl_str}</div></div>', unsafe_allow_html=True
+    )
+
+    st.markdown("**Detalle por indicador:**")
+    st.markdown(_semaforo_html(rsi_e,  "RSI (Fuerza relativa)", f"{rsi:.1f}", rsi_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(p52_e,  "Posición en rango 52 semanas", f"{pos52:.0f}% del rango anual", p52_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(s2_e,   "Distancia a SMA200", f"{dist:+.1f}%" if dist else "sin datos", s2_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(obv_e,  "OBV — flujo neto de volumen", "distribuyendo" if obv<-0.001 else "neutro" if obv<0.001 else "acumulando", obv_t), unsafe_allow_html=True)
+    st.markdown(_semaforo_html(mc_e,   "MACD — momentum", macd, mc_t), unsafe_allow_html=True)
+
+    st.caption("⚠️ Análisis educativo generado automáticamente. No constituye recomendación de inversión bajo MiFID II. Confirma siempre con análisis propio antes de tomar decisiones.")
+
 def pestaña_cartera():
     """Pestaña de gestión de carteras personales del usuario."""
     usuario = st.session_state["usuario"]
@@ -7643,18 +7883,19 @@ def pestaña_cartera():
     st.markdown("## 📁 Mis Carteras")
     st.caption(
         "Registra tus posiciones y sigue su evolución en tiempo real. "
-        "Cada usuario puede tener hasta 3 carteras por tipo (máx. 9 en total). "
+        "Cada usuario puede tener hasta 3 carteras por tipo (máx. 12 en total). "
         "Los datos de precio se obtienen de Yahoo Finance."
     )
 
     TIPOS = {
-        "dividendos":  ("💰 Dividendos",   "#16a34a", "#f0fdf4"),
-        "crecimiento": ("📈 Crecimiento",   "#1d4ed8", "#eff6ff"),
-        "indexada":    ("🗂️ Indexada",       "#7e22ce", "#faf5ff"),
+        "dividendos":  ("💰 Dividendos",      "#16a34a", "#f0fdf4"),
+        "crecimiento": ("📈 Crecimiento",      "#1d4ed8", "#eff6ff"),
+        "indexada":    ("🗂️ Indexada",          "#7e22ce", "#faf5ff"),
+        "swing":       ("⚡ Swing Trading",    "#ea580c", "#fff7ed"),
     }
 
-    tab_div, tab_cre, tab_idx = st.tabs([
-        "💰 Dividendos", "📈 Crecimiento", "🗂️ Indexada"
+    tab_div, tab_cre, tab_idx, tab_swg = st.tabs([
+        "💰 Dividendos", "📈 Crecimiento", "🗂️ Indexada", "⚡ Swing Trading"
     ])
 
     def _color_pl(val):
@@ -7818,8 +8059,12 @@ def pestaña_cartera():
                             _edit_key = f"_edit_pos_{pos['id']}"
 
                             with st.container():
-                                cols = st.columns([2, 1, 1, 1, 1, 1, 0.5, 0.5] if tipo_key == "dividendos"
-                                                  else [2, 1, 1, 1, 1, 0.5, 0.5])
+                                if tipo_key == "dividendos":
+                                    cols = st.columns([2, 1, 1, 1, 1, 1, 0.8, 0.5, 0.5])
+                                elif tipo_key == "swing":
+                                    cols = st.columns([2, 1, 1, 1, 1, 0.8, 0.5, 0.5])
+                                else:
+                                    cols = st.columns([2, 1, 1, 1, 1, 0.5, 0.5])
                                 with cols[0]:
                                     st.markdown(
                                         f"**{pos['ticker']}**"
@@ -7843,6 +8088,19 @@ def pestaña_cartera():
                                     with cols[5]:
                                         yoc = pos.get("yield_coste", 0)
                                         st.metric("Yield/coste", f"{yoc:.2f}%".replace(".",","))
+                                    with cols[6]:
+                                        _ak = f"_an_div_{pos['id']}"
+                                        if st.button("🔍", key=f"btn_an_div_{pos['id']}",
+                                                     help="Analizar si es buen momento para comprar más"):
+                                            st.session_state[_ak] = not st.session_state.get(_ak, False)
+                                            st.rerun()
+                                elif tipo_key == "swing":
+                                    with cols[5]:
+                                        _ak = f"_an_swg_{pos['id']}"
+                                        if st.button("🔍", key=f"btn_an_swg_{pos['id']}",
+                                                     help="Analizar si es momento de cerrar o reducir posición"):
+                                            st.session_state[_ak] = not st.session_state.get(_ak, False)
+                                            st.rerun()
                                 # Botones editar / eliminar
                                 with cols[-2]:
                                     if st.button("✏️", key=f"edit_pos_{pos['id']}",
@@ -7856,6 +8114,24 @@ def pestaña_cartera():
                                         eliminar_posicion(pos["id"], cid)
                                         st.session_state["_cartera_precios_cache"] = {}
                                         st.rerun()
+
+                            # ── Análisis entrada/salida ────────────────────
+                            if tipo_key == "dividendos" and st.session_state.get(f"_an_div_{pos['id']}", False):
+                                with st.container():
+                                    _render_analisis_compra_div(
+                                        pos["ticker"],
+                                        pos.get("nombre_valor", pos["ticker"]),
+                                        float(pos["precio_compra"]),
+                                        float(pos.get("yield_coste") or 0),
+                                    )
+                            elif tipo_key == "swing" and st.session_state.get(f"_an_swg_{pos['id']}", False):
+                                with st.container():
+                                    _render_analisis_venta_swing(
+                                        pos["ticker"],
+                                        pos.get("nombre_valor", pos["ticker"]),
+                                        float(pos["precio_compra"]),
+                                        float(pos.get("pl_pct") or 0),
+                                    )
 
                             # ── Formulario de edición inline ───────────────
                             if st.session_state.get(_edit_key, False):
@@ -8036,6 +8312,7 @@ def pestaña_cartera():
     _render_tipo("dividendos",  tab_div)
     _render_tipo("crecimiento", tab_cre)
     _render_tipo("indexada",    tab_idx)
+    _render_tipo("swing",       tab_swg)
 
 
 def pantalla_analisis():
