@@ -213,7 +213,7 @@ st.markdown("""
         background: #ffffff !important;
         border: 1px solid #e2e8f0 !important; border-radius: 10px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-        margin-bottom: 0.5rem !important; overflow: hidden !important;
+        margin-bottom: 0.5rem !important;
     }
 
     /* ── FORMS ──────────────────────────────────────────────────── */
