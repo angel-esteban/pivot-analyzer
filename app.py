@@ -372,6 +372,54 @@ IBEX_35 = {
     "Vidrala":                      "VID.MC",
 }
 
+# IBEX Medium Cap — Composición aproximada (revisiones semestrales del índice)
+IBEX_MEDIUM_CAP = {
+    "Almirall":                          "ALM.MC",
+    "Atresmedia":                        "A3M.MC",
+    "CAF (Const. y Aux. Ferrocarriles)": "CAF.MC",
+    "CIE Automotive":                    "CIE.MC",
+    "Ebro Foods":                        "EBRO.MC",
+    "Elecnor":                           "ENO.MC",
+    "Ence Energía y Celulosa":           "ENC.MC",
+    "Faes Farma":                        "FAE.MC",
+    "FCC":                               "FCC.MC",
+    "Global Dominion":                   "DOM.MC",
+    "Grenergy":                          "GRY.MC",
+    "Línea Directa":                     "LDA.MC",
+    "Mediaset España":                   "TL5.MC",
+    "Miquel y Costas":                   "MCM.MC",
+    "Prosegur":                          "PSG.MC",
+    "Prosegur Cash":                     "CASH.MC",
+    "Talgo":                             "TLGO.MC",
+    "Técnicas Reunidas":                 "TRE.MC",
+    "Tubacex":                           "TUB.MC",
+    "Vocento":                           "VOC.MC",
+}
+
+# IBEX Small Cap — Composición aproximada (revisiones semestrales del índice)
+IBEX_SMALL_CAP = {
+    "Aedas Homes":                       "AEDAS.MC",
+    "Amrest Holdings":                   "ARB.MC",
+    "Arteche":                           "ART.MC",
+    "Clínica Baviera":                   "CBAV.MC",
+    "Deoleo":                            "OLE.MC",
+    "Ercros":                            "ECR.MC",
+    "Iberpapel Gestión":                 "IPZ.MC",
+    "Laboratorio Reig Jofre":            "RJF.MC",
+    "Lar España Real Estate":            "LRE.MC",
+    "Metrovacesa":                       "MVC.MC",
+    "Neinor Homes":                      "HOME.MC",
+    "Oryzon Genomics":                   "ORY.MC",
+    "Prim":                              "PRM.MC",
+    "Renta Corporación":                 "REN.MC",
+    "Rovi (Lab. Farmacéuticos)":         "ROVI.MC",
+    "Soltec Power":                      "SOLT.MC",
+    "Urbas Grupo Financiero":            "UBS.MC",
+    "Befesa":                            "BFSA.MC",
+    "Atrys Health":                      "ATRY.MC",
+    "Grupo Empresarial San José":        "GSJ.MC",
+}
+
 # Eurostoxx 50 — Principales componentes (sufijos por país de cotización)
 EUROSTOXX_50 = {
     "ASML Holding":         "ASML.AS",
@@ -660,6 +708,10 @@ def obtener_tickers_mercado(mercado: str) -> dict:
         datos = _cargar_wikipedia_index(
             "https://en.wikipedia.org/wiki/FTSE_100_Index", sufijo=".L")
         return datos or _FALLBACK_FTSE
+    if mercado == "🇪🇸 IBEX Medium Cap":
+        return IBEX_MEDIUM_CAP
+    if mercado == "🇪🇸 IBEX Small Cap":
+        return IBEX_SMALL_CAP
     return {}
 
 
@@ -7449,8 +7501,66 @@ def render_tabla_pivots(tf_nombre: str, niveles: dict, precio_actual_val: float)
 # =============================================================================
 
 
+# Mapa mercado → ticker de índice de referencia para beta
+INDICE_BETA_MAP = {
+    "🇪🇸 IBEX 35":         "^IBEX",
+    "🇪🇸 IBEX Medium Cap": "^IBEX",
+    "🇪🇸 IBEX Small Cap":  "^IBEX",
+    "🌍 Eurostoxx 50":  "^STOXX50E",
+    "🇺🇸 S&P 500":      "^GSPC",
+    "🇺🇸 Nasdaq 100":   "^NDX",
+    "🇺🇸 Dow Jones 30": "^DJI",
+    "🇩🇪 DAX 40":       "^GDAXI",
+    "🇫🇷 CAC 40":       "^FCHI",
+    "🇬🇧 FTSE 100":     "^FTSE",
+    "📊 ETFs UCITS":    "^STOXX50E",
+}
+
+def indice_ref_para_ticker(ticker: str, mercado_sel: str = "") -> tuple:
+    """Devuelve (ticker_indice, nombre_indice) según mercado o sufijo del ticker."""
+    if mercado_sel and mercado_sel in INDICE_BETA_MAP:
+        t = INDICE_BETA_MAP[mercado_sel]
+        return t, mercado_sel.split(" ", 1)[-1].strip()
+    # Inferir por sufijo cuando se escribe manualmente
+    sufijo = ticker.upper().split(".")[-1] if "." in ticker else ""
+    mapa_sufijo = {
+        "MC": ("^IBEX",     "IBEX 35"),
+        "DE": ("^GDAXI",    "DAX 40"),
+        "PA": ("^FCHI",     "CAC 40"),
+        "L":  ("^FTSE",     "FTSE 100"),
+        "AS": ("^STOXX50E", "Eurostoxx 50"),
+        "MI": ("^FTSEMIB",  "FTSE MIB"),
+        "LS": ("^PSI20",    "PSI 20"),
+        "BR": ("^BFX",      "BEL 20"),
+    }
+    if sufijo in mapa_sufijo:
+        return mapa_sufijo[sufijo]
+    return "^GSPC", "S&P 500"  # fallback universal
+
 @st.cache_data(ttl=3600)
-@st.cache_data(ttl=3600)
+def calcular_beta_vs_indice(ticker: str, indice_ticker: str, periodo: str = "2y") -> float | None:
+    """Calcula beta del ticker contra el índice dado usando retornos diarios."""
+    try:
+        import pandas as pd
+        t_hist  = yf.Ticker(ticker).history(period=periodo, auto_adjust=True)["Close"]
+        i_hist  = yf.Ticker(indice_ticker).history(period=periodo, auto_adjust=True)["Close"]
+        if t_hist.empty or i_hist.empty:
+            return None
+        # Alinear por fecha
+        df = pd.DataFrame({"stock": t_hist, "indice": i_hist}).dropna()
+        if len(df) < 60:
+            return None
+        ret_s = df["stock"].pct_change().dropna()
+        ret_i = df["indice"].pct_change().dropna()
+        df2 = pd.concat([ret_s, ret_i], axis=1).dropna()
+        cov   = df2.cov().iloc[0, 1]
+        var_i = df2.iloc[:, 1].var()
+        if var_i == 0:
+            return None
+        return round(cov / var_i, 3)
+    except Exception:
+        return None
+
 def calcular_div_ttm(ticker: str) -> float:
     """Dividendo anual real (TTM): suma de pagos reales en los últimos 12 meses.
     Evita el error de Yahoo Finance que suma 4 pagos aunque la empresa pague 3 veces al año."""
@@ -7812,7 +7922,8 @@ def pestaña_cartera():
                         _mercado_pos = st.selectbox(
                             "🗂️ Índice / Mercado",
                             ["✏️ Escribir manualmente",
-                             "🇪🇸 IBEX 35", "🌍 Eurostoxx 50",
+                             "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+                             "🌍 Eurostoxx 50",
                              "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
                              "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
                              "📊 ETFs UCITS"],
@@ -8006,7 +8117,8 @@ def pantalla_analisis():
             mercado_sel = st.selectbox(
                 "🗂️ Índice / Mercado",
                 ["✏️ Escribir manualmente",
-                 "🇪🇸 IBEX 35", "🌍 Eurostoxx 50",
+                 "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+                 "🌍 Eurostoxx 50",
                  "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
                  "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
                  "📊 ETFs UCITS"],
@@ -8062,9 +8174,10 @@ def pantalla_analisis():
 
         # Si pulsa analizar, guardar ticker
         if analizar:
-            st.session_state["ultimo_ticker"] = ticker_input
-            st.session_state["ultimo_sistema"] = st.session_state.get("sistema_sel_key", _sistema_default)
+            st.session_state["ultimo_ticker"]    = ticker_input
+            st.session_state["ultimo_sistema"]   = st.session_state.get("sistema_sel_key", _sistema_default)
             st.session_state["ultima_tolerancia"] = st.session_state.get("tolerancia_key", _tol_default)
+            st.session_state["ultimo_mercado"]   = mercado_sel
 
         ticker_activo = st.session_state.get("ultimo_ticker", ticker_input)
         sistema_activo = st.session_state.get("ultimo_sistema", sistema_sel)
@@ -8089,6 +8202,12 @@ def pantalla_analisis():
 
         tipo_activo = detectar_tipo_activo(info)
         nombre = info.get("longName") or info.get("shortName") or ticker_activo
+
+        # Beta calculada contra el índice de referencia del mercado seleccionado
+        _mercado_activo = st.session_state.get("ultimo_mercado", "")
+        _indice_ref_ticker, _indice_ref_nombre = indice_ref_para_ticker(ticker_activo, _mercado_activo)
+        with st.spinner(f"Calculando beta vs {_indice_ref_nombre}..."):
+            beta_calculada = calcular_beta_vs_indice(ticker_activo, _indice_ref_ticker)
 
         # ---- PRECIO ACTUAL ----
         col_p1, col_p2, col_p3, col_p4 = st.columns([2.2, 2.1, 1.4, 1.1])
@@ -8115,12 +8234,13 @@ def pantalla_analisis():
             vol_hoy = float(hist["Volume"].iloc[-1])
             st.metric("Volumen hoy", _fmt_numero(vol_hoy), help=TOOLTIPS["Volumen hoy"])
         with col_p4:
-            beta = info.get("beta")
-            beta_str = f"{beta:.2f}" if beta is not None else "—"
-            st.metric("Beta", beta_str,
-                      help="Sensibilidad del activo respecto al mercado de referencia. "
-                           "Beta > 1: más volátil que el índice. "
-                           "Beta < 1: menos volátil. Beta < 0: correlación inversa.")
+            _beta_val = beta_calculada if beta_calculada is not None else info.get("beta")
+            _beta_str = f"{_beta_val:.2f}" if _beta_val is not None else "—"
+            st.metric("Beta",  _beta_str,
+                      help=f"Beta calculada contra **{_indice_ref_nombre}** "
+                           f"(2 años de retornos diarios). "
+                           f"Beta > 1: más volátil que el índice. "
+                           f"Beta < 1: menos volátil. Beta < 0: correlación inversa.")
 
         st.markdown(
             f'<p style="font-size:0.88rem;color:#444;margin:4px 0 0 0">'
