@@ -215,15 +215,6 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
         margin-bottom: 0.5rem !important; overflow: hidden !important;
     }
-    /* Solo estilizar el texto interior, NO el summary (evita solapar el arrow) */
-    [data-testid="stExpander"] summary > span:last-child,
-    [data-testid="stExpander"] details > summary > span {
-        font-weight: 600 !important; font-size: 0.86rem !important;
-        color: #1e293b !important;
-    }
-    [data-testid="stExpander"] details > summary:hover {
-        background: #f8fafc !important;
-    }
 
     /* ── FORMS ──────────────────────────────────────────────────── */
     [data-testid="stForm"] {
@@ -7922,85 +7913,49 @@ def pantalla_analisis():
                        'padding:2px 7px;border-radius:20px;font-weight:700">ADMIN</span>'),
     }.get(_rol, "")
 
-    # CSS adicional para el header con botones integrados
+    st.markdown(
+        f'''<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
+            padding:14px 20px 12px;border-radius:0 0 12px 12px;
+            margin:0 -1.25rem 0.5rem;display:flex;align-items:center;
+            justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.18);">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="background:rgba(255,255,255,0.12);border-radius:8px;
+                        padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
+            <div>
+              <div style="color:#fff;font-size:1.05rem;font-weight:800;
+                          letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
+              <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
+                Análisis financiero multi-método</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:#e2e8f0;font-size:0.78rem;font-weight:600">{_uname}</div>
+            <div style="margin-top:3px">{_rol_badge}</div>
+          </div>
+        </div>''',
+        unsafe_allow_html=True
+    )
+
+    # Botones compactos alineados a la derecha
     st.markdown("""
     <style>
-        /* Header row — fondo degradado en ambas columnas */
-        div[data-testid="stHorizontalBlock"].header-row {{
-            background: linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
-            border-radius: 0 0 12px 12px;
-            margin: 0 -1.25rem 1rem;
-            padding: 10px 20px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-            align-items: center !important;
-        }}
-        /* Botones del header — estilo ghost sobre fondo oscuro */
-        .header-btn .stButton > button {{
-            background: rgba(255,255,255,0.1) !important;
-            border: 1px solid rgba(255,255,255,0.25) !important;
-            color: #e2e8f0 !important;
-            font-size: 0.75rem !important;
-            padding: 0.28rem 0.65rem !important;
-            border-radius: 6px !important;
-            box-shadow: none !important;
-            width: auto !important;
-        }}
-        .header-btn .stButton > button:hover {{
-            background: rgba(255,255,255,0.2) !important;
-            border-color: rgba(255,255,255,0.45) !important;
-            color: #fff !important;
-        }}
+        .btn-row-header { display:flex; justify-content:flex-end;
+                          gap:8px; margin:-0.2rem 0 0.4rem; }
+        .btn-row-header .stButton > button {
+            width:auto !important; padding:0.28rem 0.75rem !important;
+            font-size:0.78rem !important;
+        }
     </style>
     """, unsafe_allow_html=True)
-
-    _hl, _hr = st.columns([3, 1])
-    with _hl:
-        st.markdown(
-            f'''<div style="display:flex;align-items:center;gap:12px;padding:4px 0;">
-              <div style="background:rgba(255,255,255,0.12);border-radius:8px;
-                          padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
-              <div>
-                <div style="color:#fff;font-size:1.05rem;font-weight:800;
-                            letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
-                <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
-                  Análisis financiero multi-método</div>
-              </div>
-            </div>''',
-            unsafe_allow_html=True
-        )
-    with _hr:
-        st.markdown(
-            f'''<div style="display:flex;flex-direction:column;align-items:flex-end;
-                          padding:4px 0;gap:4px;">
-              <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600">{_uname}</div>
-              <div>{_rol_badge}</div>
-            </div>''',
-            unsafe_allow_html=True
-        )
-        st.markdown('<div class="header-btn">', unsafe_allow_html=True)
-        _hb1, _hb2 = st.columns(2)
-        with _hb1:
-            if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar datos"):
-                st.cache_data.clear()
-                st.rerun()
-        with _hb2:
-            if st.button("⏻ Salir", key="logout"):
-                del st.session_state["usuario"]
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Aplicar clase al bloque horizontal del header via JS
-    st.markdown("""
-    <script>
-    (function() {
-        const blocks = window.parent.document.querySelectorAll(
-            '[data-testid="stHorizontalBlock"]');
-        if (blocks.length > 0) {
-            blocks[0].classList.add('header-row');
-        }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
+    _bs, _b1, _b2 = st.columns([8, 1, 1.3])
+    with _b1:
+        if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
+            st.cache_data.clear()
+            st.rerun()
+    with _b2:
+        if st.button("⏻ Salir", key="logout"):
+            del st.session_state["usuario"]
+            st.rerun()
 
     # Navegación
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera"]
