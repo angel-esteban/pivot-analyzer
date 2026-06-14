@@ -7996,8 +7996,12 @@ def pantalla_analisis():
 
     # ---- TAB ANÁLISIS ----
     def _render_analisis():
-        # ── Fila 1: Mercado / Sistema / Tolerancia / Analizar ──────────────
-        col1, col2, col3, col4 = st.columns([2.5, 2, 1.8, 1])
+        # Leer valores de sistema/tolerancia desde session_state (se renderizan más abajo)
+        _sistema_default = st.session_state.get("sistema_sel_key", list(SISTEMAS_PIVOT.keys())[0])
+        _tol_default      = st.session_state.get("tolerancia_key", 0.20)
+
+        # ── Fila única: Mercado | Ticker | Analizar ───────────────────────
+        col1, col2, col4 = st.columns([2, 3, 1])
         with col1:
             mercado_sel = st.selectbox(
                 "🗂️ Índice / Mercado",
@@ -8008,78 +8012,48 @@ def pantalla_analisis():
                  "📊 ETFs UCITS"],
                 key="mercado_sel",
                 help="Selecciona un índice para elegir el valor de una lista desplegable, "
-                     "o 'Escribir manualmente' para introducir cualquier ticker de Yahoo Finance. "
-                     "Sufijos de referencia: .MC (Madrid) · .DE (Xetra) · .PA (París) · .L (Londres) · .AS (Ámsterdam)"
+                     "o 'Escribir manualmente' para introducir cualquier ticker de Yahoo Finance."
             )
         with col2:
-            sistema_sel = st.selectbox(
-                "📐 Sistema Pivot", list(SISTEMAS_PIVOT.keys()),
-                help="Método de cálculo de los Pivot Points. Clásico: el más universal y usado. "
-                     "Woodie: doble peso al cierre, mejor en días con gap. "
-                     "Camarilla: 8 niveles muy próximos al precio, ideal para intradía. "
-                     "DeMark: condicional según dirección del día anterior. "
-                     "Fibonacci: usa ratios 0.382, 0.618, 1.000. "
-                     "Mid-Points: niveles intermedios entre los Clásicos."
-            )
-        with col3:
-            tolerancia = st.number_input(
-                "⚡ Tolerancia (€/$)", value=0.20, step=0.05,
-                min_value=0.01, max_value=2.0, format="%.2f",
-                help="Distancia máxima en precio para considerar que dos niveles de distintos timeframes "
-                     "confluyen en la misma zona. Un valor más bajo (ej. 0.05€) detecta solo confluencias "
-                     "muy precisas; uno más alto (ej. 0.50€) agrupa zonas más amplias. "
-                     "Ajusta según la volatilidad y precio del activo analizado."
-            )
+            if mercado_sel == "✏️ Escribir manualmente":
+                ticker_input = st.text_input(
+                    "🔎 Ticker",
+                    value=st.session_state.get("ultimo_ticker", ""),
+                    placeholder="Introduzca un ticker. Ejemplo: REP.MC",
+                    key="ticker_manual_input",
+                    help="Símbolo del activo en Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=París · .L=Londres · .AS=Ámsterdam"
+                ).upper().strip()
+            elif mercado_sel == "📊 ETFs UCITS":
+                _cat_col, _etf_col = st.columns([1, 2])
+                with _cat_col:
+                    cat_etf = st.selectbox("📂 Categoría", list(ETFS_UCITS.keys()),
+                                           key="etf_cat_at")
+                with _etf_col:
+                    etfs_cat = ETFS_UCITS[cat_etf]
+                    etf_nombre = st.selectbox("🔎 ETF", list(etfs_cat.keys()),
+                                              key="etf_nom_at")
+                    ticker_input = etfs_cat[etf_nombre]
+            else:
+                with st.spinner(f"Cargando {mercado_sel}..."):
+                    tickers_mercado = obtener_tickers_mercado(mercado_sel)
+                if tickers_mercado:
+                    nombre_sel = st.selectbox(
+                        f"🔎 Valor — {mercado_sel}", list(tickers_mercado.keys()),
+                        key="valor_mercado_sel",
+                        help=f"Valores del {mercado_sel}. Si el análisis falla usa 'Escribir manualmente'."
+                    )
+                    ticker_input = tickers_mercado[nombre_sel]
+                else:
+                    st.warning(f"No se pudieron cargar los tickers. Introduce el ticker manualmente.")
+                    ticker_input = st.text_input("🔎 Ticker", value="",
+                                                  key="ticker_fallback_at").upper().strip()
         with col4:
+            st.markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
             analizar = st.button("🔍 Analizar", type="primary")
 
-        # ── Fila 2: Ticker (depende del mercado seleccionado) ──────────────
-        if mercado_sel == "✏️ Escribir manualmente":
-            ticker_input = st.text_input(
-                "🔎 Ticker",
-                value=st.session_state.get("ultimo_ticker", ""),
-                placeholder="Introduzca un ticker. Ejemplo: REP.MC",
-                key="ticker_manual_input",
-                help="Símbolo del activo en Yahoo Finance. Ejemplos: REP.MC (Repsol), "
-                     "IBE.MC (Iberdrola), AAPL (Apple), SXR8.DE (ETF S&P 500 iShares). "
-                     "Sufijos: .MC = Madrid · .DE = Xetra · .PA = París · .L = Londres · .AS = Ámsterdam"
-            ).upper().strip()
-
-        elif mercado_sel == "📊 ETFs UCITS":
-            col_cat, col_etf = st.columns([1, 2])
-            with col_cat:
-                cat_etf = st.selectbox(
-                    "📂 Categoría ETF", list(ETFS_UCITS.keys()),
-                    help="Los ETFs UCITS son los únicos legalmente accesibles al minorista español "
-                         "bajo la regulación PRIIPs/MiFID II. Los ETFs estadounidenses (SPY, QQQ...) "
-                         "no están disponibles para residentes en España."
-                )
-            with col_etf:
-                etfs_cat = ETFS_UCITS[cat_etf]
-                etf_nombre = st.selectbox(
-                    "🔎 ETF", list(etfs_cat.keys()),
-                    help="Ticker en bolsa europea. .AS = Euronext Ámsterdam · "
-                         ".DE = Xetra · .L = Londres. Elige el disponible en tu broker."
-                )
-                ticker_input = etfs_cat[etf_nombre]
-            st.caption(f"Ticker seleccionado: `{ticker_input}` · Pulsa **Analizar** para consultar")
-
-        else:
-            # Índices bursátiles — carga dinámica Wikipedia + fallback estático
-            with st.spinner(f"Cargando valores de {mercado_sel}..."):
-                tickers_mercado = obtener_tickers_mercado(mercado_sel)
-            if tickers_mercado:
-                nombre_sel = st.selectbox(
-                    f"🔎 Valor — {mercado_sel}",
-                    list(tickers_mercado.keys()),
-                    help=f"Valores del {mercado_sel}. El ticker de Yahoo Finance se asigna automáticamente. "
-                         "Si el análisis falla, el ticker puede haber cambiado de símbolo — usa 'Escribir manualmente'."
-                )
-                ticker_input = tickers_mercado[nombre_sel]
-                st.caption(f"Ticker: `{ticker_input}` · Pulsa **Analizar** para consultar")
-            else:
-                st.warning(f"No se pudieron cargar los tickers de {mercado_sel}. Introduce el ticker manualmente.")
-                ticker_input = st.text_input("🔎 Ticker", value="", placeholder="Ej: AAPL, ITX.MC").upper().strip()
+        # Variables de sistema/tolerancia (se renderizan más abajo, valores de session_state)
+        sistema_sel = _sistema_default
+        tolerancia  = _tol_default
 
         if not analizar and "ultimo_ticker" not in st.session_state:
             st.info("Introduce un ticker y pulsa **Analizar**. Ejemplos: `NTGY.MC`, `IBE.MC`, `AAPL`, `SPY`")
@@ -8089,8 +8063,8 @@ def pantalla_analisis():
         # Si pulsa analizar, guardar ticker
         if analizar:
             st.session_state["ultimo_ticker"] = ticker_input
-            st.session_state["ultimo_sistema"] = sistema_sel
-            st.session_state["ultima_tolerancia"] = tolerancia
+            st.session_state["ultimo_sistema"] = st.session_state.get("sistema_sel_key", _sistema_default)
+            st.session_state["ultima_tolerancia"] = st.session_state.get("tolerancia_key", _tol_default)
 
         ticker_activo = st.session_state.get("ultimo_ticker", ticker_input)
         sistema_activo = st.session_state.get("ultimo_sistema", sistema_sel)
@@ -8515,6 +8489,32 @@ def pantalla_analisis():
             }
 
         # ======== LAYOUT PRINCIPAL ========
+
+        # ── Controles de análisis: Sistema Pivot + Tolerancia ────────────
+        _sc1, _sc2 = st.columns([2, 1.8])
+        with _sc1:
+            sistema_sel = st.selectbox(
+                "📐 Sistema Pivot", list(SISTEMAS_PIVOT.keys()),
+                index=list(SISTEMAS_PIVOT.keys()).index(_sistema_default)
+                      if _sistema_default in SISTEMAS_PIVOT else 0,
+                key="sistema_sel_key",
+                help="Método de cálculo de los Pivot Points. Clásico: el más universal y usado. "
+                     "Woodie: doble peso al cierre, mejor en días con gap. "
+                     "Camarilla: 8 niveles muy próximos al precio, ideal para intradía. "
+                     "DeMark: condicional según dirección del día anterior. "
+                     "Fibonacci: usa ratios 0.382, 0.618, 1.000. "
+                     "Mid-Points: niveles intermedios entre los Clásicos."
+            )
+        with _sc2:
+            tolerancia = st.number_input(
+                "⚡ Tolerancia (€/$)",
+                value=float(st.session_state.get("tolerancia_key", 0.20)),
+                step=0.05, min_value=0.01, max_value=2.0, format="%.2f",
+                key="tolerancia_key",
+                help="Distancia máxima en precio para considerar que dos niveles confluyen. "
+                     "Valor bajo (0.05€): solo confluencias muy precisas. "
+                     "Valor alto (0.50€): agrupa zonas más amplias."
+            )
 
         # ── Bloque 1: Semáforo horizontal (ancho completo) ───────────────
         st.markdown("### Semáforo Global")
