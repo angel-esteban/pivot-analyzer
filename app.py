@@ -52,7 +52,23 @@ st.markdown("""
 <style>
     /* ── FUENTE ─────────────────────────────────────────────────── */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    html, body, [class*="css"], .stMarkdown, .stText, p, span, div {
+    /* Aplicar Inter solo a elementos de texto, NO a todos los div/span
+       (evita romper la fuente de iconos interna de Streamlit) */
+    html, body,
+    .stMarkdown, .stMarkdown p, .stMarkdown span,
+    .stText,
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stText"],
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricValue"],
+    [data-testid="stMetricDelta"],
+    [data-testid="stCaptionContainer"],
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
+    [data-testid="stSelectbox"] span,
+    button[data-baseweb="tab"],
+    .stButton > button,
+    h1, h2, h3, h4, h5, h6, p, label {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     }
 
