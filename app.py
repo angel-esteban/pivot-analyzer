@@ -6055,6 +6055,73 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>\n'
         )
 
+        # ── Síntesis contextual de divergencias (HTML report) ─────────────
+        _n_alc_h = len(_dv_alc); _n_baj_h = len(_dv_baj)
+        _tiene_obv_alc_h  = any(d["tipo"] == "OBV"       for d in _dv_alc)
+        _tiene_obv_baj_h  = any(d["tipo"] == "OBV"       for d in _dv_baj)
+        _tiene_frt_alc_h  = any(d["fuerza"] == "fuerte"  for d in _dv_alc)
+        _tiene_frt_baj_h  = any(d["fuerza"] == "fuerte"  for d in _dv_baj)
+        if _n_alc_h > 0 and _n_baj_h == 0:
+            _sv_bg_h, _sv_brd_h, _sv_ico_h = "#f0fdf4", "#16a34a", "&#9650;"
+            if _n_alc_h >= 2 and (_tiene_obv_alc_h or _tiene_frt_alc_h):
+                _sv_titulo_h = "Señal alcista consolidada"
+                _sv_txt_h = (
+                    f"Se detectan <b>{_n_alc_h} divergencias alcistas</b>"
+                    + (" — entre ellas la del OBV (la más fiable, porque registra el flujo real de dinero grande)" if _tiene_obv_alc_h else "") + ". "
+                    "Esto significa que aunque el precio sigue bajando o está estancado, "
+                    "los indicadores internos muestran que la presión vendedora se está agotando. "
+                    "<b>Lo que no significa:</b> que el precio vaya a subir mañana. "
+                    "<b>Qué vigilar:</b> espera que el precio rompa por encima de una resistencia cercana "
+                    "con volumen alto. Ese sería la confirmación de que el giro está ocurriendo."
+                )
+            else:
+                _sv_titulo_h = "Señal alcista incipiente — pendiente de confirmación"
+                _sv_txt_h = (
+                    f"Se detecta <b>{_n_alc_h} divergencia alcista</b> de intensidad moderada. "
+                    "Los indicadores empiezan a mostrar que la presión bajista pierde fuerza, "
+                    "pero todavía no hay suficiente evidencia para considerar el giro confirmado. "
+                    "<b>Qué vigilar:</b> si el precio aguanta sin nuevos mínimos y los indicadores mejoran, "
+                    "la señal se fortalece. Si hace un nuevo mínimo, la divergencia queda invalidada."
+                )
+        elif _n_baj_h > 0 and _n_alc_h == 0:
+            _sv_bg_h, _sv_brd_h, _sv_ico_h = "#fef2f2", "#dc2626", "&#9660;"
+            if _n_baj_h >= 2 and (_tiene_obv_baj_h or _tiene_frt_baj_h):
+                _sv_titulo_h = "Señal bajista consolidada"
+                _sv_txt_h = (
+                    f"Se detectan <b>{_n_baj_h} divergencias bajistas</b>"
+                    + (" — entre ellas la del OBV, que registra el movimiento del dinero institucional" if _tiene_obv_baj_h else "") + ". "
+                    "Aunque el precio sigue subiendo, los indicadores muestran que la presión compradora se debilita. "
+                    "<b>Lo que no significa:</b> que el precio vaya a caer mañana. "
+                    "<b>Qué vigilar:</b> si el precio pierde un soporte relevante con volumen alto, "
+                    "la corrección puede acelerarse. Buen momento para revisar tu stop-loss."
+                )
+            else:
+                _sv_titulo_h = "Señal bajista incipiente — observar sin actuar"
+                _sv_txt_h = (
+                    f"Se detecta <b>{_n_baj_h} divergencia bajista</b> de intensidad moderada. "
+                    "En tendencias fuertes, las divergencias bajistas moderadas pueden fallar varias veces antes de que el precio corrija. "
+                    "<b>Qué vigilar:</b> si aparecen más divergencias o el precio pierde su SMA20, la señal gana peso."
+                )
+        else:
+            _sv_bg_h, _sv_brd_h, _sv_ico_h = "#fefce8", "#ca8a04", "&#9888;"
+            _sv_titulo_h = "Señales contradictorias — sin dirección definida"
+            _sv_txt_h = (
+                f"Se detectan a la vez <b>{_n_alc_h} divergencia{'s' if _n_alc_h>1 else ''} alcista{'s' if _n_alc_h>1 else ''}</b> "
+                f"y <b>{_n_baj_h} bajista{'s' if _n_baj_h>1 else ''}</b>. "
+                "Cuando los indicadores no se ponen de acuerdo, lo habitual es una fase de transición o rango lateral. "
+                "<b>Qué vigilar:</b> espera a que el precio rompa un nivel técnico relevante antes de actuar."
+            )
+        _sv_synth_h = (
+            f'<div style="background:{_sv_bg_h};border:1px solid {_sv_brd_h};'
+            f'border-radius:8px;padding:14px 16px;margin-top:12px">'
+            f'<div style="font-size:11px;font-weight:700;color:{_sv_brd_h};'
+            f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+            f'{_sv_ico_h} Qué significa esto para ti — {_sv_titulo_h}</div>'
+            f'<div style="font-size:12px;color:#1e293b;line-height:1.65">{_sv_txt_h}</div>'
+            f'</div>'
+        )
+        _divs_section = _divs_section[:-len("</div>\n")] + _sv_synth_h + "\n</div>\n"
+
     # ── Huecos de precio ──────────────────────────────────────────────────
 
     # ── Diagnóstico Técnico ──────────────────────────────────────────────
@@ -6078,28 +6145,155 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f'<td style="padding:5px 10px;font-size:12px;color:#555;line-height:1.5">{_narr_h}</td>'
                 f'</tr>'
             )
-    _score_row_html = ""
-    if puntuacion_tec:
-        _sc_h = puntuacion_tec["score_total"]
-        _sn_h = puntuacion_tec["señal"]
-        _col_h = {"alcista": "#16a34a", "bajista": "#dc2626", "neutral": "#64748b"}.get(_sn_h, "#64748b")
-        _cv_h = puntuacion_tec["conviccion"]
-        _dp_h = puntuacion_tec["disp_total"]
-        _score_row_html = (
-            f'<tr style="background:#f0f9ff">'
-            f'<td colspan="3" style="padding:10px 12px">'
-            f'<strong style="color:{_col_h};font-size:14px">&#127919; Puntuacion Tecnica: '
-            f'{_sc_h:.1f}/10 &#8212; {_sn_h.upper()}</strong>'
-            f'&nbsp;<span style="color:#64748b;font-size:12px">({_cv_h}/{_dp_h} componentes coinciden)</span>'
-            f'<br/><span style="font-size:12px;color:#374151;line-height:1.6">'
-            f'{puntuacion_tec["texto"]}</span>'
-            f'</td></tr>'
-        )
+    _esc_labels_h = {
+        "subida_libre_establecida": ("Superando ATH — subida libre",    "#16a34a", "#f0fdf4"),
+        "en_ath":                   ("En máximos históricos",           "#16a34a", "#f0fdf4"),
+        "aproximandose_cerca":      ("Cerca del ATH (< 5%)",            "#15803d", "#f0fdf4"),
+        "aproximandose":            ("Próximo al ATH (5-15%)",          "#ca8a04", "#fefce8"),
+        "referencia":               ("Lejos del ATH (15-30%)",          "#ea580c", "#fff7ed"),
+        "lejos":                    ("Muy lejos del ATH (> 30%)",       "#dc2626", "#fef2f2"),
+        "giro_alcista_reciente":    ("Giro alcista reciente",           "#16a34a", "#f0fdf4"),
+        "tendencia_alcista":        ("Tendencia alcista confirmada",    "#16a34a", "#f0fdf4"),
+        "plana":                    ("Media plana — sin tendencia",     "#64748b", "#f8fafc"),
+        "giro_bajista_reciente":    ("Giro bajista reciente",           "#dc2626", "#fef2f2"),
+        "tendencia_bajista":        ("Tendencia bajista confirmada",    "#dc2626", "#fef2f2"),
+        "en_soporte":               ("Apoyado en soporte",              "#16a34a", "#f0fdf4"),
+        "zona_baja_rango":          ("Zona baja del rango",             "#15803d", "#f0fdf4"),
+        "sin_resistencia":          ("Sin resistencia sobre el precio", "#16a34a", "#f0fdf4"),
+        "zona_media_rango":         ("Zona media del rango",            "#64748b", "#f8fafc"),
+        "zona_alta_rango":          ("Zona alta — resistencia próxima", "#ea580c", "#fff7ed"),
+        "en_resistencia":           ("Presionando resistencia",         "#dc2626", "#fef2f2"),
+        "sin_soporte":              ("Sin soporte bajo el precio",      "#dc2626", "#fef2f2"),
+        "extension_161":            ("Extensión 161.8%",                "#1d4ed8", "#eff6ff"),
+        "extension_127":            ("Extensión 127.2%",                "#2563eb", "#eff6ff"),
+        "en_maximo":                ("En máximo del swing",             "#16a34a", "#f0fdf4"),
+        "retroceso_236":            ("Retroceso leve 23.6%",            "#15803d", "#f0fdf4"),
+        "retroceso_382":            ("Retroceso normal 38-50%",         "#ca8a04", "#fefce8"),
+        "retroceso_618":            ("Zona dorada 61.8%",               "#15803d", "#f0fdf4"),
+        "retroceso_786":            ("Retroceso profundo 78.6%",        "#ea580c", "#fff7ed"),
+        "swing_roto":               ("Swing anual invalidado",          "#dc2626", "#fef2f2"),
+        "sobrecompra_extrema":      ("Sobrecompra extrema (RSI>80)",    "#dc2626", "#fef2f2"),
+        "sobrecompra":              ("Sobrecomprado (RSI 70-80)",       "#ea580c", "#fff7ed"),
+        "zona_alcista":             ("Zona alcista (RSI 55-70)",        "#16a34a", "#f0fdf4"),
+        "zona_neutra":              ("Zona neutra (RSI 45-55)",         "#64748b", "#f8fafc"),
+        "zona_bajista":             ("Zona bajista (RSI 30-45)",        "#ea580c", "#fff7ed"),
+        "sobreventa":               ("Sobrevendido (RSI 20-30)",        "#16a34a", "#f0fdf4"),
+        "sobreventa_extrema":       ("Sobreventa extrema (RSI<20)",     "#1d4ed8", "#eff6ff"),
+        "volumen_excepcional":      ("Volumen excepcional",             "#16a34a", "#f0fdf4"),
+        "volumen_alto":             ("Volumen alto",                    "#16a34a", "#f0fdf4"),
+        "volumen_normal":           ("Volumen normal",                  "#64748b", "#f8fafc"),
+        "volumen_bajo":             ("Volumen bajo",                    "#ea580c", "#fff7ed"),
+        "volumen_seco":             ("Volumen seco",                    "#dc2626", "#fef2f2"),
+    }
+
     _diag_section = ""
-    if _diag_rows_html or _score_row_html:
+    if _diag_rows_html or puntuacion_tec:
+        # ── Badge + mini-cards resumen ────────────────────────────────────
+        _sc_h  = puntuacion_tec["score_total"] if puntuacion_tec else 5.0
+        _sn_h  = puntuacion_tec["señal"]       if puntuacion_tec else "neutral"
+        _col_h = {"alcista": "#16a34a", "bajista": "#dc2626", "neutral": "#64748b"}.get(_sn_h, "#64748b")
+        _bg_h  = {"alcista": "#f0fdf4", "bajista": "#fef2f2", "neutral": "#f8fafc"}.get(_sn_h, "#f8fafc")
+        _ico_h = {"alcista": "🟢",      "bajista": "🔴",      "neutral": "⚪"}.get(_sn_h, "⚪")
+
+        _mini_cards_h = ""
+        if puntuacion_tec:
+            _comp_order = [
+                ("ath",    "📈 ATH"),
+                ("sma200", "〰️ SMA200"),
+                ("resist", "🧱 Niveles"),
+                ("fibo",   "📐 Fibonacci"),
+                ("rsi",    "⚡ RSI"),
+                ("vol",    "🔊 Volumen"),
+            ]
+            for _ck_h, _cn_h2 in _comp_order:
+                _cv_h = puntuacion_tec["scores_ind"].get(_ck_h, {})
+                if not _cv_h.get("disponible"):
+                    _mini_cards_h += (
+                        f'<div style="background:#f8fafc;border-radius:6px;padding:8px 10px;'
+                        f'border:1px solid #e2e8f0;text-align:center">'
+                        f'<div style="font-size:10px;color:#94a3b8;font-weight:600">{_cn_h2}</div>'
+                        f'<div style="font-size:11px;color:#94a3b8;margin-top:2px">Sin datos</div>'
+                        f'</div>'
+                    )
+                    continue
+                _esc_h2 = _cv_h.get("escenario","")
+                _lbl_h, _fc_h, _fbg_h = _esc_labels_h.get(_esc_h2, (_esc_h2.replace("_"," ").title(), "#64748b", "#f8fafc"))
+                _pts_h = _cv_h.get("puntos", 5)
+                _mini_cards_h += (
+                    f'<div style="background:{_fbg_h};border-radius:6px;padding:8px 10px;'
+                    f'border:1px solid {_fc_h}40;text-align:center">'
+                    f'<div style="font-size:10px;color:{_fc_h};font-weight:700">{_cn_h2}</div>'
+                    f'<div style="font-size:10px;color:#1e293b;margin-top:2px;line-height:1.3">{_lbl_h}</div>'
+                    f'<div style="font-size:11px;font-weight:800;color:{_fc_h};margin-top:2px">{_pts_h}/10</div>'
+                    f'</div>'
+                )
+
+        _texto_h = puntuacion_tec["texto"] if puntuacion_tec else ""
+        _resumen_h = (
+            f'<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:14px">'
+            f'<div style="min-width:80px;text-align:center;border:3px solid {_col_h};'
+            f'border-radius:12px;padding:10px 6px;background:{_bg_h};color:{_col_h};flex-shrink:0">'
+            f'<div style="font-size:26px;line-height:1">{_ico_h}</div>'
+            f'<div style="font-size:12px;font-weight:800;margin-top:4px">{_sn_h.upper()}</div>'
+            f'<div style="font-size:20px;font-weight:700;color:#1e293b">{_sc_h:.1f}</div>'
+            f'<div style="font-size:9px;color:{_col_h};font-weight:600">/ 10</div>'
+            f'</div>'
+            f'<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px">'
+            f'{_mini_cards_h}'
+            f'</div>'
+            f'</div>'
+            f'<div style="border-left:4px solid {_col_h};background:{_bg_h};'
+            f'border-radius:0 6px 6px 0;padding:8px 12px;font-size:12px;color:#374151;'
+            f'line-height:1.6;margin-bottom:14px">{_texto_h}</div>'
+        )
+
+        # Fibonacci synthesis for HTML report
+        _fib_synth_h = ""
+        if analisis_fibo:
+            _fesc_h = analisis_fibo.get("escenario", "")
+            _ffa_h  = analisis_fibo.get("fib_abajo")
+            _ffu_h  = analisis_fibo.get("fib_arriba")
+            _fib_alc_h = {"extension_161", "extension_127", "en_maximo", "retroceso_236"}
+            _fib_neu_h = {"retroceso_382"}
+            if _fesc_h in _fib_alc_h:   _fsb_h, _fbrd_h = "#f0fdf4", "#16a34a"
+            elif _fesc_h in _fib_neu_h: _fsb_h, _fbrd_h = "#fefce8", "#ca8a04"
+            else:                        _fsb_h, _fbrd_h = "#fff7ed", "#ea580c"
+            _fn_h = ""
+            if _ffa_h and _ffu_h:
+                _fn_h = (f"El precio tiene soporte Fibonacci en <b>{_ffa_h['precio']:,.4f}</b> "
+                         f"(nivel {_ffa_h['label']}%, a {_ffa_h['dist_pct']:.1f}% de distancia) "
+                         f"y resistencia en <b>{_ffu_h['precio']:,.4f}</b> "
+                         f"(nivel {_ffu_h['label']}%, a {_ffu_h['dist_pct']:.1f}% de distancia). ")
+            elif _ffa_h:
+                _fn_h = (f"Soporte Fibonacci más cercano: <b>{_ffa_h['precio']:,.4f}</b> "
+                         f"(nivel {_ffa_h['label']}%, a {_ffa_h['dist_pct']:.1f}%). ")
+            elif _ffu_h:
+                _fn_h = (f"Resistencia Fibonacci más cercana: <b>{_ffu_h['precio']:,.4f}</b> "
+                         f"(nivel {_ffu_h['label']}%, a {_ffu_h['dist_pct']:.1f}%). ")
+            _fa_h = {
+                "extension_161": "Precio en extensión 161.8% del swing anual — no hay resistencias Fibonacci previas, camino despejado al alza. El Fibonacci no da señales de alarma si tienes posición.",
+                "extension_127": "Precio en extensión 127.2% — primer objetivo de proyección tras superar máximos. Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos.",
+                "en_maximo": "Precio en el máximo del swing (100% Fibonacci). Superar este nivel con volumen sería señal alcista importante. Sin romperlo, puede corregir.",
+                "retroceso_236": "Retroceso solo del 23.6% — tendencia alcista muy intacta. Si el precio aguanta aquí, la probabilidad de continuar al alza es alta.",
+                "retroceso_382": "Zona de retroceso normal (38.2–50%) dentro de una tendencia alcista sana. Rebote con volumen aquí = tendencia activa. Sin rebote, siguiente soporte en 61.8%.",
+                "retroceso_618": "Zona dorada (61.8%) — el retroceso más seguido institucionalmente. Último soporte relevante antes de comprometer la estructura. Rebote aquí = posible entrada técnica.",
+                "retroceso_786": "Retroceso muy profundo al 78.6% — estructura alcista muy debilitada. El nivel 0% (origen del swing) es la última defensa: perderlo invalida el swing.",
+                "swing_roto": "Swing alcista anual invalidado — precio por debajo del origen del movimiento. El análisis Fibonacci debe reconstruirse sobre el nuevo mínimo.",
+            }.get(_fesc_h, "")
+            if _fn_h or _fa_h:
+                _fib_synth_h = (
+                    f'<div style="background:{_fsb_h};border:1px solid {_fbrd_h};'
+                    f'border-radius:8px;padding:14px 16px;margin-top:12px">'
+                    f'<div style="font-size:11px;font-weight:700;color:{_fbrd_h};'
+                    f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+                    f'&#128208; Qué significa esto para ti — Fibonacci</div>'
+                    f'<div style="font-size:12px;color:#1e293b;line-height:1.65">{_fn_h}{_fa_h}</div>'
+                    f'</div>'
+                )
         _diag_section = (
             f'<div style="margin:20px 0">'
             f'<div class="col-title" style="margin-bottom:10px">Diagnostico Tecnico</div>'
+            + _resumen_h +
             f'<table style="width:100%;border-collapse:collapse;font-size:13px;'
             f'border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">'
             f'<thead><tr style="background:#1e3a5f;color:#fff">'
@@ -6109,8 +6303,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</tr></thead>'
             f'<tbody style="background:#fff">'
             + "".join(_diag_rows_html)
-            + _score_row_html
-            + f'</tbody></table></div>'
+            + f'</tbody></table>' + _fib_synth_h + f'</div>'
         )
 
     _huecos_section = ""
@@ -6140,12 +6333,57 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f'</div>'
             )
         _cards = "".join(_hueco_card(h) for h in huecos[:6])
+        # Synthesis contextual de huecos (HTML report)
+        _huecos_ord_h = sorted(huecos, key=lambda x: abs(x["dist_pct"]))
+        _hc_h = _huecos_ord_h[0]
+        _hc_tipo_h = _hc_h["tipo"]; _hc_dist_h = _hc_h["dist_pct"]
+        _hc_dias_h = _hc_h["dias_abierto"]; _hc_low_h = _hc_h["gap_low"]
+        _hc_high_h = _hc_h["gap_high"]; _hc_size_h = _hc_h["gap_pct"]
+        _hc_todos_alc_h = [h for h in huecos if h["tipo"] == "alcista"]
+        _hc_todos_baj_h = [h for h in huecos if h["tipo"] == "bajista"]
+        if _hc_tipo_h == "alcista":
+            _hs_bg_h, _hs_brd_h, _hs_ico_h = "#f0fdf4", "#16a34a", "&#9650;"
+            _hs_titulo_h = "El soporte más próximo es un hueco alcista"
+            _hs_txt_h = (
+                f"El hueco abierto más cercano es alcista y está <b>a un {abs(_hc_dist_h):.1f}% por debajo</b> "
+                f"(zona {_hc_low_h:.4f}–{_hc_high_h:.4f}, tamaño {_hc_size_h:.1f}%, {_hc_dias_h} sesiones sin cerrarse). "
+                "Un hueco alcista es una zona donde el precio subió de golpe sin negociarse — "
+                "los inversores que compraron antes tienden a recomprar si el precio vuelve ahí. "
+                "Eso la convierte en un <b>suelo natural</b>."
+            )
+            if _hc_size_h >= 2.0:
+                _hs_txt_h += f" El tamaño ({_hc_size_h:.1f}%) es relevante — huecos grandes tienen más fuerza."
+            if _hc_todos_baj_h:
+                _hs_txt_h += f" Por encima hay además {len(_hc_todos_baj_h)} hueco{'s' if len(_hc_todos_baj_h)>1 else ''} bajista(s) como resistencia potencial."
+        else:
+            _hs_bg_h, _hs_brd_h, _hs_ico_h = "#fef2f2", "#dc2626", "&#9660;"
+            _hs_titulo_h = "La resistencia más próxima es un hueco bajista"
+            _hs_txt_h = (
+                f"El hueco abierto más cercano es bajista y está <b>a un {abs(_hc_dist_h):.1f}% por encima</b> "
+                f"(zona {_hc_low_h:.4f}–{_hc_high_h:.4f}, tamaño {_hc_size_h:.1f}%, {_hc_dias_h} sesiones sin cerrarse). "
+                "Un hueco bajista es una zona donde el precio cayó de golpe — inversores con pérdidas tienden a vender "
+                "al recuperar para «salir sin pérdidas». Eso la convierte en un <b>techo natural</b>."
+            )
+            if _hc_size_h >= 2.0:
+                _hs_txt_h += f" El tamaño ({_hc_size_h:.1f}%) es relevante — huecos grandes tienen más fuerza."
+            if _hc_todos_alc_h:
+                _hs_txt_h += f" Por debajo hay además {len(_hc_todos_alc_h)} hueco{'s' if len(_hc_todos_alc_h)>1 else ''} alcista(s) como soporte potencial."
+        _hs_synth_h = (
+            f'<div style="background:{_hs_bg_h};border:1px solid {_hs_brd_h};'
+            f'border-radius:8px;padding:14px 16px;margin-top:12px">'
+            f'<div style="font-size:11px;font-weight:700;color:{_hs_brd_h};'
+            f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+            f'{_hs_ico_h} Qué significa esto para ti — {_hs_titulo_h}</div>'
+            f'<div style="font-size:12px;color:#1e293b;line-height:1.65">{_hs_txt_h}</div>'
+            f'</div>'
+        )
         _huecos_section = (
             f'<div class="card">\n'
             f'<h2>&#128202; Huecos de Precio Abiertos</h2>\n'
             f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">\n'
             f'{_cards}\n'
             f'</div>\n'
+            f'{_hs_synth_h}\n'
             f'</div>\n'
         )
 
@@ -7455,6 +7693,80 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             ]))
             historia.append(t_fund)
 
+    # ── Divergencias Técnicas ─────────────────────────────────────────────────
+    if divergencias_tecnicas:
+        _dv_alc_p = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
+        _dv_baj_p = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
+        historia.append(Spacer(1, 0.3*cm))
+        _pdf_sh("Divergencias Tecnicas", historia)
+        historia.append(Spacer(1, 0.15*cm))
+        _dv_rows_p = [["Tipo", "Indicador", "Descripcion", "Fuerza"]]
+        for _d in divergencias_tecnicas[:8]:
+            _dv_rows_p.append([
+                "Alcista [+]" if _d["direccion"] == "alcista" else "Bajista [-]",
+                _d.get("tipo", ""),
+                _d.get("descripcion", ""),
+                _d.get("fuerza", ""),
+            ])
+        _dv_t = Table(_dv_rows_p, colWidths=[2.2*cm, 2.0*cm, 10.0*cm, 2.0*cm])
+        _dv_t.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0), CA),
+            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE",      (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, GF]),
+            ("GRID",          (0, 0), (-1, -1), 0.2, GB),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ]))
+        for _ri, _d in enumerate(divergencias_tecnicas[:8], 1):
+            _rc = colors.HexColor("#f0fdf4") if _d["direccion"] == "alcista" else colors.HexColor("#fef2f2")
+            _dv_t.setStyle(TableStyle([("BACKGROUND", (0, _ri), (-1, _ri), _rc)]))
+        historia.append(_dv_t)
+        # Synthesis
+        _n_alc_p = len(_dv_alc_p); _n_baj_p = len(_dv_baj_p)
+        _tiene_obv_alc_p = any(d["tipo"] == "OBV" for d in _dv_alc_p)
+        _tiene_obv_baj_p = any(d["tipo"] == "OBV" for d in _dv_baj_p)
+        _tiene_frt_alc_p = any(d["fuerza"] == "fuerte" for d in _dv_alc_p)
+        _tiene_frt_baj_p = any(d["fuerza"] == "fuerte" for d in _dv_baj_p)
+        if _n_alc_p > 0 and _n_baj_p == 0:
+            _sv_col_p = VE
+            if _n_alc_p >= 2 and (_tiene_obv_alc_p or _tiene_frt_alc_p):
+                _sv_txt_p = (
+                    f"[QUE SIGNIFICA PARA TI] Se detectan {_n_alc_p} divergencias alcistas"
+                    + (" (OBV incluido)" if _tiene_obv_alc_p else "") + ". "
+                    "Aunque el precio baja, los indicadores muestran que la presion vendedora se agota. "
+                    "Que vigilar: ruptura por encima de resistencia cercana con volumen alto."
+                )
+            else:
+                _sv_txt_p = (
+                    f"[QUE SIGNIFICA PARA TI] Se detecta {_n_alc_p} divergencia alcista moderada. "
+                    "Que vigilar: si el precio aguanta sin nuevos minimos y mejoran los indicadores, la senal se fortalece."
+                )
+        elif _n_baj_p > 0 and _n_alc_p == 0:
+            _sv_col_p = RO
+            if _n_baj_p >= 2 and (_tiene_obv_baj_p or _tiene_frt_baj_p):
+                _sv_txt_p = (
+                    f"[QUE SIGNIFICA PARA TI] Se detectan {_n_baj_p} divergencias bajistas"
+                    + (" (OBV incluido)" if _tiene_obv_baj_p else "") + ". "
+                    "Aunque el precio sube, los indicadores muestran debilitamiento comprador. "
+                    "Que vigilar: si pierde soporte con volumen, la correccion puede acelerarse."
+                )
+            else:
+                _sv_txt_p = (
+                    f"[QUE SIGNIFICA PARA TI] Se detecta {_n_baj_p} divergencia bajista moderada. "
+                    "Que vigilar: mas divergencias o precio bajo SMA20 le dan mas peso a la senal."
+                )
+        else:
+            _sv_col_p = colors.HexColor("#ca8a04")
+            _sv_txt_p = (
+                f"[QUE SIGNIFICA PARA TI] Senales contradictorias: {_n_alc_p} alcistas y {_n_baj_p} bajistas. "
+                "Que vigilar: espera ruptura clara de soporte/resistencia antes de actuar."
+            )
+        historia.append(Spacer(1, 0.15*cm))
+        historia.append(Paragraph(_strip(_sv_txt_p), _p(fontSize=7.5, textColor=_sv_col_p)))
+
     # ── Huecos de precio ──────────────────────────────────────────────────
     if huecos:
         historia.append(Spacer(1, 0.3*cm))
@@ -7492,6 +7804,43 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _hue_style.append(("BACKGROUND", (0, _ri), (-1, _ri), _row_color))
         _hue_t.setStyle(TableStyle(_hue_style))
         historia.append(_hue_t)
+        # Huecos synthesis PDF
+        _huecos_ord_p = sorted(huecos, key=lambda x: abs(x["dist_pct"]))
+        _hc_p = _huecos_ord_p[0]
+        _hc_tipo_p = _hc_p["tipo"]
+        _hc_dist_p = _hc_p["dist_pct"]
+        _hc_dias_p = _hc_p["dias_abierto"]
+        _hc_low_p  = _hc_p["gap_low"]
+        _hc_high_p = _hc_p["gap_high"]
+        _hc_size_p = _hc_p["gap_pct"]
+        _hc_alc_p  = [h for h in huecos if h["tipo"] == "alcista"]
+        _hc_baj_p  = [h for h in huecos if h["tipo"] == "bajista"]
+        if _hc_tipo_p == "alcista":
+            _hs_col_p = VE
+            _hs_txt_p = (
+                f"[QUE SIGNIFICA PARA TI] El hueco mas cercano es alcista, "
+                f"a un {abs(_hc_dist_p):.1f}% por debajo "
+                f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
+                "Actua como suelo natural: inversores que compraron antes del salto tienden a recomprar si el precio vuelve."
+            )
+            if _hc_size_p >= 2.0:
+                _hs_txt_p += f" Tamano relevante ({_hc_size_p:.1f}%) — mayor fuerza como soporte."
+            if _hc_baj_p:
+                _hs_txt_p += f" Encima hay {len(_hc_baj_p)} hueco(s) bajista(s) actuando como resistencia."
+        else:
+            _hs_col_p = RO
+            _hs_txt_p = (
+                f"[QUE SIGNIFICA PARA TI] El hueco mas cercano es bajista, "
+                f"a un {abs(_hc_dist_p):.1f}% por encima "
+                f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
+                "Actua como techo natural: inversores con perdidas tienden a vender al recuperar."
+            )
+            if _hc_size_p >= 2.0:
+                _hs_txt_p += f" Tamano relevante ({_hc_size_p:.1f}%) — mayor fuerza como resistencia."
+            if _hc_alc_p:
+                _hs_txt_p += f" Debajo hay {len(_hc_alc_p)} hueco(s) alcista(s) actuando como soporte."
+        historia.append(Spacer(1, 0.15*cm))
+        historia.append(Paragraph(_strip(_hs_txt_p), _p(fontSize=7.5, textColor=_hs_col_p)))
 
 
     # ── DIAGNOSTICO TECNICO ───────────────────────────────────────────────
@@ -7539,14 +7888,163 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _sn_d  = puntuacion_tec["señal"]
             _col_d = {"alcista": VE, "bajista": RO,
                       "neutral": colors.HexColor("#64748b")}.get(_sn_d, GB)
-            _cv_d  = puntuacion_tec["conviccion"]
-            _dt_d  = puntuacion_tec["disp_total"]
-            historia.append(Paragraph(
-                f"<b>Puntuacion Tecnica Integrada: {_sc_d:.1f}/10 -- {_sn_d.upper()}</b> "
-                f"({_cv_d}/{_dt_d} componentes) -- {puntuacion_tec['texto']}",
-                _p(fontSize=7.5, textColor=_col_d)
-            ))
+            _bg_d  = {"alcista": colors.HexColor("#f0fdf4"),
+                      "bajista": colors.HexColor("#fef2f2"),
+                      "neutral": colors.HexColor("#f8fafc")}.get(_sn_d, GF)
+            _ico_d = {"alcista": "ALCISTA", "bajista": "BAJISTA", "neutral": "NEUTRAL"}.get(_sn_d, "NEUTRAL")
+
+            _esc_labels_pdf = {
+                "subida_libre_establecida": "Superando ATH",
+                "en_ath":                   "En maximos historicos",
+                "aproximandose_cerca":      "Cerca ATH (<5%)",
+                "aproximandose":            "Proximo ATH (5-15%)",
+                "referencia":               "Lejos ATH (15-30%)",
+                "lejos":                    "Muy lejos ATH (>30%)",
+                "giro_alcista_reciente":    "Giro alcista reciente",
+                "tendencia_alcista":        "Tendencia alcista",
+                "plana":                    "Media plana",
+                "giro_bajista_reciente":    "Giro bajista reciente",
+                "tendencia_bajista":        "Tendencia bajista",
+                "en_soporte":               "En soporte",
+                "zona_baja_rango":          "Zona baja",
+                "sin_resistencia":          "Sin resistencia",
+                "zona_media_rango":         "Zona media",
+                "zona_alta_rango":          "Zona alta",
+                "en_resistencia":           "En resistencia",
+                "sin_soporte":              "Sin soporte",
+                "extension_161":            "Extension 161.8%",
+                "extension_127":            "Extension 127.2%",
+                "en_maximo":                "En maximo swing",
+                "retroceso_236":            "Retroceso 23.6%",
+                "retroceso_382":            "Retroceso 38-50%",
+                "retroceso_618":            "Zona dorada 61.8%",
+                "retroceso_786":            "Retroceso 78.6%",
+                "swing_roto":               "Swing invalidado",
+                "sobrecompra_extrema":      "Sobrecompra extrema",
+                "sobrecompra":              "Sobrecomprado",
+                "zona_alcista":             "Zona alcista",
+                "zona_neutra":              "Zona neutra",
+                "zona_bajista":             "Zona bajista",
+                "sobreventa":               "Sobrevendido",
+                "sobreventa_extrema":       "Sobreventa extrema",
+                "volumen_excepcional":      "Vol. excepcional",
+                "volumen_alto":             "Vol. alto",
+                "volumen_normal":           "Vol. normal",
+                "volumen_bajo":             "Vol. bajo",
+                "volumen_seco":             "Vol. seco",
+            }
+
+            def _pts_color_pdf(pts):
+                if pts >= 7:   return VE
+                elif pts >= 5: return colors.HexColor("#ca8a04")
+                elif pts >= 3: return colors.HexColor("#ea580c")
+                else:          return RO
+
+            # Fila de resumen: badge + 6 mini-celdas
+            _comp_order_pdf = [
+                ("ath",    "ATH"),
+                ("sma200", "SMA200"),
+                ("resist", "Niveles"),
+                ("fibo",   "Fibonacci"),
+                ("rsi",    "RSI"),
+                ("vol",    "Volumen"),
+            ]
+            _badge_cell = Paragraph(
+                f"<b>{_sc_d:.1f}/10</b><br/>{_ico_d}",
+                _p(fontSize=9, fontName="Helvetica-Bold", textColor=_col_d, alignment=1)
+            )
+            _mini_cells = [_badge_cell]
+            for _ck_p, _cn_p in _comp_order_pdf:
+                _cv_p = puntuacion_tec["scores_ind"].get(_ck_p, {})
+                if not _cv_p.get("disponible"):
+                    _mini_cells.append(Paragraph("—", _p(fontSize=7, alignment=1)))
+                    continue
+                _esc_p = _cv_p.get("escenario","")
+                _lbl_p = _esc_labels_pdf.get(_esc_p, _esc_p.replace("_"," ").title())
+                _pts_p = _cv_p.get("puntos", 5)
+                _fc_p  = _pts_color_pdf(_pts_p)
+                _mini_cells.append(Paragraph(
+                    f"<b>{_cn_p}</b><br/>{_lbl_p}<br/><b>{_pts_p}/10</b>",
+                    _p(fontSize=6.5, textColor=_fc_p, alignment=1)
+                ))
+
+            _mini_tbl = Table([_mini_cells],
+                colWidths=[2.0*cm] + [2.43*cm]*6)
+            _mini_tbl.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0), (0,0), _bg_d),
+                ("ROWBACKGROUNDS",(1,0),(-1,0), [GF]),
+                ("BOX",          (0,0),(-1,-1), 0.5, GB),
+                ("INNERGRID",    (0,0),(-1,-1), 0.3, GB),
+                ("TOPPADDING",   (0,0),(-1,-1), 5),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 5),
+                ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+            ]))
+            historia.append(_mini_tbl)
             historia.append(Spacer(1, 0.15*cm))
+            historia.append(Paragraph(puntuacion_tec["texto"], _p(fontSize=7.5, textColor=_col_d)))
+            historia.append(Spacer(1, 0.15*cm))
+
+    # ── Fibonacci synthesis PDF ───────────────────────────────────────────
+    if analisis_fibo:
+        _fesc_p = analisis_fibo.get("escenario", "")
+        _ffa_p  = analisis_fibo.get("fib_abajo")
+        _ffu_p  = analisis_fibo.get("fib_arriba")
+        _fib_alc_esc_p = {"extension_161", "extension_127", "en_maximo", "retroceso_236"}
+        _fib_neu_esc_p = {"retroceso_382"}
+        if _fesc_p in _fib_alc_esc_p:
+            _ffib_col_p = VE
+        elif _fesc_p in _fib_neu_esc_p:
+            _ffib_col_p = colors.HexColor("#ca8a04")
+        else:
+            _ffib_col_p = colors.HexColor("#ea580c")
+        _fniveles_p = ""
+        if _ffa_p and _ffu_p:
+            _fniveles_p = (
+                f"Soporte Fibonacci: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}%, a {_ffa_p['dist_pct']:.1f}%). "
+                f"Resistencia Fibonacci: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}%, a {_ffu_p['dist_pct']:.1f}%). "
+            )
+        elif _ffa_p:
+            _fniveles_p = f"Soporte Fibonacci mas cercano: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}%, a {_ffa_p['dist_pct']:.1f}%). "
+        elif _ffu_p:
+            _fniveles_p = f"Resistencia Fibonacci mas cercana: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}%, a {_ffu_p['dist_pct']:.1f}%). "
+        _fib_accion_p = {
+            "extension_161": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 161.8% del swing anual. "
+                "No hay resistencias Fibonacci previas — camino tecnicamente despejado al alza. El Fibonacci no da senales de alarma."
+            ),
+            "extension_127": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 127.2% — primer objetivo de proyeccion. "
+                "Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos."
+            ),
+            "en_maximo": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en el maximo del swing (100% Fibonacci). "
+                "Superar este nivel con volumen seria senal alcista importante. Sin romperlo puede corregir."
+            ),
+            "retroceso_236": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso solo del 23.6% — tendencia alcista muy intacta. "
+                "Si aguanta este nivel, la probabilidad de continuar al alza es alta."
+            ),
+            "retroceso_382": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso normal (38.2-50%) dentro de tendencia alcista sana. "
+                "Rebote con volumen aqui = tendencia alcista activa. Sin rebote, siguiente soporte en 61.8%."
+            ),
+            "retroceso_618": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Zona dorada (61.8%) — el retroceso mas seguido institucionalmente. "
+                "Ultimo soporte relevante antes de comprometer la estructura. Rebote aqui = posible entrada tecnica."
+            ),
+            "retroceso_786": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso muy profundo al 78.6% — estructura alcista debilitada. "
+                "Nivel 0% (origen del swing) es la ultima defensa: perderlo invalida el swing."
+            ),
+            "swing_roto": (
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Swing alcista anual invalidado — precio por debajo del origen. "
+                "El analisis Fibonacci debe reconstruirse sobre el nuevo minimo."
+            ),
+        }.get(_fesc_p, "")
+        if _fniveles_p or _fib_accion_p:
+            historia.append(Spacer(1, 0.1*cm))
+            historia.append(Paragraph(_strip(_fniveles_p + _fib_accion_p), _p(fontSize=7.5, textColor=_ffib_col_p)))
+            historia.append(Spacer(1, 0.1*cm))
 
     # ── PIE ───────────────────────────────────────────────────────────────
     historia.append(Spacer(1, 0.5*cm))
