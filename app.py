@@ -9141,7 +9141,7 @@ def pestaña_cartera():
                             m1, m2, m3, m4, m5 = st.columns(5)
                             with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
                             with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
-                            with m3: _metric_card("P&L total",
+                            with m3: _metric_card("P&L total (Beneficio / Pérdida)",
                                                    _fmt_eur(pl_total) if pl_total is not None else "N/D",
                                                    color=_color_pl(pl_total), bg="#f8fafc",
                                                    sub=_fmt_pct_c(pl_pct_tot))
@@ -9153,7 +9153,7 @@ def pestaña_cartera():
                             m1, m2, m3 = st.columns(3)
                             with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
                             with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
-                            with m3: _metric_card("P&L total",
+                            with m3: _metric_card("P&L total (Beneficio / Pérdida)",
                                                    _fmt_eur(pl_total) if pl_total is not None else "N/D",
                                                    color=_color_pl(pl_total), bg="#f8fafc",
                                                    sub=_fmt_pct_c(pl_pct_tot))
@@ -9161,7 +9161,7 @@ def pestaña_cartera():
                             m1, m2, m3 = st.columns(3)
                             with m1: _metric_card("Coste total", _fmt_eur(val_compra), bg="#f8fafc")
                             with m2: _metric_card("Valor actual", _fmt_eur(val_actual) if val_actual else "N/D", bg="#f8fafc")
-                            with m3: _metric_card("P&L total",
+                            with m3: _metric_card("P&L total (Beneficio / Pérdida)",
                                                    _fmt_eur(pl_total) if pl_total is not None else "N/D",
                                                    color=_color_pl(pl_total), bg="#f8fafc",
                                                    sub=_fmt_pct_c(pl_pct_tot))
@@ -9213,7 +9213,7 @@ def pestaña_cartera():
                                 with cols[4]:
                                     pl_str = (_fmt_eur(pl_a) + " / " + _fmt_pct_c(pl_p)
                                               if pl_a is not None else "N/D")
-                                    st.metric("P&L", pl_str,
+                                    st.metric("P&L (Beneficio / Pérdida)", pl_str,
                                               delta=_fmt_pct_c(pl_p) if pl_p is not None else None)
                                 if tipo_key == "dividendos":
                                     with cols[5]:
