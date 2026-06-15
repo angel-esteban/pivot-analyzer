@@ -6465,6 +6465,49 @@ tr:nth-child(even) td { background:#f8fafc; }
     )
 
     # ── Ensamblar ─────────────────────────────────────────────────────────
+    # ── Pre-build semáforo card HTML (avoids implicit-concat type errors)
+    _sem_card_html = (
+        f'<div class="card">\n'
+        f'<h2>&#128680; Sem&#225;foro Global</h2>\n'
+        f'<div class="sem-row">\n'
+        f'<div class="sem-badge" style="border-color:{sem_color}">\n'
+        f'<div class="sem-emoji">{emoji_sem}</div>\n'
+        f'<div class="sem-label" style="color:{sem_color}">{semaforo.upper()}</div>\n'
+        f'<div class="sem-pct">{pct_semaforo:.0f}%</div>\n'
+        f'</div>\n'
+        f'<div class="fac-grid">{fac_cards}</div>\n'
+        f'</div>\n'
+    )
+    _pivots_card_html = (
+        f'<div class="card">\n'
+        f'<h2>&#128208; Pivot Points &#8212; {sistema}</h2>\n'
+        f'<div class="pivot-row">\n'
+        f'{pivot_blocks}'
+        f'<div>\n<div class="col-title">Confluencias</div>\n{conf_html}</div>\n'
+        f'</div>\n</div>\n'
+    )
+    _ind_card_html = (
+        f'<div class="card three-col">\n'
+        f'<div>\n<div class="col-title">Indicadores T&#233;cnicos</div>\n'
+        f'<div class="ind-grid">{ind_base_html}</div>\n</div>\n'
+        f'<div>\n<div class="col-title">Medias M&#243;viles</div>\n'
+        f'<div class="ind-grid">{ind_med_html}</div>\n</div>\n'
+        f'<div>\n<div class="col-title">Volumen</div>\n{vol_html}\n</div>\n'
+        f'</div>\n'
+    )
+    _body_html = (
+        (_li_section or "")
+        + _sem_card_html
+        + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color)
+        + f"</div>\n"
+        + (_diag_section or "")
+        + _pivots_card_html
+        + _ind_card_html
+        + (_conv_section or "")
+        + (_divs_section or "")
+        + (_huecos_section or "")
+        + f"{fund_section}\n"
+    )
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
         f'<meta charset="UTF-8">'
@@ -6490,54 +6533,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'</div>\n</div>\n'
 
         f'<div class="body">\n'
-        + _li_section +
+        + _body_html
+        + f'</div>\n'
 
-        # Semáforo
-        f'<div class="card">\n'
-        f'<h2>&#128680; Sem&#225;foro Global</h2>\n'
-        f'<div class="sem-row">\n'
-        f'<div class="sem-badge" style="border-color:{sem_color}">\n'
-        f'<div class="sem-emoji">{emoji_sem}</div>\n'
-        f'<div class="sem-label" style="color:{sem_color}">{semaforo.upper()}</div>\n'
-        f'<div class="sem-pct">{pct_semaforo:.0f}%</div>\n'
-        f'</div>\n'
-        f'<div class="fac-grid">{fac_cards}</div>\n'
-        f'</div>\n'
-        + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color) +
-        f'</div>\n'
-        + _diag_section +
-
-        # Pivots: 4 columnas paralelas + confluencias
-        f'<div class="card">\n'
-        f'<h2>&#128208; Pivot Points &#8212; {sistema}</h2>\n'
-        f'<div class="pivot-row">\n'
-        f'{pivot_blocks}'
-        f'<div>\n<div class="col-title">Confluencias</div>\n{conf_html}</div>\n'
-        f'</div>\n</div>\n'
-
-        # Indicadores | Medias | Volumen — 3 columnas
-        f'<div class="card three-col">\n'
-        f'<div>\n<div class="col-title">Indicadores T&#233;cnicos</div>\n'
-        f'<div class="ind-grid">{ind_base_html}</div>\n</div>\n'
-        f'<div>\n<div class="col-title">Medias M&#243;viles</div>\n'
-        f'<div class="ind-grid">{ind_med_html}</div>\n</div>\n'
-        f'<div>\n<div class="col-title">Volumen</div>\n{vol_html}\n</div>\n'
-        f'</div>\n'
-
-        # Convergencia Técnica
-        + _conv_section
-        + _divs_section
-
-        # Huecos de Precio
-        + _huecos_section
-
-        # Diagnostico Tecnico
-
-
-        # Fundamentales
-        + f'{fund_section}\n'
-
-        f'</div>\n'  # end .body
 
         f'<div class="footer">\n'
         f'An&#225;lisis educativo &nbsp;&middot;&nbsp; '
