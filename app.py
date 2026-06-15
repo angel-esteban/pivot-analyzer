@@ -8957,26 +8957,36 @@ def pestana_principiante():
                 if hist is None or hist.empty:
                     st.error(f"No se pudieron obtener datos para **{_ticker}**. Verifica el ticker.")
                     return
-                _precio = precio_actual(hist)
-                _nombre = info.get("longName") or info.get("shortName") or _ticker
-                _cierre = hist["Close"]
-                _rsi    = calcular_rsi(_cierre)
+                _precio  = precio_actual(hist)
+                _nombre  = info.get("longName") or info.get("shortName") or _ticker
+                _cierre  = hist["Close"]
+                _rsi     = calcular_rsi(_cierre)
                 _macd, _macd_s, _macd_h = calcular_macd(_cierre)
                 _bb_sup, _bb_med, _bb_inf, _pct_b = calcular_bollinger(_cierre)
                 _sar_val, _sar_tend = calcular_sar(hist)
-                _medias = calcular_sma_ema(_cierre)
-                _vol    = analisis_volumen(hist)
+                _medias  = calcular_sma_ema(_cierre)
+                _vol_sem = analisis_volumen(hist)          # para semáforo
+                _vol_tec = analizar_volumen(hist, _nombre) # para diagnóstico técnico
+                # Pivots + convergencia (necesaria para niveles_reforzados)
+                _rpivots = calcular_todos_pivots(hist, list(SISTEMAS_PIVOT.keys())[0])
+                _pd_d    = _rpivots.get("Diario")
+                _niv_ref, _señales_dir, _consenso = calcular_convergencia_tecnica(
+                    _rpivots, _medias, _precio,
+                    _rsi, _macd, _macd_s, _macd_h, _sar_tend, _pct_b,
+                    tolerancia=0.20
+                )
+                # Análisis técnico estructural (orden correcto)
                 _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=True)
                 _a_ath  = analizar_maximos_historicos(_hist_l, _precio, _nombre)
                 _a_sma  = analizar_sma200(hist, _precio, _nombre)
-                _a_res  = analizar_resistencias_estructurales(hist, _precio, _nombre)
+                _a_res  = analizar_resistencias_estructurales(_niv_ref, _precio, _nombre)
                 _a_fib  = analizar_fibonacci(hist, _precio, _nombre)
                 _a_rsi  = analizar_rsi(hist, _precio, _nombre)
-                _pt     = calcular_puntuacion_tecnica(_a_ath, _a_sma, _a_res, _a_fib, _a_rsi, _vol)
-                _rpivots = calcular_todos_pivots(hist, list(SISTEMAS_PIVOT.keys())[0])
-                _pd_d    = _rpivots.get("Diario")
+                _pt     = calcular_puntuacion_tecnica(_a_ath, _a_sma, _a_res, _a_fib, _a_rsi, _vol_tec)
+                # Semáforo
                 _c_sem, _p_sem, _f_sem = calcular_semaforo(
-                    _precio, _pd_d, _rsi, _macd, _macd_s, _bb_sup, _bb_inf, _vol, _sar_tend
+                    _precio, _pd_d, _rsi, _macd, _macd_s,
+                    _bb_sup, _bb_inf, _vol_sem, _sar_tend
                 )
                 _confs = detectar_confluencias(_rpivots, tolerancia=0.20)
                 st.session_state["_pp_data"] = {
@@ -8985,13 +8995,15 @@ def pestana_principiante():
                     "rsi_val": _rsi, "macd_val": _macd, "macd_señal": _macd_s,
                     "pct_b": _pct_b, "bb_sup": _bb_sup, "bb_inf": _bb_inf,
                     "sar_val": _sar_val, "sar_tend": _sar_tend,
-                    "medias": _medias, "vol_data": _vol,
+                    "medias": _medias, "vol_data": _vol_sem,
                     "puntuacion_tec": _pt,
                     "color_sem": _c_sem, "pct_sem": _p_sem, "factores_sem": _f_sem,
                     "pivots_diario": _pd_d, "confluencias": _confs,
                 }
             except Exception as _e:
-                st.error(f"Error al obtener datos: {_e}")
+                st.error(f"Error al cargar datos: {_e}")
+                import traceback
+                st.code(traceback.format_exc())
                 return
 
     d = st.session_state.get("_pp_data")
