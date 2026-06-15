@@ -9861,6 +9861,7 @@ Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar 
         st.divider()
 
         # ── Bloque 3: Indicadores Técnicos | Medias Móviles | Volumen ─────
+        _sh("📊 Indicadores Técnicos")
         # Construir HTML idéntico al informe
         def _ind_s(lbl, val, sub=""):
             sub_h = f'<div class="s-ind-sub">{sub}</div>' if sub else ""
