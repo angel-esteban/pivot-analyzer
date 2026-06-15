@@ -7816,9 +7816,13 @@ def _mini_analisis_cartera(ticker: str) -> dict:
     try:
         import yfinance as yf
         import numpy as _np
-        hist = yf.Ticker(ticker).history(period="1y")
+        tk   = yf.Ticker(ticker)
+        hist = tk.history(period="1y")
         if hist.empty or len(hist) < 30:
             return {}
+        _info   = tk.info or {}
+        sector   = _info.get("sector") or _info.get("sectorKey") or ""
+        industry = _info.get("industry") or _info.get("industryKey") or ""
         close = hist["Close"]
         vol   = hist["Volume"]
         precio = float(close.iloc[-1])
@@ -7858,6 +7862,8 @@ def _mini_analisis_cartera(ticker: str) -> dict:
             "macd_trend": macd_trend,
             "dist_sma200": (precio / sma200 - 1) * 100 if sma200 else None,
             "dist_sma50":  (precio / sma50  - 1) * 100 if sma50  else None,
+            "sector":     sector,
+            "industry":   industry,
         }
     except Exception:
         return {}
@@ -7876,15 +7882,24 @@ def _semaforo_html(emoji: str, label: str, valor: str, texto: str) -> str:
 
 
 def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
-                                 yield_coste: float):
+                                 yield_coste: float, pos_id: int = 0):
     """Muestra análisis didáctico de entrada para cartera de dividendos."""
-    st.markdown(
-        f'<div style="background:linear-gradient(90deg,#f0fdf4,#dcfce7);'
-        f'border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin-bottom:12px">'
-        f'<span style="font-size:15px;font-weight:800">🔍 Análisis de entrada — {ticker}</span>'
-        f'<span style="font-size:12px;color:#16a34a;margin-left:10px">Cartera Dividendos</span>'
-        f'</div>', unsafe_allow_html=True
-    )
+    _col_hdr, _col_x = st.columns([9, 1])
+    with _col_hdr:
+        st.markdown(
+            f'<div style="background:linear-gradient(90deg,#f0fdf4,#dcfce7);'
+            f'border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin-bottom:4px">'
+            f'<span style="font-size:15px;font-weight:800">🔍 Análisis de entrada — {ticker}</span>'
+            f'<span style="font-size:12px;color:#16a34a;margin-left:10px">Cartera Dividendos</span>'
+            f'</div>', unsafe_allow_html=True
+        )
+    with _col_x:
+        st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
+        if st.button("✕", key=f"close_an_div_{pos_id}", help="Cerrar análisis",
+                     use_container_width=True):
+            st.session_state[f"_an_div_{pos_id}"] = False
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
     with st.spinner(f"Descargando datos de {ticker}…"):
         d = _mini_analisis_cartera(ticker)
     if not d:
@@ -7948,15 +7963,24 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
 
 
 def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
-                                  pl_pct: float):
+                                  pl_pct: float, pos_id: int = 0):
     """Muestra análisis didáctico de salida para cartera swing trading."""
-    st.markdown(
-        f'<div style="background:linear-gradient(90deg,#fff7ed,#ffedd5);'
-        f'border:1px solid #fdba74;border-radius:10px;padding:14px 18px;margin-bottom:12px">'
-        f'<span style="font-size:15px;font-weight:800">🔍 Análisis de salida — {ticker}</span>'
-        f'<span style="font-size:12px;color:#ea580c;margin-left:10px">Cartera Swing Trading</span>'
-        f'</div>', unsafe_allow_html=True
-    )
+    _col_hdr, _col_x = st.columns([9, 1])
+    with _col_hdr:
+        st.markdown(
+            f'<div style="background:linear-gradient(90deg,#fff7ed,#ffedd5);'
+            f'border:1px solid #fdba74;border-radius:10px;padding:14px 18px;margin-bottom:4px">'
+            f'<span style="font-size:15px;font-weight:800">🔍 Análisis de salida — {ticker}</span>'
+            f'<span style="font-size:12px;color:#ea580c;margin-left:10px">Cartera Swing Trading</span>'
+            f'</div>', unsafe_allow_html=True
+        )
+    with _col_x:
+        st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
+        if st.button("✕", key=f"close_an_swg_{pos_id}", help="Cerrar análisis",
+                     use_container_width=True):
+            st.session_state[f"_an_swg_{pos_id}"] = False
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
     with st.spinner(f"Descargando datos de {ticker}…"):
         d = _mini_analisis_cartera(ticker)
     if not d:
@@ -8341,6 +8365,17 @@ def pestaña_cartera():
                                         f"**{pos['ticker']}**"
                                         + (f" — {pos['nombre_valor']}" if pos.get("nombre_valor") else "")
                                     )
+                                    # Sector (from cache if already loaded, else fetch)
+                                    _sector_key = f"_sector_{pos['ticker']}"
+                                    if _sector_key not in st.session_state:
+                                        try:
+                                            _inf = yf.Ticker(pos["ticker"]).info or {}
+                                            st.session_state[_sector_key] = _inf.get("sector") or _inf.get("sectorKey") or ""
+                                        except Exception:
+                                            st.session_state[_sector_key] = ""
+                                    _sector_val = st.session_state.get(_sector_key, "")
+                                    if _sector_val:
+                                        st.caption(f"📂 {_sector_val}")
                                     if pos.get("notas"):
                                         st.caption(pos["notas"])
                                 with cols[1]:
@@ -8394,6 +8429,7 @@ def pestaña_cartera():
                                         pos.get("nombre_valor", pos["ticker"]),
                                         float(pos["precio_compra"]),
                                         float(pos.get("yield_coste") or 0),
+                                        pos_id=pos["id"],
                                     )
                             elif tipo_key == "swing" and st.session_state.get(f"_an_swg_{pos['id']}", False):
                                 with st.container():
@@ -8402,6 +8438,7 @@ def pestaña_cartera():
                                         pos.get("nombre_valor", pos["ticker"]),
                                         float(pos["precio_compra"]),
                                         float(pos.get("pl_pct") or 0),
+                                        pos_id=pos["id"],
                                     )
 
                             # ── Formulario de edición inline ───────────────
