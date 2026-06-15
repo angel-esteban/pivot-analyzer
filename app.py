@@ -6387,6 +6387,83 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>\n'
         )
 
+    # ── Lectura Integrada HTML ─────────────────────────────────────────────
+    _li_score_h = (puntuacion_tec or {}).get("score_total", 5.0)
+    _li_nivel_h = "alto" if _li_score_h >= 7 else ("medio" if _li_score_h >= 4 else "bajo")
+    _li_key_h   = (_li_nivel_h, semaforo)
+    _LI_M = {
+        ("alto",   "verde"):    ("#f0fdf4", "#16a34a", "🟢", "Todo en verde: estructura y momento alineados",
+            f"El valor tiene posicion estructural solida (score {_li_score_h:.1f}/10) y el momentum acompana. "
+            "Los indicadores tecnicos estan mayoritariamente alineados al alza.",
+            "Es el entorno tecnico mas favorable. Si ya tienes posicion, las senales respaldan mantenerla. "
+            "Si no has entrado, busca una zona de soporte cercana para hacerlo."),
+        ("alto",   "amarillo"): ("#fefce8", "#ca8a04", "🟡", "Buena estructura, pero el impulso duda",
+            f"La posicion estructural es fuerte (score {_li_score_h:.1f}/10). Sin embargo, el momentum envia senales contradictorias.",
+            "No es el momento de entrar con todo el capital de golpe. Si ya tienes posicion, no hay por que salir. "
+            "Espera a que el semaforo mejore antes de entrar."),
+        ("alto",   "rojo"):     ("#fefce8", "#ca8a04", "🟡", "Buena estructura, pero correccion en marcha",
+            f"La estructura tecnica de largo plazo es positiva (score {_li_score_h:.1f}/10), pero el precio pasa por una correccion temporal.",
+            "Las correcciones en valores con buena estructura son oportunidades para quien tiene paciencia. "
+            "Vigila el soporte mas cercano: si lo pierde con mucho volumen, la correccion puede profundizarse."),
+        ("medio",  "verde"):    ("#fefce8", "#ca8a04", "🟡", "El precio sube, pero la base no es solida",
+            f"El momentum a corto plazo es favorable, pero la posicion estructural es neutral (score {_li_score_h:.1f}/10).",
+            "Cuidado con las subidas sin estructura solida: pueden bajar igual de rapido. "
+            "Si tienes beneficios, ajusta tu stop-loss. Si no tienes posicion, espera mejora estructural."),
+        ("medio",  "amarillo"): ("#f8fafc", "#94a3b8", "⚪", "Sin senal clara en ningun sentido",
+            f"Ni la estructura (score {_li_score_h:.1f}/10) ni el momentum apuntan en una direccion definida.",
+            "Estamos en mercado lateral. Lo mas prudente es esperar ruptura clara por encima o debajo de un nivel relevante."),
+        ("medio",  "rojo"):     ("#fff7ed", "#ea580c", "🟠", "Impulso bajista sin base que amortigüe",
+            f"El momentum esta deteriorado y la posicion estructural es neutral (score {_li_score_h:.1f}/10).",
+            "Entorno tecnico desfavorable sin red de seguridad estructural. Si ya tienes posicion, "
+            "revisa los soportes mas cercanos. Si estas fuera, espera estabilizacion."),
+        ("bajo",   "verde"):    ("#fff7ed", "#ea580c", "🟠", "Rebote puntual en valor con problemas de fondo",
+            f"El precio sube a corto plazo, pero la estructura de largo plazo es debil (score {_li_score_h:.1f}/10).",
+            "Este tipo de rebote suele ser temporal. Historicamente son momentos en los que los inversores "
+            "que ya tienen posicion aprovechan para vender, no para comprar."),
+        ("bajo",   "amarillo"): ("#fef2f2", "#dc2626", "🔴", "Estructura debil y sin direccion",
+            f"La estructura tecnica de largo plazo es claramente negativa (score {_li_score_h:.1f}/10) y el momentum no muestra recuperacion.",
+            "Alto riesgo tecnico. Si tienes posicion, revisa tu stop-loss. "
+            "Si estas fuera, no hay senal que justifique entrar."),
+        ("bajo",   "rojo"):     ("#fef2f2", "#dc2626", "🔴", "Todos los indicadores en contra",
+            f"La estructura tecnica es negativa (score {_li_score_h:.1f}/10) y el momentum confirma la presion bajista.",
+            "Es el entorno tecnico mas desfavorable. Entrar ahora seria ir contra todos los indicadores disponibles. "
+            "Si ya tienes posicion, valora honestamente si lo que esperabas al entrar sigue siendo valido."),
+    }
+    _li_bg_h, _li_brd_h, _li_ico_h, _li_tit_h, _li_sit_h, _li_imp_h = _LI_M.get(
+        _li_key_h, ("#f8fafc", "#94a3b8", "⚪", "Analisis en proceso", "Datos insuficientes.", "")
+    )
+    _li_nk_h = ""
+    if niveles_reforzados:
+        _nr_h = min(niveles_reforzados, key=lambda x: abs(x["precio"] - precio))
+        _nr_dist_h = (_nr_h["precio"] - precio) / precio * 100
+        _nr_tipo_h = "Resistencia reforzada" if _nr_h["tipo"] == "R" else ("Soporte reforzado" if _nr_h["tipo"] == "S" else "Nivel reforzado")
+        _nr_em_h = "🔴" if _nr_h["tipo"] == "R" else ("🟢" if _nr_h["tipo"] == "S" else "🔵")
+        _li_nk_h = (
+            f'<div style="margin-top:10px;padding:8px 12px;background:rgba(0,0,0,0.04);'
+            f'border-radius:7px;font-size:12px">'
+            f'<span style="color:#64748b;font-weight:600">NIVEL CLAVE MÁS CERCANO</span><br>'
+            f'<span style="font-size:14px;font-weight:800;color:#0f172a">'
+            f'{_nr_em_h} {_nr_h["precio"]:.4f}</span>'
+            f'<span style="font-size:11px;color:#64748b;margin-left:8px">'
+            f'{_nr_dist_h:+.1f}% &middot; {_nr_tipo_h}</span></div>'
+        )
+    _li_section = (
+        f'<div class="card">\n'
+        f'<h2>&#129517; Lectura Integrada</h2>\n'
+        f'<div style="background:{_li_bg_h};border:1.5px solid {_li_brd_h};border-radius:12px;padding:16px 18px">\n'
+        f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;'
+        f'color:#64748b;margin-bottom:6px">Lectura Integrada</div>\n'
+        f'<div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:10px;line-height:1.2">'
+        f'{_li_ico_h} {_li_tit_h}</div>\n'
+        f'<div style="font-size:12.5px;color:#374151;line-height:1.6;margin-bottom:8px">{_li_sit_h}</div>\n'
+        f'<div style="font-size:12px;color:#1e3a5f;line-height:1.6;font-weight:500;'
+        f'border-left:3px solid {_li_brd_h};padding-left:10px">{_li_imp_h}</div>\n'
+        f'{_li_nk_h}\n'
+        f'<div style="font-size:10px;color:#94a3b8;margin-top:10px">'
+        f'Diagnostico {_li_score_h:.1f}/10 &middot; Semaforo {semaforo.upper()} {pct_semaforo:.0f}%</div>\n'
+        f'</div>\n</div>\n'
+    )
+
     # ── Ensamblar ─────────────────────────────────────────────────────────
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
@@ -6427,6 +6504,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'</div>\n'
         + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color) +
         f'</div>\n'
+        + _li_section +
 
         # Pivots: 4 columnas paralelas + confluencias
         f'<div class="card">\n'
@@ -7374,6 +7452,63 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Spacer(1, 0.35*cm))
 
     # ── PIVOT POINTS MULTI-COLUMNA ────────────────────────────────────────
+    # ── Lectura Integrada (PDF) ───────────────────────────────────────────
+    _lip_score = (puntuacion_tec or {}).get("score_total", 5.0)
+    _lip_nivel = "alto" if _lip_score >= 7 else ("medio" if _lip_score >= 4 else "bajo")
+    _lip_key   = (_lip_nivel, semaforo)
+    _LIP_M = {
+        ("alto",   "verde"):    (VE, "TODO EN VERDE: estructura y momento alineados",
+            f"Posicion estructural solida (score {_lip_score:.1f}/10) y momentum acompanando. "
+            "Entorno tecnico mas favorable. Si tienes posicion, las senales respaldan mantenerla. "
+            "Si no has entrado, busca zona de soporte cercana."),
+        ("alto",   "amarillo"): (colors.HexColor("#ca8a04"), "BUENA ESTRUCTURA, PERO EL IMPULSO DUDA",
+            f"Estructura fuerte (score {_lip_score:.1f}/10) pero momentum con senales contradictorias. "
+            "No es momento de entrar con todo el capital. Si tienes posicion, no hay por que salir."),
+        ("alto",   "rojo"):     (colors.HexColor("#ca8a04"), "BUENA ESTRUCTURA, CORRECCION EN MARCHA",
+            f"Estructura de largo plazo positiva (score {_lip_score:.1f}/10) pero correccion temporal activa. "
+            "Vigila el soporte mas cercano: si lo pierde con volumen, la correccion puede profundizarse."),
+        ("medio",  "verde"):    (colors.HexColor("#ca8a04"), "EL PRECIO SUBE PERO LA BASE NO ES SOLIDA",
+            f"Momentum favorable a corto plazo, pero posicion estructural neutral (score {_lip_score:.1f}/10). "
+            "Cuidado: subidas sin estructura solida pueden bajar igual de rapido."),
+        ("medio",  "amarillo"): (colors.grey, "SIN SENAL CLARA EN NINGUN SENTIDO",
+            f"Ni estructura (score {_lip_score:.1f}/10) ni momentum apuntan en direccion definida. "
+            "Espera ruptura clara de un nivel relevante antes de actuar."),
+        ("medio",  "rojo"):     (colors.HexColor("#ea580c"), "IMPULSO BAJISTA SIN BASE QUE AMORTIGÜE",
+            f"Momentum deteriorado y posicion estructural neutral (score {_lip_score:.1f}/10). "
+            "Sin red de seguridad estructural. Revisa soportes mas cercanos."),
+        ("bajo",   "verde"):    (colors.HexColor("#ea580c"), "REBOTE PUNTUAL EN VALOR CON PROBLEMAS DE FONDO",
+            f"El precio sube a corto plazo pero la estructura es debil (score {_lip_score:.1f}/10). "
+            "Este tipo de rebote suele ser temporal."),
+        ("bajo",   "amarillo"): (RO, "ESTRUCTURA DEBIL Y SIN DIRECCION",
+            f"Estructura claramente negativa (score {_lip_score:.1f}/10) y momentum sin recuperacion. "
+            "Alto riesgo tecnico. Revisa tu stop-loss si tienes posicion."),
+        ("bajo",   "rojo"):     (RO, "TODOS LOS INDICADORES EN CONTRA",
+            f"Estructura negativa (score {_lip_score:.1f}/10) y momentum confirma presion bajista. "
+            "Entorno tecnico mas desfavorable. No hay senal tecnica que justifique entrar."),
+    }
+    _lip_col, _lip_tit, _lip_txt = _LIP_M.get(
+        _lip_key, (colors.grey, "ANALISIS EN PROCESO", "Datos insuficientes.")
+    )
+    historia.append(Spacer(1, 0.3*cm))
+    _pdf_sh("Lectura Integrada", historia)
+    historia.append(Spacer(1, 0.1*cm))
+    historia.append(Paragraph(_strip(f"SITUACION: {_lip_tit}"), _p(fontSize=9, fontName="Helvetica-Bold", textColor=_lip_col)))
+    historia.append(Spacer(1, 0.08*cm))
+    historia.append(Paragraph(_strip(_lip_txt), _p(fontSize=8, textColor=_lip_col)))
+    if niveles_reforzados:
+        _lip_nr = min(niveles_reforzados, key=lambda x: abs(x["precio"] - precio))
+        _lip_nrd = (_lip_nr["precio"] - precio) / precio * 100
+        _lip_nrt = "Resistencia" if _lip_nr["tipo"] == "R" else ("Soporte" if _lip_nr["tipo"] == "S" else "Nivel")
+        historia.append(Spacer(1, 0.08*cm))
+        historia.append(Paragraph(
+            f"Nivel clave mas cercano: {_lip_nr['precio']:.4f} ({_lip_nrd:+.1f}% — {_lip_nrt} reforzado)",
+            _p(fontSize=7.5, fontName="Helvetica-Bold", textColor=_lip_col)
+        ))
+    historia.append(Paragraph(
+        f"Diagnostico {_lip_score:.1f}/10 · Semaforo {semaforo.upper()} {pct_semaforo:.0f}%",
+        _p(fontSize=7, textColor=colors.HexColor("#94a3b8"))
+    ))
+
     _pdf_sh(f"📐 Pivot Points — Sistema {sistema}", historia)
 
     NIV = ["R4","R3","R2","R1","PP","S1","S2","S3","S4","M1","M2","M3","M4","M5"]
@@ -7615,6 +7750,40 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             historia.append(t_dv)
             historia.append(Spacer(1, 0.15*cm))
         historia.append(Spacer(1, 0.1*cm))
+        # Síntesis Divergencias
+        _sv_dv_alc = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
+        _sv_dv_baj = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
+        _sv_n_alc = len(_sv_dv_alc); _sv_n_baj = len(_sv_dv_baj)
+        _sv_obv_alc = any(d["tipo"] == "OBV" for d in _sv_dv_alc)
+        _sv_obv_baj = any(d["tipo"] == "OBV" for d in _sv_dv_baj)
+        _sv_frt_alc = any(d["fuerza"] == "fuerte" for d in _sv_dv_alc)
+        _sv_frt_baj = any(d["fuerza"] == "fuerte" for d in _sv_dv_baj)
+        if _sv_n_alc > 0 and _sv_n_baj == 0:
+            _sv_c = VE
+            if _sv_n_alc >= 2 and (_sv_obv_alc or _sv_frt_alc):
+                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detectan {_sv_n_alc} divergencias alcistas"
+                    + (" (OBV incluido)" if _sv_obv_alc else "") + ". "
+                    "Aunque el precio baja, los indicadores muestran que la presion vendedora se agota. "
+                    "Que vigilar: ruptura por encima de resistencia con volumen alto.")
+            else:
+                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detecta {_sv_n_alc} divergencia alcista moderada. "
+                    "Que vigilar: precio aguantando sin nuevos minimos mientras mejoran indicadores.")
+        elif _sv_n_baj > 0 and _sv_n_alc == 0:
+            _sv_c = RO
+            if _sv_n_baj >= 2 and (_sv_obv_baj or _sv_frt_baj):
+                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detectan {_sv_n_baj} divergencias bajistas"
+                    + (" (OBV incluido)" if _sv_obv_baj else "") + ". "
+                    "Aunque el precio sube, los indicadores muestran debilitamiento comprador. "
+                    "Que vigilar: perdida de soporte con volumen.")
+            else:
+                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detecta {_sv_n_baj} divergencia bajista moderada. "
+                    "Que vigilar: mas divergencias o precio bajo SMA20 dan mas peso a la senal.")
+        else:
+            _sv_c = colors.HexColor("#ca8a04")
+            _sv_t = (f"[QUE SIGNIFICA PARA TI] Senales contradictorias: {_sv_n_alc} alcistas y {_sv_n_baj} bajistas. "
+                "Que vigilar: ruptura clara de soporte/resistencia antes de actuar.")
+        historia.append(Spacer(1, 0.1*cm))
+        historia.append(Paragraph(_strip(_sv_t), _p(fontSize=7.5, textColor=_sv_c)))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
     _pdf_sh("🏦 Datos Fundamentales", historia)
@@ -7692,80 +7861,6 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 ("LEFTPADDING",  (0,0),(-1,-1), 4),
             ]))
             historia.append(t_fund)
-
-    # ── Divergencias Técnicas ─────────────────────────────────────────────────
-    if divergencias_tecnicas:
-        _dv_alc_p = [d for d in divergencias_tecnicas if d["direccion"] == "alcista"]
-        _dv_baj_p = [d for d in divergencias_tecnicas if d["direccion"] == "bajista"]
-        historia.append(Spacer(1, 0.3*cm))
-        _pdf_sh("Divergencias Tecnicas", historia)
-        historia.append(Spacer(1, 0.15*cm))
-        _dv_rows_p = [["Tipo", "Indicador", "Descripcion", "Fuerza"]]
-        for _d in divergencias_tecnicas[:8]:
-            _dv_rows_p.append([
-                "Alcista [+]" if _d["direccion"] == "alcista" else "Bajista [-]",
-                _d.get("tipo", ""),
-                _d.get("descripcion", ""),
-                _d.get("fuerza", ""),
-            ])
-        _dv_t = Table(_dv_rows_p, colWidths=[2.2*cm, 2.0*cm, 10.0*cm, 2.0*cm])
-        _dv_t.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, 0), CA),
-            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE",      (0, 0), (-1, -1), 8),
-            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, GF]),
-            ("GRID",          (0, 0), (-1, -1), 0.2, GB),
-            ("TOPPADDING",    (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
-            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ]))
-        for _ri, _d in enumerate(divergencias_tecnicas[:8], 1):
-            _rc = colors.HexColor("#f0fdf4") if _d["direccion"] == "alcista" else colors.HexColor("#fef2f2")
-            _dv_t.setStyle(TableStyle([("BACKGROUND", (0, _ri), (-1, _ri), _rc)]))
-        historia.append(_dv_t)
-        # Synthesis
-        _n_alc_p = len(_dv_alc_p); _n_baj_p = len(_dv_baj_p)
-        _tiene_obv_alc_p = any(d["tipo"] == "OBV" for d in _dv_alc_p)
-        _tiene_obv_baj_p = any(d["tipo"] == "OBV" for d in _dv_baj_p)
-        _tiene_frt_alc_p = any(d["fuerza"] == "fuerte" for d in _dv_alc_p)
-        _tiene_frt_baj_p = any(d["fuerza"] == "fuerte" for d in _dv_baj_p)
-        if _n_alc_p > 0 and _n_baj_p == 0:
-            _sv_col_p = VE
-            if _n_alc_p >= 2 and (_tiene_obv_alc_p or _tiene_frt_alc_p):
-                _sv_txt_p = (
-                    f"[QUE SIGNIFICA PARA TI] Se detectan {_n_alc_p} divergencias alcistas"
-                    + (" (OBV incluido)" if _tiene_obv_alc_p else "") + ". "
-                    "Aunque el precio baja, los indicadores muestran que la presion vendedora se agota. "
-                    "Que vigilar: ruptura por encima de resistencia cercana con volumen alto."
-                )
-            else:
-                _sv_txt_p = (
-                    f"[QUE SIGNIFICA PARA TI] Se detecta {_n_alc_p} divergencia alcista moderada. "
-                    "Que vigilar: si el precio aguanta sin nuevos minimos y mejoran los indicadores, la senal se fortalece."
-                )
-        elif _n_baj_p > 0 and _n_alc_p == 0:
-            _sv_col_p = RO
-            if _n_baj_p >= 2 and (_tiene_obv_baj_p or _tiene_frt_baj_p):
-                _sv_txt_p = (
-                    f"[QUE SIGNIFICA PARA TI] Se detectan {_n_baj_p} divergencias bajistas"
-                    + (" (OBV incluido)" if _tiene_obv_baj_p else "") + ". "
-                    "Aunque el precio sube, los indicadores muestran debilitamiento comprador. "
-                    "Que vigilar: si pierde soporte con volumen, la correccion puede acelerarse."
-                )
-            else:
-                _sv_txt_p = (
-                    f"[QUE SIGNIFICA PARA TI] Se detecta {_n_baj_p} divergencia bajista moderada. "
-                    "Que vigilar: mas divergencias o precio bajo SMA20 le dan mas peso a la senal."
-                )
-        else:
-            _sv_col_p = colors.HexColor("#ca8a04")
-            _sv_txt_p = (
-                f"[QUE SIGNIFICA PARA TI] Senales contradictorias: {_n_alc_p} alcistas y {_n_baj_p} bajistas. "
-                "Que vigilar: espera ruptura clara de soporte/resistencia antes de actuar."
-            )
-        historia.append(Spacer(1, 0.15*cm))
-        historia.append(Paragraph(_strip(_sv_txt_p), _p(fontSize=7.5, textColor=_sv_col_p)))
 
     # ── Huecos de precio ──────────────────────────────────────────────────
     if huecos:
@@ -8338,7 +8433,7 @@ def _lectura_integrada(
     """Síntesis accionable: cruza estructura (Diagnóstico) con momento (Semáforo)
     y genera una lectura en lenguaje de inversor con implicación práctica."""
 
-    diag_score = (puntuacion_tec or {}).get("total", 5.0)
+    diag_score = (puntuacion_tec or {}).get("score_total", 5.0)
 
     # ── Clasificación cruzada ──────────────────────────────────────────────
     diag_nivel = "alto" if diag_score >= 7 else ("medio" if diag_score >= 4 else "bajo")
