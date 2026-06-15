@@ -9194,11 +9194,11 @@ def pestaña_cartera():
 
                             with st.container():
                                 if tipo_key == "dividendos":
-                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 1.3, 0.9])
+                                    cols = st.columns([4, 1.1, 1.1, 1.1, 1.5, 1.1, 0.8], gap="small")
                                 elif tipo_key == "swing":
-                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 0.9])
+                                    cols = st.columns([4, 1.1, 1.1, 1.1, 1.5, 0.8], gap="small")
                                 else:
-                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 0.9])
+                                    cols = st.columns([4, 1.1, 1.1, 1.1, 1.5, 0.8], gap="small")
                                 with cols[0]:
                                     st.markdown(
                                         f"**{pos['ticker']}**"
@@ -9233,7 +9233,7 @@ def pestaña_cartera():
                                         yoc = pos.get("yield_coste", 0)
                                         st.metric("Yield/coste", f"{yoc:.2f}%".replace(".",","))
                                     with cols[6]:
-                                        _btn6a, _btn6b, _btn6c = st.columns(3)
+                                        _btn6a, _btn6b, _btn6c = st.columns(3, gap="small")
                                         with _btn6a:
                                             _ak = f"_an_div_{pos['id']}"
                                             if st.button("🔍", key=f"btn_an_div_{pos['id']}",
@@ -9253,7 +9253,7 @@ def pestaña_cartera():
                                                 st.rerun()
                                 elif tipo_key == "swing":
                                     with cols[5]:
-                                        _btn5a, _btn5b, _btn5c = st.columns(3)
+                                        _btn5a, _btn5b, _btn5c = st.columns(3, gap="small")
                                         with _btn5a:
                                             _ak = f"_an_swg_{pos['id']}"
                                             if st.button("🔍", key=f"btn_an_swg_{pos['id']}",
@@ -9273,7 +9273,7 @@ def pestaña_cartera():
                                                 st.rerun()
                                 else:
                                     with cols[5]:
-                                        _btn5a, _btn5b = st.columns(2)
+                                        _btn5a, _btn5b = st.columns(2, gap="small")
                                         with _btn5a:
                                             if st.button("✏️", key=f"edit_pos_{pos['id']}",
                                                          help="Editar esta posición"):
