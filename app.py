@@ -29,6 +29,21 @@ import psycopg2.extras
 
 # HTTP para ECB Statistical Data Warehouse (sin API key)
 import requests
+import json as _json_mod
+import os as _os_mod
+
+# ── Base de conocimiento sectorial GICS ─────────────────────────────────
+def _load_sector_knowledge() -> dict:
+    """Carga sector_knowledge.json desde la misma carpeta que app.py."""
+    try:
+        _base = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
+        _fp = _os_mod.path.join(_base, 'sector_knowledge.json')
+        with open(_fp, 'r', encoding='utf-8') as _f:
+            return _json_mod.load(_f)
+    except Exception:
+        return {}
+
+SECTOR_KNOWLEDGE = _load_sector_knowledge()
 
 # Technical indicators — pandas_ta con fallback manual
 try:
@@ -8457,6 +8472,7 @@ def _lectura_integrada(
     consenso_dir: tuple,
     precio: float, rsi_val: float,
     factores_sem: list,
+    sector_yf: str = "",
 ) -> None:
     """Síntesis accionable: cruza estructura (Diagnóstico) con momento (Semáforo)
     y genera una lectura en lenguaje de inversor con implicación práctica."""
@@ -8880,6 +8896,27 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
 # ─────────────────────────────────────────────────────────────────────────────
 # PESTAÑA: ¿POR DÓNDE EMPIEZO? — Flujo guiado para el inversor principiante
 # ─────────────────────────────────────────────────────────────────────────────
+    # ── Nota sectorial (si disponible) ─────────────────────────────────────
+    if sector_yf:
+        _sk_s = SECTOR_KNOWLEDGE.get("sectores", {})
+        _si_info = _sk_s.get(sector_yf)
+        if not _si_info:
+            for _k, _v in _sk_s.items():
+                if sector_yf in (_v.get("yfinance_keys") or []):
+                    _si_info = _v; break
+        if _si_info:
+            _sn  = _si_info.get("nombre_es", sector_yf)
+            _se  = _si_info.get("emoji", "📊")
+            _car = _si_info.get("caracter", "").replace("-", " · ").title()
+            _st  = _si_info.get("sensibilidad_tipos", {}).get("direccion", "").replace("-", " ")
+            st.markdown(
+                f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem 1rem;'
+                f'margin-top:.8rem;font-size:.84rem;color:#475569">'
+                f'<b>{_se} Sector: {_sn}</b> &nbsp;·&nbsp; Carácter: {_car} &nbsp;·&nbsp; Sensibilidad tipos: {_st}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
 def pestana_principiante():
     """Wizard de 4 pasos: Macro → Diagnóstico → Semáforo → Niveles."""
 
@@ -9106,6 +9143,69 @@ def pestana_principiante():
         SMA 200 por debajo = necesitas razones muy s&#243;lidas para comprar contra tendencia.<br>
         Alta volatilidad = tamaño de posici&#243;n m&#225;s peque&#241;o para el mismo riesgo real.
         </div>""", unsafe_allow_html=True)
+        # ── Sector context from SECTOR_KNOWLEDGE ─────────────────────
+        _sk_data = SECTOR_KNOWLEDGE.get("sectores", {})
+        _sector_yf = _info.get("sector", "") or ""
+        # normalise key: yfinance sometimes returns "Financial Services", sometimes "Financials"
+        _sector_info = _sk_data.get(_sector_yf)
+        if not _sector_info:
+            # try yfinance_keys fallback
+            for _sk, _sv in _sk_data.items():
+                if _sector_yf in (_sv.get("yfinance_keys") or []):
+                    _sector_info = _sv
+                    break
+        if _sector_info:
+            _s_emoji  = _sector_info.get("emoji", "📊")
+            _s_nombre = _sector_info.get("nombre_es", _sector_yf)
+            _s_car    = _sector_info.get("caracter", "").replace("-", " · ").title()
+            _s_desc   = _sector_info.get("descripcion", "")
+            _s_tipos  = _sector_info.get("sensibilidad_tipos", {})
+            _s_tipos_dir = _s_tipos.get("direccion", "").replace("-", " ")
+            _s_tipos_exp = _s_tipos.get("explicacion", "")
+            _s_riesgos   = _sector_info.get("riesgos_especificos", [])
+            _s_leccion   = _sector_info.get("leccion_historica", "")
+            # Comportamiento ciclo
+            _s_ciclo  = _sector_info.get("comportamiento_ciclo", {})
+            _ciclo_rows = "".join(
+                f'<tr><td style="padding:2px 8px 2px 0;font-weight:600;color:#475569;font-size:.82rem;min-width:110px">&#8226; {ph.capitalize()}</td>'
+                f'<td style="padding:2px 0;font-size:.82rem;color:#334155">{txt}</td></tr>'
+                for ph, txt in _s_ciclo.items()
+            )
+            _riesgos_li = "".join(f'<li style="font-size:.82rem;color:#7f1d1d;margin:2px 0">{r}</li>' for r in _s_riesgos[:4])
+            st.markdown(f"""
+            <div class="pp-card" style="border-color:#6366f133">
+              <div class="pp-title">{_s_emoji} Contexto Sectorial — {_s_nombre}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin:.4rem 0">
+                <span class="pp-badge" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">&#127968; {_s_nombre}</span>
+                <span class="pp-badge" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0">&#9881;&#65039; {_s_car}</span>
+                <span class="pp-badge" style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a">&#128200; Tipos: {_s_tipos_dir}</span>
+              </div>
+              <p style="font-size:.86rem;color:#334155;margin:.5rem 0">{_s_desc}</p>
+              <details style="margin:.4rem 0">
+                <summary style="font-size:.83rem;font-weight:700;color:#475569;cursor:pointer">&#128202; Comportamiento por fase de ciclo</summary>
+                <table style="margin:.4rem 0;border-collapse:collapse"><tbody>{_ciclo_rows}</tbody></table>
+              </details>
+              <details style="margin:.4rem 0">
+                <summary style="font-size:.83rem;font-weight:700;color:#475569;cursor:pointer">&#9889; Sensibilidad a tipos de interés</summary>
+                <p style="font-size:.82rem;color:#334155;margin:.4rem 0">{_s_tipos_exp}</p>
+              </details>
+              <details style="margin:.4rem 0">
+                <summary style="font-size:.83rem;font-weight:700;color:#991b1b;cursor:pointer">&#9888;&#65039; Riesgos específicos del sector</summary>
+                <ul style="margin:.3rem 0;padding-left:1rem">{_riesgos_li}</ul>
+              </details>
+              <div class="pp-edu" style="background:#fff7ed;border-color:#f97316;color:#7c2d12;margin-top:.6rem">
+                &#128218; <b>Lección histórica:</b> {_s_leccion}
+              </div>
+            </div>""", unsafe_allow_html=True)
+        elif _sector_yf:
+            st.markdown(f'<div class="pp-card"><div class="pp-title">&#128202; Sector: {_sector_yf}</div>'
+                        f'<p style="color:#64748b;font-size:.86rem">Sector detectado. Sin ficha de conocimiento específica disponible.</p></div>',
+                        unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="pp-card"><div class="pp-title">&#128202; Sector: No disponible</div>'
+                        '<p style="color:#94a3b8;font-size:.86rem">yfinance no devuelve dato sectorial para este activo (ETFs, índices, etc.).</p></div>',
+                        unsafe_allow_html=True)
+
         st.info("&#128218; Para an&#225;lisis macro completo (BCE, inflaci&#243;n, tipos) visita la pesta&#241;a **&#127758; Macro**.")
 
     # ── PASO 2: DIAGNÓSTICO TÉCNICO ─────────────────────────────────────────
@@ -9191,8 +9291,11 @@ def pestana_principiante():
         st.markdown("**Factores analizados:**")
         for _fn, _fd, _fv in _fsem:
             _fc = "#16a34a" if _fv >= 1 else ("#f59e0b" if _fv >= 0.5 else "#dc2626")
-            st.markdown(f"""<span class="pp-badge"
-                style="background:{_fc}22;color:{_fc};border:1px solid {_fc}44">{_fd}</span>""",
+            st.markdown(
+                f"""<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+                <span style="min-width:160px;font-size:.78rem;font-weight:700;color:#64748b">{_fn}</span>
+                <span class="pp-badge" style="background:{_fc}22;color:{_fc};border:1px solid {_fc}44">{_fd}</span>
+                </div>""",
                 unsafe_allow_html=True)
 
         _IMAP = {
@@ -10561,6 +10664,7 @@ def pantalla_analisis():
             precio=precio,
             rsi_val=rsi_val,
             factores_sem=factores_sem,
+            sector_yf=(info.get("sector") or "") if info else "",
         )
 
         _sh("🚦 Semáforo Global")
