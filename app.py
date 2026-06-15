@@ -9506,44 +9506,46 @@ de debilidad a corto plazo.
 """)
         emoji_color = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(color_sem, "⚪")
         css_class = f"semaforo-{color_sem}"
+        _sem_color_hex = {"verde": "#16a34a", "amarillo": "#ca8a04", "rojo": "#dc2626"}.get(color_sem, "#94a3b8")
+        _sem_bg_hex    = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
 
-        col_badge, col_factores = st.columns([1, 5])
-        with col_badge:
-            st.markdown(
-                f'<div class="{css_class}" style="text-align:center;padding:0.4rem 0">'
-                f'<div style="font-size:2rem;line-height:1">{emoji_color}</div>'
-                f'<div style="font-size:1rem;font-weight:bold;margin-top:0.2rem">'
-                f'{color_sem.upper()}</div>'
-                f'<div style="font-size:1.3rem;font-weight:bold">{pct_sem:.0f}%</div>'
-                f'</div>',
-                unsafe_allow_html=True
+        # Badge compacto inline + grid 2 columnas de factores
+        tarjetas_html = ""
+        for factor, descripcion, _ in factores_sem:
+            tarjetas_html += (
+                f'<div style="background:var(--secondary-background-color,#f0f2f6);'
+                f'border-radius:0.5rem;padding:0.45rem 0.65rem;min-width:0">'
+                f'<div style="font-size:0.68rem;color:var(--text-color,#666);'
+                f'margin-bottom:0.15rem;font-weight:600;text-transform:uppercase;'
+                f'letter-spacing:0.03em">{factor}</div>'
+                f'<div style="font-size:0.82rem;font-weight:700;'
+                f'word-break:break-word;white-space:normal">{descripcion}</div>'
+                f'</div>'
             )
-        with col_factores:
-            # Tarjetas HTML: evita truncado de st.metric en valores largos
-            tarjetas_html = ""
-            for factor, descripcion, _ in factores_sem:
-                tarjetas_html += (
-                    f'<div style="background:var(--secondary-background-color,#f0f2f6);'
-                    f'border-radius:0.5rem;padding:0.55rem 0.75rem;flex:1;min-width:0">'
-                    f'<div style="font-size:0.75rem;color:var(--text-color,#666);'
-                    f'margin-bottom:0.25rem;font-weight:500">{factor}</div>'
-                    f'<div style="font-size:0.95rem;font-weight:700;'
-                    f'word-break:break-word;white-space:normal">{descripcion}</div>'
-                    f'</div>'
-                )
-            st.markdown(
-                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem">'
-                f'{tarjetas_html}</div>',
-                unsafe_allow_html=True
-            )
+
+        st.markdown(
+            f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:10px">'
+            f'<div style="text-align:center;min-width:62px;padding:6px 0;'
+            f'background:{_sem_bg_hex};border:1.5px solid {_sem_color_hex};'
+            f'border-radius:10px">'
+            f'<div style="font-size:1.6rem;line-height:1">{emoji_color}</div>'
+            f'<div style="font-size:0.78rem;font-weight:800;color:{_sem_color_hex};'
+            f'margin-top:2px">{color_sem.upper()}</div>'
+            f'<div style="font-size:1.1rem;font-weight:800;color:{_sem_color_hex}">'
+            f'{pct_sem:.0f}%</div>'
+            f'</div>'
+            f'<div style="flex:1;display:grid;grid-template-columns:repeat(2,1fr);gap:0.4rem">'
+            f'{tarjetas_html}'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
         # ── Interpretación contextual del semáforo ────────────────────────
-        _borde = {"verde": "#16a34a", "amarillo": "#ca8a04", "rojo": "#dc2626"}.get(color_sem, "#94a3b8")
-        _fondo = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
         _interp_txt = _interpretacion_semaforo(color_sem, pct_sem, factores_sem)
         st.markdown(
-            f'<div style="border-left:4px solid {_borde};background:{_fondo};'
-            f'border-radius:0 8px 8px 0;padding:12px 16px;margin-top:10px">',
+            f'<div style="border-left:4px solid {_sem_color_hex};background:{_sem_bg_hex};'
+            f'border-radius:0 8px 8px 0;padding:10px 14px;margin-top:4px">',
             unsafe_allow_html=True
         )
         st.markdown(_interp_txt)
