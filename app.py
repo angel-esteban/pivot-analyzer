@@ -9453,10 +9453,21 @@ def pantalla_analisis():
                      "Valor alto (0.50€): agrupa zonas más amplias."
             )
 
-        # ── Bloque 1: Semáforo + Lectura Integrada ────────────────────────
-        _col_sem, _col_li = st.columns([3, 2])
-        with _col_sem:
-            _sh("🚦 Semáforo Global")
+        # ── Bloque 1: Lectura Integrada (arriba) + Semáforo (abajo) ─────────
+        _lectura_integrada(
+            color_sem=color_sem,
+            pct_sem=pct_sem,
+            puntuacion_tec=puntuacion_tec,
+            analisis_ath=analisis_ath,
+            analisis_sma200=analisis_sma200,
+            niveles_reforzados=niveles_reforzados,
+            consenso_dir=consenso_dir,
+            precio=precio,
+            rsi_val=rsi_val,
+            factores_sem=factores_sem,
+        )
+
+        _sh("🚦 Semáforo Global")
         with st.expander("💡 ¿Qué mide el Semáforo Global? — Diferencia con el Diagnóstico Técnico", expanded=False):
             st.markdown("""
 #### 🚦 Semáforo Global: el pulso técnico a corto plazo
@@ -9509,32 +9520,28 @@ de debilidad a corto plazo.
         _sem_color_hex = {"verde": "#16a34a", "amarillo": "#ca8a04", "rojo": "#dc2626"}.get(color_sem, "#94a3b8")
         _sem_bg_hex    = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
 
-        # Badge compacto inline + grid 2 columnas de factores
+        # Badge original + grid 3 columnas de factores
         tarjetas_html = ""
         for factor, descripcion, _ in factores_sem:
             tarjetas_html += (
-                f'<div style="background:var(--secondary-background-color,#f0f2f6);'
-                f'border-radius:0.5rem;padding:0.45rem 0.65rem;min-width:0">'
-                f'<div style="font-size:0.68rem;color:var(--text-color,#666);'
-                f'margin-bottom:0.15rem;font-weight:600;text-transform:uppercase;'
-                f'letter-spacing:0.03em">{factor}</div>'
-                f'<div style="font-size:0.82rem;font-weight:700;'
+                f'<div style="background:var(--secondary-background-color,#f1f5f9);'
+                f'border-radius:8px;padding:9px 11px;min-width:0">'
+                f'<div style="font-size:11px;color:var(--text-color,#64748b);'
+                f'font-weight:500;margin-bottom:3px">{factor}</div>'
+                f'<div style="font-size:13px;font-weight:700;'
                 f'word-break:break-word;white-space:normal">{descripcion}</div>'
                 f'</div>'
             )
 
         st.markdown(
-            f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:10px">'
-            f'<div style="text-align:center;min-width:62px;padding:6px 0;'
-            f'background:{_sem_bg_hex};border:1.5px solid {_sem_color_hex};'
-            f'border-radius:10px">'
-            f'<div style="font-size:1.6rem;line-height:1">{emoji_color}</div>'
-            f'<div style="font-size:0.78rem;font-weight:800;color:{_sem_color_hex};'
-            f'margin-top:2px">{color_sem.upper()}</div>'
-            f'<div style="font-size:1.1rem;font-weight:800;color:{_sem_color_hex}">'
-            f'{pct_sem:.0f}%</div>'
+            f'<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:12px">'
+            f'<div style="min-width:88px;text-align:center;border:3px solid {_sem_color_hex};'
+            f'border-radius:12px;padding:12px 8px;background:{_sem_bg_hex};color:{_sem_color_hex}">'
+            f'<div style="font-size:30px;line-height:1">{emoji_color}</div>'
+            f'<div style="font-size:15px;font-weight:800;margin-top:6px">{color_sem.upper()}</div>'
+            f'<div style="font-size:22px;font-weight:700;color:#1e293b">{pct_sem:.0f}%</div>'
             f'</div>'
-            f'<div style="flex:1;display:grid;grid-template-columns:repeat(2,1fr);gap:0.4rem">'
+            f'<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
             f'{tarjetas_html}'
             f'</div>'
             f'</div>',
@@ -9550,22 +9557,6 @@ de debilidad a corto plazo.
         )
         st.markdown(_interp_txt)
         st.markdown("</div>", unsafe_allow_html=True)
-
-        with _col_li:
-            st.markdown("<div style='padding-top:42px'>", unsafe_allow_html=True)
-            _lectura_integrada(
-                color_sem=color_sem,
-                pct_sem=pct_sem,
-                puntuacion_tec=puntuacion_tec,
-                analisis_ath=analisis_ath,
-                analisis_sma200=analisis_sma200,
-                niveles_reforzados=niveles_reforzados,
-                consenso_dir=consenso_dir,
-                precio=precio,
-                rsi_val=rsi_val,
-                factores_sem=factores_sem,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
 
