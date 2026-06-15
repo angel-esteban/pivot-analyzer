@@ -9595,6 +9595,122 @@ de debilidad a corto plazo.
         st.markdown(_interp_txt)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # ── Diagnóstico Técnico — tarjeta resumen arriba ──────────────────
+        if puntuacion_tec:
+            _sh("📝 Diagnóstico Técnico")
+            _pt2 = puntuacion_tec
+            _sc2 = _pt2["score_total"]
+            _sn2 = _pt2["señal"]
+            _pt2_bg  = {"alcista": "#f0fdf4", "neutral": "#f8fafc", "bajista": "#fef2f2"}.get(_sn2, "#f8fafc")
+            _pt2_col = {"alcista": "#16a34a", "neutral": "#64748b", "bajista": "#dc2626"}.get(_sn2, "#64748b")
+            _pt2_ico = {"alcista": "🟢",      "neutral": "⚪",       "bajista": "🔴"}.get(_sn2, "⚪")
+
+            # Frases cortas por escenario para cada componente
+            _esc_labels = {
+                # ATH
+                "subida_libre_establecida": ("Superando ATH — subida libre",    9),
+                "en_ath":                   ("En máximos históricos",           8),
+                "aproximandose_cerca":      ("Cerca del ATH (< 5%)",            7),
+                "aproximandose":            ("Próximo al ATH (5-15%)",          6),
+                "referencia":               ("Lejos del ATH (15-30%)",          4),
+                "lejos":                    ("Muy lejos del ATH (> 30%)",       2),
+                # SMA200
+                "giro_alcista_reciente":    ("Giro alcista reciente",           9),
+                "tendencia_alcista":        ("Tendencia alcista confirmada",    7),
+                "plana":                    ("Media plana — sin tendencia",     5),
+                "giro_bajista_reciente":    ("Giro bajista reciente",           2),
+                "tendencia_bajista":        ("Tendencia bajista confirmada",    1),
+                # Resistencias
+                "en_soporte":              ("Apoyado en soporte",               8),
+                "zona_baja_rango":         ("Zona baja del rango",              7),
+                "sin_resistencia":         ("Sin resistencia sobre el precio",  8),
+                "zona_media_rango":        ("Zona media del rango",             5),
+                "zona_alta_rango":         ("Zona alta — resistencia próxima",  3),
+                "en_resistencia":          ("Presionando resistencia",          2),
+                "sin_soporte":             ("Sin soporte bajo el precio",       2),
+                # Fibonacci
+                "extension_161":           ("Extensión 161.8% — impulso fuerte", 9),
+                "extension_127":           ("Extensión 127.2%",                 8),
+                "en_maximo":               ("En el máximo del swing anual",     7),
+                "retroceso_236":           ("Retroceso leve 23.6%",             6),
+                "retroceso_382":           ("Retroceso normal 38-50%",          5),
+                "retroceso_618":           ("Zona dorada 61.8% — rebote clave", 7),
+                "retroceso_786":           ("Retroceso profundo 78.6%",         3),
+                "swing_roto":              ("Swing anual invalidado",           1),
+                # RSI
+                "sobrecompra_extrema":     ("Sobrecompra extrema (RSI > 80)",   2),
+                "sobrecompra":             ("Sobrecomprado (RSI 70-80)",        3),
+                "zona_alcista":            ("Zona alcista (RSI 55-70)",         7),
+                "zona_neutra":             ("Zona neutra (RSI 45-55)",          5),
+                "zona_bajista":            ("Zona bajista (RSI 30-45)",         3),
+                "sobreventa":              ("Sobrevendido (RSI 20-30)",         7),
+                "sobreventa_extrema":      ("Sobreventa extrema (RSI < 20)",    8),
+                # Volumen
+                "volumen_excepcional":     ("Volumen excepcional",              7),
+                "volumen_alto":            ("Volumen alto",                     7),
+                "volumen_normal":          ("Volumen normal",                   5),
+                "volumen_bajo":            ("Volumen bajo — poca convicción",   4),
+                "volumen_seco":            ("Volumen seco — sin participación", 3),
+            }
+
+            def _pt_color(pts):
+                if pts >= 7:   return "#16a34a", "#f0fdf4"
+                elif pts >= 5: return "#ca8a04", "#fefce8"
+                elif pts >= 3: return "#ea580c", "#fff7ed"
+                else:          return "#dc2626", "#fef2f2"
+
+            # Mini-cards de los 6 componentes
+            _comp_cards_html = ""
+            for _ck, _cv in _pt2["scores_ind"].items():
+                if not _cv["disponible"]:
+                    _comp_cards_html += (
+                        f'<div style="background:#f8fafc;border-radius:8px;'
+                        f'padding:9px 11px;min-width:0;border:1px solid #e2e8f0">'
+                        f'<div style="font-size:11px;color:#94a3b8;font-weight:600;'
+                        f'margin-bottom:3px">{_cv["icono"]} {_cv["nombre"]}</div>'
+                        f'<div style="font-size:12px;color:#94a3b8">Sin datos</div>'
+                        f'</div>'
+                    )
+                    continue
+                _esc = _cv["escenario"]
+                _lbl, _ = _esc_labels.get(_esc, (_esc.replace("_"," ").title(), _cv["puntos"]))
+                _pts = _cv["puntos"]
+                _fc, _fbg = _pt_color(_pts)
+                _comp_cards_html += (
+                    f'<div style="background:{_fbg};border-radius:8px;'
+                    f'padding:9px 11px;min-width:0;border:1px solid {_fc}40">'
+                    f'<div style="font-size:11px;color:{_fc};font-weight:700;'
+                    f'margin-bottom:3px">{_cv["icono"]} {_cv["nombre"]}</div>'
+                    f'<div style="font-size:12px;font-weight:600;color:#1e293b;'
+                    f'line-height:1.3">{_lbl}</div>'
+                    f'<div style="font-size:10px;color:{_fc};margin-top:3px;font-weight:700">'
+                    f'{_pts}/10</div>'
+                    f'</div>'
+                )
+
+            st.markdown(
+                f'<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:12px">'
+                f'<div style="min-width:88px;text-align:center;border:3px solid {_pt2_col};'
+                f'border-radius:12px;padding:12px 8px;background:{_pt2_bg};color:{_pt2_col}">'
+                f'<div style="font-size:30px;line-height:1">{_pt2_ico}</div>'
+                f'<div style="font-size:13px;font-weight:800;margin-top:6px">{_sn2.upper()}</div>'
+                f'<div style="font-size:22px;font-weight:700;color:#1e293b">{_sc2:.1f}</div>'
+                f'<div style="font-size:10px;color:{_pt2_col};font-weight:600">/ 10</div>'
+                f'</div>'
+                f'<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+                f'{_comp_cards_html}'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                f'<div style="border-left:4px solid {_pt2_col};background:{_pt2_bg};'
+                f'border-radius:0 8px 8px 0;padding:10px 14px;margin-top:4px;'
+                f'font-size:13px;color:#1e293b;line-height:1.6">'
+                f'{_pt2["texto"]}</div>',
+                unsafe_allow_html=True
+            )
+
         st.divider()
 
         # ── Bloque 2: Pivot Points (izq) | Confluencias (der) ────────────
@@ -11492,51 +11608,6 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
         puntuacion_tec = puntuacion_tec  # variable local ya calculada
         if puntuacion_tec:
             _pt = puntuacion_tec
-            _score = _pt["score_total"]
-            _señal = _pt["señal"]
-
-            _cfg_señal = {
-                "alcista": ("#f0fdf4", "#16a34a", "🟢", "SESGO ALCISTA"),
-                "neutral": ("#f8fafc", "#64748b", "⚪", "ZONA NEUTRAL"),
-                "bajista": ("#fef2f2", "#dc2626", "🔴", "SESGO BAJISTA"),
-            }
-            _bg_pt, _col_pt, _ico_pt, _lab_pt = _cfg_señal.get(
-                _señal, ("#f8fafc", "#64748b", "⚪", "NEUTRAL")
-            )
-
-            # Score en formato grande
-            _c1_pt, _c2_pt, _c3_pt = st.columns(3)
-            with _c1_pt:
-                st.metric(
-                    "Puntuación Técnica",
-                    f"{_score:.1f} / 10",
-                    help="Media ponderada de los 6 componentes del Diagnóstico Técnico. "
-                         "0–3.5 = bajista · 3.5–6.5 = neutral · 6.5–10 = alcista"
-                )
-            with _c2_pt:
-                st.metric(
-                    "Señal",
-                    f"{_ico_pt} {_señal.capitalize()}",
-                    help="Señal técnica agregada basada en la puntuación total"
-                )
-            with _c3_pt:
-                st.metric(
-                    "Convicción",
-                    f"{_pt['conviccion']}/{_pt['disp_total']} componentes",
-                    help="Número de componentes que coinciden con la señal dominante"
-                )
-
-            # Tarjeta narrativa
-            st.markdown(
-                f'<div style="background:{_bg_pt};border-left:4px solid {_col_pt};'
-                f'border-radius:6px;padding:12px 16px;margin-top:8px;">'
-                f'<span style="font-weight:700;color:{_col_pt};">'
-                f'🎯 DIAGNÓSTICO TÉCNICO INTEGRADO — {_lab_pt}</span><br/>'
-                f'<p style="margin:6px 0 0 0;font-size:0.92rem;color:#374151;">'
-                f'{_pt["texto"]}</p>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
 
             # ── Botón de explicación ──────────────────────────────────
             with st.expander("📖 ¿Cómo se calcula esta puntuación?"):
