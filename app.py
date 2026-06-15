@@ -10339,6 +10339,94 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
                 else:
                     st.caption("Sin divergencias bajistas")
 
+            # ── Síntesis contextual de divergencias ───────────────────────
+            _n_alc = len(_dv_alc)
+            _n_baj = len(_dv_baj)
+            _tiene_obv_alc = any(d["tipo"] == "OBV" for d in _dv_alc)
+            _tiene_obv_baj = any(d["tipo"] == "OBV" for d in _dv_baj)
+            _tiene_fuerte_alc = any(d["fuerza"] == "fuerte" for d in _dv_alc)
+            _tiene_fuerte_baj = any(d["fuerza"] == "fuerte" for d in _dv_baj)
+
+            if _n_alc > 0 and _n_baj == 0:
+                # Solo alcistas
+                _sv_bg, _sv_brd, _sv_ico = "#f0fdf4", "#16a34a", "🔺"
+                if _n_alc >= 2 and (_tiene_obv_alc or _tiene_fuerte_alc):
+                    _sv_titulo = "Señal de advertencia alcista consolidada"
+                    _sv_texto = (
+                        f"Se detectan **{_n_alc} divergencias alcistas**"
+                        + (" — entre ellas la del OBV (la más fiable, porque registra el flujo real de dinero grande)" if _tiene_obv_alc else "") + ". "
+                        "Esto significa que aunque el precio sigue bajando o está estancado, "
+                        "los indicadores internos muestran que la presión vendedora se está agotando. "
+                        "Es como ver que un coche frena: el motor sigue en marcha pero cada vez con menos fuerza. "
+                        "**Lo que no significa:** que el precio vaya a subir mañana. Una divergencia avisa de agotamiento, "
+                        "no marca el día exacto del giro. "
+                        "**Qué vigilar:** espera que el precio rompa por encima de un nivel de resistencia cercano "
+                        "con volumen alto antes de actuar. Ese sería la confirmación de que el giro está ocurriendo."
+                    )
+                else:
+                    _sv_titulo = "Señal alcista incipiente — pendiente de confirmación"
+                    _sv_texto = (
+                        f"Se detecta **{_n_alc} divergencia alcista** de intensidad moderada. "
+                        "Los indicadores empiezan a mostrar que la presión bajista pierde fuerza, "
+                        "pero todavía no hay suficiente evidencia para considerar que el giro está confirmado. "
+                        "**Qué vigilar:** si en los próximos días el precio aguanta sin hacer nuevos mínimos "
+                        "y los indicadores siguen mejorando, la señal se fortalece. "
+                        "Si el precio hace un nuevo mínimo, la divergencia queda invalidada."
+                    )
+            elif _n_baj > 0 and _n_alc == 0:
+                # Solo bajistas
+                _sv_bg, _sv_brd, _sv_ico = "#fef2f2", "#dc2626", "🔻"
+                if _n_baj >= 2 and (_tiene_obv_baj or _tiene_fuerte_baj):
+                    _sv_titulo = "Señal de advertencia bajista consolidada"
+                    _sv_texto = (
+                        f"Se detectan **{_n_baj} divergencias bajistas**"
+                        + (" — entre ellas la del OBV, que registra el movimiento del dinero institucional" if _tiene_obv_baj else "") + ". "
+                        "Esto significa que aunque el precio sigue subiendo, los indicadores internos "
+                        "muestran que la presión compradora se está debilitando. "
+                        "Es como ver un coche que acelera pero con el depósito casi vacío: puede seguir subiendo "
+                        "un poco más, pero el combustible se acaba. "
+                        "**Lo que no significa:** que el precio vaya a caer mañana ni que tengas que vender ya. "
+                        "**Qué vigilar:** si el precio pierde un soporte relevante con volumen alto, "
+                        "la corrección puede acelerarse. Es un buen momento para revisar dónde tienes "
+                        "el límite de pérdidas (stop-loss) si ya tienes posición."
+                    )
+                else:
+                    _sv_titulo = "Señal bajista incipiente — observar sin actuar"
+                    _sv_texto = (
+                        f"Se detecta **{_n_baj} divergencia bajista** de intensidad moderada. "
+                        "Los indicadores muestran cierta pérdida de impulso alcista, pero la señal es débil. "
+                        "En tendencias fuertes, las divergencias bajistas moderadas pueden fallar varias veces "
+                        "antes de que el precio realmente corrija — es uno de sus puntos débiles conocidos. "
+                        "**Qué vigilar:** si aparecen más divergencias bajistas en los próximos días "
+                        "o el precio pierde su media de corto plazo (SMA20), la señal gana peso."
+                    )
+            else:
+                # Mixtas: alcistas Y bajistas al mismo tiempo
+                _sv_bg, _sv_brd, _sv_ico = "#fefce8", "#ca8a04", "⚠️"
+                _sv_titulo = "Señales contradictorias — mercado sin dirección definida"
+                _sv_texto = (
+                    f"Se detectan a la vez **{_n_alc} divergencia{'s' if _n_alc>1 else ''} alcista{'s' if _n_alc>1 else ''}** "
+                    f"y **{_n_baj} bajista{'s' if _n_baj>1 else ''}**. "
+                    "Cuando los indicadores no se ponen de acuerdo, lo habitual es que el precio "
+                    "esté en una fase de transición o en un rango lateral (moviéndose de lado sin tendencia clara). "
+                    "En estas situaciones, actuar basándose solo en divergencias tiene menos sentido — "
+                    "las señales se contrarrestan entre sí. "
+                    "**Qué vigilar:** espera a que el precio rompa claramente un nivel técnico relevante "
+                    "(soporte o resistencia) para tener una dirección más clara antes de tomar decisiones."
+                )
+
+            st.markdown(
+                f'<div style="background:{_sv_bg};border:1px solid {_sv_brd};'
+                f'border-radius:8px;padding:14px 16px;margin-top:12px">'
+                f'<div style="font-size:12px;font-weight:700;color:{_sv_brd};'
+                f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+                f'{_sv_ico} Qué significa esto para ti</div>'
+                f'<div style="font-size:13px;color:#1e293b;line-height:1.65">'
+                f'{_sv_texto}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
         st.divider()
 
         # ── Bloque 3d: Convergencia Técnica ──────────────────────────────
