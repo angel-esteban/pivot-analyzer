@@ -8908,17 +8908,52 @@ def pestana_principiante():
         unsafe_allow_html=True
     )
 
-    col_t, col_b = st.columns([4, 1])
-    with col_t:
-        _ticker_in = st.text_input(
-            "&#128270; Ticker del valor a analizar",
-            value=st.session_state.get("_pp_ticker", st.session_state.get("ultimo_ticker", "")),
-            placeholder="Ej: BBVA.MC, SAN.MC, AAPL, IBE.MC",
-            key="_pp_ticker_input",
-            help="S&#237;mbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=Par&#237;s · .L=Londres"
-        ).upper().strip()
-    with col_b:
-        st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+    # ── Selector igual que en Análisis Técnico ───────────────────────────────
+    _col1, _col2, _col4 = st.columns([2, 3, 1])
+    with _col1:
+        _mercado_pp = st.selectbox(
+            "&#128450;&#65039; &#205;ndice / Mercado",
+            ["&#9999;&#65039; Escribir manualmente",
+             "&#127466;&#127480; IBEX 35", "&#127466;&#127480; IBEX Medium Cap", "&#127466;&#127480; IBEX Small Cap",
+             "&#127758; Eurostoxx 50",
+             "&#127482;&#127480; S&P 500", "&#127482;&#127480; Nasdaq 100", "&#127482;&#127480; Dow Jones 30",
+             "&#127465;&#127466; DAX 40", "&#127467;&#127479; CAC 40", "&#127468;&#127463; FTSE 100",
+             "&#128202; ETFs UCITS"],
+            key="_pp_mercado_sel",
+            help="Selecciona un &#237;ndice o escribe el ticker manualmente."
+        )
+    with _col2:
+        if _mercado_pp == "&#9999;&#65039; Escribir manualmente":
+            _ticker_in = st.text_input(
+                "&#128270; Ticker",
+                value=st.session_state.get("_pp_ticker", st.session_state.get("ultimo_ticker", "")),
+                placeholder="Ejemplo: REP.MC, BBVA.MC, AAPL",
+                key="_pp_ticker_input",
+                help="S&#237;mbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=Par&#237;s · .L=Londres · .AS=&#193;msterdam"
+            ).upper().strip()
+        elif _mercado_pp == "&#128202; ETFs UCITS":
+            _cat_c, _etf_c = st.columns([1, 2])
+            with _cat_c:
+                _cat_pp = st.selectbox("&#128193; Categor&#237;a", list(ETFS_UCITS.keys()), key="_pp_etf_cat")
+            with _etf_c:
+                _etfs_pp = ETFS_UCITS[_cat_pp]
+                _etf_nom = st.selectbox("&#128270; ETF", list(_etfs_pp.keys()), key="_pp_etf_nom")
+                _ticker_in = _etfs_pp[_etf_nom]
+        else:
+            with st.spinner(f"Cargando {_mercado_pp}..."):
+                _tickers_pp = obtener_tickers_mercado(_mercado_pp)
+            if _tickers_pp:
+                _nom_pp = st.selectbox(
+                    f"&#128270; Valor — {_mercado_pp}", list(_tickers_pp.keys()),
+                    key="_pp_valor_sel",
+                    help=f"Valores del {_mercado_pp}."
+                )
+                _ticker_in = _tickers_pp[_nom_pp]
+            else:
+                st.warning("No se pudieron cargar los tickers. Escribe el ticker manualmente.")
+                _ticker_in = st.text_input("&#128270; Ticker", value="", key="_pp_ticker_fallback").upper().strip()
+    with _col4:
+        st.markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
         _analizar = st.button("&#128269; Analizar", type="primary", key="_pp_btn_analizar", use_container_width=True)
 
     if _analizar and _ticker_in:
@@ -8930,7 +8965,7 @@ def pestana_principiante():
     _step   = st.session_state.get("_pp_step", 1)
 
     if not _ticker:
-        st.info("Introduce un ticker y pulsa **Analizar** para comenzar el recorrido guiado.")
+        st.info("Selecciona un mercado y un valor, o escribe el ticker, y pulsa **Analizar**.")
         st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
         return
 
