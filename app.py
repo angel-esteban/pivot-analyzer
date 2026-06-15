@@ -1388,17 +1388,42 @@ def enriquecer_posiciones_con_precios(posiciones: list) -> list:
         if tkr not in cache:
             try:
                 t = yf.Ticker(tkr)
-                info = t.info
-                precio_actual = (info.get("currentPrice")
-                                 or info.get("regularMarketPrice")
-                                 or info.get("previousClose"))
+                precio_actual = None
+                # 1) fast_info (más ligero y fiable para .MC)
+                try:
+                    fi = t.fast_info
+                    precio_actual = float(fi.last_price) if fi.last_price else None
+                except Exception:
+                    precio_actual = None
+                # 2) info fallback
+                if not precio_actual:
+                    try:
+                        info = t.info
+                        precio_actual = (info.get("currentPrice")
+                                         or info.get("regularMarketPrice")
+                                         or info.get("previousClose"))
+                        if precio_actual:
+                            precio_actual = float(precio_actual)
+                    except Exception:
+                        pass
+                # 3) history fallback
+                if not precio_actual:
+                    try:
+                        h = t.history(period="5d", auto_adjust=True)
+                        if h is not None and len(h) > 0:
+                            precio_actual = float(h["Close"].iloc[-1])
+                    except Exception:
+                        pass
                 # Dividendo TTM desde historial real
                 import pandas as pd
-                divs = t.dividends
                 ttm_div = 0.0
-                if divs is not None and len(divs) > 0:
-                    cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=12)
-                    ttm_div = float(divs[divs.index >= cutoff].sum())
+                try:
+                    divs = t.dividends
+                    if divs is not None and len(divs) > 0:
+                        cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=12)
+                        ttm_div = float(divs[divs.index >= cutoff].sum())
+                except Exception:
+                    ttm_div = 0.0
                 cache[tkr] = {"precio_actual": precio_actual, "div_ttm": ttm_div}
             except Exception:
                 cache[tkr] = {"precio_actual": None, "div_ttm": 0.0}
