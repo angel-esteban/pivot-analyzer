@@ -6,6 +6,7 @@
 # =============================================================================
 
 import streamlit as st
+import streamlit.components.v1 as _st_components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -77,7 +78,36 @@ st.markdown("""
     footer { visibility: hidden !important; }
     [data-testid="stToolbar"] { display: none !important; }
     [data-testid="stDecoration"] { display: none !important; }
-    [data-testid="stStatusWidget"] { display: none !important; }
+    /* stStatusWidget: invisible pero legible por JS (para detectar estado "running") */
+    [data-testid="stStatusWidget"] {
+        visibility: hidden !important;
+        position: fixed !important;
+        top: 0 !important; right: 0 !important;
+        pointer-events: none !important;
+        z-index: -1 !important;
+        opacity: 0 !important;
+    }
+    /* ── OVERLAY DE CARGA ───────────────────────────────────────── */
+    #pivot-loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 999998;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+    }
+    .pivot-spinner {
+        width: 44px; height: 44px;
+        border: 4px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: pivot-spin 0.75s linear infinite;
+    }
+    @keyframes pivot-spin { to { transform: rotate(360deg); } }
     .stDeployButton { display: none !important; }
     header[data-testid="stHeader"] { background: transparent !important; height: 0 !important; }
 
@@ -7811,6 +7841,7 @@ def _sh(titulo: str) -> None:
     )
 
 
+@st.cache_data(ttl=3600)
 def _mini_analisis_cartera(ticker: str) -> dict:
     """Descarga 1 año de histórico y calcula RSI, SMA200, pos 52W, OBV slope."""
     try:
@@ -7820,9 +7851,15 @@ def _mini_analisis_cartera(ticker: str) -> dict:
         hist = tk.history(period="1y")
         if hist.empty or len(hist) < 30:
             return {}
-        _info   = tk.info or {}
-        sector   = _info.get("sector") or _info.get("sectorKey") or ""
-        industry = _info.get("industry") or _info.get("industryKey") or ""
+        # Sector/industry en try separado para que un timeout no rompa el análisis
+        sector = ""; industry = ""
+        try:
+            _info    = tk.fast_info or {}
+            _info2   = tk.info or {}
+            sector   = _info2.get("sector") or _info2.get("sectorKey") or ""
+            industry = _info2.get("industry") or _info2.get("industryKey") or ""
+        except Exception:
+            pass
         close = hist["Close"]
         vol   = hist["Volume"]
         precio = float(close.iloc[-1])
@@ -8627,6 +8664,50 @@ def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
+
+    # ── Overlay "Cargando Datos" — detecta estado running de Streamlit ────
+    _st_components.html("""
+<script>
+(function() {
+    try {
+        var doc = window.parent.document;
+
+        // Crear overlay si no existe aún
+        if (!doc.getElementById('pivot-loading-overlay')) {
+            var el = doc.createElement('div');
+            el.id = 'pivot-loading-overlay';
+            el.innerHTML =
+                '<div style="background:#ffffff;border-radius:16px;padding:32px 48px;' +
+                'box-shadow:0 8px 40px rgba(0,0,0,0.22);text-align:center;' +
+                'display:flex;flex-direction:column;align-items:center;gap:18px;">' +
+                '<div class=\'pivot-spinner\'></div>' +
+                '<div style="font-size:15px;font-weight:700;color:#1e3a5f;' +
+                'letter-spacing:-0.01em">Cargando Datos</div>' +
+                '</div>';
+            doc.body.appendChild(el);
+        }
+
+        function setOverlay(show) {
+            var ov = doc.getElementById('pivot-loading-overlay');
+            if (ov) ov.style.display = show ? 'flex' : 'none';
+        }
+
+        function checkRunning() {
+            var w = doc.querySelector('[data-testid="stStatusWidget"]');
+            // stStatusWidget tiene contenido (SVG+botones) cuando Streamlit está ejecutando
+            setOverlay(w && w.innerHTML.trim().length > 20);
+        }
+
+        // Observar cambios en el DOM para detectar transiciones running/idle
+        if (!window._pivotObserver) {
+            window._pivotObserver = new MutationObserver(checkRunning);
+            window._pivotObserver.observe(doc.body, { subtree: true, childList: true });
+        }
+        checkRunning();
+    } catch(e) {}
+})();
+</script>
+""", height=0, scrolling=False)
     # Inicialización única por sesión: evita queries innecesarias en cada rerun
     if not st.session_state.get("_app_init_done"):
         inicializar_tabla_alertas()
