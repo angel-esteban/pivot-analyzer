@@ -8876,6 +8876,356 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
 
     st.caption("⚠️ Análisis educativo generado automáticamente. No constituye recomendación de inversión bajo MiFID II. Confirma siempre con análisis propio antes de tomar decisiones.")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PESTAÑA: ¿POR DÓNDE EMPIEZO? — Flujo guiado para el inversor principiante
+# ─────────────────────────────────────────────────────────────────────────────
+def pestana_principiante():
+    """Wizard de 4 pasos: Macro → Diagnóstico → Semáforo → Niveles."""
+
+    _CSS = """
+    <style>
+    .pp-stepper{display:flex;gap:0;margin-bottom:1.5rem}
+    .pp-step{flex:1;padding:10px 6px;text-align:center;font-size:.78rem;
+             font-weight:600;border-bottom:3px solid #e2e8f0;color:#94a3b8;cursor:default}
+    .pp-step.active{border-bottom:3px solid #2563eb;color:#2563eb}
+    .pp-step.done{border-bottom:3px solid #16a34a;color:#16a34a}
+    .pp-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.2rem 1.4rem;margin:.6rem 0}
+    .pp-title{font-size:1.15rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem}
+    .pp-edu{background:#eff6ff;border-left:4px solid #2563eb;padding:.7rem 1rem;
+            border-radius:0 8px 8px 0;font-size:.88rem;color:#1e40af;margin:.8rem 0}
+    .pp-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;margin:2px}
+    .pp-score-bar{height:14px;border-radius:7px;background:#e2e8f0;margin:.4rem 0}
+    .pp-score-fill{height:14px;border-radius:7px}
+    </style>
+    """
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+    st.markdown(
+        '<h2 style="color:#1e3a5f;margin-bottom:.2rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
+        '<p style="color:#64748b;margin-bottom:1rem">Sigue estos 4 pasos para analizar cualquier valor '
+        'de forma ordenada. Cada paso explica <b>qu&#233; es</b> y <b>qu&#233; significa para ti</b>.</p>',
+        unsafe_allow_html=True
+    )
+
+    col_t, col_b = st.columns([4, 1])
+    with col_t:
+        _ticker_in = st.text_input(
+            "&#128270; Ticker del valor a analizar",
+            value=st.session_state.get("_pp_ticker", st.session_state.get("ultimo_ticker", "")),
+            placeholder="Ej: BBVA.MC, SAN.MC, AAPL, IBE.MC",
+            key="_pp_ticker_input",
+            help="S&#237;mbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=Par&#237;s · .L=Londres"
+        ).upper().strip()
+    with col_b:
+        st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+        _analizar = st.button("&#128269; Analizar", type="primary", key="_pp_btn_analizar", use_container_width=True)
+
+    if _analizar and _ticker_in:
+        st.session_state["_pp_ticker"] = _ticker_in
+        st.session_state["_pp_step"]   = 1
+        st.session_state["_pp_data"]   = None
+
+    _ticker = st.session_state.get("_pp_ticker", "")
+    _step   = st.session_state.get("_pp_step", 1)
+
+    if not _ticker:
+        st.info("Introduce un ticker y pulsa **Analizar** para comenzar el recorrido guiado.")
+        st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
+        return
+
+    _pasos = [
+        "&#127758; Contexto Macro",
+        "&#127959;&#65039; Estructura",
+        "&#128678; Momento",
+        "&#128204; Niveles",
+    ]
+    _step_html = '<div class="pp-stepper">'
+    for i, lbl in enumerate(_pasos, 1):
+        cls = "active" if i == _step else ("done" if i < _step else "")
+        _step_html += f'<div class="pp-step {cls}">{lbl}</div>'
+    _step_html += "</div>"
+    st.markdown(_step_html, unsafe_allow_html=True)
+    st.progress(_step / 4)
+
+    # Cargar datos una vez por ticker
+    if (st.session_state.get("_pp_data") is None
+            or st.session_state.get("_pp_data", {}).get("ticker") != _ticker):
+        with st.spinner(f"Obteniendo datos de {_ticker}..."):
+            try:
+                hist, info = obtener_datos(_ticker)
+                if hist is None or hist.empty:
+                    st.error(f"No se pudieron obtener datos para **{_ticker}**. Verifica el ticker.")
+                    return
+                _precio = precio_actual(hist)
+                _nombre = info.get("longName") or info.get("shortName") or _ticker
+                _cierre = hist["Close"]
+                _rsi    = calcular_rsi(_cierre)
+                _macd, _macd_s, _macd_h = calcular_macd(_cierre)
+                _bb_sup, _bb_med, _bb_inf, _pct_b = calcular_bollinger(_cierre)
+                _sar_val, _sar_tend = calcular_sar(hist)
+                _medias = calcular_sma_ema(_cierre)
+                _vol    = analisis_volumen(hist)
+                _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=True)
+                _a_ath  = analizar_maximos_historicos(_hist_l, _precio, _nombre)
+                _a_sma  = analizar_sma200(hist, _precio, _nombre)
+                _a_res  = analizar_resistencias_estructurales(hist, _precio, _nombre)
+                _a_fib  = analizar_fibonacci(hist, _precio, _nombre)
+                _a_rsi  = analizar_rsi(hist, _precio, _nombre)
+                _pt     = calcular_puntuacion_tecnica(_a_ath, _a_sma, _a_res, _a_fib, _a_rsi, _vol)
+                _rpivots = calcular_todos_pivots(hist, list(SISTEMAS_PIVOT.keys())[0])
+                _pd_d    = _rpivots.get("Diario")
+                _c_sem, _p_sem, _f_sem = calcular_semaforo(
+                    _precio, _pd_d, _rsi, _macd, _macd_s, _bb_sup, _bb_inf, _vol, _sar_tend
+                )
+                _confs = detectar_confluencias(_rpivots, tolerancia=0.20)
+                st.session_state["_pp_data"] = {
+                    "ticker": _ticker, "nombre": _nombre, "precio": _precio,
+                    "info": info, "hist": hist,
+                    "rsi_val": _rsi, "macd_val": _macd, "macd_señal": _macd_s,
+                    "pct_b": _pct_b, "bb_sup": _bb_sup, "bb_inf": _bb_inf,
+                    "sar_val": _sar_val, "sar_tend": _sar_tend,
+                    "medias": _medias, "vol_data": _vol,
+                    "puntuacion_tec": _pt,
+                    "color_sem": _c_sem, "pct_sem": _p_sem, "factores_sem": _f_sem,
+                    "pivots_diario": _pd_d, "confluencias": _confs,
+                }
+            except Exception as _e:
+                st.error(f"Error al obtener datos: {_e}")
+                return
+
+    d = st.session_state.get("_pp_data")
+    if not d:
+        return
+    precio = d["precio"]
+    nombre = d["nombre"]
+    hist   = d["hist"]
+
+    # ── PASO 1: CONTEXTO MACRO ──────────────────────────────────────────────
+    if _step == 1:
+        st.markdown("""
+        <div class="pp-card">
+          <div class="pp-title">&#127758; Paso 1 — Contexto Macro: &#191;El viento a favor o en contra?</div>
+          <div class="pp-edu">&#128218; <b>&#191;Por qu&#233; empezar aqu&#237;?</b><br>
+          El contexto macro es el <b>viento del mercado</b>. Puedes tener la mejor empresa del mundo,
+          pero si los tipos suben agresivamente o hay recesi&#243;n, el precio puede caer de todas formas.
+          Antes de mirar cualquier gr&#225;fico, sit&#250;ate en el mapa grande.</div>
+        </div>""", unsafe_allow_html=True)
+
+        _medias = d["medias"]
+        _sma200 = _medias.get(200, (None, None))[0] if 200 in _medias else None
+        _info   = d["info"]
+        _h52    = _info.get("fiftyTwoWeekHigh")
+        _l52    = _info.get("fiftyTwoWeekLow")
+
+        _tend_lbl = ("&#9989; Por encima de SMA 200" if _sma200 and precio > _sma200
+                     else "&#10060; Por debajo de SMA 200" if _sma200
+                     else "&#8212; Sin datos")
+        _tend_txt = ("Tendencia de largo plazo alcista. El mercado reconoce valor en este activo." if _sma200 and precio > _sma200
+                     else "Tendencia de largo plazo bajista. Comprar contra tendencia exige razones muy s&#243;lidas." if _sma200
+                     else "Sin datos suficientes de media 200.")
+
+        if _h52 and _l52 and _h52 > _l52:
+            _rng_pct = (precio - _l52) / (_h52 - _l52) * 100
+            _rng_lbl = f"{_rng_pct:.0f}% del rango anual"
+            _rng_txt = ("Cerca de m&#225;ximos anuales. Momentum positivo." if _rng_pct > 75
+                        else "En zona media del rango." if _rng_pct > 35
+                        else "Cerca de m&#237;nimos anuales. Verificar causa.")
+        else:
+            _rng_lbl = "&#8212;"; _rng_txt = ""
+
+        _ret = hist["Close"].pct_change().dropna()
+        _vol_a = float(_ret.std() * (252 ** 0.5) * 100) if len(_ret) > 20 else None
+        _vol_lbl = f"{_vol_a:.1f}% anualizada" if _vol_a else "&#8212;"
+        _vol_txt = ("Alta volatilidad &#8212; movimientos bruscos posibles." if _vol_a and _vol_a > 30
+                    else "Volatilidad moderada." if _vol_a and _vol_a > 15
+                    else "Baja volatilidad &#8212; activo relativamente estable." if _vol_a else "")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Tendencia largo plazo", _tend_lbl)
+            st.caption(_tend_txt)
+        with c2:
+            st.metric("Posici&#243;n en rango 52W", _rng_lbl)
+            st.caption(_rng_txt)
+        with c3:
+            st.metric("Volatilidad hist&#243;rica", _vol_lbl)
+            st.caption(_vol_txt)
+
+        st.markdown("""
+        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">
+        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>
+        SMA 200 por encima + mitad superior del rango anual = <b>viento a favor</b>.<br>
+        SMA 200 por debajo = necesitas razones muy s&#243;lidas para comprar contra tendencia.<br>
+        Alta volatilidad = tamaño de posici&#243;n m&#225;s peque&#241;o para el mismo riesgo real.
+        </div>""", unsafe_allow_html=True)
+        st.info("&#128218; Para an&#225;lisis macro completo (BCE, inflaci&#243;n, tipos) visita la pesta&#241;a **&#127758; Macro**.")
+
+    # ── PASO 2: DIAGNÓSTICO TÉCNICO ─────────────────────────────────────────
+    elif _step == 2:
+        _pt = d["puntuacion_tec"]
+        _score = _pt.get("score_total", 5.0)
+        _si    = _pt.get("scores_ind", {})
+        _cc    = "#16a34a" if _score >= 7 else ("#f59e0b" if _score >= 4 else "#dc2626")
+        _cl    = "ESTRUCTURA S&#211;LIDA" if _score >= 7 else ("ESTRUCTURA MIXTA" if _score >= 4 else "ESTRUCTURA D&#201;BIL")
+
+        st.markdown(f"""
+        <div class="pp-card">
+          <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico: &#191;Est&#225; el activo en buena forma?</div>
+          <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el diagn&#243;stico t&#233;cnico?</b><br>
+          Analiza la <b>estructura de largo y medio plazo</b>: m&#225;ximos hist&#243;ricos, media 200,
+          Fibonacci, RSI estructural y volumen. No mide si <i>ahora</i> es buen momento
+          (eso es el Paso 3), sino si el activo est&#225; en <b>buena forma estructural</b>.</div>
+        </div>""", unsafe_allow_html=True)
+
+        _bw = int(_score * 10)
+        st.markdown(f"""
+        <div style="margin:.8rem 0">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-weight:700;color:{_cc}">{_cl}</span>
+            <span style="font-size:1.4rem;font-weight:800;color:{_cc}">{_score:.1f}/10</span>
+          </div>
+          <div class="pp-score-bar"><div class="pp-score-fill" style="width:{_bw}%;background:{_cc}"></div></div>
+        </div>""", unsafe_allow_html=True)
+
+        _comp_edu = {
+            "ath":    ("&#128200; M&#225;x. Hist&#243;rico",  "&#191;Cu&#225;nto dista de su m&#225;ximo hist&#243;rico? Cerca = fuerza; lejos = recorrido potencial."),
+            "sma200": ("&#12336;&#65038; Media 200",           "&#191;Est&#225; por encima de su media de largo plazo? Fundamental para tendencia."),
+            "resist": ("&#129395; Resistencias",               "&#191;Ha roto niveles clave? Las rupturas con volumen son se&#241;ales de fuerza real."),
+            "fibo":   ("&#128208; Fibonacci",                  "&#191;En qu&#233; retroceso de Fibonacci est&#225;? El 0.618 es el nivel m&#225;s relevante para inversores."),
+            "rsi":    ("&#9889; RSI Estructural",              "&#191;Est&#225; el RSI en zona de salud (40-70)? Extremos = se&#241;al de agotamiento."),
+            "vol":    ("&#128266; Volumen",                    "&#191;El volumen confirma el movimiento? Subidas con volumen creciente = convicci&#243;n real."),
+        }
+        for key, si_item in _si.items():
+            _lbl, _edu = _comp_edu.get(key, (key, ""))
+            _cc2 = "#16a34a" if si_item["puntos"] >= 7 else ("#f59e0b" if si_item["puntos"] >= 4 else "#dc2626")
+            _bw2 = int(si_item["puntos"] * 10)
+            with st.expander(f"{_lbl} — **{si_item['escenario']}** ({si_item['puntos']:.0f}/10)"):
+                st.caption(_edu)
+                st.markdown(f"""<div class="pp-score-bar"><div class="pp-score-fill"
+                    style="width:{_bw2}%;background:{_cc2}"></div></div>""", unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">
+        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>
+        &#8805; 7/10: estructura s&#243;lida &#8212; probabilidades t&#233;cnicas a favor.<br>
+        4&#8211;6/10: se&#241;ales contradictorias &#8212; m&#225;s cautela y criterios adicionales.<br>
+        &lt; 4/10: estructura d&#233;bil &#8212; no es momento de comprar sin razones muy s&#243;lidas.
+        </div>""", unsafe_allow_html=True)
+
+    # ── PASO 3: SEMÁFORO ─────────────────────────────────────────────────────
+    elif _step == 3:
+        _csem = d["color_sem"]
+        _psem = d["pct_sem"]
+        _fsem = d["factores_sem"]
+        _SCC  = {"verde": "#16a34a", "amarillo": "#f59e0b", "rojo": "#dc2626"}
+        _SCE  = {"verde": "&#128994;", "amarillo": "&#128993;", "rojo": "&#128308;"}
+        _SCL  = {"verde": "MOMENTO FAVORABLE", "amarillo": "SIN SESGO CLARO", "rojo": "MOMENTO DESFAVORABLE"}
+        _sc = _SCC.get(_csem, "#94a3b8")
+        _se = _SCE.get(_csem, "&#9898;")
+        _sl = _SCL.get(_csem, "INDEFINIDO")
+
+        st.markdown(f"""
+        <div class="pp-card">
+          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global: &#191;Es buen momento para actuar?</div>
+          <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el sem&#225;foro?</b><br>
+          Mide el <b>momento actual</b>: si RSI, MACD, Bollinger, SAR y Volumen est&#225;n alineados
+          a favor o en contra. Buena estructura (Paso 2) con sem&#225;foro rojo = <b>esperar</b>.
+          Sem&#225;foro verde con estructura d&#233;bil = trampa frecuente para principiantes.</div>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div style="text-align:center;padding:1rem 0">
+          <div style="font-size:3rem">{_se}</div>
+          <div style="font-size:1.5rem;font-weight:800;color:{_sc}">{_sl}</div>
+          <div style="font-size:1rem;color:#64748b">{_psem:.0f}% de factores positivos</div>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown("**Factores analizados:**")
+        for _fn, _fd, _fv in _fsem:
+            _fc = "#16a34a" if _fv >= 1 else ("#f59e0b" if _fv >= 0.5 else "#dc2626")
+            st.markdown(f"""<span class="pp-badge"
+                style="background:{_fc}22;color:{_fc};border:1px solid {_fc}44">{_fd}</span>""",
+                unsafe_allow_html=True)
+
+        _IMAP = {
+            "verde":    "Los indicadores de corto plazo acompa&#241;an. Combinado con buena estructura es el escenario t&#233;cnico m&#225;s propicio.",
+            "amarillo": "El mercado est&#225; indeciso en este valor. Espera confirmaci&#243;n antes de actuar.",
+            "rojo":     "Los indicadores de corto plazo est&#225;n en contra. Aunque la estructura sea buena, espera a que el sem&#225;foro mejore.",
+        }
+        st.markdown(f"""
+        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534;margin-top:.8rem">
+        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>{_IMAP.get(_csem, "Analiza con precauci&#243;n.")}
+        </div>""", unsafe_allow_html=True)
+
+    # ── PASO 4: NIVELES ──────────────────────────────────────────────────────
+    elif _step == 4:
+        _pivots = d["pivots_diario"] or {}
+        _confs  = d["confluencias"]
+
+        st.markdown(f"""
+        <div class="pp-card">
+          <div class="pp-title">&#128204; Paso 4 — Niveles concretos: &#191;A qu&#233; precio act&#250;o?</div>
+          <div class="pp-edu">&#128218; <b>&#191;Qu&#233; son los niveles?</b><br>
+          Los Pivot Points son precios donde el mercado <b>hist&#243;ricamente reacciona</b>.
+          Las <b>confluencias</b> son los m&#225;s fiables: varios sistemas o timeframes coinciden
+          en el mismo precio. Son tus referencias para <b>entrada, stop y objetivo</b>.</div>
+        </div>""", unsafe_allow_html=True)
+
+        st.markdown(f"**Precio actual: `{precio:.4f}`**")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Niveles Pivot diario:**")
+            if _pivots:
+                for _k in ["R3","R2","R1","PP","S1","S2","S3"]:
+                    _v = _pivots.get(_k)
+                    if _v is None: continue
+                    _d2 = (_v - precio) / precio * 100
+                    _t2 = "&#128308; Resistencia" if _v > precio else ("&#9878;&#65039; Pivot" if abs(_d2) < 0.1 else "&#128994; Soporte")
+                    _b = "**" if abs(_d2) < 2 else ""
+                    st.markdown(f"{_b}`{_k}` {_t2} — **{_v:.4f}** ({_d2:+.2f}%){_b}")
+            else:
+                st.caption("Sin datos de Pivot Points.")
+        with c2:
+            st.markdown("**Confluencias m&#225;s cercanas:**")
+            if _confs:
+                for _cf in sorted(_confs, key=lambda x: abs(x["precio"] - precio))[:5]:
+                    _dc = (_cf["precio"] - precio) / precio * 100
+                    _tc = "&#128308; Resistencia" if _cf["precio"] > precio else "&#128994; Soporte"
+                    _nt = _cf.get("timeframes_count", 1)
+                    st.markdown(f"`{_cf['precio']:.4f}` {_tc} ({_dc:+.2f}%) &#8212; {_nt} sistemas")
+            else:
+                st.caption("Sin confluencias destacadas en rango cercano.")
+
+        st.markdown("""
+        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">
+        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>
+        <b>Resistencias</b> = precios donde el activo puede frenarse al subir &#8594; obj. de salida.<br>
+        <b>Soportes</b> = precios donde puede rebotar al bajar &#8594; referencias de entrada o stop.<br>
+        <b>Regla fundamental:</b> nunca compres sin saber d&#243;nde pondr&#225;s el stop.
+        La confluencia m&#225;s cercana por debajo del precio es tu primera referencia.
+        </div>""", unsafe_allow_html=True)
+
+        st.success(f"&#9989; **Has completado el an&#225;lisis guiado de {nombre} ({d['ticker']})**")
+        if st.button("&#128202; Ver an&#225;lisis t&#233;cnico completo", type="primary", key="_pp_btn_full"):
+            st.session_state["ultimo_ticker"] = d["ticker"]
+            st.info("Ve a la pesta&#241;a **&#128200; An&#225;lisis T&#233;cnico** para ver el an&#225;lisis completo.")
+
+    # ── Navegación ────────────────────────────────────────────────────────────
+    st.markdown("---")
+    _nl, _nr = st.columns(2)
+    with _nl:
+        if _step > 1:
+            if st.button("&#8592; Paso anterior", key="_pp_prev"):
+                st.session_state["_pp_step"] = _step - 1
+                st.rerun()
+    with _nr:
+        if _step < 4:
+            if st.button("Paso siguiente &#8594;", type="primary", key="_pp_next", use_container_width=True):
+                st.session_state["_pp_step"] = _step + 1
+                st.rerun()
+
 def pestaña_cartera():
     """Pestaña de gestión de carteras personales del usuario."""
     usuario = st.session_state["usuario"]
@@ -9599,7 +9949,7 @@ def pantalla_analisis():
             st.rerun()
 
     # Navegación
-    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera"]
+    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
@@ -9611,10 +9961,11 @@ def pantalla_analisis():
     tab_macro      = tab_objs[3]
     tab_rf         = tab_objs[4]
     tab_cartera    = tab_objs[5]
+    tab_principiante = tab_objs[6]
 
-    if es_superadmin and len(tab_objs) >= 8:
-        tab_admin = tab_objs[6]
-        tab_ayuda = tab_objs[7]
+    if es_superadmin and len(tab_objs) >= 9:
+        tab_admin = tab_objs[7]
+        tab_ayuda = tab_objs[8]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -13722,6 +14073,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 
     with tab_cartera:
         pestaña_cartera()
+
+    # ---- TAB ¿POR DÓNDE EMPIEZO? ----
+    with tab_principiante:
+        pestana_principiante()
 
     # ---- TAB ADMIN ----
     if es_superadmin and tab_admin:
