@@ -6490,6 +6490,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'</div>\n</div>\n'
 
         f'<div class="body">\n'
+        + _li_section +
 
         # Semáforo
         f'<div class="card">\n'
@@ -6504,7 +6505,6 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'</div>\n'
         + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color) +
         f'</div>\n'
-        + _li_section +
         + _diag_section +
 
         # Pivots: 4 columnas paralelas + confluencias
@@ -7400,59 +7400,6 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(chips_t)
     historia.append(Spacer(1, 0.3*cm))
 
-    # ── SEMÁFORO ──────────────────────────────────────────────────────────
-    _pdf_sh("🚦 Semáforo Global", historia)
-    badge_t = Table(
-        [[Paragraph(SEM_DOT, _p(fontName="Helvetica-Bold", fontSize=24, alignment=TA_CENTER))],
-         [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
-         [Paragraph(f"{pct_semaforo:.0f}%", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))]],
-        colWidths=[2.8*cm]
-    )
-    badge_t.setStyle(TableStyle([
-        ("BOX",           (0,0),(-1,-1), 2, SC),
-        ("BACKGROUND",    (0,0),(-1,-1), GF),
-        ("TOPPADDING",    (0,0),(-1,-1), 5),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 5),
-        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
-    ]))
-    # Factores: 2 filas × 3 columnas
-    fac_data, row_buf = [], []
-    for i, (fac, desc, _) in enumerate(factores_semaforo):
-        inner = Table(
-            [[Paragraph(_strip(fac),  _p(fontSize=7.5, textColor=colors.HexColor("#6b7280")))],
-             [Paragraph(_strip(desc), _p(fontSize=9,   fontName="Helvetica-Bold"))]],
-            colWidths=[4.9*cm]
-        )
-        inner.setStyle(TableStyle([
-            ("TOPPADDING",    (0,0),(-1,-1), 3),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 3),
-            ("LEFTPADDING",   (0,0),(-1,-1), 6),
-        ]))
-        row_buf.append(inner)
-        if len(row_buf) == 3:
-            fac_data.append(row_buf); row_buf = []
-    if row_buf:
-        while len(row_buf) < 3:
-            row_buf.append(Paragraph("", S_NRM))
-        fac_data.append(row_buf)
-    fac_t = Table(fac_data, colWidths=[4.9*cm]*3)
-    fac_t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0),(-1,-1), GF),
-        ("GRID",       (0,0),(-1,-1), 0.3, GB),
-        ("VALIGN",     (0,0),(-1,-1), "TOP"),
-    ]))
-    sem_t = Table([[badge_t, fac_t]], colWidths=[3*cm, 15*cm])
-    sem_t.setStyle(TableStyle([
-        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
-        ("LEFTPADDING",  (0,0),(0,0), 0),
-        ("RIGHTPADDING", (0,0),(0,0), 8),
-        ("TOPPADDING",   (0,0),(-1,-1), 0),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 0),
-    ]))
-    historia.append(sem_t)
-    historia.append(Spacer(1, 0.35*cm))
-
-    # ── PIVOT POINTS MULTI-COLUMNA ────────────────────────────────────────
     # ── Lectura Integrada (PDF) ───────────────────────────────────────────
     _lip_score = (puntuacion_tec or {}).get("score_total", 5.0)
     _lip_nivel = "alto" if _lip_score >= 7 else ("medio" if _lip_score >= 4 else "bajo")
@@ -7509,6 +7456,61 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         f"Diagnóstico {_lip_score:.1f}/10 · Semáforo {semaforo.upper()} {pct_semaforo:.0f}%",
         _p(fontSize=7, textColor=colors.HexColor("#94a3b8"))
     ))
+
+
+    # ── SEMÁFORO ──────────────────────────────────────────────────────────
+    _pdf_sh("🚦 Semáforo Global", historia)
+    badge_t = Table(
+        [[Paragraph(SEM_DOT, _p(fontName="Helvetica-Bold", fontSize=24, alignment=TA_CENTER))],
+         [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
+         [Paragraph(f"{pct_semaforo:.0f}%", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))]],
+        colWidths=[2.8*cm]
+    )
+    badge_t.setStyle(TableStyle([
+        ("BOX",           (0,0),(-1,-1), 2, SC),
+        ("BACKGROUND",    (0,0),(-1,-1), GF),
+        ("TOPPADDING",    (0,0),(-1,-1), 5),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
+    ]))
+    # Factores: 2 filas × 3 columnas
+    fac_data, row_buf = [], []
+    for i, (fac, desc, _) in enumerate(factores_semaforo):
+        inner = Table(
+            [[Paragraph(_strip(fac),  _p(fontSize=7.5, textColor=colors.HexColor("#6b7280")))],
+             [Paragraph(_strip(desc), _p(fontSize=9,   fontName="Helvetica-Bold"))]],
+            colWidths=[4.9*cm]
+        )
+        inner.setStyle(TableStyle([
+            ("TOPPADDING",    (0,0),(-1,-1), 3),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+            ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ]))
+        row_buf.append(inner)
+        if len(row_buf) == 3:
+            fac_data.append(row_buf); row_buf = []
+    if row_buf:
+        while len(row_buf) < 3:
+            row_buf.append(Paragraph("", S_NRM))
+        fac_data.append(row_buf)
+    fac_t = Table(fac_data, colWidths=[4.9*cm]*3)
+    fac_t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0),(-1,-1), GF),
+        ("GRID",       (0,0),(-1,-1), 0.3, GB),
+        ("VALIGN",     (0,0),(-1,-1), "TOP"),
+    ]))
+    sem_t = Table([[badge_t, fac_t]], colWidths=[3*cm, 15*cm])
+    sem_t.setStyle(TableStyle([
+        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+        ("LEFTPADDING",  (0,0),(0,0), 0),
+        ("RIGHTPADDING", (0,0),(0,0), 8),
+        ("TOPPADDING",   (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 0),
+    ]))
+    historia.append(sem_t)
+    historia.append(Spacer(1, 0.35*cm))
+
+    # ── PIVOT POINTS MULTI-COLUMNA ────────────────────────────────────────
 
 
     # ── DIAGNOSTICO TECNICO ───────────────────────────────────────────────
