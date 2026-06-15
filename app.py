@@ -7847,68 +7847,104 @@ def _lectura_integrada(
 
     MATRIZ = {
         # (diag_nivel, color_sem): (icono, titulo, situacion, implicacion, bg, border)
-        ("alto",   "verde"):    ("🟢", "Condiciones técnicas favorables",
-            f"El valor tiene una posición estructural sólida (score {diag_score:.1f}/10) y el momentum a corto plazo acompaña. "
-            "Los indicadores técnicos están mayoritariamente alineados al alza.",
-            "Entorno técnico favorable para el inversor posicionado. Si no tienes posición, "
-            "valora la cercanía a niveles de soporte antes de entrar — comprar cerca de un soporte "
-            "mejora la relación riesgo/beneficio.",
+        ("alto",   "verde"):    ("🟢", "Todo en verde: estructura y momento alineados",
+            f"El valor tiene una posición estructural sólida (score {diag_score:.1f}/10 — esto mide "
+            "cómo está posicionado el valor a medio-largo plazo: distancia al ATH, medias de largo plazo, "
+            "niveles de soporte…) y el momentum (la fuerza y dirección del movimiento actual) también "
+            "acompaña. Los indicadores técnicos están mayoritariamente alineados al alza.",
+            "Es el entorno técnico más favorable. Si ya tienes posición, las señales respaldan "
+            "mantenerla. Si todavía no has entrado, busca una zona de soporte cercana para hacerlo "
+            "— entrar cerca de un soporte (precio donde el valor históricamente ha rebotado) "
+            "significa que si te equivocas, el golpe es menor. Nunca es el único criterio, "
+            "pero las condiciones técnicas están de tu lado.",
             "#f0fdf4", "#16a34a"),
-        ("alto",   "amarillo"): ("🟡", "Estructura sólida · Momento mixto",
-            f"La posición estructural es fuerte (score {diag_score:.1f}/10), pero el momentum a corto plazo envía señales contradictorias. "
-            "No hay acuerdo entre los indicadores de corto plazo.",
-            "No es el momento de añadir posición agresivamente, pero tampoco hay señales "
-            "de deterioro estructural. Zona de espera: mantén si estás dentro, "
-            "no entres hasta que el semáforo mejore.",
+        ("alto",   "amarillo"): ("🟡", "Buena estructura, pero el impulso duda",
+            f"La posición estructural es fuerte (score {diag_score:.1f}/10), lo que indica que el valor "
+            "está bien posicionado a medio plazo. Sin embargo, el momentum (el impulso inmediato del precio) "
+            "envía señales contradictorias: algunos indicadores apuntan arriba y otros abajo. "
+            "Nadie sabe todavía qué dirección va a tomar el precio en los próximos días.",
+            "No es el momento de entrar con todo el capital de golpe, pero tampoco hay nada que "
+            "indique que el valor vaya a perder su estructura de largo plazo. Es una zona de espera. "
+            "Si ya tienes posición, no hay por qué salir. Si estás fuera, espera a que "
+            "el semáforo mejore a verde antes de entrar: tendrás más certeza y probablemente "
+            "no perderás mucho precio.",
             "#fefce8", "#ca8a04"),
-        ("alto",   "rojo"):     ("🟡", "Estructura sólida · Corrección técnica activa",
-            f"La estructura técnica de largo plazo es positiva (score {diag_score:.1f}/10), pero el valor atraviesa "
-            "una corrección técnica a corto plazo con el momentum deteriorado.",
-            "Correcciones en valores con buena estructura son, históricamente, oportunidades. "
-            "El riesgo es que la corrección se extienda. Vigila el nivel de soporte más cercano: "
-            "si lo pierde con volumen, la corrección puede profundizar.",
+        ("alto",   "rojo"):     ("🟡", "Buena estructura, pero corrección en marcha",
+            f"La estructura técnica de largo plazo es positiva (score {diag_score:.1f}/10): el valor "
+            "está bien posicionado a medio plazo. Pero está pasando por una corrección (bajada temporal "
+            "dentro de una tendencia que sigue siendo alcista). El momentum (el impulso del precio "
+            "a corto plazo) está deteriorado — los indicadores de corto plazo marcan debilidad.",
+            "Las correcciones en valores con buena estructura son, históricamente, oportunidades "
+            "para quien tiene paciencia. La trampa es que no sabes cuánto va a durar. "
+            "Vigila el soporte más cercano (el precio donde el valor tiende a frenar caídas): "
+            "si lo pierde con mucho volumen (muchas operaciones), la corrección puede "
+            "profundizarse antes de rebotar. No hay urgencia para actuar — la estructura resiste.",
             "#fefce8", "#ca8a04"),
-        ("medio",  "verde"):    ("🟡", "Momento positivo · Base técnica neutral",
-            f"El momentum a corto plazo es favorable, pero la posición estructural es neutral "
-            f"(score {diag_score:.1f}/10). El valor sube, pero sin una base técnica de largo plazo sólida.",
-            "El movimiento alcista actual necesita confirmación. Un valor que sube sin estructura "
-            "sólida puede revertir con más facilidad. Si estás dentro, protege beneficios con "
-            "stops ajustados. Si no lo estás, espera a ver si la estructura mejora.",
+        ("medio",  "verde"):    ("🟡", "El precio sube, pero la base no es sólida",
+            f"El momentum (impulso del precio) a corto plazo es favorable — el valor está subiendo "
+            f"y los indicadores de corto plazo acompañan. Pero la posición estructural es neutral "
+            f"(score {diag_score:.1f}/10), lo que indica que el valor no tiene una base técnica "
+            "de largo plazo especialmente sólida que respalde ese movimiento.",
+            "Cuidado con las subidas sin estructura sólida detrás: un valor que sube 'en el aire' "
+            "puede bajar igual de rápido si el impulso se agota. Si ya tienes posición y tienes "
+            "beneficios, ajusta dónde pondrías el límite de pérdidas (el precio a partir del cual "
+            "saldrías) para no devolver todo lo ganado. Si no tienes posición, espera a ver si "
+            "la estructura de largo plazo también mejora antes de entrar.",
             "#fefce8", "#ca8a04"),
-        ("medio",  "amarillo"): ("⚪", "Sin señal técnica clara",
-            f"Ni la estructura (score {diag_score:.1f}/10) ni el momentum apuntan en una dirección definida. "
-            "Los indicadores están en zona neutral sin alineación.",
-            "Mercado lateral o sin tendencia clara. En estos entornos, las señales técnicas "
-            "son menos fiables. Mejor esperar a que el precio rompa claramente un nivel relevante "
-            "antes de tomar decisiones. La paciencia es una posición.",
+        ("medio",  "amarillo"): ("⚪", "Sin señal clara en ningún sentido",
+            f"Ni la estructura (score {diag_score:.1f}/10 — posición del valor a medio-largo plazo) "
+            "ni el momentum (impulso del precio a corto plazo) apuntan en una dirección definida. "
+            "Los indicadores técnicos están en zona neutral: ni alcistas ni bajistas, sin acuerdo.",
+            "Estamos ante un mercado lateral (el precio se mueve de lado, sin subir ni bajar "
+            "de forma sostenida) o simplemente sin tendencia clara. En estos entornos, actuar "
+            "basándose en señales técnicas tiene menos sentido porque las señales son poco fiables. "
+            "Lo más prudente es esperar a que el precio rompa claramente por encima o por debajo "
+            "de un nivel relevante antes de tomar ninguna decisión. No hacer nada también es "
+            "una posición válida.",
             "#f8fafc", "#94a3b8"),
-        ("medio",  "rojo"):     ("🟠", "Presión técnica a corto · Base neutral",
-            f"El momentum a corto plazo está deteriorado y la estructura no ofrece un suelo "
-            f"sólido (score {diag_score:.1f}/10). Combinación de señales negativas.",
-            "Entorno técnico desfavorable sin base estructural que amortigüe. "
-            "Si tienes posición, revisa si los niveles de soporte relevantes siguen intactos. "
-            "Si estás fuera, espera confirmación de estabilización antes de entrar.",
+        ("medio",  "rojo"):     ("🟠", "Impulso bajista sin base que amortigüe",
+            f"El momentum (impulso del precio) a corto plazo está deteriorado — el valor cae "
+            f"y los indicadores de corto plazo lo confirman. Además, la posición estructural "
+            f"es neutral (score {diag_score:.1f}/10): no hay una base de largo plazo sólida "
+            "que sirva de amortiguador si la caída continúa.",
+            "Es un entorno técnico desfavorable en el que no hay red de seguridad estructural. "
+            "Si ya tienes posición, revisa los niveles de soporte más cercanos (precios donde "
+            "el valor históricamente ha rebotado): si esos niveles ceden, el valor podría "
+            "seguir cayendo sin apoyos claros. Si estás fuera, no hay señal que justifique "
+            "entrar todavía — espera a ver estabilización antes de actuar.",
             "#fff7ed", "#ea580c"),
-        ("bajo",   "verde"):    ("🟠", "Rebote técnico en estructura débil",
-            f"El valor experimenta un rebote técnico a corto plazo, pero la estructura de largo plazo "
-            f"es débil (score {diag_score:.1f}/10). El impulso positivo va contra la tendencia estructural.",
-            "Los rebotes en tendencias bajistas estructurales suelen ser temporales. "
-            "Históricamente, son zonas de venta para quienes quieren reducir exposición, "
-            "no de compra agresiva. Extrema la cautela si piensas que 'ya ha caído mucho'.",
+        ("bajo",   "verde"):    ("🟠", "Rebote puntual en un valor con problemas de fondo",
+            f"El precio está subiendo a corto plazo y el momentum (impulso inmediato) es positivo, "
+            f"pero la estructura de largo plazo es débil (score {diag_score:.1f}/10): el valor "
+            "no está bien posicionado a medio plazo — puede estar lejos de sus medias de largo plazo, "
+            "cerca de resistencias importantes, o en una tendencia bajista estructural.",
+            "Este tipo de rebote (subida puntual dentro de una tendencia bajista de fondo) "
+            "suele ser temporal. Históricamente, son momentos en los que los inversores "
+            "que ya tienen posición aprovechan para vender con menos pérdidas, no momentos "
+            "para comprar. Si piensas 'ya ha caído mucho, tiene que subir', ten cuidado: "
+            "los valores que han caído mucho pueden seguir cayendo. La estructura técnica "
+            "todavía no respalda una entrada.",
             "#fff7ed", "#ea580c"),
-        ("bajo",   "amarillo"): ("🔴", "Estructura débil · Sin dirección",
-            f"La estructura técnica es claramente negativa (score {diag_score:.1f}/10) y el momentum "
-            "no muestra señales de recuperación. Doble presión técnica.",
-            "Entorno de alto riesgo técnico. Sin evidencia de suelo estructural ni "
-            "impulso comprador. Si tienes posición, revisa si el nivel de stop-loss "
-            "original sigue siendo válido o si ha sido superado.",
+        ("bajo",   "amarillo"): ("🔴", "Estructura débil y sin dirección",
+            f"La estructura técnica de largo plazo es claramente negativa (score {diag_score:.1f}/10): "
+            "el valor está mal posicionado a medio plazo. Y el momentum (impulso a corto plazo) "
+            "tampoco muestra señales de recuperación. Doble presión en la misma dirección.",
+            "Es un entorno de alto riesgo técnico: no hay base estructural que aguante caídas "
+            "ni impulso alcista que impulse subidas. Si tienes posición, revisa si el precio "
+            "al que decidiste salir (tu nivel de stop-loss, el límite de pérdidas que te "
+            "habías marcado) sigue siendo válido o si ya ha sido superado. Si estás fuera, "
+            "no hay ninguna señal técnica que justifique entrar.",
             "#fef2f2", "#dc2626"),
-        ("bajo",   "rojo"):     ("🔴", "Condiciones técnicas desfavorables",
-            f"La estructura técnica es negativa (score {diag_score:.1f}/10) y el momentum "
-            "a corto plazo confirma la presión bajista. Todos los indicadores apuntan en la misma dirección.",
-            "Entorno técnico desfavorable en todos los plazos. No es zona de entrada "
-            "salvo que tengas una tesis fundamental muy sólida que justifique ir contra "
-            "la técnica. Si estás posicionado, valora si el riesgo/beneficio actual sigue siendo aceptable.",
+        ("bajo",   "rojo"):     ("🔴", "Todos los indicadores en contra",
+            f"La estructura técnica de largo plazo es negativa (score {diag_score:.1f}/10) "
+            "y el momentum (el impulso del precio a corto plazo) confirma la presión bajista. "
+            "No hay ningún indicador técnico relevante que apunte al alza en este momento.",
+            "Es el entorno técnico más desfavorable. Entrar ahora sería ir contra todos los "
+            "indicadores técnicos disponibles. Solo tendría sentido si tuvieras una razón "
+            "fundamental muy sólida (análisis de la empresa, valoración, dividendo…) que "
+            "justificara ir a contracorriente — y aun así, la técnica te está diciendo que "
+            "esperes. Si ya tienes posición, valora honestamente si lo que esperabas cuando "
+            "entraste sigue siendo válido.",
             "#fef2f2", "#dc2626"),
     }
 
@@ -9454,6 +9490,7 @@ def pantalla_analisis():
             )
 
         # ── Bloque 1: Lectura Integrada (arriba) + Semáforo (abajo) ─────────
+        _sh("🔗 Lectura Integrada")
         _lectura_integrada(
             color_sem=color_sem,
             pct_sem=pct_sem,
