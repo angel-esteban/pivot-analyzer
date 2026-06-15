@@ -9194,11 +9194,11 @@ def pestaña_cartera():
 
                             with st.container():
                                 if tipo_key == "dividendos":
-                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.1, 1.4])
+                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 1.3, 0.9])
                                 elif tipo_key == "swing":
-                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.4])
+                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 0.9])
                                 else:
-                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.4])
+                                    cols = st.columns([3, 1.3, 1.3, 1.3, 1.8, 0.9])
                                 with cols[0]:
                                     st.markdown(
                                         f"**{pos['ticker']}**"
