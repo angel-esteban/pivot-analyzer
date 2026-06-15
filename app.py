@@ -7827,6 +7827,137 @@ def obtener_comparativa_etf(categoria: str, ticker_actual: str) -> list[dict]:
 # =============================================================================
 
 @st.cache_data(ttl=3600)
+def _lectura_integrada(
+    color_sem: str, pct_sem: float,
+    puntuacion_tec: dict,
+    analisis_ath: dict,
+    analisis_sma200: dict,
+    niveles_reforzados: list,
+    consenso_dir: tuple,
+    precio: float, rsi_val: float,
+    factores_sem: list,
+) -> None:
+    """Síntesis accionable: cruza estructura (Diagnóstico) con momento (Semáforo)
+    y genera una lectura en lenguaje de inversor con implicación práctica."""
+
+    diag_score = (puntuacion_tec or {}).get("total", 5.0)
+
+    # ── Clasificación cruzada ──────────────────────────────────────────────
+    diag_nivel = "alto" if diag_score >= 7 else ("medio" if diag_score >= 4 else "bajo")
+
+    MATRIZ = {
+        # (diag_nivel, color_sem): (icono, titulo, situacion, implicacion, bg, border)
+        ("alto",   "verde"):    ("🟢", "Condiciones técnicas favorables",
+            f"El valor tiene una posición estructural sólida (score {diag_score:.1f}/10) y el momentum a corto plazo acompaña. "
+            "Los indicadores técnicos están mayoritariamente alineados al alza.",
+            "Entorno técnico favorable para el inversor posicionado. Si no tienes posición, "
+            "valora la cercanía a niveles de soporte antes de entrar — comprar cerca de un soporte "
+            "mejora la relación riesgo/beneficio.",
+            "#f0fdf4", "#16a34a"),
+        ("alto",   "amarillo"): ("🟡", "Estructura sólida · Momento mixto",
+            f"La posición estructural es fuerte (score {diag_score:.1f}/10), pero el momentum a corto plazo envía señales contradictorias. "
+            "No hay acuerdo entre los indicadores de corto plazo.",
+            "No es el momento de añadir posición agresivamente, pero tampoco hay señales "
+            "de deterioro estructural. Zona de espera: mantén si estás dentro, "
+            "no entres hasta que el semáforo mejore.",
+            "#fefce8", "#ca8a04"),
+        ("alto",   "rojo"):     ("🟡", "Estructura sólida · Corrección técnica activa",
+            f"La estructura técnica de largo plazo es positiva (score {diag_score:.1f}/10), pero el valor atraviesa "
+            "una corrección técnica a corto plazo con el momentum deteriorado.",
+            "Correcciones en valores con buena estructura son, históricamente, oportunidades. "
+            "El riesgo es que la corrección se extienda. Vigila el nivel de soporte más cercano: "
+            "si lo pierde con volumen, la corrección puede profundizar.",
+            "#fefce8", "#ca8a04"),
+        ("medio",  "verde"):    ("🟡", "Momento positivo · Base técnica neutral",
+            f"El momentum a corto plazo es favorable, pero la posición estructural es neutral "
+            f"(score {diag_score:.1f}/10). El valor sube, pero sin una base técnica de largo plazo sólida.",
+            "El movimiento alcista actual necesita confirmación. Un valor que sube sin estructura "
+            "sólida puede revertir con más facilidad. Si estás dentro, protege beneficios con "
+            "stops ajustados. Si no lo estás, espera a ver si la estructura mejora.",
+            "#fefce8", "#ca8a04"),
+        ("medio",  "amarillo"): ("⚪", "Sin señal técnica clara",
+            f"Ni la estructura (score {diag_score:.1f}/10) ni el momentum apuntan en una dirección definida. "
+            "Los indicadores están en zona neutral sin alineación.",
+            "Mercado lateral o sin tendencia clara. En estos entornos, las señales técnicas "
+            "son menos fiables. Mejor esperar a que el precio rompa claramente un nivel relevante "
+            "antes de tomar decisiones. La paciencia es una posición.",
+            "#f8fafc", "#94a3b8"),
+        ("medio",  "rojo"):     ("🟠", "Presión técnica a corto · Base neutral",
+            f"El momentum a corto plazo está deteriorado y la estructura no ofrece un suelo "
+            f"sólido (score {diag_score:.1f}/10). Combinación de señales negativas.",
+            "Entorno técnico desfavorable sin base estructural que amortigüe. "
+            "Si tienes posición, revisa si los niveles de soporte relevantes siguen intactos. "
+            "Si estás fuera, espera confirmación de estabilización antes de entrar.",
+            "#fff7ed", "#ea580c"),
+        ("bajo",   "verde"):    ("🟠", "Rebote técnico en estructura débil",
+            f"El valor experimenta un rebote técnico a corto plazo, pero la estructura de largo plazo "
+            f"es débil (score {diag_score:.1f}/10). El impulso positivo va contra la tendencia estructural.",
+            "Los rebotes en tendencias bajistas estructurales suelen ser temporales. "
+            "Históricamente, son zonas de venta para quienes quieren reducir exposición, "
+            "no de compra agresiva. Extrema la cautela si piensas que 'ya ha caído mucho'.",
+            "#fff7ed", "#ea580c"),
+        ("bajo",   "amarillo"): ("🔴", "Estructura débil · Sin dirección",
+            f"La estructura técnica es claramente negativa (score {diag_score:.1f}/10) y el momentum "
+            "no muestra señales de recuperación. Doble presión técnica.",
+            "Entorno de alto riesgo técnico. Sin evidencia de suelo estructural ni "
+            "impulso comprador. Si tienes posición, revisa si el nivel de stop-loss "
+            "original sigue siendo válido o si ha sido superado.",
+            "#fef2f2", "#dc2626"),
+        ("bajo",   "rojo"):     ("🔴", "Condiciones técnicas desfavorables",
+            f"La estructura técnica es negativa (score {diag_score:.1f}/10) y el momentum "
+            "a corto plazo confirma la presión bajista. Todos los indicadores apuntan en la misma dirección.",
+            "Entorno técnico desfavorable en todos los plazos. No es zona de entrada "
+            "salvo que tengas una tesis fundamental muy sólida que justifique ir contra "
+            "la técnica. Si estás posicionado, valora si el riesgo/beneficio actual sigue siendo aceptable.",
+            "#fef2f2", "#dc2626"),
+    }
+
+    key = (diag_nivel, color_sem)
+    icono, titulo, situacion, implicacion, bg, border = MATRIZ.get(
+        key, ("⚪", "Análisis en proceso", "Datos insuficientes para síntesis.", "", "#f8fafc", "#94a3b8")
+    )
+
+    # ── Nivel clave más relevante ──────────────────────────────────────────
+    nivel_clave_html = ""
+    if niveles_reforzados:
+        # Nivel más cercano al precio actual (sea soporte o resistencia)
+        nr_cercano = min(niveles_reforzados, key=lambda x: abs(x["precio"] - precio))
+        dist_nr = (nr_cercano["precio"] - precio) / precio * 100
+        tipo_nr = "Resistencia reforzada" if nr_cercano["tipo"] == "R" else (
+                  "Soporte reforzado" if nr_cercano["tipo"] == "S" else "Pivot reforzado")
+        emoji_nr = "🔴" if nr_cercano["tipo"] == "R" else ("🟢" if nr_cercano["tipo"] == "S" else "🔵")
+        nivel_clave_html = (
+            f'<div style="margin-top:10px;padding:8px 12px;background:rgba(0,0,0,0.04);'
+            f'border-radius:7px;font-size:12px">'
+            f'<span style="color:#64748b;font-weight:600">NIVEL CLAVE MÁS CERCANO</span><br>'
+            f'<span style="font-size:14px;font-weight:800;color:#0f172a">'
+            f'{emoji_nr} {nr_cercano["precio"]:.4f}'
+            f'</span>'
+            f'<span style="font-size:11px;color:#64748b;margin-left:8px">'
+            f'{dist_nr:+.1f}% · {tipo_nr} · {nr_cercano["pivot"]} + {nr_cercano["media"]}'
+            f'</span></div>'
+        )
+
+    # ── Render ─────────────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:{bg};border:1.5px solid {border};border-radius:12px;'
+        f'padding:16px 18px;height:100%">'
+        f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:0.08em;color:#64748b;margin-bottom:6px">🧭 Lectura Integrada</div>'
+        f'<div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:10px;'
+        f'line-height:1.2">{icono} {titulo}</div>'
+        f'<div style="font-size:12.5px;color:#374151;line-height:1.6;margin-bottom:8px">'
+        f'{situacion}</div>'
+        f'<div style="font-size:12px;color:#1e3a5f;line-height:1.6;font-weight:500;'
+        f'border-left:3px solid {border};padding-left:10px">{implicacion}</div>'
+        f'{nivel_clave_html}'
+        f'<div style="font-size:10px;color:#94a3b8;margin-top:10px">'
+        f'Diagnóstico {diag_score:.1f}/10 · Semáforo {color_sem.upper()} {pct_sem:.0f}%'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
+
+
 def _sh(titulo: str) -> None:
     """Renderiza un título de sección estilizado en la pantalla de Análisis Técnico."""
     st.markdown(
@@ -9322,8 +9453,10 @@ def pantalla_analisis():
                      "Valor alto (0.50€): agrupa zonas más amplias."
             )
 
-        # ── Bloque 1: Semáforo horizontal (ancho completo) ───────────────
-        _sh("🚦 Semáforo Global")
+        # ── Bloque 1: Semáforo + Lectura Integrada ────────────────────────
+        _col_sem, _col_li = st.columns([3, 2])
+        with _col_sem:
+            _sh("🚦 Semáforo Global")
         with st.expander("💡 ¿Qué mide el Semáforo Global? — Diferencia con el Diagnóstico Técnico", expanded=False):
             st.markdown("""
 #### 🚦 Semáforo Global: el pulso técnico a corto plazo
@@ -9415,6 +9548,22 @@ de debilidad a corto plazo.
         )
         st.markdown(_interp_txt)
         st.markdown("</div>", unsafe_allow_html=True)
+
+        with _col_li:
+            st.markdown("<div style='padding-top:42px'>", unsafe_allow_html=True)
+            _lectura_integrada(
+                color_sem=color_sem,
+                pct_sem=pct_sem,
+                puntuacion_tec=puntuacion_tec,
+                analisis_ath=analisis_ath,
+                analisis_sma200=analisis_sma200,
+                niveles_reforzados=niveles_reforzados,
+                consenso_dir=consenso_dir,
+                precio=precio,
+                rsi_val=rsi_val,
+                factores_sem=factores_sem,
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -10183,11 +10332,12 @@ Son zonas donde **un nivel pivot y una media móvil coinciden** dentro del marge
 - La **media móvil** representa la referencia dinámica de tendencia que siguen operadores institucionales, fondos y algoritmos.
 - Cuando ambos coinciden en la misma zona, la concentración de órdenes esperada es mayor.
 
-**Tipos de nivel:**
-- 🟢 **Soporte reforzado**: zona donde el precio tiene alta probabilidad de encontrar demanda. Referencia para stop-loss en posiciones largas o zona de entrada vigilada.
-- 🔴 **Resistencia reforzada**: zona donde el precio puede encontrar oferta. Objetivo de toma de beneficios o zona de entrada en cortos con confirmación.
+**Tipos de nivel (color del indicador):**
+- 🔵 **Pivot Point central (PP)**: el nivel de referencia neutro del sistema, calculado como la media de máximo, mínimo y cierre del período anterior. No es soporte ni resistencia por sí solo — es el eje de equilibrio alrededor del cual el mercado organiza sus niveles. Cuando una media móvil confluye con el PP, marca una zona de interés técnico especial: un punto donde el mercado puede rotar en cualquier dirección.
+- 🟢 **Soporte reforzado (S1, S2, S3…)**: zona donde el precio tiene alta probabilidad de encontrar demanda. La coincidencia de un soporte pivot con una media móvil refuerza ese suelo. Referencia para definir stop-loss en posiciones largas o zona de entrada vigilada tras un retroceso.
+- 🔴 **Resistencia reforzada (R1, R2, R3…)**: zona donde el precio puede encontrar oferta. La coincidencia con una media móvil amplifica el techo potencial. Objetivo natural de toma de beneficios o nivel de atención para posibles cortos con confirmación adicional.
 
-*La tolerancia activa define cuánto margen de distancia se permite entre el pivot y la media para considerarlos coincidentes.*
+*La tolerancia activa define cuánto margen de distancia se permite entre el pivot y la media para considerarlos coincidentes. Un valor más amplio detecta más confluencias pero con menor precisión.*
 
 ---
 
