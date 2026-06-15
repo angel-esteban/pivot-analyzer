@@ -9168,6 +9168,20 @@ def pestaña_cartera():
 
                         st.markdown("---")
                         # ── Tabla de posiciones ────────────────────────────
+                        st.markdown("""<style>
+                        [data-testid="stMetric"] label {
+                            font-size: 10px !important;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+                        [data-testid="stMetric"] [data-testid="stMetricValue"] {
+                            font-size: 13px !important;
+                        }
+                        [data-testid="stMetric"] [data-testid="stMetricDelta"] {
+                            font-size: 11px !important;
+                        }
+                        </style>""", unsafe_allow_html=True)
                         st.markdown("##### Posiciones")
                         for pos in posiciones:
                             pc = float(pos["precio_compra"])
@@ -9180,17 +9194,16 @@ def pestaña_cartera():
 
                             with st.container():
                                 if tipo_key == "dividendos":
-                                    cols = st.columns([2, 1, 1, 1, 1, 1, 0.8, 0.5, 0.5])
+                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.1, 1.4])
                                 elif tipo_key == "swing":
-                                    cols = st.columns([2, 1, 1, 1, 1, 0.8, 0.5, 0.5])
+                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.4])
                                 else:
-                                    cols = st.columns([2, 1, 1, 1, 1, 0.5, 0.5])
+                                    cols = st.columns([3, 1.1, 1.1, 1.1, 1.6, 1.4])
                                 with cols[0]:
                                     st.markdown(
                                         f"**{pos['ticker']}**"
                                         + (f" — {pos['nombre_valor']}" if pos.get("nombre_valor") else "")
                                     )
-                                    # Sector (from cache if already loaded, else fetch)
                                     _sector_key = f"_sector_{pos['ticker']}"
                                     if _sector_key not in st.session_state:
                                         try:
@@ -9206,45 +9219,72 @@ def pestaña_cartera():
                                 with cols[1]:
                                     st.metric("Acciones", _fmt_eu(na, 2))
                                 with cols[2]:
-                                    st.metric("P. Compra", _fmt_eu(pc, 2, f" {pos.get('moneda','EUR')}"))
+                                    st.metric("P.Compra", _fmt_eu(pc, 2, f" {pos.get('moneda','EUR')}"))
                                 with cols[3]:
-                                    st.metric("P. Actual",
+                                    st.metric("P.Actual",
                                               _fmt_eu(pa, 2, f" {pos.get('moneda','EUR')}") if pa else "N/D")
                                 with cols[4]:
                                     pl_str = (_fmt_eur(pl_a) + " / " + _fmt_pct_c(pl_p)
                                               if pl_a is not None else "N/D")
-                                    st.metric("P&L (Beneficio / Pérdida)", pl_str,
+                                    st.metric("B/P (€/%)", pl_str,
                                               delta=_fmt_pct_c(pl_p) if pl_p is not None else None)
                                 if tipo_key == "dividendos":
                                     with cols[5]:
                                         yoc = pos.get("yield_coste", 0)
                                         st.metric("Yield/coste", f"{yoc:.2f}%".replace(".",","))
                                     with cols[6]:
-                                        _ak = f"_an_div_{pos['id']}"
-                                        if st.button("🔍", key=f"btn_an_div_{pos['id']}",
-                                                     help="Analizar si es buen momento para comprar más"):
-                                            st.session_state[_ak] = not st.session_state.get(_ak, False)
-                                            st.rerun()
+                                        _btn6a, _btn6b, _btn6c = st.columns(3)
+                                        with _btn6a:
+                                            _ak = f"_an_div_{pos['id']}"
+                                            if st.button("🔍", key=f"btn_an_div_{pos['id']}",
+                                                         help="Analizar si es buen momento para comprar más"):
+                                                st.session_state[_ak] = not st.session_state.get(_ak, False)
+                                                st.rerun()
+                                        with _btn6b:
+                                            if st.button("✏️", key=f"edit_pos_{pos['id']}",
+                                                         help="Editar esta posición"):
+                                                st.session_state[_edit_key] = not st.session_state.get(_edit_key, False)
+                                                st.rerun()
+                                        with _btn6c:
+                                            if st.button("🗑️", key=f"del_pos_{pos['id']}",
+                                                         help="Eliminar esta posición"):
+                                                eliminar_posicion(pos["id"], cid)
+                                                st.session_state["_cartera_precios_cache"] = {}
+                                                st.rerun()
                                 elif tipo_key == "swing":
                                     with cols[5]:
-                                        _ak = f"_an_swg_{pos['id']}"
-                                        if st.button("🔍", key=f"btn_an_swg_{pos['id']}",
-                                                     help="Analizar si es momento de cerrar o reducir posición"):
-                                            st.session_state[_ak] = not st.session_state.get(_ak, False)
-                                            st.rerun()
-                                # Botones editar / eliminar
-                                with cols[-2]:
-                                    if st.button("✏️", key=f"edit_pos_{pos['id']}",
-                                                 help="Editar esta posición"):
-                                        current = st.session_state.get(_edit_key, False)
-                                        st.session_state[_edit_key] = not current
-                                        st.rerun()
-                                with cols[-1]:
-                                    if st.button("🗑️", key=f"del_pos_{pos['id']}",
-                                                 help="Eliminar esta posición"):
-                                        eliminar_posicion(pos["id"], cid)
-                                        st.session_state["_cartera_precios_cache"] = {}
-                                        st.rerun()
+                                        _btn5a, _btn5b, _btn5c = st.columns(3)
+                                        with _btn5a:
+                                            _ak = f"_an_swg_{pos['id']}"
+                                            if st.button("🔍", key=f"btn_an_swg_{pos['id']}",
+                                                         help="Analizar si es momento de cerrar o reducir posición"):
+                                                st.session_state[_ak] = not st.session_state.get(_ak, False)
+                                                st.rerun()
+                                        with _btn5b:
+                                            if st.button("✏️", key=f"edit_pos_{pos['id']}",
+                                                         help="Editar esta posición"):
+                                                st.session_state[_edit_key] = not st.session_state.get(_edit_key, False)
+                                                st.rerun()
+                                        with _btn5c:
+                                            if st.button("🗑️", key=f"del_pos_{pos['id']}",
+                                                         help="Eliminar esta posición"):
+                                                eliminar_posicion(pos["id"], cid)
+                                                st.session_state["_cartera_precios_cache"] = {}
+                                                st.rerun()
+                                else:
+                                    with cols[5]:
+                                        _btn5a, _btn5b = st.columns(2)
+                                        with _btn5a:
+                                            if st.button("✏️", key=f"edit_pos_{pos['id']}",
+                                                         help="Editar esta posición"):
+                                                st.session_state[_edit_key] = not st.session_state.get(_edit_key, False)
+                                                st.rerun()
+                                        with _btn5b:
+                                            if st.button("🗑️", key=f"del_pos_{pos['id']}",
+                                                         help="Eliminar esta posición"):
+                                                eliminar_posicion(pos["id"], cid)
+                                                st.session_state["_cartera_precios_cache"] = {}
+                                                st.rerun()
 
                             # ── Análisis entrada/salida ────────────────────
                             if tipo_key == "dividendos" and st.session_state.get(f"_an_div_{pos['id']}", False):
