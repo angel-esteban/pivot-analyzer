@@ -10689,6 +10689,83 @@ si hay noticias negativas, o si el volumen en la zona fue muy bajo.
         else:
             st.caption("No se detectan huecos abiertos significativos (≥ 0.3%) en los últimos 252 días.")
 
+        # ── Síntesis contextual de huecos ─────────────────────────────────
+        if huecos_abiertos:
+            # Los huecos ya vienen ordenados por distancia absoluta al precio
+            _hc = huecos_abiertos[0]
+            _hc_tipo   = _hc["tipo"]
+            _hc_dist   = _hc["dist_pct"]
+            _hc_dias   = _hc["dias_abierto"]
+            _hc_low    = _hc["gap_low"]
+            _hc_high   = _hc["gap_high"]
+            _hc_size   = _hc["gap_pct"]
+            _hc_todos_alc = [h for h in huecos_abiertos if h["tipo"] == "alcista"]
+            _hc_todos_baj = [h for h in huecos_abiertos if h["tipo"] == "bajista"]
+
+            if _hc_tipo == "alcista":
+                # Hueco más cercano está por debajo → actúa como soporte potencial
+                _hs_bg, _hs_brd, _hs_ico = "#f0fdf4", "#16a34a", "🔼"
+                _hs_titulo = "El soporte más próximo es un hueco alcista"
+                _hs_dist_txt = f"a un {abs(_hc_dist):.1f}% por debajo del precio actual"
+                _hs_texto = (
+                    f"El hueco abierto más cercano es alcista y está **{_hs_dist_txt}** "
+                    f"(zona {_hc_low:.4f}–{_hc_high:.4f}, tamaño {_hc_size:.1f}%). "
+                    f"Lleva **{_hc_dias} sesiones** sin cerrarse. "
+                    "Un hueco alcista es una zona donde el precio subió de golpe sin negociarse — "
+                    "los inversores que compraron antes de ese salto obtuvieron ganancias inesperadas "
+                    "y, si el precio vuelve a esa zona, suelen recomprar con convicción. "
+                    "Eso convierte esa zona en un **suelo natural**: si el precio cae hasta ahí, "
+                    "es razonable esperar que aparezca demanda compradora."
+                )
+                if _hc_size >= 2.0:
+                    _hs_texto += (
+                        f" El tamaño del hueco ({_hc_size:.1f}%) es relevante — "
+                        "huecos grandes tienen más fuerza como soporte que los pequeños."
+                    )
+                if len(_hc_todos_baj) > 0:
+                    _hs_texto += (
+                        f" Por encima del precio hay además {len(_hc_todos_baj)} hueco{'s' if len(_hc_todos_baj)>1 else ''} "
+                        "bajista(s) que actúan como resistencia potencial."
+                    )
+            else:
+                # Hueco más cercano está por encima → actúa como resistencia potencial
+                _hs_bg, _hs_brd, _hs_ico = "#fef2f2", "#dc2626", "🔽"
+                _hs_titulo = "La resistencia más próxima es un hueco bajista"
+                _hs_dist_txt = f"a un {abs(_hc_dist):.1f}% por encima del precio actual"
+                _hs_texto = (
+                    f"El hueco abierto más cercano es bajista y está **{_hs_dist_txt}** "
+                    f"(zona {_hc_low:.4f}–{_hc_high:.4f}, tamaño {_hc_size:.1f}%). "
+                    f"Lleva **{_hc_dias} sesiones** sin cerrarse. "
+                    "Un hueco bajista es una zona donde el precio cayó de golpe — "
+                    "los inversores que compraron antes de esa caída quedaron con pérdidas "
+                    "y, cuando el precio recupera hasta esa zona, tienden a vender "
+                    "para «salir sin pérdidas». Esa presión vendedora convierte la zona "
+                    "en un **techo natural**: si el precio sube hasta ahí, "
+                    "es razonable anticipar resistencia."
+                )
+                if _hc_size >= 2.0:
+                    _hs_texto += (
+                        f" El tamaño del hueco ({_hc_size:.1f}%) es relevante — "
+                        "huecos grandes tienen más fuerza como resistencia que los pequeños."
+                    )
+                if len(_hc_todos_alc) > 0:
+                    _hs_texto += (
+                        f" Por debajo del precio hay además {len(_hc_todos_alc)} hueco{'s' if len(_hc_todos_alc)>1 else ''} "
+                        "alcista(s) que actúan como soporte potencial."
+                    )
+
+            st.markdown(
+                f'<div style="background:{_hs_bg};border:1px solid {_hs_brd};'
+                f'border-radius:8px;padding:14px 16px;margin-top:12px">'
+                f'<div style="font-size:12px;font-weight:700;color:{_hs_brd};'
+                f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+                f'{_hs_ico} Qué significa esto para ti</div>'
+                f'<div style="font-size:13px;color:#1e293b;line-height:1.65">'
+                f'{_hs_texto}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
         st.divider()
 
         # ── Bloque: Diagnóstico Técnico ───────────────────────────────────
@@ -11166,6 +11243,107 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 f'</div>',
                 unsafe_allow_html=True
             )
+
+            # ── Síntesis contextual Fibonacci ─────────────────────────────
+            _fib_escenarios_alcistas = {"extension_161", "extension_127", "en_maximo", "retroceso_236"}
+            _fib_escenarios_neutros  = {"retroceso_382"}
+            _fib_es_alcista = _esc_f in _fib_escenarios_alcistas
+            _fib_es_neutro  = _esc_f in _fib_escenarios_neutros
+
+            if _fib_es_alcista:
+                _fib_sb, _fib_brd = "#f0fdf4", "#16a34a"
+            elif _fib_es_neutro:
+                _fib_sb, _fib_brd = "#fefce8", "#ca8a04"
+            else:
+                _fib_sb, _fib_brd = "#fff7ed", "#ea580c"
+
+            # Construir texto de niveles
+            _fib_niveles_txt = ""
+            if _fa and _fu:
+                _fib_niveles_txt = (
+                    f"El precio tiene soporte Fibonacci en **{_fa['precio']:,.4f}** "
+                    f"(nivel {_fa['label']}%, a {_fa['dist_pct']:.1f}% de distancia) "
+                    f"y resistencia Fibonacci en **{_fu['precio']:,.4f}** "
+                    f"(nivel {_fu['label']}%, a {_fu['dist_pct']:.1f}% de distancia). "
+                )
+            elif _fa:
+                _fib_niveles_txt = (
+                    f"El nivel Fibonacci más cercano por debajo actúa como soporte potencial: "
+                    f"**{_fa['precio']:,.4f}** (nivel {_fa['label']}%, a {_fa['dist_pct']:.1f}%). "
+                )
+            elif _fu:
+                _fib_niveles_txt = (
+                    f"El nivel Fibonacci más cercano por encima actúa como resistencia potencial: "
+                    f"**{_fu['precio']:,.4f}** (nivel {_fu['label']}%, a {_fu['dist_pct']:.1f}%). "
+                )
+
+            # Texto de qué hacer según escenario
+            _fib_accion = {
+                "extension_161": (
+                    "El precio está en territorio de extensión — ha superado el máximo del swing anual "
+                    "y continúa subiendo. En estos niveles no hay resistencias Fibonacci históricas previas, "
+                    "lo que técnicamente despeja el camino al alza. El siguiente objetivo de referencia "
+                    "es la extensión 161.8%. Si tienes posición, el Fibonacci no da señales de alarma."
+                ),
+                "extension_127": (
+                    "El precio ha superado el máximo del swing y ha alcanzado la extensión 127.2% — "
+                    "primer objetivo de proyección tras superar máximos. Es una zona donde el precio "
+                    "puede tomarse un respiro (consolidar o corregir levemente) antes de continuar. "
+                    "No es una señal de venta, pero sí un nivel donde conviene tener los ojos abiertos."
+                ),
+                "en_maximo": (
+                    "El precio está en el máximo del swing (100% de Fibonacci). Es la zona de mayor "
+                    "resistencia histórica reciente — el punto más alto del año. Superar este nivel "
+                    "con volumen sería una señal alcista importante (ruptura de máximos). "
+                    "Sin romperlo, el precio puede corregir hacia niveles Fibonacci inferiores."
+                ),
+                "retroceso_236": (
+                    "El precio ha retrocedido solo un 23.6% desde el máximo del swing — "
+                    "es el retroceso más superficial de Fibonacci. Indica que la tendencia alcista "
+                    "está muy intacta: los vendedores apenas han podido corregir la subida. "
+                    "Si el precio aguanta este nivel, la probabilidad de continuar al alza es alta."
+                ),
+                "retroceso_382": (
+                    "El precio está en la zona de retroceso 38.2–50% — considerada la zona de "
+                    "retroceso 'normal' dentro de una tendencia alcista sana. "
+                    "Ni demasiado profundo ni superficial. Si el precio rebota desde aquí con volumen, "
+                    "es una señal de que la tendencia alcista principal sigue intacta. "
+                    "Si la pierde, el siguiente soporte es la zona dorada (61.8%)."
+                ),
+                "retroceso_618": (
+                    "El precio está en la 'zona dorada' de Fibonacci (61.8%) — el retroceso más "
+                    "seguido por traders e inversores institucionales en todo el mundo. "
+                    "Es el último soporte Fibonacci relevante antes de que la estructura alcista "
+                    "del swing quede comprometida. Si el precio rebota aquí con fuerza, "
+                    "puede ser una oportunidad de entrada técnica. Si lo pierde, el swing "
+                    "podría romperse (nivel 0% en el punto de partida del movimiento)."
+                ),
+                "retroceso_786": (
+                    "El precio ha retrocedido un 78.6% del swing alcista — retroceso muy profundo "
+                    "que pone a prueba la estructura. El swing alcista sigue técnicamente activo "
+                    "pero por poco margen. El nivel 0% (origen del swing) es la última defensa: "
+                    "si el precio lo pierde, el swing queda invalidado y se abre paso a nuevos mínimos."
+                ),
+                "swing_roto": (
+                    "El swing alcista anual ha sido invalidado — el precio ha caído por debajo del "
+                    "punto de partida del movimiento. Fibonacci no ofrece soporte estructural relevante "
+                    "en la zona actual. El análisis técnico de Fibonacci debe reconstruirse "
+                    "sobre el nuevo mínimo que establezca el precio."
+                ),
+            }.get(_esc_f, "")
+
+            if _fib_niveles_txt or _fib_accion:
+                st.markdown(
+                    f'<div style="background:{_fib_sb};border:1px solid {_fib_brd};'
+                    f'border-radius:8px;padding:14px 16px;margin-top:10px">'
+                    f'<div style="font-size:12px;font-weight:700;color:{_fib_brd};'
+                    f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+                    f'📐 Qué significa esto para ti</div>'
+                    f'<div style="font-size:13px;color:#1e293b;line-height:1.65">'
+                    f'{_fib_niveles_txt}{_fib_accion}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
         else:
             st.caption("Datos insuficientes para calcular niveles de Fibonacci.")
 
