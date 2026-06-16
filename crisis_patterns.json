@@ -1,0 +1,491 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "fuente": "PRISMA-IB · Scriptum",
+    "descripcion": "Base de conocimiento de crisis financieras históricas 1979–2023. Estructura canónica: detonante, mecánica, duración, sectores afectados, señales previas, lección operativa. Marco PRISMA-IB: cada crisis incluye analogías y disanalogías explícitas con el momento actual.",
+    "ultima_revision": "2026-01",
+    "nota_epistemica": "Para episodios anteriores a 2000, análisis basado en conocimiento histórico documentado, no en observación de mercado en tiempo real. El análisis retrospectivo subestima la confusión del presente en cada momento."
+  },
+
+  "crisis": {
+
+    "volcker_shock_1979_1982": {
+      "nombre": "Shock Volcker y Crisis de Deuda Latinoamericana",
+      "periodo": "Agosto 1979 – Noviembre 1982",
+      "emoji": "🏚️",
+      "tipo": ["política monetaria extrema", "crisis de deuda soberana", "recesión inducida"],
+      "gravedad": 9,
+      "detonante": {
+        "evento": "Paul Volcker, nombrado presidente de la Fed en agosto 1979, sube el tipo Fed Funds del 11% al 20% en menos de 18 meses para domar una inflación que había llegado al 14.8%.",
+        "contexto": "Dos shocks del petróleo (1973 y 1979) habían instalado inflación estructural de una década. Nixon había roto la convertibilidad oro-dólar en 1971. La Fed de Burns había mantenido tipos reales negativos demasiado tiempo."
+      },
+      "mecanica": "Subida de tipos más agresiva de la historia de la Fed moderna. El dólar se dispara. Los países latinoamericanos que habían tomado deuda en USD a tipos variables ven multiplicarse su coste de servicio. México declara default en agosto 1982. Le siguen Argentina, Brasil. En EE.UU., dos recesiones (1980 y 1981-82). El S&P 500 cae un 27% desde su máximo de 1980 hasta el mínimo de 1982.",
+      "duracion": {
+        "mercado": "S&P 500 bear market: ~27 meses (noviembre 1980 – agosto 1982)",
+        "economica": "Dos recesiones: enero-julio 1980 y julio 1981-noviembre 1982"
+      },
+      "magnitud_mercado": {
+        "sp500_caida": "-27% (pico a suelo)",
+        "bonos": "Rendimiento bono 10Y EE.UU. llegó al 15.84% en septiembre 1981 — máximo histórico absoluto",
+        "dolar": "DXY subió de 85 a 164 entre 1980 y 1985"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Bonos larga duración (pérdidas masivas por subida de tipos)", "Inmobiliario (hipotecas al 18%)", "S&L (Savings & Loans — captaban corto, prestaban largo)"],
+        "negativo": ["Consumo cíclico", "Industriales", "Bancos con exposición LatAm"],
+        "positivo": ["Dólar (activo refugio)", "Bonos corto plazo (mientras tipos subían)"]
+      },
+      "señales_previas": [
+        "Inflación > 10% durante > 12 meses sin respuesta de política monetaria creíble",
+        "Tipos reales negativos prolongados (inflación > tipo Fed Funds)",
+        "Dolarización masiva de deuda soberana de países emergentes en años 70",
+        "Precio del petróleo x4 en 1973 y x2 en 1979 sin ajuste estructural de la economía"
+      ],
+      "resolucion": "La recesión de 1981-82 fue el precio explícito de recuperar la credibilidad antiinflacionaria. El S&P 500 inició un bull market de 18 años en agosto 1982. El Plan Brady en 1989 reestructuró la deuda latinoamericana.",
+      "leccion_operativa": "La credibilidad de un banco central, una vez perdida, solo se recupera causando dolor deliberado. Volcker lo hizo. La lección para 2022-2024: la Fed y el BCE estaban dispuestos a inducir recesión antes que perder credibilidad antiinflacionaria de nuevo.",
+      "analogias_2022": {
+        "coincidencias": [
+          "Inflación >7% con banco central detrás de la curva",
+          "Ciclo de subidas más agresivo desde Volcker",
+          "Impacto sobre activos de larga duración (bonos y growth tech equivalen a los bonos de los 80)"
+        ],
+        "disanalogias": [
+          "En 2022 la inflación era un shock de oferta post-pandemia, no inflación estructural de una década",
+          "Los balances de la Fed/BCE estaban masivamente expandidos por QE — herramienta adicional (QT)",
+          "La inflación de 2022 se domó sin recesión profunda; en 1980-82 hubo dos recesiones"
+        ]
+      }
+    },
+
+    "black_monday_1987": {
+      "nombre": "Black Monday — Lunes Negro",
+      "periodo": "Octubre 1987",
+      "emoji": "⚫",
+      "tipo": ["crash de mercado", "evento de estructura de mercado", "crisis de liquidez intradía"],
+      "gravedad": 7,
+      "detonante": {
+        "evento": "El 19 de octubre de 1987, el Dow Jones cae un 22.6% en una sola sesión — la mayor caída diaria porcentual de la historia bursátil americana.",
+        "contexto": "Los mercados habían subido fuertemente en 1985-1987. Las tasas de interés estaban subiendo. El dólar bajo presión. Pero el detonante inmediato fue la mecánica del mercado, no los fundamentales."
+      },
+      "mecanica": "El Portfolio Insurance — estrategia sistemática de cobertura basada en venta de futuros del S&P 500 cuando el mercado cae — se convirtió en un amplificador procíclico masivo. Al caer el mercado, los sistemas vendían futuros automáticamente, lo que hacía caer más el mercado, lo que disparaba más ventas automáticas. Bucle de retroalimentación pura. La liquidez desapareció en minutos.",
+      "duracion": {
+        "mercado": "El suelo se tocó ese mismo día. Recuperación completa en ~2 años",
+        "economica": "No hubo recesión — la economía real apenas se resintió"
+      },
+      "magnitud_mercado": {
+        "dow_jones_dia": "-22.6% en una sola sesión (19 oct 1987)",
+        "sp500_desde_pico": "-33.5% desde el máximo de agosto 1987 al suelo de octubre",
+        "recuperacion": "El S&P 500 recuperó los máximos previos en enero 1989"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Todo el mercado por igual — fue una venta sistémica indiscriminada"],
+        "impacto_diferencial": "Los valores más líquidos fueron los más atacados por las ventas sistemáticas"
+      },
+      "señales_previas": [
+        "Mercado había subido >40% en 1987 antes del crash",
+        "Tipos de interés subiendo (bono 10Y del 7% al 10% en 1987)",
+        "Dólar bajo presión (Acuerdo del Louvre en febrero 1987 para estabilizarlo)",
+        "Volatilidad comprimida durante meses antes del evento — complacencia extrema"
+      ],
+      "resolucion": "Greenspan emitió un comunicado al día siguiente prometiendo liquidez ilimitada al sistema bancario. Fue el nacimiento del 'Fed Put' — la idea de que la Fed intervendrá para salvar los mercados en crisis severas.",
+      "leccion_operativa": "Las estrategias sistemáticas de cobertura no reducen el riesgo del sistema: lo concentran. Cuando todos hacen lo mismo y usan las mismas coberturas, el colapso es simultaneo. Este patrón se repite: Portfolio Insurance 1987, LTCM 1998, vol-mageddon 2018, LDI pensions UK 2022.",
+      "legado": "Nacimiento del 'Fed Put' como doctrina implícita de la política monetaria americana. Los circuit breakers del NYSE se implementaron directamente como consecuencia.",
+      "analogias_recientes": {
+        "volmageddon_2018": "Mismo patrón: estrategia sistemática (venta de volatilidad vía ETN XIV) amplificó el movimiento del mercado. El VIX pasó de 12 a 50 en dos sesiones.",
+        "ldi_uk_2022": "El colapso de las pensiones LDI en el Reino Unido (octubre 2022) siguió exactamente el mismo bucle: caída de gilts → margin calls → venta forzada de gilts → más caída."
+      }
+    },
+
+    "burbuja_japonesa_1989_2003": {
+      "nombre": "Burbuja Japonesa — Las Tres Décadas Perdidas",
+      "periodo": "Diciembre 1989 – (mínimo 2003, estancamiento persistente hasta 2013+)",
+      "emoji": "🗾",
+      "tipo": ["burbuja de activos", "burbuja inmobiliaria", "deflación de balance"],
+      "gravedad": 10,
+      "detonante": {
+        "evento": "El Nikkei tocó máximos históricos de 38.957 puntos el 29 de diciembre de 1989. En los 3 años siguientes cayó un 63%.",
+        "contexto": "La política monetaria ultra-laxa del Banco de Japón en los 80 había inflado simultáneamente las bolsas y el mercado inmobiliario. Los precios del suelo en Tokio llegaron a niveles en los que el valor total del suelo de la ciudad superaba el del conjunto de EE.UU."
+      },
+      "mecanica": "Al subir tipos el Banco de Japón para frenar la burbuja (1989-1990), el suelo se derrumbó. La banca japonesa, que había prestado masivamente contra garantías inmobiliarias sobrevaloradas, quedó insolvente. Durante 15 años, los bancos zombis mantuvieron en su balance préstamos fallidos sin provisionarlos ('extend and pretend'). La economía quedó atrapada en deflación de balance: empresas y hogares dedicaban sus ingresos a devolver deuda en lugar de gastar e invertir.",
+      "duracion": {
+        "mercado": "Nikkei no recuperó los máximos de 1989 hasta 2024 (35 años)",
+        "economica": "Dos décadas perdidas de crecimiento: PIB nominal japonés prácticamente plano 1995-2013"
+      },
+      "magnitud_mercado": {
+        "nikkei_caida": "-82% desde máximos de 1989 al mínimo de 2003 (de 38.957 a 7.607 puntos)",
+        "inmobiliario": "El precio del suelo en Japón cayó un 70-80% desde máximos",
+        "recuperacion": "Parcial bajo Abenomics a partir de 2013; máximos históricos recuperados en 2024"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Banca japonesa (insolvencia sistémica durante años)", "Inmobiliario", "Construcción"],
+        "negativo": ["Todo el mercado japones en general"],
+        "impacto_global": "Moderado fuera de Japón — Japón absorbió el dolor internamente"
+      },
+      "señales_previas": [
+        "PER del Nikkei llegó a 60-70x en 1989 — múltiplos indefendibles",
+        "Precio del suelo en Tokio subió 400% en 10 años",
+        "Tipos de interés artificialmente bajos durante la segunda mitad de los 80 (política expansiva post-acuerdo Plaza 1985)",
+        "Bancos prestando contra garantías inmobiliarias sin control del LTV"
+      ],
+      "resolucion": "Parcial. Abenomics (2013) — política fiscal, monetaria y reformas estructurales — detuvo la deflación. El QE del Banco de Japón se convirtió en el más extremo del mundo (llegó a poseer >50% del mercado de bonos soberanos japoneses). Máximos de 1989 recuperados finalmente en 2024.",
+      "leccion_operativa": "Las burbujas simultáneas en activos financieros e inmobiliarios son las más destructivas porque el efecto riqueza negativo dura décadas. La lección para los análisis de la burbuja inmobiliaria española 2007-2012: las consecuencias se miden en décadas, no en trimestres.",
+      "analogias_esp": {
+        "burbuja_inmobiliaria_2007": "España replicó la mecánica japonesa en escala reducida: banca prestando contra garantías inmobiliarias, sobrevaloración masiva, colapso del suelo que dejó balances bancarios deteriorados. Diferencia: el 'whatever it takes' de Draghi y el mecanismo europeo de rescate evitaron el escenario deflacionario prolongado.",
+        "diferencia_clave": "Japón no tuvo prestamista de última instancia externo dispuesto a actuar; España sí (BCE + ESM)"
+      }
+    },
+
+    "sl_crisis_1989_1995": {
+      "nombre": "Crisis Savings & Loan (S&L)",
+      "periodo": "Pico 1989 – Resolución 1995",
+      "emoji": "🏦",
+      "tipo": ["crisis bancaria", "riesgo de duración", "riesgo moral"],
+      "gravedad": 6,
+      "detonante": {
+        "evento": "Quiebra masiva de las Savings & Loan Associations (cajas de ahorro americanas), que habían captado depósitos a corto plazo a tipos fijos bajos y concedido hipotecas a largo plazo a tipos fijos bajos. Al subir los tipos con Volcker, el margen se invirtió: pagaban más por los depósitos de lo que cobraban por las hipotecas.",
+        "contexto": "La desregulación de los 80 permitió a las S&L expandirse hacia inversiones de mayor riesgo (junk bonds, inmobiliario comercial). Muchas incurrieron en fraude y autocracia de sus gestores."
+      },
+      "mecanica": "El seguro de depósitos federal (FSLIC) protegía los depósitos — esto creó riesgo moral masivo: los gestores asumían riesgos extremos porque las pérdidas las cubría el contribuyente. El Resolution Trust Corporation (RTC) se creó para liquidar los activos de las S&L quebradas. Coste total: ~160.000M$ para el contribuyente americano.",
+      "duracion": {
+        "mercado": "Impacto difuso — no hubo crash bursátil único asociado",
+        "economica": "Contribuyó a la recesión americana de 1990-91"
+      },
+      "magnitud_mercado": {
+        "instituciones_quebradas": "~1.000 de las 3.200 S&L existentes quebraron",
+        "coste_contribuyente": "~160.000M$ (3.2% del PIB de EE.UU. en 1989)",
+        "sp500": "No hubo crash puntual pero el mercado estuvo deprimido 1989-1990"
+      },
+      "señales_previas": [
+        "Tipos de interés muy altos post-Volcker haciendo insostenible el modelo de negocio S&L",
+        "Desregulación sin supervisión adecuada — combinación clásica de crisis bancaria",
+        "Concentración masiva en inmobiliario comercial en fase de burbuja",
+        "Seguro de depósitos ilimitado = incentivo al riesgo moral"
+      ],
+      "resolucion": "Creación del RTC para liquidar activos. Reforma regulatoria (FIRREA 1989). El coste lo pagó el contribuyente americano a lo largo de los 90.",
+      "leccion_operativa": "El riesgo de duración en banca — captar corto, prestar largo — es el mecanismo de quiebra bancaria más antiguo y recurrente. Se repitió en Silicon Valley Bank en 2023: captaba depósitos a la vista, invertía en bonos del Tesoro a 10Y. Cuando los tipos subieron, las pérdidas latentes superaron el capital.",
+      "analogias_svb_2023": {
+        "coincidencias": ["Mismo mecanismo: riesgo de duración (captar corto, invertir largo)", "Misma complacencia regulatoria ante concentración de riesgo de tipos", "Mismo detonante: subida de tipos"],
+        "disanalogias": ["SVB era un evento puntual, no sistémico; las S&L eran un sector entero", "La respuesta de la Fed/FDIC en 2023 fue más rápida y garantizó todos los depósitos", "Redes sociales aceleraron el bank run de SVB en horas vs. semanas en los años 80"]
+      }
+    },
+
+    "erm_crisis_1992": {
+      "nombre": "Crisis del SME y Devaluación de la Peseta",
+      "periodo": "Septiembre 1992 – Agosto 1993",
+      "emoji": "💱",
+      "tipo": ["crisis de divisa", "crisis de mecanismo de tipo de cambio", "especulación monetaria"],
+      "gravedad": 6,
+      "detonante": {
+        "evento": "George Soros y otros especuladores atacaron las divisas vinculadas al SME (Sistema Monetario Europeo) que mantenían tipos de cambio fijos frente al marco alemán. La libra y la lira salieron del SME el 16 de septiembre de 1992 (Miércoles Negro).",
+        "contexto": "Alemania reunificada había subido tipos para controlar la inflación post-reunificación. El resto de Europa no podía seguirle porque sus economías estaban débiles. Los tipos de cambio fijos eran insostenibles con políticas monetarias divergentes."
+      },
+      "mecanica": "Soros vendió en corto ~10.000M£ contra el Banco de Inglaterra, que intentó defender la paridad subiendo tipos hasta el 15% en un solo día. Fue imposible: la economía real no aguantaba tipos tan altos solo para defender un tipo de cambio. La peseta se devaluó un 5% en septiembre 1992, otro 6% en noviembre 1992 y un 8% en mayo 1993. Tres devaluaciones en 9 meses.",
+      "duracion": {
+        "mercado": "Crisis concentrada en septiembre 1992; efectos secundarios hasta 1993",
+        "economica": "España entró en recesión en 1992-1993 (PIB -1.3% en 1993)"
+      },
+      "magnitud_mercado": {
+        "peseta": "Devaluada ~20% acumulada entre 1992 y 1995",
+        "ibex": "Caída de ~30% en 1992-1993",
+        "bono_español_spread": "Prima de riesgo española subió a 500-600pb sobre Alemania"
+      },
+      "señales_previas": [
+        "Tipos reales españoles muy altos para sostener el cambio peseta/marco",
+        "Divergencia económica creciente entre economías del SME",
+        "Reservas del Banco de España insuficientes para defender la paridad frente a capital especulativo",
+        "Referéndum de Maastricht en Dinamarca (negativo en junio 1992): primer crack en la credibilidad europea"
+      ],
+      "resolucion": "El SME amplió sus bandas de fluctuación al ±15% en agosto 1993, esencialmente abandonando los tipos fijos. España implementó reformas laborales. La economía se recuperó con la devaluación mejorada de competitividad.",
+      "leccion_operativa": "Un banco central no puede defender indefinidamente un tipo de cambio contra la presión del mercado si la política macroeconómica subyacente es inconsistente. La lección para el euro: la unión monetaria sin unión fiscal crea vulnerabilidades estructurales similares — la crisis de deuda soberana 2010-2012 fue la confirmación a mayor escala.",
+      "relevancia_ibex": "La devaluación de la peseta fue un laboratorio de lo que ocurre cuando España no puede depreciar su moneda para ajustar competitividad — exactamente la restricción que tiene ahora dentro del euro."
+    },
+
+    "crisis_asiatica_ltcm_1997_1998": {
+      "nombre": "Crisis Asiática y Colapso de LTCM",
+      "periodo": "Julio 1997 – Octubre 1998",
+      "emoji": "🌏",
+      "tipo": ["crisis de divisa emergente", "contagio", "fallo de modelo cuantitativo", "riesgo sistémico"],
+      "gravedad": 8,
+      "detonante": {
+        "evento": "Tailandia abandona el tipo de cambio fijo del baht frente al dólar el 2 de julio de 1997. El contagio se extiende a Malasia, Indonesia, Corea del Sur, Filipinas. En 1998, Rusia declara default en agosto. Long-Term Capital Management (LTCM) colapsa en septiembre 1998.",
+        "contexto": "Los países asiáticos habían tomado deuda en USD a tipos bajos aprovechando sus tipos de cambio fijos. El dólar fuerte hizo la deuda insostenible. LTCM era un hedge fund con ~125.000M$ en activos y 1.2 billones en posiciones nocionales, gestionado por ex-académicos de la Fed y dos premios Nobel de economía."
+      },
+      "mecanica_asiatica": "Los currency pegs colapsaron uno a uno. Las divisas asiáticas perdieron el 40-80% de su valor. La deuda en USD, en términos de divisa local, se multiplicó. Las economías entraron en recesión severa.",
+      "mecanica_ltcm": "LTCM usaba modelos basados en distribuciones gaussianas — suponía que las correlaciones históricas se mantendrían y que los eventos extremos ('fat tails') eran estadísticamente irrelevantes. El default de Rusia creó correlaciones que los modelos no contemplaban: activos que 'no podían caer simultáneamente' cayeron todos a la vez. Con apalancamiento 25:1, la quiebra fue instantánea. La Fed coordinó un rescate privado de 3.600M$ para evitar el colapso sistémico.",
+      "duracion": {
+        "mercado": "S&P 500 cayó un 22% entre julio y octubre 1998; recuperó máximos en noviembre 1998",
+        "economica": "Las economías asiáticas afectadas tardaron 2-3 años en recuperarse"
+      },
+      "magnitud_mercado": {
+        "sp500": "-22% julio-octubre 1998 (recuperación muy rápida — no hubo recesión en EE.UU.)",
+        "divisas_asiaticas": "Won coreano -55%, Rupia indonesia -83%, Baht tailandés -50%",
+        "ltcm": "Pérdidas de 4.600M$ en 4 meses"
+      },
+      "señales_previas": [
+        "Deficit por cuenta corriente masivos en economías asiáticas financiados con deuda en USD",
+        "Tipo de cambio fijo en contexto de dólar apreciando — inconsistencia creciente",
+        "Apalancamiento extremo de LTCM sin precedentes en un hedge fund (25:1)",
+        "Modelos de riesgo basados en correlaciones históricas que no contemplaban contagio"
+      ],
+      "resolucion": "El FMI intervino con paquetes de rescate condicionados a reformas estructurales. La Fed bajó tipos tres veces entre septiembre y noviembre 1998. LTCM fue liquidado ordenadamente.",
+      "leccion_operativa": "Los modelos financieros basados en distribuciones normales fallan exactamente cuando más se necesitan — en crisis, las correlaciones convergen a 1 y los 'fat tails' se materializan. Taleb lo formalizó posteriormente como 'cisnes negros'. LTCM demostró que los premios Nobel no te protegen de la realidad del mercado."
+    },
+
+    "burbuja_puntocom_1999_2002": {
+      "nombre": "Burbuja Puntocom (Dot-com Bubble)",
+      "periodo": "Marzo 2000 – Octubre 2002",
+      "emoji": "💻",
+      "tipo": ["burbuja de valoración", "euforia narrativa", "ciclo tecnológico"],
+      "gravedad": 8,
+      "detonante": {
+        "evento": "El Nasdaq tocó máximos de 5.048 puntos el 10 de marzo de 2000. En los 30 meses siguientes cayó un 78%.",
+        "contexto": "La narrativa de 'internet lo cambia todo' justificó valoraciones sin conexión con los flujos de caja reales. Empresas sin ingresos cotizaban a miles de millones de dólares. El ratio PER del S&P 500 llegó a 44x. Terra Networks en España fue el caso local más extremo."
+      },
+      "mecanica": "Las IPOs de empresas tecnológicas se hacían a valoraciones absurdas con libro de órdenes sobreinscrito miles de veces. El capital riesgo financiaba empresas con el único objetivo de llegar a la OPV. La subida de tipos de la Fed en 2000 (6.5%) fue el detonante final al comprimir los múltiplos de valoración. El Nasdaq tardó 15 años en recuperar los máximos de 2000.",
+      "duracion": {
+        "mercado": "Nasdaq: 30 meses de bajada (marzo 2000 – octubre 2002). Recuperación de máximos: 2015",
+        "economica": "Recesión americana leve: marzo-noviembre 2001"
+      },
+      "magnitud_mercado": {
+        "nasdaq_caida": "-78% desde máximos (5.048 → 1.114 puntos)",
+        "sp500_caida": "-49%",
+        "terra_networks": "De 157€ en febrero 2000 a prácticamente 0€ en 2002",
+        "capitalización_destruida": "Se estima que se destruyeron ~5 billones de dólares en valor bursátil"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Tecnología (especialmente internet puro)", "Telecomunicaciones", "Media digital"],
+        "negativo": ["Semis, hardware"],
+        "refugio": ["Defensivos, utilities, inmobiliario (inició su propia burbuja en paralelo)"]
+      },
+      "señales_previas": [
+        "PER de mercado a 44x — solo comparable con 1929",
+        "Empresas con pérdidas masivas cotizando a precio de libro >20x",
+        "Salidas a bolsa de empresas sin modelo de negocio viable ni ingresos",
+        "Euforia popular: taxis en San Francisco llenos de conversaciones sobre acciones",
+        "Greenspan alertó de 'exuberancia irracional' en diciembre 1996 — el mercado ignoró la advertencia durante 3 años más"
+      ],
+      "resolucion": "Destrucción masiva de valor. La Fed bajó tipos desde el 6.5% al 1% entre 2001 y 2003 — sembrando la burbuja inmobiliaria que causaría la GFC.",
+      "leccion_operativa": "Una empresa puede tener la mejor tecnología y la narrativa correcta y aun así ser una trampa de valoración. La diferencia entre 'empresa real' y 'empresa puntocom' era simple: flujos de caja positivos. Terra, Webvan, Pets.com no los tenían. Amazon y Google sí.",
+      "analogia_ia_2023_2025": {
+        "coincidencias": ["Narrativa transformacional que justifica múltiplos extremos", "Concentración de flujos en pocas empresas (Magnificent 7 vs AOL/Yahoo/WebMD)", "PER de mercado > 25x"],
+        "disanalogias": ["Las grandes empresas de IA (Microsoft, Nvidia, Google) tienen beneficios reales masivos", "La adopción de IA es real y medible — la adopción de internet en 2000 era hipotética", "El ciclo de tipos es diferente: en 2000 los tipos estaban subiendo; la IA rally ocurrió con tipos altos pero con expectativa de bajadas"]
+      }
+    },
+
+    "gfc_2007_2009": {
+      "nombre": "Gran Crisis Financiera (GFC)",
+      "periodo": "Agosto 2007 – Marzo 2009",
+      "emoji": "🔥",
+      "tipo": ["crisis bancaria sistémica", "burbuja inmobiliaria", "crisis de crédito", "riesgo de contraparte"],
+      "gravedad": 10,
+      "detonante": {
+        "evento": "El 9 de agosto de 2007, BNP Paribas congela tres fondos de money market con exposición a hipotecas subprime americanas — el BCE inyecta 95.000M€ de emergencia. El 15 de septiembre de 2008, Lehman Brothers quiebra.",
+        "contexto": "La titulización de hipotecas subprime había creado instrumentos (CDOs, CDO²) que escondían el riesgo de crédito bajo capas de complejidad. Las agencias de rating les daban AAA. El apalancamiento del sistema bancario en la sombra era de 30-40:1."
+      },
+      "mecanica": "Al caer los precios de las viviendas americanas, las hipotecas subprime empezaron a impagar en masa. Los CDOs perdieron valor. Los bancos que los tenían en balance (directamente o a través de vehículos off-balance) se convirtieron en cajas negras: nadie sabía quién tenía qué. El mercado interbancario se congeló. Lehman no tenía comprador y el gobierno americano dejó quebrar — señal de que el riesgo moral tenía un límite. Pánico global. El S&P 500 cayó un 57%.",
+      "duracion": {
+        "mercado": "S&P 500 bear market: 17 meses (octubre 2007 – marzo 2009)",
+        "economica": "Recesión americana: diciembre 2007 – junio 2009 (18 meses, la más larga desde la Gran Depresión)"
+      },
+      "magnitud_mercado": {
+        "sp500_caida": "-57% (octubre 2007 → marzo 2009)",
+        "ibex_caida": "-60% (noviembre 2007 → marzo 2009)",
+        "financieros_mundiales": "Citigroup -97%, AIG -99%, Lehman = 0",
+        "vivienda_eeuu": "Precios medios -33% a nivel nacional; -50-60% en mercados como Vegas, Miami"
+      },
+      "señales_previas": [
+        "Ratio precio vivienda/ingreso familiar en EE.UU. en máximos históricos desde 2004",
+        "Estándares de crédito hipotecario en mínimos históricos (NINJA loans: No Income No Job No Assets)",
+        "Yield curve invertida en 2006-2007 — señal recesiva ignorada",
+        "Tasa de morosidad hipotecaria empezando a subir desde 2006",
+        "Precios de CDS de Bear Stearns y Lehman disparándose meses antes del colapso"
+      ],
+      "resolucion": "TARP (700.000M$ de rescate bancario), QE de la Fed (primera vez en historia), rescate de AIG, Fannie Mae, Freddie Mac, Bear Stearns. El S&P 500 tocó suelo en marzo 2009 y comenzó el bull market más largo de la historia (2009-2020).",
+      "leccion_operativa": "El riesgo sistémico oculto en la complejidad de los instrumentos financieros es más peligroso que el riesgo visible. La complejidad del CDO² ocultaba el riesgo de correlación. Cuando el mercado inmobiliario cayó y las correlaciones convergieron, todos los activos 'seguros' resultaron ser el mismo activo empaquetado de formas diferentes.",
+      "legado": "Basilea III, regulación de derivados OTC, stress tests bancarios, FSB (Financial Stability Board). El QE como herramienta de política monetaria se normalizó. La semilla de la crisis de deuda soberana europea 2010-2012."
+    },
+
+    "crisis_deuda_soberana_europea_2010_2012": {
+      "nombre": "Crisis de Deuda Soberana Europea — Rescate de España",
+      "periodo": "Abril 2010 – Julio 2012",
+      "emoji": "🇪🇺",
+      "tipo": ["crisis de deuda soberana", "crisis bancaria", "doom loop", "riesgo de ruptura del euro"],
+      "gravedad": 9,
+      "detonante": {
+        "evento": "Grecia revela que su déficit real era del 12.7% del PIB (vs. 6% declarado). Los spreads periféricos se disparan. Portugal, Irlanda, España e Italia entran en el punto de mira.",
+        "contexto": "La GFC había transferido el riesgo privado (bancario) al balance soberano. Los estados habían rescatado sus bancos aumentando la deuda pública. El euro impedía la devaluación como mecanismo de ajuste."
+      },
+      "mecanica": "El 'doom loop': los bancos españoles tenían deuda soberana española en balance. Al subir el spread soberano, los bancos perdían valor. Al debilitarse los bancos, la deuda soberana se hacía más cara. Ciclo destructivo. Bankia se convirtió en el símbolo de la crisis bancaria española: rescate de 41.000M€. El spread del bono español sobre el Bund llegó a 638pb en julio 2012.",
+      "duracion": {
+        "mercado": "IBEX cayó de ~12.000 en 2010 a ~5.900 en junio 2012 (-51%)",
+        "economica": "España: recesión 2009, recuperación efímera 2010, segunda recesión 2011-2013. Paro llegó al 26.9%"
+      },
+      "magnitud_mercado": {
+        "ibex_caida": "IBEX: -51% desde máximos 2010 hasta mínimos junio 2012",
+        "spread_bono_es": "De 100pb en 2010 a 638pb en julio 2012",
+        "bankia": "Rescate de 41.000M€; acciones a 0",
+        "banca_española": "BBVA -60%, Santander -58%, CaixaBank -70% desde máximos 2010 hasta mínimos 2012"
+      },
+      "señales_previas": [
+        "Burbuja inmobiliaria española: precio vivienda subió 200% entre 1997 y 2007",
+        "Déficit por cuenta corriente del 10% del PIB en 2007 financiado con deuda exterior",
+        "Exposición masiva de la banca española al ladrillo (crédito promotor + hipotecas = ~60% del balance)",
+        "Déficit público disparándose por rescate bancario + colapso de ingresos fiscales ligados a la construcción"
+      ],
+      "punto_inflexion": {
+        "fecha": "26 de julio de 2012",
+        "evento": "Mario Draghi pronuncia en Londres: 'El BCE hará todo lo necesario para preservar el euro. Y créanme, será suficiente.' (Within our mandate, the ECB is ready to do whatever it takes to preserve the euro. And believe me, it will be enough.)",
+        "efecto": "El spread español cayó 200pb en dos semanas sin que el BCE comprara un solo bono. La credibilidad de la promesa fue suficiente. Punto de inflexión de la crisis."
+      },
+      "resolucion": "OMT (Outright Monetary Transactions), rescate bancario de 41.000M€, reformas estructurales (laboral 2012), MEDE como mecanismo permanente. España inicia recuperación en 2013-2014.",
+      "leccion_operativa": "En una unión monetaria, la credibilidad del banco central es todo. Draghi no necesitó gastar un euro — la promesa creíble fue suficiente. El 'whatever it takes' es la demostración más potente del poder de la política de comunicación sobre los mercados de bonos."
+    },
+
+    "covid_crash_2020": {
+      "nombre": "Crash COVID-19",
+      "periodo": "Febrero – Marzo 2020 (crash); recuperación hasta agosto 2020",
+      "emoji": "🦠",
+      "tipo": ["shock exógeno", "crisis de liquidez", "pánico sistémico", "recesión súbita"],
+      "gravedad": 8,
+      "detonante": {
+        "evento": "El 20 de febrero de 2020, los mercados globales empiezan a descontar el impacto de COVID-19. En 33 días (el crash más rápido de la historia), el S&P 500 cayó un 34%.",
+        "contexto": "La pandemia fue un shock exógeno puro — no fue gestada por desequilibrios financieros previos, a diferencia de 2000 o 2008. El confinamiento global paralizó simultáneamente la oferta y la demanda."
+      },
+      "mecanica": "El crash inicial fue un crash de liquidez: todos los activos se vendieron simultáneamente (incluyendo oro y bonos — activos refugio habituales) porque los inversores necesitaban efectivo. El VIX llegó a 85. El petróleo WTI llegó a precios negativos (-37$) el 20 de abril. La Fed actuó con la mayor intervención de su historia en días.",
+      "duracion": {
+        "mercado": "Crash: 33 días. Recuperación del S&P 500 a máximos previos: 148 días (agosto 2020 — la recuperación más rápida de la historia de crashes > 30%)",
+        "economica": "Recesión oficial más breve de la historia americana: febrero-abril 2020 (2 meses)"
+      },
+      "magnitud_mercado": {
+        "sp500_caida": "-34% en 33 días (19 febrero – 23 marzo 2020)",
+        "vix": "85 puntos el 18 marzo 2020",
+        "petroleo_wti": "-37.63$/bbl el 20 abril 2020",
+        "ibex": "-40% en 33 días; IAG -65%, Meliá -70%"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Aerolíneas (-60-80%)", "Hotelero (-50-70%)", "Energía", "Retail no alimentario"],
+        "negativo": ["Banca", "Consumo cíclico", "Inmobiliario comercial"],
+        "positivo": ["Technology (aceleración digital)", "Healthcare (vacunas)", "Consumer Defensive (supermercados)", "E-commerce"]
+      },
+      "señales_previas": [
+        "Las señales previas de COVID fueron ignoradas deliberadamente — el mercado no las valoró hasta el 20 de febrero",
+        "El VIX en 12 en enero 2020 indicaba complacencia extrema",
+        "Los modelos epidemiológicos de enero-febrero 2020 eran accesibles pero ignorados por el mercado"
+      ],
+      "resolucion": "La Fed bajó tipos a cero en emergencia el 15 de marzo. QE ilimitado. Gobierno americano: 2.2 billones $ en estímulo fiscal (CARES Act). BCE: PEPP de 1.85 billones €. La combinación de política monetaria y fiscal más agresiva de la historia moderna. El exceso monetario sembró la inflación de 2021-2022.",
+      "leccion_operativa": "Los crashes de liquidez — donde todo cae a la vez incluyendo activos refugio — son diferentes a los crashes fundamentales. Son cortos y violentos, y la recuperación es igualmente violenta si el problema subyacente se resuelve (en este caso, vacunas + estímulo fiscal). La lección para el inversor: los crashes de pánico puro son oportunidades históricas si tienes liquidez y horizonte temporal.",
+      "efecto_secundario": "El exceso monetario de 2020-2021 (M2 +27% interanual) sembró la mayor inflación en 40 años. El crash de 2020 causó indirectamente el ciclo de subidas de 2022."
+    },
+
+    "inflacion_tipos_2022": {
+      "nombre": "Ciclo de Subidas de Tipos 2022 — Mayor Pérdida Combinada Bonos+Equity en Décadas",
+      "periodo": "Enero 2022 – Octubre 2022 (mercado); inflación persistió hasta 2024",
+      "emoji": "📈",
+      "tipo": ["mercado bajista de renta fija y variable simultáneo", "crisis inflacionaria", "ciclo monetario restrictivo"],
+      "gravedad": 7,
+      "detonante": {
+        "evento": "La Fed sube tipos en marzo 2022 por primera vez desde 2018. En 16 meses sube de 0.25% a 5.50%. El BCE sube de 0% a 4.0% en 14 meses. Simultaneidad sin precedentes en las dos principales economías.",
+        "contexto": "La combinación de estímulo fiscal COVID masivo + expansión monetaria récord + disrupciones de cadena de suministro + invasión de Ucrania (energía) generó inflación del 9-10% en EE.UU. y Europa. Los bancos centrales habían calificado la inflación de 'transitoria' durante 2021 — error de diagnóstico histórico."
+      },
+      "mecanica": "El mercado de bonos tuvo su peor año en 100+ años. El índice de bonos del Tesoro americano a 20Y cayó un 40%. Las acciones growth (Nasdaq) cayeron un 33%. Por primera vez desde 1969, bonos y acciones cayeron simultáneamente — haciendo inútil la diversificación tradicional 60/40. Los sectores sensibles a tipos (utilities, REITs, tech growth) fueron los más castigados.",
+      "duracion": {
+        "mercado": "Bear market: enero-octubre 2022 para acciones; el mercado de bonos tardó más en recuperar",
+        "inflacion": "Inflación por encima del objetivo BCE/Fed: 2021-2024 (3 años)"
+      },
+      "magnitud_mercado": {
+        "nasdaq": "-33% en 2022",
+        "sp500": "-19% en 2022",
+        "bono_20y_eeuu": "-39% en 2022 (TLT ETF)",
+        "ibex35": "-6% en 2022 (mejor comportamiento relativo por su composición defensiva/value)",
+        "bonos_globales": "Peor año para bonos soberanos desde 1788 (según algunos índices históricos)"
+      },
+      "sectores_afectados": {
+        "muy_negativo": ["Technology growth (-40-70% para muchas compañías)", "REITs (-25-35%)", "Utilities (-15-25%)", "Bonos larga duración (-35-45%)"],
+        "negativo": ["Consumer Discretionary", "Communication Services"],
+        "positivo": ["Energy (+60%)", "Consumer Defensive (+0/-5%)", "Utilities high-dividend relativo", "Banca (NIM mejora)"]
+      },
+      "señales_previas": [
+        "IPC subyacente superando el 4% interanual en verano 2021 — ignorado como 'transitorio'",
+        "Curva 2Y-10Y invirtiéndose en marzo-abril 2022",
+        "Mercado laboral en máximos de pleno empleo con salarios acelerando",
+        "M2 habiendo crecido un 27% en 2020-2021 — el exceso monetario tarde o temprano genera inflación"
+      ],
+      "resolucion": "Inflación alcanzó el objetivo del 2% en 2024 sin recesión profunda en EE.UU. ('aterrizaje suave'). El BCE completó el ciclo de subidas en septiembre 2023. La combinación de política monetaria restrictiva + resiliencia del mercado laboral fue el escenario más benigno posible dado el punto de partida.",
+      "leccion_operativa": "La correlación positiva entre bonos y acciones (ambos cayendo) demostró que el supuesto de diversificación 60/40 solo funciona en entornos de inflación baja/moderada. En inflación alta, los bancos centrales tienen que subir tipos aunque dañen la economía — y eso daña simultáneamente bonos y acciones. Las materias primas y activos reales son la cobertura genuina contra este escenario.",
+      "analogia_volcker": {
+        "coincidencias": ["Inflación alta con bancos centrales detrás de la curva", "Ciclo de subidas más agresivo en décadas", "Pérdidas masivas en activos de larga duración"],
+        "disanalogias": ["La inflación de 2022 partía de un shock de oferta, no de una década de inflación estructural", "El punto de partida fue tipos en 0% con balances enormes (QE), no tipos al 10% como en 1979", "El 'aterrizaje suave' de 2023-2024 no ocurrió en 1980-82 — hubo dos recesiones"]
+      }
+    },
+
+    "crisis_bancaria_regional_eeuu_2023": {
+      "nombre": "Crisis Bancaria Regional EE.UU. — SVB, Signature, First Republic",
+      "periodo": "Marzo – Mayo 2023",
+      "emoji": "🏧",
+      "tipo": ["crisis bancaria localizada", "riesgo de duración", "bank run digital", "contagio psicológico"],
+      "gravedad": 5,
+      "detonante": {
+        "evento": "Silicon Valley Bank (SVB) — el 16º banco americano por activos — quiebra el 10 de marzo de 2023. Fue el mayor colapso bancario americano desde Washington Mutual en 2008.",
+        "contexto": "SVB había invertido masivamente en bonos del Tesoro americano a largo plazo durante el período de tipos cero. Al subir los tipos, esos bonos tenían pérdidas latentes que superaban su capital. Un post de Peter Thiel recomendando retirar fondos en Twitter desencadenó el bank run."
+      },
+      "mecanica": "SVB intentó una ampliación de capital para cubrir las pérdidas. El intento de ampliación reveló el problema en lugar de resolverlo. Las redes sociales aceleraron el bank run a velocidad nunca vista: 42.000M$ retirados en un día. En 48 horas, SVB estaba cerrado por el FDIC. Signature Bank quebró ese mismo fin de semana. First Republic fue adquirida por JPMorgan en mayo.",
+      "duracion": {
+        "mercado": "Pánico bancario concentrado en 2-3 semanas; los índices bancarios regionales tardaron meses en recuperar",
+        "economica": "No hubo recesión — la economía absorbió el shock sin problema sistémico"
+      },
+      "magnitud_mercado": {
+        "svb": "-60% en un día antes de la intervención",
+        "kre_etf": "KRE (ETF bancos regionales EE.UU.) -30% en una semana",
+        "credit_suisse": "Quiebra de Credit Suisse en paralelo (17 marzo 2023) — coordinada con adquisición por UBS"
+      },
+      "señales_previas": [
+        "Concentración extrema de SVB en un solo sector (startups tech) = correlación 100% del riesgo",
+        "Cartera de bonos a largo plazo con pérdidas latentes del 20% del total de activos — visible en los informes trimestrales",
+        "Base de depósitos sin diversificar: grandes depósitos institucionales superiores al límite del FDIC (250.000$) = incentivo al bank run",
+        "Subida de tipos más rápida en 40 años hacía matemáticamente inevitable el problema de duración"
+      ],
+      "resolucion": "FDIC garantizó todos los depósitos (incluso los superiores a 250.000$) para evitar contagio. La Fed creó el BTFP (Bank Term Funding Program) permitiendo a los bancos tomar préstamos al valor nominal de sus bonos (no al valor de mercado). La crisis se contuvo en semanas.",
+      "leccion_operativa": "El riesgo de duración bancario — captar depósitos a la vista e invertir en bonos a largo plazo — es tan viejo como la banca. Se repitió 40 años después de la S&L Crisis con el mismo mecanismo. La diferencia: Twitter y las redes sociales hicieron el bank run 100 veces más rápido. Lección para inversores: verificar siempre la composición de la cartera de bonos de los bancos en períodos de subida rápida de tipos.",
+      "analogia_sl": {
+        "coincidencias": ["Mismo mecanismo (riesgo de duración)", "Misma causa (subida rápida de tipos)", "Mismo detonante (intentos fallidos de recapitalización que revelaron el problema)"],
+        "disanalogias": ["SVB fue un evento puntual; S&L fue sistémico (1.000 bancos)", "Las redes sociales aceleraron el contagio a velocidad sin precedentes", "La respuesta del FDIC/Fed fue mucho más rápida y decisiva en 2023"]
+      }
+    }
+  },
+
+  "patrones_recurrentes": {
+    "descripcion": "Estructuras comunes que aparecen en múltiples crisis",
+    "patron_apalancamiento_complacencia_catalizador": {
+      "nombre": "Triángulo: Apalancamiento + Complacencia + Catalizador",
+      "descripcion": "Todas las grandes crisis comparten esta estructura. Primero se acumula apalancamiento silenciosamente (S&L, GFC, crisis soberana). Luego la complacencia se instala (VIX bajo, spreads comprimidos). Un catalizador relativamente pequeño (default de México 1982, BNP Paribas 2007, Brexit 2016) revela el apalancamiento oculto.",
+      "ejemplos": ["GFC: apalancamiento en CDOs + complacencia en ratings AAA + Lehman", "Crisis soberana: apalancamiento bancario + complacencia en spreads + Grecia", "Burbuja puntocom: apalancamiento en valoraciones + complacencia de PER 44x + subida de tipos"]
+    },
+    "patron_estrategias_sistematicas_amplificadoras": {
+      "nombre": "Estrategias Sistemáticas como Amplificadores Procíclicos",
+      "descripcion": "Portfolio Insurance (1987), LTCM (1998), Vol-selling via ETNs (2018), LDI pensions UK (2022). En todos los casos, una estrategia de cobertura o de rendimiento que parecía reducir el riesgo individual lo concentró a nivel sistémico y se convirtió en el amplificador del crash cuando todos intentaron salir a la vez.",
+      "señal_warning": "Cuando una estrategia de inversión/cobertura se vuelve masivamente popular y se convierte en 'lo que todo el mundo hace', evalúa qué pasa si todo el mundo intenta salir al mismo tiempo."
+    },
+    "patron_doom_loop": {
+      "nombre": "Doom Loop (Bucle de Retroalimentación Destructivo)",
+      "descripcion": "Mecanismo por el que dos activos o sectores se hunden mutuamente. El más peligroso: banca-soberano (crisis europea 2010-2012). También: banca-inmobiliario (España 2007-2012, Japón 1989-2003). La característica clave es que no hay equilibrio intermedio: el sistema es inestable y cae hasta que hay intervención externa o destrucción completa.",
+      "ruptura_doom_loop": "Solo se rompe con intervención creíble de prestamista de última instancia (Draghi 2012) o mecanismo externo de absorción de pérdidas (TARP 2008, rescate bancario España 2012)."
+    },
+    "patron_banco_central_detras_curva": {
+      "nombre": "Banco Central 'Detrás de la Curva'",
+      "descripcion": "La Fed en 1979 (inflación instalada durante años sin respuesta), el BCE/Fed en 2021 (inflación 'transitoria' durante demasiado tiempo). Cuando el banco central actúa tarde, tiene que actuar más agresivamente, causando más daño. El coste de recuperar la credibilidad siempre es mayor que el de mantenerla.",
+      "señal_warning": "Cuando un banco central usa el adjetivo 'transitorio' para describir inflación persistente durante más de 6 meses, el riesgo de error de diagnóstico es alto."
+    }
+  },
+
+  "comparador_estructura": {
+    "descripcion": "Framework para comparar el momento actual con episodios históricos. Protocolo PRISMA-IB: mínimo 3 analogías + 3 disanalogías antes de aceptar la comparación.",
+    "dimensiones_comparacion": [
+      "Origen del shock (endógeno financiero vs. exógeno real vs. política monetaria)",
+      "Nivel de apalancamiento del sistema en el momento del crash",
+      "Velocidad de transmisión (semanas vs. meses vs. años)",
+      "Disponibilidad y voluntad de intervención del banco central",
+      "Estado del ciclo económico en el momento del shock",
+      "Concentración sectorial vs. carácter sistémico"
+    ],
+    "advertencia": "La analogía histórica más peligrosa es la que se acepta sin nombrar sus disanalogías. Cada crisis comparte estructura con otras pero difiere en mecánica específica. Tres factores coincidentes y tres divergentes, mínimo."
+  }
+}

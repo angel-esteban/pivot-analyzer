@@ -1,0 +1,501 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "fuente": "PRISMA-IB · Scriptum",
+    "descripcion": "Glosario de términos financieros usados en sector_knowledge.json, macro_indicators.json y crisis_patterns.json. Definiciones en lenguaje accesible para el inversor particular. Nivel: sin conocimientos previos requeridos.",
+    "ultima_revision": "2026-01"
+  },
+
+  "terminos": {
+
+    "NIM": {
+      "nombre_completo": "Net Interest Margin — Margen de Intereses Neto",
+      "definicion": "La diferencia entre lo que un banco cobra por los préstamos que concede y lo que paga por los depósitos que capta. Si un banco cobra un 4% por las hipotecas y paga un 0.5% por los depósitos, su NIM es ~3.5%. Es la principal fuente de beneficio de la banca tradicional. Cuando los tipos de interés suben, el NIM generalmente mejora porque los bancos suben los tipos de los préstamos más rápido que los de los depósitos.",
+      "ejemplo": "BBVA 2023: NIM del 3.2% — por cada 100€ prestados, gana 3.2€ de margen bruto antes de costes.",
+      "donde_aparece": ["macro_indicators.json", "sector_knowledge.json"]
+    },
+
+    "NAIRU": {
+      "nombre_completo": "Non-Accelerating Inflation Rate of Unemployment — Tasa de Paro No Inflacionaria",
+      "definicion": "El nivel de paro por debajo del cual la inflación empieza a acelerarse porque las empresas compiten agresivamente por trabajadores escasos, lo que sube los salarios y con ellos los precios. Es un concepto teórico — nadie sabe exactamente cuál es, pero los bancos centrales lo estiman. Para EE.UU. se estima en torno al 4%; para España, por las rigideces de su mercado laboral, en torno al 7-9%.",
+      "ejemplo": "Si el paro en EE.UU. cae del 4%, la Fed se preocupa porque los salarios empezarán a subir con fuerza, alimentando la inflación.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "CDO": {
+      "nombre_completo": "Collateralized Debt Obligation — Obligación de Deuda Garantizada",
+      "definicion": "Un producto financiero creado empaquetando miles de préstamos (hipotecas, créditos al consumo, deuda corporativa) y vendiéndolos en tramos ordenados por nivel de riesgo. El tramo 'senior' (AAA) cobra primero si hay impagos; el tramo 'equity' (el más arriesgado) absorbe las primeras pérdidas. El problema de la crisis de 2008: las agencias de rating calificaban de AAA tramos que dependían de que millones de hipotecas subprime no fallaran simultáneamente — algo que los modelos consideraban imposible pero que ocurrió.",
+      "ejemplo": "Un CDO de 2007 podía contener 5.000 hipotecas de distintos estados americanos, 'diversificadas' en teoría, pero todas sensibles al mismo factor: la caída del precio de la vivienda.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "CDO_cuadrado": {
+      "nombre_completo": "CDO² — CDO de CDOs",
+      "definicion": "Un CDO cuyos activos subyacentes son tramos de otros CDOs, no préstamos directos. Esto añadía una capa más de complejidad que hacía prácticamente imposible calcular el riesgo real. En 2008 se descubrió que muchos CDO² calificados como AAA contenían indirectamente las mismas hipotecas subprime que los CDOs de primer nivel.",
+      "ejemplo": "Imagina que metes en una caja (CDO) varias cajas más pequeñas (CDOs). Luego metes esas cajas en una caja aún mayor (CDO²). Si alguna hipoteca dentro de las cajas pequeñas falla, es muy difícil saber a qué caja grande afecta.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "TARP": {
+      "nombre_completo": "Troubled Asset Relief Program — Programa de Alivio de Activos Problemáticos",
+      "definicion": "El rescate bancario aprobado por el Congreso americano en octubre 2008, por valor de 700.000 millones de dólares, para comprar activos tóxicos (hipotecas subprime) de los balances de los grandes bancos y evitar su colapso en cadena. Es el equivalente americano al rescate bancario español de 2012, pero a mucho mayor escala.",
+      "ejemplo": "Con el TARP, el gobierno americano compró activos tóxicos a Citigroup, Bank of America y otros gigantes, evitando que quebraran. Al final, recuperó prácticamente todo el dinero — el contribuyente americano no perdió dinero neto.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "OMT": {
+      "nombre_completo": "Outright Monetary Transactions — Compras Directas de Deuda Soberana",
+      "definicion": "El programa del BCE anunciado en septiembre 2012 por Mario Draghi que le permite comprar deuda soberana de países de la eurozona en el mercado secundario, sin límite de cantidad, siempre que ese país solicite un programa de asistencia al MEDE. La sola existencia del programa fue suficiente para calmar los mercados — el BCE nunca ha tenido que activarlo realmente.",
+      "ejemplo": "El anuncio del OMT hizo caer el spread del bono español de 638pb a 250pb en pocas semanas sin que el BCE comprara un solo bono. La promesa creíble fue suficiente.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "PEPP": {
+      "nombre_completo": "Pandemic Emergency Purchase Programme — Programa de Compras de Emergencia Pandémica",
+      "definicion": "El programa de compra de bonos del BCE lanzado en marzo 2020 para responder al COVID-19. Compró 1,85 billones de euros en deuda pública y privada entre 2020 y 2022. A diferencia de programas anteriores, era flexible: podía comprar más deuda de los países que más lo necesitaran (como Italia o España) sin estar limitado por las cuotas de capital del BCE.",
+      "ejemplo": "El PEPP mantuvo los spreads de deuda española e italiana controlados durante la crisis COVID, evitando que se repitiera el escenario de 2012.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "TPI": {
+      "nombre_completo": "Transmission Protection Instrument — Instrumento de Protección de la Transmisión",
+      "definicion": "El sucesor del OMT, anunciado por el BCE en julio 2022. Permite al BCE comprar deuda de países de la eurozona cuyos spreads se amplíen de forma injustificada por contagio o especulación, no por fundamentos económicos propios. Es la versión actualizada del 'escudo anticrisis' del BCE.",
+      "ejemplo": "Si el bono italiano se dispara porque los inversores entran en pánico por los titulares, pero la economía italiana no ha cambiado fundamentalmente, el BCE puede activar el TPI para comprar bonos italianos y estabilizar el spread.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "MEDE": {
+      "nombre_completo": "Mecanismo Europeo de Estabilidad (ESM — European Stability Mechanism)",
+      "definicion": "El fondo de rescate permanente de la eurozona, creado en 2012 con capacidad de préstamo de 500.000 millones de euros. Puede conceder préstamos a países de la eurozona que tengan dificultades para financiarse en los mercados, a cambio de comprometerse con un programa de reformas supervisado por la Comisión Europea, el BCE y el FMI (la 'Troika').",
+      "ejemplo": "España recibió hasta 41.000 millones del MEDE en 2012 exclusivamente para recapitalizar su sistema bancario (especialmente Bankia). No fue un rescate completo del Estado, sino solo del sector financiero.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "LDI": {
+      "nombre_completo": "Liability-Driven Investment — Inversión Orientada al Pasivo",
+      "definicion": "Estrategia usada por los fondos de pensiones de prestación definida del Reino Unido para cubrir sus obligaciones futuras (pagos de pensiones) usando derivados de tipos de interés. El problema: usaban apalancamiento para ampliar la cobertura. Cuando los tipos de interés subieron bruscamente en octubre 2022 (tras el 'mini-budget' de Truss), los derivados generaron pérdidas masivas y las pensiones tuvieron que vender gilts (bonos del gobierno) urgentemente, lo que hundió aún más el precio de los gilts — un bucle clásico de retroalimentación destructiva.",
+      "ejemplo": "Imagina que tienes un seguro de coche apalancado 5:1. Si el seguro cae de valor un 10%, pierdes el 50% de tu inversión. Eso es lo que pasó a las pensiones británicas con los LDI en octubre 2022.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "BTFP": {
+      "nombre_completo": "Bank Term Funding Program — Programa de Financiación a Plazo para Bancos",
+      "definicion": "El programa de emergencia que la Fed creó en marzo 2023 tras la quiebra de SVB. Permitía a los bancos americanos tomar préstamos de la Fed usando sus bonos del Tesoro como garantía, pero valorándolos a precio nominal (100%), no a precio de mercado (que podía ser 70-80% tras la subida de tipos). Esto eliminó el incentivo a vender bonos con pérdidas para hacer frente a retiradas de depósitos.",
+      "ejemplo": "Un banco que tenía bonos del Tesoro que valían 80 en el mercado podía llevarlos a la Fed y obtener 100 en préstamos. Así ya no necesitaba venderlos con pérdidas.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "FDIC": {
+      "nombre_completo": "Federal Deposit Insurance Corporation — Corporación Federal de Seguro de Depósitos",
+      "definicion": "El organismo americano equivalente al Fondo de Garantía de Depósitos español. Garantiza los depósitos bancarios de los ciudadanos hasta 250.000 dólares por titular y entidad. En caso de quiebra bancaria, el FDIC interviene, toma el control del banco y devuelve los depósitos garantizados. En la crisis de SVB (2023) decidió garantizar también los depósitos por encima de 250.000$ para evitar el contagio.",
+      "ejemplo": "Si un banco americano quiebra hoy, cualquier depósito hasta 250.000$ está protegido. El FDIC lo paga directamente. Lo que ocurrió con SVB es que muchos clientes (startups tecnológicas) tenían depósitos de millones de dólares — muy por encima del límite garantizado.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "RTC": {
+      "nombre_completo": "Resolution Trust Corporation — Corporación de Resolución y Confianza",
+      "definicion": "La agencia gubernamental americana creada en 1989 para liquidar los activos de las Savings & Loan quebradas. Vendió propiedades inmobiliarias, carteras de préstamos y otros activos de más de 700 instituciones quebradas durante 6 años (1989-1995). Es el antecedente directo de la SAREB española (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria).",
+      "ejemplo": "La RTC tuvo que vender miles de propiedades inmobiliarias de golpe, lo que contribuyó a hundir aún más los precios inmobiliarios en EE.UU. a principios de los 90.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "FSLIC": {
+      "nombre_completo": "Federal Savings and Loan Insurance Corporation",
+      "definicion": "El equivalente del FDIC para las Savings & Loan (cajas de ahorro americanas). Garantizaba los depósitos de estas instituciones. Quebró en 1989 porque las pérdidas de las S&L superaron completamente sus reservas — tuvo que ser absorbida por el FDIC y su deuda asumida por el contribuyente americano.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "JOLTS": {
+      "nombre_completo": "Job Openings and Labor Turnover Survey — Encuesta de Vacantes y Rotación Laboral",
+      "definicion": "Un informe mensual del Departamento de Trabajo americano que mide las ofertas de empleo disponibles, las contrataciones y las bajas voluntarias. Es uno de los indicadores adelantados del mercado laboral más seguidos por la Fed, porque una caída en las ofertas de empleo anticipa un enfriamiento del mercado laboral antes de que el paro empiece a subir.",
+      "ejemplo": "Si las empresas anuncian un 20% menos de vacantes que hace un año, están contratando menos — el paro subirá en los próximos meses aunque todavía no lo haya hecho.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "PCE": {
+      "nombre_completo": "Personal Consumption Expenditures — Gasto en Consumo Personal",
+      "definicion": "El índice de precios preferido de la Reserva Federal para medir la inflación americana (vs. el CPI/IPC que es el más popular mediáticamente). El Core PCE (sin energía ni alimentos) es la métrica que la Fed sigue para calibrar su política monetaria. Su objetivo oficial es el 2% de Core PCE.",
+      "diferencia_cpi": "El PCE tiende a ser ligeramente menor que el CPI porque tiene en cuenta la sustitución de productos (si la carne sube mucho, la gente compra más pollo — el CPI ignora ese ajuste, el PCE no).",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "carry_trade": {
+      "nombre_completo": "Carry Trade",
+      "definicion": "Estrategia de inversión que consiste en tomar prestado dinero en una divisa o mercado con tipos de interés bajos, y usar ese dinero para invertir en activos que ofrecen mayor rentabilidad. La ganancia (el 'carry') es la diferencia entre el coste del préstamo y el rendimiento de la inversión. El riesgo: si la divisa en la que pediste prestado se aprecia, o si los activos donde invertiste caen, las pérdidas pueden superar el beneficio del diferencial.",
+      "ejemplo": "Durante los años 2010-2021: tomar prestado en yenes japoneses (tipo 0%) e invertir en bonos brasileños (tipo 10%). El carry era del 10% anual... mientras el yen no se apreciara y Brasil no tuviera problemas.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "doom_loop": {
+      "nombre_completo": "Doom Loop — Bucle Destructivo de Retroalimentación",
+      "definicion": "Una espiral en la que dos problemas se alimentan mutuamente de forma que cada uno empeora al otro, sin punto de equilibrio intermedio. El más famoso en Europa: el bucle banca-soberano de 2010-2012. Los bancos españoles tenían deuda pública española; cuando la deuda española perdía valor, los bancos perdían capital; cuando los bancos estaban débiles, el Estado tenía que rescatarlos aumentando su deuda; al aumentar la deuda estatal, los bonos españoles perdían más valor... y así sucesivamente.",
+      "ejemplo": "España 2012: Bankia tiene bonos españoles → spread español sube → Bankia pierde capital → Estado rescata Bankia → deuda española sube → spread sube más → otras entidades bajo presión...",
+      "donde_aparece": ["crisis_patterns.json", "macro_indicators.json", "sector_knowledge.json"]
+    },
+
+    "fat_tails": {
+      "nombre_completo": "Fat Tails — Colas Gordas (distribución estadística)",
+      "definicion": "En estadística, cuando decimos que los retornos financieros siguen una distribución con 'colas gordas', significa que los eventos extremos (caídas o subidas muy grandes) ocurren con mucha más frecuencia de lo que predice la distribución normal (curva de campana). Los modelos financieros clásicos asumen distribución normal, lo que subestima sistemáticamente la probabilidad de un crash del 30% o más. Nassim Taleb popularizó este concepto con el 'cisne negro'.",
+      "ejemplo": "Un modelo normal diría que una caída del 20% en un día (como el Black Monday 1987) es prácticamente imposible — debería ocurrir una vez cada millones de años. En realidad ha ocurrido múltiples veces en la historia bursátil.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "fed_put": {
+      "nombre_completo": "'Fed Put' — La Red de Seguridad de la Fed",
+      "definicion": "La idea, no escrita pero ampliamente aceptada desde 1987, de que la Reserva Federal intervendrá para salvar los mercados financieros cuando caigan con suficiente fuerza. Como una opción 'put' (que te protege de las caídas), los inversores asumían que la Fed siempre acudiría al rescate bajando tipos o inyectando liquidez si el mercado caía un 20% o más. Comenzó con Greenspan en 1987, se reforzó en 2008 y 2020. En 2022 se puso a prueba: la Fed subió tipos aunque el mercado caía, rompiendo temporalmente esa expectativa.",
+      "ejemplo": "En octubre 1987, el Dow Jones cayó un 22% en un día. Al día siguiente, Greenspan anunció que la Fed proveería toda la liquidez necesaria al sistema. Los mercados rebotaron. Así nació el 'Fed put'.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "ninja_loans": {
+      "nombre_completo": "NINJA Loans — Préstamos NINJA",
+      "definicion": "Acrónimo de No Income, No Job, No Assets (Sin Ingresos, Sin Empleo, Sin Activos). Hipotecas concedidas en EE.UU. durante la burbuja de los 2000 a personas sin ninguna capacidad verificada de devolución. Se podía obtener una hipoteca de 500.000$ sin presentar nómina, sin historial crediticio y sin ningún activo como respaldo. Fueron el ingrediente tóxico central de los CDOs que causaron la GFC de 2008.",
+      "ejemplo": "Un trabajador inmigrante sin papeles podía solicitar una hipoteca de 400.000$ en Florida en 2006 sin más documentación que su firma. El broker inmobiliario cobraba su comisión y vendía la hipoteca al banco, que la empaquetaba en un CDO.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "extend_and_pretend": {
+      "nombre_completo": "'Extend and Pretend' — Extender y Fingir",
+      "definicion": "Práctica bancaria que consiste en no reconocer que un préstamo es incobrable, sino refinanciarlo una y otra vez, 'extendiendo' el plazo y 'fingiendo' que algún día se devolverá. Permite al banco no provisionar la pérdida y mantener el activo en balance a valor nominal. Japón lo hizo masivamente en los 90, creando los 'bancos zombi'. España lo hizo parcialmente con crédito promotor entre 2009 y 2012.",
+      "ejemplo": "Un banco tiene una hipoteca de 1 millón de euros sobre un solar que ahora vale 300.000€. En lugar de reconocer la pérdida de 700.000€ (lo que hundiría su capital), refinancia la hipoteca por otros 5 años 'esperando' que el solar recupere valor.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "LTV": {
+      "nombre_completo": "Loan to Value — Préstamo sobre Valor del Activo",
+      "definicion": "El porcentaje del valor de un activo que está financiado con deuda. Si tienes una casa que vale 200.000€ y tienes una hipoteca de 150.000€, tu LTV es del 75%. Cuanto más alto el LTV, más apalancado estás y más vulnerable eres a una caída del valor del activo. Los bancos y las SOCIMIs usan esta métrica para medir su nivel de endeudamiento relativo al valor de sus activos inmobiliarios.",
+      "ejemplo": "LTV del 80% significa que si el activo cae un 20%, has perdido todo tu capital propio. Por eso los bancos prefieren LTV < 80% en hipotecas residenciales.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "NAV": {
+      "nombre_completo": "Net Asset Value — Valor Neto de los Activos",
+      "definicion": "El valor intrínseco de una empresa calculado como el valor de todos sus activos menos todas sus deudas. En el sector inmobiliario (SOCIMIs, REITs) es la métrica de referencia principal: si la empresa cotiza por debajo de su NAV, el mercado está comprando el activo con descuento; si cotiza por encima, con prima. En fondos de inversión, el NAV es el precio de la participación (valor de la cartera dividido entre el número de participaciones).",
+      "ejemplo": "Si una SOCIMI tiene edificios valorados en 1.000M€ y deudas de 400M€, su NAV es 600M€. Si la empresa capitaliza 500M€ en bolsa, cotiza con un descuento del 17% sobre NAV — aparentemente barata si los activos están bien valorados.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "FFO": {
+      "nombre_completo": "Funds From Operations — Fondos de las Operaciones",
+      "definicion": "La métrica de generación de caja específica del sector inmobiliario (REITs y SOCIMIs). Es el equivalente al FCF (flujo de caja libre) para las inmobiliarias. Se calcula como el beneficio neto más las amortizaciones de los activos inmobiliarios, excluyendo las ganancias o pérdidas por venta de activos. Por qué se usa: los activos inmobiliarios amortizan contablemente aunque en realidad se revalorizan, lo que distorsiona el beneficio neto. El FFO elimina esa distorsión.",
+      "ejemplo": "Una SOCIMI con un beneficio neto de 10M€ pero amortizaciones de 30M€ sobre sus edificios tiene un FFO de 40M€ — eso es lo que realmente genera en caja para pagar dividendos.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "RAB": {
+      "nombre_completo": "Regulated Asset Base — Base de Activos Regulada",
+      "definicion": "El valor reconocido oficialmente por el regulador de los activos de infraestructura de una empresa de servicios públicos (eléctrica, gasista, distribuidora de agua) sobre el que se calcula la retribución regulada que puede cobrar. Si una eléctrica tiene una RAB de 10.000M€ y el regulador le permite ganar un 6% de retorno sobre esa base, la empresa debería ganar ~600M€ anuales de la actividad regulada. Es la métrica clave para valorar utilities reguladas como Red Eléctrica o Enagás.",
+      "ejemplo": "Si Iberdrola tiene una RAB de 20.000M€ en sus redes de distribución, y el regulador (CNMC) aprueba un retorno del 6.5%, el negocio regulado genera 1.300M€/año prácticamente garantizados.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "ARPU": {
+      "nombre_completo": "Average Revenue Per User — Ingreso Medio por Usuario",
+      "definicion": "Los ingresos medios que una empresa de telecomunicaciones, medios o plataformas digitales obtiene por cada cliente al mes. Es el KPI central para evaluar la capacidad de una teleco de monetizar a su base de clientes y subir precios. Un ARPU estancado o decreciente señala guerra de precios o pérdida de poder de fijación de precios.",
+      "ejemplo": "Si Telefónica España tiene 11 millones de clientes residenciales y factura 990M€ al mes, su ARPU es de 90€/mes. Si baja a 85€, está perdiendo pricing power frente a Orange, MásMóvil, etc.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "FCF": {
+      "nombre_completo": "Free Cash Flow — Flujo de Caja Libre",
+      "definicion": "El dinero real que genera una empresa después de pagar todos sus gastos operativos y todas sus inversiones necesarias para mantener y crecer el negocio (capex). Es la métrica más importante para valorar una empresa porque es el dinero que queda disponible para pagar dividendos, recomprar acciones, devolver deuda o hacer adquisiciones. Un beneficio neto alto con FCF bajo es una señal de alerta — puede indicar que el beneficio está 'fabricado' contablemente.",
+      "ejemplo": "Una empresa puede tener un beneficio neto de 100M€ pero si necesita invertir 90M€ cada año para mantener sus fábricas funcionando, su FCF es solo 10M€. Ese FCF de 10M€ es lo que realmente tiene para distribuir a sus accionistas.",
+      "donde_aparece": ["sector_knowledge.json", "macro_indicators.json"]
+    },
+
+    "ROIC": {
+      "nombre_completo": "Return on Invested Capital — Retorno sobre el Capital Invertido",
+      "definicion": "Mide cuánto beneficio genera una empresa por cada euro que ha invertido en su negocio (capital propio + deuda). Es la mejor métrica para evaluar la calidad de un negocio: si el ROIC supera el coste del capital (WACC), la empresa crea valor; si está por debajo, lo destruye. Las mejores empresas del mundo (Apple, LVMH, Visa) mantienen ROICs del 20-40% sostenidos durante décadas — eso es la ventaja competitiva durable de la que habla Buffett.",
+      "ejemplo": "Si una empresa tiene 1.000M€ invertidos en su negocio y genera 150M€ de beneficio operativo después de impuestos, su ROIC es del 15%. Si su coste de capital es del 8%, está creando 7 puntos de valor por año.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "ROCE": {
+      "nombre_completo": "Return on Capital Employed — Retorno sobre el Capital Empleado",
+      "definicion": "Similar al ROIC pero calculado como el beneficio operativo dividido entre el capital empleado (activos totales menos pasivos corrientes). Muy usado en sectores intensivos en capital como energía, industria y telecomunicaciones. Indica la eficiencia con la que la empresa usa sus activos para generar beneficios operativos.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "EV_EBITDA": {
+      "nombre_completo": "EV/EBITDA — Enterprise Value sobre EBITDA",
+      "definicion": "Uno de los múltiplos de valoración más usados. El Enterprise Value (EV) es el valor total de la empresa, incluyendo deuda (capitalización bursátil + deuda neta). El EBITDA es el beneficio antes de intereses, impuestos, amortizaciones y depreciaciones — una aproximación al flujo de caja operativo. El ratio EV/EBITDA responde a la pregunta: ¿cuántos años de EBITDA necesitarías para pagar el precio total de la empresa? Un EV/EBITDA de 10x significa que pagas 10 años de EBITDA.",
+      "ejemplo": "Si una empresa tiene una capitalización de 800M€, deuda neta de 200M€ (EV=1.000M€) y genera 100M€ de EBITDA, cotiza a 10x EV/EBITDA. Si el sector cotiza de media a 8x, la empresa está cara relativamente.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "PEG": {
+      "nombre_completo": "Price/Earnings to Growth — PER Ajustado por Crecimiento",
+      "definicion": "Un ratio que relaciona el PER (precio/beneficio) con la tasa de crecimiento esperada de los beneficios. Propuesto por Peter Lynch como mejora al PER simple: una empresa con PER de 30x puede estar barata si crece al 30% anual (PEG = 1.0), pero cara si solo crece al 10% (PEG = 3.0). La regla de Lynch: PEG < 1 sugiere infravaloración; PEG > 2 sugiere sobrevaloración.",
+      "ejemplo": "Amazon en 2010 tenía PER de 60x — parecía carísima. Pero crecía al 40% anual, lo que daba un PEG de 1.5x — caro pero no irracional dado ese crecimiento.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "PBV": {
+      "nombre_completo": "Price to Book Value — Precio sobre Valor en Libros",
+      "definicion": "Compara el precio de la acción con el valor contable de la empresa por acción (lo que vale el patrimonio neto según el balance). Un PBV < 1 significa que el mercado valora la empresa por debajo de lo que valen contablemente sus activos netos — puede ser señal de valor o señal de que el mercado anticipa pérdidas futuras que destruirán ese valor. En banca, PBV < 1 indica que el mercado no cree que el banco genere un retorno superior a su coste de capital.",
+      "ejemplo": "Si un banco tiene un patrimonio neto de 10.000M€ y capitaliza 7.000M€, cotiza a 0.7x P/BV. El mercado dice que por cada euro de valor contable del banco, solo está dispuesto a pagar 70 céntimos.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "CET1": {
+      "nombre_completo": "Common Equity Tier 1 — Capital Ordinario de Nivel 1",
+      "definicion": "La métrica principal de solvencia de los bancos bajo la regulación de Basilea III/IV. Mide el capital de mayor calidad del banco (acciones ordinarias más reservas) como porcentaje de sus activos ponderados por riesgo. Cuanto más alto el CET1, más resistente es el banco ante pérdidas. El BCE exige un mínimo del ~8-11% según el banco; los bancos sanos suelen mantener 12-16%.",
+      "ejemplo": "BBVA con CET1 del 13.5%: por cada 100€ de activos ponderados por riesgo, tiene 13.5€ de capital de primera calidad para absorber pérdidas antes de entrar en problemas.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "PER": {
+      "nombre_completo": "Price to Earnings Ratio — Ratio Precio/Beneficio",
+      "definicion": "El múltiplo de valoración más básico y utilizado. Divide el precio de la acción entre el beneficio por acción (BPA). Responde a: ¿cuántos años de beneficios actuales pagas por esta empresa? Un PER de 15x significa que pagas 15 años de beneficios. No es bueno ni malo en sí mismo — depende del sector, el crecimiento esperado y el contexto de tipos de interés. Con tipos altos, el PER 'razonable' es más bajo porque los bonos compiten con más rentabilidad.",
+      "ejemplo": "Con el bono español al 3.5%, un inversor puede exigir una rentabilidad por beneficios del 6-7% en acciones (prima de riesgo), lo que implica PER máximo de ~14-17x. Si los tipos suben al 5%, el PER razonable cae a ~10-13x.",
+      "donde_aparece": ["sector_knowledge.json", "crisis_patterns.json"]
+    },
+
+    "DY": {
+      "nombre_completo": "Dividend Yield — Rentabilidad por Dividendo",
+      "definicion": "El dividendo anual pagado por la empresa dividido entre el precio actual de la acción, expresado en porcentaje. Si una empresa paga 1€ de dividendo y su acción cotiza a 20€, el DY es del 5%. Es la rentabilidad 'income' de la inversión. Un DY muy alto (>8%) puede ser señal de valor o señal de trampa — el mercado puede estar descontando que el dividendo no es sostenible.",
+      "ejemplo": "Si Telefónica cotiza a 4€ y paga 0.30€ de dividendo, el DY es del 7.5%. Eso parece atractivo, pero si el mercado cree que Telefónica reducirá el dividendo al 50% por su deuda, el DY 'real' sería del 3.75%.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "WACC": {
+      "nombre_completo": "Weighted Average Cost of Capital — Coste Medio Ponderado del Capital",
+      "definicion": "La tasa de rentabilidad mínima que una empresa debe generar para satisfacer a todos sus financiadores (accionistas y acreedores), ponderada por el peso de cada tipo de financiación. Es la 'hurdle rate' o tasa de corte: si un proyecto genera más que el WACC, crea valor; si genera menos, lo destruye. Con tipos altos, el WACC sube y muchos proyectos antes rentables dejan de serlo — esto es por qué la subida de tipos reduce la valoración de empresas.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "QE": {
+      "nombre_completo": "Quantitative Easing — Expansión Cuantitativa",
+      "definicion": "Política monetaria no convencional por la que un banco central (Fed, BCE) crea dinero nuevo y lo usa para comprar activos financieros (principalmente bonos del Estado) en el mercado. Al comprar bonos, sube su precio y baja su rendimiento, reduciendo los tipos de interés de largo plazo. Se usa cuando los tipos ya están en 0% y no se puede bajar más. El BCE lo usó masivamente entre 2015 y 2022.",
+      "ejemplo": "Entre 2015 y 2022, el BCE compró más de 3 billones de euros en bonos soberanos europeos. Esto mantuvo los tipos de interés a largo plazo artificialmente bajos, animando la inversión y el consumo.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "QT": {
+      "nombre_completo": "Quantitative Tightening — Contracción Cuantitativa",
+      "definicion": "El proceso inverso al QE: el banco central reduce el tamaño de su balance dejando vencer los bonos que compró (sin recomprarlos) o vendiéndolos directamente en el mercado. Reduce la liquidez del sistema y tiende a subir los tipos de interés de largo plazo. El BCE y la Fed iniciaron el QT en 2022-2023 para combatir la inflación.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "spread": {
+      "nombre_completo": "Spread — Diferencial",
+      "definicion": "La diferencia entre dos tipos de interés o rendimientos. En el contexto de deuda soberana, el spread entre el bono español y el bund alemán a 10 años indica la prima de riesgo adicional que paga España. En crédito corporativo, el spread sobre el bono soberano mide el riesgo de crédito de la empresa. Los spreads se amplían cuando el mercado percibe más riesgo y se comprimen cuando hay confianza.",
+      "ejemplo": "Si el bono español rinde el 3.8% y el bund alemán el 2.3%, el spread es de 150 puntos básicos (1.50%). Eso significa que el mercado pide un 1.5% adicional para prestar a España en lugar de a Alemania.",
+      "donde_aparece": ["macro_indicators.json", "crisis_patterns.json", "sector_knowledge.json"]
+    },
+
+    "puntos_basicos": {
+      "nombre_completo": "Puntos Básicos (pb) / Basis Points (bps)",
+      "definicion": "La unidad estándar para expresar diferencias en tipos de interés. 1 punto básico = 0.01%. 100 puntos básicos = 1%. Se usa para mayor precisión cuando los movimientos son pequeños. La Fed sube tipos en múltiplos de 25pb (la subida normal), 50pb (la subida fuerte) o 75pb (la subida de emergencia, usada en 2022).",
+      "ejemplo": "Si el tipo del BCE sube del 3.50% al 3.75%, ha subido 25 puntos básicos. Si el spread bono-Bund pasa de 100pb a 150pb, ha aumentado 50 puntos básicos (0.50%).",
+      "donde_aparece": ["macro_indicators.json", "crisis_patterns.json"]
+    },
+
+    "curva_tipos": {
+      "nombre_completo": "Curva de Tipos / Curva de Rendimientos",
+      "definicion": "Una representación gráfica de los tipos de interés de los bonos del mismo emisor (por ejemplo, el Tesoro americano) para distintos plazos: 3 meses, 1 año, 2 años, 5 años, 10 años, 30 años. En condiciones normales la curva tiene pendiente positiva (los plazos más largos pagan más, porque el inversor exige compensación por inmovilizar su dinero más tiempo). Cuando se invierte (los plazos cortos pagan más que los largos), el mercado está diciendo que espera que los tipos bajen en el futuro — normalmente porque anticipa una recesión.",
+      "ejemplo": "En 2022-2023, el bono americano a 2 años rendía el 5% y el de 10 años solo el 4% (curva invertida). Eso significaba que el mercado esperaba que los tipos bajaran significativamente en los próximos años.",
+      "donde_aparece": ["macro_indicators.json", "crisis_patterns.json"]
+    },
+
+    "inflacion_segunda_ronda": {
+      "nombre_completo": "Inflación de Segunda Ronda",
+      "definicion": "Cuando la inflación inicial (causada por un shock externo como la subida del petróleo) provoca subidas de salarios, que a su vez elevan los costes de producción y servicios, generando una nueva oleada de inflación. Es el escenario que más temen los bancos centrales porque crea un bucle auto-sostenido: precios suben → trabajadores piden más salarios → empresas suben precios para cubrir costes laborales → precios suben de nuevo.",
+      "ejemplo": "Inflación energética 2021-2022: los precios de la energía suben → los trabajadores de distribución piden subidas salariales del 5% → las empresas de transporte suben sus tarifas → todos los productos cuestan más → nueva ronda de presión salarial.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "tipos_reales": {
+      "nombre_completo": "Tipos de Interés Reales",
+      "definicion": "El tipo de interés nominal (el que ves publicado) menos la inflación. Los tipos reales miden el coste del dinero descontando la pérdida de poder adquisitivo. Tipos reales negativos (inflación > tipo nominal) representan represión financiera: quien ahorra en depósitos está perdiendo poder adquisitivo. Tipos reales muy positivos son muy restrictivos para la economía.",
+      "ejemplo": "BCE al 4% con inflación al 6% = tipos reales del -2% (todavía acomodaticio en términos reales aunque el nominal parezca alto). BCE al 3% con inflación al 2% = tipos reales del +1% (zona neutral-restrictiva).",
+      "donde_aparece": ["macro_indicators.json", "crisis_patterns.json"]
+    },
+
+    "bear_market": {
+      "nombre_completo": "Bear Market — Mercado Bajista",
+      "definicion": "Caída del 20% o más desde los máximos recientes en un índice bursátil principal, sostenida en el tiempo. La convención es que la caída debe superar el 20% para calificarse de 'bear market' (y no de simple corrección). Los bear markets asociados a recesión económica suelen durar entre 12 y 18 meses y caer entre el 30% y el 60%. Los bear markets sin recesión (como el de 2022 para el Nasdaq) pueden ser más rápidos.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "bull_market": {
+      "nombre_completo": "Bull Market — Mercado Alcista",
+      "definicion": "Subida sostenida del mercado del 20% o más desde los mínimos recientes. Históricamente el bull market promedio americano dura ~5 años y produce retornos del 150-180%. El bull market 2009-2020 fue el más largo de la historia americana (11 años). Los bull markets acaban cuando cambia el ciclo económico, suben los tipos de forma agresiva o explota una burbuja.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "circuit_breaker": {
+      "nombre_completo": "Circuit Breaker — Cortocircuito de Mercado",
+      "definicion": "Mecanismo de pausa automática en la cotización de un mercado cuando la caída supera ciertos umbrales en un período muy corto. El NYSE tiene tres niveles: pausa de 15 minutos si el S&P 500 cae un 7% o un 13%; cierre del mercado si cae un 20%. Fueron implementados directamente como consecuencia del Black Monday de 1987 para evitar que los bucles de ventas automáticas se retroalimenten sin freno.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "backlog": {
+      "nombre_completo": "Backlog — Cartera de Pedidos",
+      "definicion": "El volumen total de pedidos u órdenes de trabajo que una empresa tiene contratados pero todavía no ha ejecutado ni facturado. Es un indicador adelantado de ingresos futuros muy relevante en sectores como industria, construcción, aeroespacial y defensa. Un backlog alto y creciente indica visibilidad de ingresos futuros; un backlog cayendo anticipa caída de ingresos.",
+      "ejemplo": "Airbus con backlog de 8.000 aviones a precio medio de 100M€ = 800.000M€ de ingresos futuros ya contratados. Aunque las ventas nuevas se paren, tiene trabajo para 10+ años.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "same_store_sales": {
+      "nombre_completo": "Same-Store Sales / Ventas Comparables",
+      "definicion": "El crecimiento de las ventas comparando solo las tiendas o establecimientos que ya existían el año anterior (excluyendo las nuevas aperturas). Es el KPI más honesto del sector retail porque elimina el efecto de la expansión: una cadena puede crecer un 20% en ventas totales simplemente abriendo 20 tiendas nuevas, pero si las tiendas existentes venden lo mismo que el año pasado, el negocio no está creciendo de verdad.",
+      "ejemplo": "Inditex con same-store sales del +8%: las tiendas que ya tenía el año pasado venden un 8% más. Eso sí es crecimiento real de negocio.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "pricing_power": {
+      "nombre_completo": "Pricing Power — Poder de Fijación de Precios",
+      "definicion": "La capacidad de una empresa de subir sus precios sin perder clientes de forma significativa. Es la característica definitoria de los negocios de alta calidad según Buffett. Las empresas con pricing power pueden trasladar la inflación de costes a sus clientes; las que no lo tienen ven sus márgenes comprimidos cuando los costes suben. Las marcas fuertes (Coca-Cola, LVMH, Inditex) tienen pricing power; los fabricantes de commodities no.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "stranded_assets": {
+      "nombre_completo": "Stranded Assets — Activos Varados o Abandonados",
+      "definicion": "Activos que han perdido valor antes de lo esperado por cambios tecnológicos, regulatorios o de mercado que los vuelven innecesarios o no rentables. En el sector energético, se refiere a las reservas de petróleo, gas y carbón que no podrán extraerse y venderse si el mundo transita hacia las energías renovables antes de que se agoten naturalmente. Para las compañías energéticas, tener muchos stranded assets potenciales es un riesgo creciente en sus valoraciones.",
+      "ejemplo": "Si la UE prohíbe los coches de combustión en 2035, las refinerías construidas para durar hasta 2050 se convierten en stranded assets — activos que valen mucho menos de lo que aparece en el balance.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "capex": {
+      "nombre_completo": "Capital Expenditure — Gasto de Capital",
+      "definicion": "La inversión que realiza una empresa en activos físicos (maquinaria, instalaciones, infraestructura, equipos) necesarios para mantener o ampliar su negocio. Se diferencia del gasto operativo (OPEX) en que genera activos que duran más de un año. El capex de mantenimiento es necesario para que el negocio siga funcionando; el capex de crecimiento es el que amplía capacidad. Sectores como telecomunicaciones, utilities y aeroespacial tienen capex muy elevado, lo que reduce significativamente el FCF real.",
+      "ejemplo": "Telefónica invierte ~8.000M€/año en capex (fundamentalmente redes de fibra y 5G). Aunque genera 15.000M€ de EBITDA, su FCF es mucho menor porque primero debe pagar esa inversión.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "windfall_tax": {
+      "nombre_completo": "Windfall Tax — Impuesto sobre Beneficios Extraordinarios",
+      "definicion": "Un impuesto excepcional que los gobiernos aplican sobre los beneficios 'inesperados' de empresas de ciertos sectores cuando las circunstancias del mercado les generan ganancias muy por encima de lo normal. España lo aplicó en 2023 sobre la banca y las energéticas. El argumento del gobierno: los beneficios récord de la banca no se deben a su mejor gestión sino a la subida de tipos decidida por el BCE; los de las energéticas no se deben a su eficiencia sino a la crisis energética por Ucrania.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "DMA": {
+      "nombre_completo": "Digital Markets Act — Ley de Mercados Digitales",
+      "definicion": "Regulación de la Unión Europea aprobada en 2022 que impone obligaciones específicas a las grandes plataformas digitales ('gatekeepers') como Alphabet/Google, Apple, Meta, Amazon y Microsoft. Busca garantizar la competencia en los mercados digitales europeos y evitar abusos de posición dominante. Puede obligar a cambios estructurales en los modelos de negocio de estas empresas en Europa.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "DSA": {
+      "nombre_completo": "Digital Services Act — Ley de Servicios Digitales",
+      "definicion": "La otra gran regulación digital de la UE (junto al DMA), que establece obligaciones de transparencia, moderación de contenidos y responsabilidad para las grandes plataformas digitales. Obliga a plataformas muy grandes como Facebook, YouTube o TikTok a ser más transparentes sobre sus algoritmos y a luchar activamente contra contenidos ilegales.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "opciones_put": {
+      "nombre_completo": "Opciones Put — Opciones de Venta",
+      "definicion": "Un contrato financiero que da al comprador el derecho (no la obligación) de vender un activo a un precio predeterminado (precio de ejercicio) antes de una fecha de vencimiento. Se usan como seguro contra caídas del mercado: si tienes acciones y compras puts, si el mercado cae por debajo del precio de ejercicio, puedes vender a ese precio más alto. Los inversores institucionales compran masivamente puts cuando tienen miedo — esto sube el precio de las puts y con ello el VIX.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "put_call_ratio": {
+      "nombre_completo": "Put/Call Ratio — Ratio Put/Call",
+      "definicion": "La relación entre el volumen de opciones put (de venta, apuestas bajistas o coberturas) y opciones call (de compra, apuestas alcistas) que se negocian en el mercado. Un ratio muy alto (muchas puts) indica que los inversores están comprando protección frente a caídas — señal de miedo. Un ratio muy bajo (muchas calls) puede indicar euforia y complacencia. Se usa como indicador de sentimiento contrario.",
+      "donde_aparece": ["macro_indicators.json"]
+    },
+
+    "apalancamiento": {
+      "nombre_completo": "Apalancamiento / Leverage",
+      "definicion": "El uso de deuda para amplificar el tamaño de una inversión más allá del capital propio disponible. Si tienes 100€ y pides prestados 400€ más para invertir 500€, tienes un apalancamiento de 5:1. Si la inversión sube un 10% ganas 50€ sobre 100€ propios (50% de retorno). Si baja un 10% pierdes 50€ sobre 100€ propios (-50% de retorno). El apalancamiento amplifica tanto las ganancias como las pérdidas. Es el ingrediente común a todas las grandes crisis financieras.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "riesgo_moral": {
+      "nombre_completo": "Riesgo Moral / Moral Hazard",
+      "definicion": "La tendencia de las personas o instituciones a asumir más riesgos cuando saben que no soportarán completamente las consecuencias de esos riesgos (porque alguien más las cubrirá). El ejemplo clásico: los bancos asumían riesgos excesivos en los años 80 porque sabían que el seguro de depósitos federal pagaría a los clientes si quebraban. El 'Fed put' también crea riesgo moral: si los inversores saben que la Fed bajará tipos ante cualquier crisis grave, tienen incentivos a asumir más riesgo.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "bank_run": {
+      "nombre_completo": "Bank Run — Pánico Bancario / Retirada Masiva de Depósitos",
+      "definicion": "Cuando un gran número de depositantes de un banco retira su dinero simultáneamente por miedo a que el banco quiebre. Como los bancos no mantienen en efectivo el 100% de los depósitos (lo prestan), incluso un banco solvente puede quebrar si sufre un bank run suficientemente masivo y rápido. SVB en 2023 sufrió el primer bank run digital de la historia: 42.000M$ retirados en un solo día a través de apps de banca online.",
+      "donde_aparece": ["crisis_patterns.json"]
+    },
+
+    "regulacion_tarifaria": {
+      "nombre_completo": "Regulación Tarifaria / Marco Retributivo Regulado",
+      "definicion": "El conjunto de normas fijadas por el regulador (en España, la CNMC — Comisión Nacional de Mercados y la Competencia) que determinan qué ingresos puede obtener una empresa de servicios públicos (eléctrica, gasista, distribuidora de agua) por sus actividades reguladas (transporte y distribución de energía). El regulador fija periódicamente los retornos permitidos y las inversiones reconocidas. Un cambio regulatorio puede alterar radicalmente los ingresos de una utility de un año para otro.",
+      "donde_aparece": ["sector_knowledge.json"]
+    },
+
+    "corto_plazo_largo_plazo": {
+      "nombre_completo": "Posición corta / Venta en corto (Short Selling)",
+      "definicion": "Estrategia por la que un inversor vende acciones que no posee, tomándolas prestadas, esperando que su precio baje para recomprarlas más baratas y devolvérselas al prestamista. La ganancia es la diferencia entre el precio de venta (alto) y el de recompra (bajo). La pérdida potencial es ilimitada si el precio sube en lugar de bajar. George Soros vendió 10.000M£ en corto contra el Banco de Inglaterra en 1992 — apostando a que la libra tendría que devaluarse.",
+      "donde_aparece": ["crisis_patterns.json"]
+    }
+  },
+
+  "abreviaturas": {
+    "BCE": "Banco Central Europeo",
+    "Fed": "Reserva Federal de Estados Unidos (Federal Reserve)",
+    "CNMC": "Comisión Nacional de Mercados y la Competencia (regulador español)",
+    "CNMV": "Comisión Nacional del Mercado de Valores (supervisor bursátil español)",
+    "IBEX": "Índice Bursátil Español — los 35 valores de mayor liquidez de la Bolsa española",
+    "S&P 500": "Standard & Poor's 500 — índice de las 500 mayores empresas americanas por capitalización",
+    "Nasdaq": "National Association of Securities Dealers Automated Quotations — índice de tecnología americana",
+    "DAX": "Índice bursátil alemán — las 40 mayores empresas de la bolsa de Frankfurt",
+    "GICS": "Global Industry Classification Standard — sistema de clasificación sectorial de MSCI y S&P",
+    "NIIF": "Normas Internacionales de Información Financiera (en inglés: IFRS)",
+    "GAAP": "Generally Accepted Accounting Principles — normas contables americanas",
+    "ETF": "Exchange-Traded Fund — fondo de inversión que cotiza en bolsa como una acción",
+    "UCITS": "Undertakings for Collective Investment in Transferable Securities — marco regulatorio europeo de fondos",
+    "PMI": "Purchasing Managers Index — Índice de Directores de Compras",
+    "IPC": "Índice de Precios al Consumo",
+    "PIB": "Producto Interior Bruto",
+    "pb": "Puntos básicos (1pb = 0.01%)",
+    "TTM": "Trailing Twelve Months — últimos 12 meses",
+    "YTD": "Year to Date — desde inicio del año",
+    "EAF": "Empresa de Asesoramiento Financiero (entidad autorizada por CNMV para dar consejo personalizado)",
+    "MiFID II": "Markets in Financial Instruments Directive II — directiva europea que regula los servicios de inversión",
+    "FMI": "Fondo Monetario Internacional",
+    "OCDE": "Organización para la Cooperación y el Desarrollo Económico",
+    "OPEP": "Organización de Países Exportadores de Petróleo",
+    "OPV": "Oferta Pública de Venta (equivalente a IPO en español)",
+    "IPO": "Initial Public Offering — salida a bolsa de una empresa",
+    "M&A": "Mergers & Acquisitions — fusiones y adquisiciones",
+    "SOCIMI": "Sociedad Cotizada Anónima de Inversión en el Mercado Inmobiliario — equivalente español del REIT",
+    "REIT": "Real Estate Investment Trust — vehículo de inversión inmobiliaria americano",
+    "HY": "High Yield — bonos corporativos de alto rendimiento y mayor riesgo de crédito (también llamados 'bonos basura')",
+    "IG": "Investment Grade — bonos corporativos de alta calidad crediticia",
+    "CDS": "Credit Default Swap — seguro contra impago de un bono; su precio sube cuando el riesgo de crédito del emisor sube",
+    "VIX": "Volatility Index — Índice de Volatilidad del S&P 500 (CBOE)",
+    "DXY": "Dollar Index — Índice del dólar americano frente a una cesta de 6 divisas",
+    "WTI": "West Texas Intermediate — variedad de crudo americano (vs. Brent europeo)",
+    "EBITDA": "Earnings Before Interest, Taxes, Depreciation and Amortization — beneficio antes de intereses, impuestos, amortizaciones y depreciaciones",
+    "EBIT": "Earnings Before Interest and Taxes — beneficio operativo antes de intereses e impuestos",
+    "BPA": "Beneficio Por Acción (en inglés EPS — Earnings Per Share)",
+    "NIM": "Net Interest Margin — Margen de Intereses Neto",
+    "ROE": "Return on Equity — Rentabilidad sobre Recursos Propios",
+    "ROIC": "Return on Invested Capital — Retorno sobre el Capital Invertido",
+    "ROCE": "Return on Capital Employed — Retorno sobre el Capital Empleado",
+    "FCF": "Free Cash Flow — Flujo de Caja Libre",
+    "DCF": "Discounted Cash Flow — Descuento de Flujos de Caja (método de valoración)",
+    "LTV": "Loan to Value — Préstamo sobre Valor del Activo",
+    "NAV": "Net Asset Value — Valor Neto de los Activos",
+    "FFO": "Funds From Operations — Fondos de las Operaciones (métrica de REITs/SOCIMIs)",
+    "RAB": "Regulated Asset Base — Base de Activos Regulada",
+    "ARPU": "Average Revenue Per User — Ingreso Medio por Usuario",
+    "PEG": "Price/Earnings to Growth — PER Ajustado por Crecimiento",
+    "PBV": "Price to Book Value — Precio sobre Valor en Libros",
+    "CET1": "Common Equity Tier 1 — Capital Ordinario de Nivel 1 (solvencia bancaria)",
+    "WACC": "Weighted Average Cost of Capital — Coste Medio Ponderado del Capital",
+    "QE": "Quantitative Easing — Expansión Cuantitativa",
+    "QT": "Quantitative Tightening — Contracción Cuantitativa",
+    "TARP": "Troubled Asset Relief Program — rescate bancario americano de 2008",
+    "FDIC": "Federal Deposit Insurance Corporation — seguro de depósitos americano",
+    "RTC": "Resolution Trust Corporation — agencia americana de liquidación bancaria (1989-1995)",
+    "OMT": "Outright Monetary Transactions — programa de compra de deuda soberana del BCE",
+    "PEPP": "Pandemic Emergency Purchase Programme — programa de compras COVID del BCE",
+    "TPI": "Transmission Protection Instrument — instrumento anticrisis del BCE (2022)",
+    "MEDE": "Mecanismo Europeo de Estabilidad (ESM — European Stability Mechanism)",
+    "CDO": "Collateralized Debt Obligation — obligación de deuda garantizada",
+    "LDI": "Liability-Driven Investment — inversión orientada al pasivo (pensiones UK)",
+    "BTFP": "Bank Term Funding Program — programa de financiación bancaria Fed (2023)",
+    "JOLTS": "Job Openings and Labor Turnover Survey — encuesta de vacantes laborales EE.UU.",
+    "PCE": "Personal Consumption Expenditures — índice de precios al consumo preferido de la Fed",
+    "DMA": "Digital Markets Act — Ley de Mercados Digitales (UE)",
+    "DSA": "Digital Services Act — Ley de Servicios Digitales (UE)",
+    "NAIRU": "Non-Accelerating Inflation Rate of Unemployment — tasa de paro no inflacionaria",
+    "CNMV": "Comisión Nacional del Mercado de Valores"
+  }
+}
