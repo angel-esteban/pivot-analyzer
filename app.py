@@ -9199,6 +9199,14 @@ def pestana_principiante():
     )
 
     # ── Selector igual que en Análisis Técnico ───────────────────────────────
+    def _on_mercado_pp_change():
+        """Al cambiar el índice en ¿Por dónde empiezo?, limpiar ticker y valor previos."""
+        st.session_state.pop("_pp_ticker", None)
+        st.session_state.pop("_pp_valor_sel", None)
+        st.session_state.pop("_pp_ticker_input", None)
+        st.session_state["_pp_data"] = None
+        st.session_state["_pp_step"] = 1
+
     _col1, _col2, _col4 = st.columns([2, 3, 1])
     with _col1:
         _mercado_pp = st.selectbox(
@@ -9210,6 +9218,7 @@ def pestana_principiante():
              "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
              "📊 ETFs UCITS"],
             key="_pp_mercado_sel",
+            on_change=_on_mercado_pp_change,
             help="Selecciona un índice o escribe el ticker manualmente."
         )
     with _col2:
@@ -9616,9 +9625,19 @@ def pestana_principiante():
 
         st.success(f"&#9989; **Has completado el an&#225;lisis guiado de {nombre} ({d['ticker']})**")
         if st.button("&#128202; Ver an&#225;lisis t&#233;cnico completo", type="primary", key="_pp_btn_full"):
-            st.session_state["ultimo_ticker"]       = d["ticker"]
-            st.session_state["mercado_sel"]         = "✏️ Escribir manualmente"
-            st.session_state["ticker_manual_input"] = d["ticker"]
+            st.session_state["ultimo_ticker"] = d["ticker"]
+            # Propagar selección de mercado/valor desde ¿Por dónde empiezo? a Análisis Técnico
+            _pp_mkt = st.session_state.get("_pp_mercado_sel", "✏️ Escribir manualmente")
+            if _pp_mkt not in ("✏️ Escribir manualmente", "📊 ETFs UCITS"):
+                # Usuario eligió un índice → propagar mercado y nombre del valor
+                st.session_state["mercado_sel"]      = _pp_mkt
+                st.session_state["valor_mercado_sel"] = st.session_state.get("_pp_valor_sel", "")
+                # Limpiar entrada manual para evitar conflicto
+                st.session_state.pop("ticker_manual_input", None)
+            else:
+                # Modo manual o ETF → pasar ticker directamente
+                st.session_state["mercado_sel"]         = "✏️ Escribir manualmente"
+                st.session_state["ticker_manual_input"] = d["ticker"]
             st.session_state["_pp_jump_to_analisis"] = True
             st.rerun()
 
@@ -10402,6 +10421,12 @@ def pantalla_analisis():
         tab_ayuda = tab_objs[-1]
 
     # ---- TAB ANÁLISIS ----
+    def _on_mercado_at_change():
+        """Al cambiar el índice en Análisis Técnico, limpiar ticker y valor previos."""
+        st.session_state.pop("ultimo_ticker", None)
+        st.session_state.pop("valor_mercado_sel", None)
+        st.session_state.pop("ticker_manual_input", None)
+
     def _render_analisis():
         # Leer valores de sistema/tolerancia desde session_state (se renderizan más abajo)
         _sistema_default = st.session_state.get("sistema_sel_key", list(SISTEMAS_PIVOT.keys())[0])
@@ -10419,6 +10444,7 @@ def pantalla_analisis():
                  "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
                  "📊 ETFs UCITS"],
                 key="mercado_sel",
+                on_change=_on_mercado_at_change,
                 help="Selecciona un índice para elegir el valor de una lista desplegable, "
                      "o 'Escribir manualmente' para introducir cualquier ticker de Yahoo Finance."
             )
@@ -10445,8 +10471,14 @@ def pantalla_analisis():
                 with st.spinner(f"Cargando {mercado_sel}..."):
                     tickers_mercado = obtener_tickers_mercado(mercado_sel)
                 if tickers_mercado:
+                    # Validar que el valor guardado en session_state sea válido para este mercado
+                    _vmk_opts = list(tickers_mercado.keys())
+                    _vmk_saved = st.session_state.get("valor_mercado_sel", "")
+                    if _vmk_saved and _vmk_saved not in _vmk_opts:
+                        # El valor guardado no pertenece a este mercado → resetear
+                        st.session_state["valor_mercado_sel"] = _vmk_opts[0]
                     nombre_sel = st.selectbox(
-                        f"🔎 Valor — {mercado_sel}", list(tickers_mercado.keys()),
+                        f"🔎 Valor — {mercado_sel}", _vmk_opts,
                         key="valor_mercado_sel",
                         help=f"Valores del {mercado_sel}. Si el análisis falla usa 'Escribir manualmente'."
                     )
@@ -10507,8 +10539,18 @@ def pantalla_analisis():
 
         # ---- PRECIO ACTUAL ----
         col_p1, col_p2, col_p3, col_p4 = st.columns([2.2, 2.1, 1.4, 1.1])
-        cierre_ant = float(hist["Close"].iloc[-2]) if len(hist) > 1 else precio
-        cambio = precio - cierre_ant
+        # Cambio diario: usar campos directos de yfinance (previousClose + regularMarketPrice)
+        # para obtener la variación real del día, no la diferencia entre dos cierres históricos
+        _prev_close   = info.get("previousClose") or info.get("regularMarketPreviousClose")
+        _curr_market  = info.get("regularMarketPrice") or info.get("currentPrice")
+        if _prev_close and _curr_market:
+            cierre_ant       = float(_prev_close)
+            _precio_delta    = float(_curr_market)
+        else:
+            # fallback: comparar últimas dos barras del histórico
+            cierre_ant    = float(hist["Close"].iloc[-2]) if len(hist) > 1 else precio
+            _precio_delta = precio
+        cambio = _precio_delta - cierre_ant
         cambio_pct = (cambio / cierre_ant * 100) if cierre_ant else 0
         var_str = f"{cambio:+.4f} ({cambio_pct:+.2f}%)"
 
