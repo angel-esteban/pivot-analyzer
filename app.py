@@ -4545,11 +4545,13 @@ def pestaña_macro():
     _h_met_norm = {}
     for _nm, _hdf in _h_metales.items():
         if _hdf is not None and not _hdf.empty:
-            _base = float(_hdf["Close"].dropna().iloc[0])
+            _serie = _hdf if hasattr(_hdf, "iloc") else _hdf
+            _clean = _serie.dropna()
+            if len(_clean) == 0:
+                continue
+            _base = float(_clean.iloc[0])
             if _base:
-                _hdf2 = _hdf.copy()
-                _hdf2["Close"] = _hdf2["Close"] / _base * 100
-                _h_met_norm[_nm] = _hdf2
+                _h_met_norm[_nm] = _serie / _base * 100
     if _h_met_norm:
         _fig_met = _macro_chart(_h_met_norm, unidad=" (base 100)", fecha_inicio=_fecha_ini)
         st.plotly_chart(_fig_met, use_container_width=True, config={"displayModeBar": False})
@@ -4623,7 +4625,7 @@ def pestaña_macro():
             continue
         _unit = " USD/b" if _yaxis == "y1" else " USD/MMBTU"
         _fig_en.add_trace(_go_en.Scatter(
-            x=_hdf2.index, y=_hdf2["Close"].values,
+            x=_hdf2.index, y=_hdf2.values,
             mode="lines", name=_sname,
             line=dict(color=_color, width=2),
             yaxis=_yaxis,
