@@ -79,6 +79,54 @@ MACRO_KNOWLEDGE  = _load_json_kb('macro_indicators.json')
 CRISIS_PATTERNS  = _load_json_kb('crisis_patterns.json')
 GLOSARIO_KB      = _load_json_kb('glosario.json')
 
+# Fallback manual: tickers conocidos cuyo sector yfinance a veces omite
+TICKER_SECTOR_FALLBACK = {
+    # IBEX 35 — Comunicaciones
+    "TEF.MC": "Communication Services",
+    "AMXL.MX": "Communication Services",
+    # IBEX 35 — Financiero
+    "SAN.MC": "Financial Services",
+    "BBVA.MC": "Financial Services",
+    "CABK.MC": "Financial Services",
+    "SAB.MC": "Financial Services",
+    "BKT.MC": "Financial Services",
+    "MAP.MC": "Financial Services",
+    # IBEX 35 — Energía
+    "REP.MC": "Energy",
+    "ENGI.PA": "Utilities",
+    "ELE.MC": "Utilities",
+    "IBE.MC": "Utilities",
+    "ENG.MC": "Energy",
+    "ACS.MC": "Industrials",
+    # IBEX 35 — Consumo
+    "ITX.MC": "Consumer Cyclical",
+    "MRL.MC": "Consumer Defensive",
+    "AENA.MC": "Industrials",
+    "IAG.MC": "Industrials",
+    "MEL.MC": "Consumer Cyclical",
+    "NH.MC": "Consumer Cyclical",
+    # IBEX 35 — Materiales/Industria
+    "ACX.MC": "Basic Materials",
+    "CLNX.MC": "Real Estate",
+    "COL.MC": "Industrials",
+    "FER.MC": "Industrials",
+    "GRF.MC": "Healthcare",
+    "PHM.MC": "Healthcare",
+    "SGRE.MC": "Industrials",
+    "SOLARIA.MC": "Utilities",
+    "VIS.MC": "Industrials",
+    # Global — referencia
+    "AAPL": "Technology",
+    "MSFT": "Technology",
+    "GOOGL": "Communication Services",
+    "AMZN": "Consumer Cyclical",
+    "META": "Communication Services",
+    "NVDA": "Technology",
+    "TSLA": "Consumer Cyclical",
+    "JPM": "Financial Services",
+    "BRK-B": "Financial Services",
+}
+
 # Technical indicators — pandas_ta con fallback manual
 try:
     import pandas_ta as ta
@@ -9351,6 +9399,10 @@ def pestana_principiante():
         # ── Sector context from SECTOR_KNOWLEDGE ─────────────────────
         _sk_data = SECTOR_KNOWLEDGE.get("sectores", {})
         _sector_yf = _info.get("sector", "") or ""
+        # Si yfinance no devolvió sector, usar mapa de fallback
+        if not _sector_yf:
+            _ticker_up = _ticker.upper()
+            _sector_yf = TICKER_SECTOR_FALLBACK.get(_ticker_up, "")
         # normalise key: yfinance sometimes returns "Financial Services", sometimes "Financials"
         _sector_info = _sk_data.get(_sector_yf)
         if not _sector_info:
