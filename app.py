@@ -9650,94 +9650,70 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # CSS: botones Ant/Sig del paso activo pequeños y sin borde superior (integrados en la tarjeta)
-    _wiz_btn_sel = (f'div[data-testid="stHorizontalBlock"]'
-                    f' > div[data-testid="column"]:nth-child({_step})'
-                    f' div[data-testid="stHorizontalBlock"] .stButton > button')
-    st.markdown(f'<style>'
-                f'{_wiz_btn_sel}{{'
-                f'border-top:none!important;border-radius:0 0 8px 8px!important;'
-                f'padding:3px 6px!important;font-size:.72rem!important;'
-                f'min-height:26px!important;height:26px!important;'
-                f'background:#dbeafe!important;border-color:#2563eb!important;'
-                f'color:#1e40af!important;font-weight:600!important;}}'
-                f'{_wiz_btn_sel}[kind="primary"]{{'
-                f'background:#2563eb!important;color:white!important;}}'
-                f'</style>', unsafe_allow_html=True)
+    # Marcador único para selector CSS sin afectar otros bloques de la página
+    st.markdown('<span id="pp-wiz-anc" style="display:none"></span>', unsafe_allow_html=True)
 
-    _WIZ_H = '112px'   # altura fija igual para done/activo/pending
-    _WIZ_H_TOP = '86px' # parte superior del activo (el resto son los botones)
+    # CSS: estiliza cada botón-tarjeta por posición nth-child dentro del bloque wizard
+    _wiz_base = ('div[data-testid="stMarkdown"]:has(#pp-wiz-anc)'
+                 ' + div[data-testid="stHorizontalBlock"]'
+                 ' > div[data-testid="column"]')
+    _wiz_btn_common = ('min-height:105px!important;height:auto!important;'
+                       'white-space:pre-wrap!important;line-height:1.45!important;'
+                       'border-radius:10px!important;font-size:.83rem!important;'
+                       'font-weight:700!important;transition:none!important;'
+                       'padding:10px 6px!important;')
+    _wiz_css = ['<style>']
+    for _ci in range(1, 5):
+        _s = f'{_wiz_base}:nth-child({_ci}) .stButton > button'
+        _ci_done = (_ci != _step and _ci <= _max_step)
+        _ci_act  = (_ci == _step)
+        if _ci_done:
+            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#f0fdf4!important;border:2px solid #16a34a!important;color:#15803d!important;}}')
+            _wiz_css.append(f'{_s}:hover{{background:#dcfce7!important;}}')
+        elif _ci_act:
+            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#eff6ff!important;border:2px solid #2563eb!important;color:#2563eb!important;cursor:default!important;}}')
+        else:
+            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#f8fafc!important;border:2px solid #e2e8f0!important;color:#94a3b8!important;}}')
+    _wiz_css.append('</style>')
+    st.markdown(''.join(_wiz_css), unsafe_allow_html=True)
 
+    # Renderizar las 4 tarjetas como botones
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
             _is_done   = (_wi != _step and _wi <= _max_step)
-
+            _lbl = _wico + '\n' + _wnm + '\nPaso ' + str(_wi)
             if _is_done:
-                st.markdown(
-                    f'<div style="background:#f0fdf4;border:2px solid #16a34a;'
-                    f'border-radius:10px;text-align:center;height:{_WIZ_H};'
-                    f'display:flex;flex-direction:column;align-items:center;'
-                    f'justify-content:center;box-sizing:border-box">'
-                    f'<div style="font-size:1.35rem">{_wico}</div>'
-                    f'<div style="font-size:.8rem;font-weight:700;color:#15803d;margin:4px 0 2px">{_wnm}</div>'
-                    f'<div style="font-size:.7rem;font-weight:600;color:#16a34a">Paso {_wi}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-
+                if st.button(_lbl, key=f'_pp_goto_{_wi}', use_container_width=True):
+                    st.session_state['_pp_step'] = _wi
+                    st.rerun()
             elif _is_active:
-                # Parte superior: misma altura que done menos la franja de botones (~26px)
-                st.markdown(
-                    f'<div style="background:#eff6ff;border:2px solid #2563eb;border-bottom:none;'
-                    f'border-radius:10px 10px 0 0;text-align:center;height:{_WIZ_H_TOP};'
-                    f'display:flex;flex-direction:column;align-items:center;'
-                    f'justify-content:center;box-sizing:border-box">'
-                    f'<div style="font-size:1.35rem">{_wico}</div>'
-                    f'<div style="font-size:.8rem;font-weight:700;color:#2563eb;margin:4px 0 2px">{_wnm}</div>'
-                    f'<div style="font-size:.7rem;font-weight:600;color:#2563eb">Paso {_wi}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                # Botones pequeños integrados en la base de la tarjeta
-                _na, _nb = st.columns(2)
-                with _na:
-                    if _wi > 1:
-                        if st.button('← Ant.', key='_pp_wiz_prev', use_container_width=True):
-                            st.session_state['_pp_step'] = _wi - 1
-                            st.rerun()
-                    else:
-                        st.markdown(f'<div style="height:26px;background:#dbeafe;'
-                                    f'border:2px solid #2563eb;border-top:none;'
-                                    f'border-radius:0 0 0 8px"></div>', unsafe_allow_html=True)
-                with _nb:
-                    if _wi < 4:
-                        if st.button('Sig. →', key='_pp_wiz_next', type='primary',
-                                     use_container_width=True):
-                            st.session_state['_pp_max_step'] = max(_max_step, _wi + 1)
-                            st.session_state['_pp_step'] = _wi + 1
-                            st.rerun()
-                    else:
-                        if st.button('📄 Ver informe', key='_pp_wiz_rep', type='primary',
-                                     use_container_width=True):
-                            st.session_state['_pp_jump_to_analisis'] = True
-                            st.rerun()
+                st.button(_lbl, key=f'_pp_act_{_wi}', use_container_width=True)
+            else:
+                st.button(_lbl, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
 
-            else:  # pendiente
-                st.markdown(
-                    f'<div style="background:#f8fafc;border:2px solid #e2e8f0;'
-                    f'border-radius:10px;text-align:center;height:{_WIZ_H};'
-                    f'display:flex;flex-direction:column;align-items:center;'
-                    f'justify-content:center;box-sizing:border-box">'
-                    f'<div style="font-size:1.35rem;opacity:.4">{_wico}</div>'
-                    f'<div style="font-size:.8rem;font-weight:600;color:#94a3b8;margin:4px 0 2px">{_wnm}</div>'
-                    f'<div style="font-size:.7rem;font-weight:600;color:#cbd5e1">Paso {_wi}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-
-    st.markdown("<div style='margin-bottom:.6rem'></div>", unsafe_allow_html=True)
+    # Botones de navegación: fila separada debajo de las tarjetas, sin solapamiento
+    st.markdown('<div style="margin-top:10px"></div>', unsafe_allow_html=True)
+    _nav_l, _nav_c, _nav_r = st.columns([1, 2, 1])
+    with _nav_l:
+        if _step > 1:
+            if st.button('← Paso anterior', key='_pp_wiz_prev', use_container_width=True):
+                st.session_state['_pp_step'] = _step - 1
+                st.rerun()
+    with _nav_r:
+        if _step < 4:
+            if st.button('Paso siguiente →', key='_pp_wiz_next', type='primary',
+                         use_container_width=True):
+                st.session_state['_pp_max_step'] = max(_max_step, _step + 1)
+                st.session_state['_pp_step'] = _step + 1
+                st.rerun()
+        else:
+            if st.button('📄 Ver informe completo', key='_pp_wiz_rep', type='primary',
+                         use_container_width=True):
+                st.session_state['_pp_jump_to_analisis'] = True
+                st.rerun()
+    st.markdown('<div style="margin-bottom:.4rem"></div>', unsafe_allow_html=True)
 
     # Cargar datos una vez por ticker
     if (st.session_state.get("_pp_data") is None
