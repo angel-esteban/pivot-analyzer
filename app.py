@@ -9650,18 +9650,21 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # CSS + anchor en un único st.markdown para que el selector + (adjacent sibling) funcione
+    # Anchor + CSS en un único bloque. Usa ~ (general sibling) para mayor robustez.
     _wiz_base = ('div[data-testid="stMarkdown"]:has(#pp-wiz-anc)'
-                 ' + div[data-testid="stHorizontalBlock"]'
+                 ' ~ div[data-testid="stHorizontalBlock"]'
                  ' > div[data-testid="column"]')
+    _nav_base  = ('div[data-testid="stMarkdown"]:has(#pp-nav-anc)'
+                  ' ~ div[data-testid="stHorizontalBlock"]'
+                  ' > div[data-testid="column"]')
+    _cmn = ('border-top:none!important;border-radius:0 0 8px 8px!important;'
+            'padding:3px 6px!important;font-size:.74rem!important;'
+            'min-height:26px!important;height:26px!important;font-weight:700!important;')
     _wiz_parts = ['<span id="pp-wiz-anc" style="display:none"></span><style>']
     for _ci in range(1, 5):
         _sb = f'{_wiz_base}:nth-child({_ci}) .stButton > button'
         _ci_done = (_ci != _step and _ci <= _max_step)
         _ci_act  = (_ci == _step)
-        _cmn = ('border-top:none!important;border-radius:0 0 8px 8px!important;'
-                'padding:3px 6px!important;font-size:.74rem!important;'
-                'min-height:26px!important;height:26px!important;font-weight:700!important;')
         if _ci_done:
             _wiz_parts.append(f'{_sb}{{{_cmn}background:#dcfce7!important;border:2px solid #16a34a!important;color:#15803d!important;}}')
             _wiz_parts.append(f'{_sb}:hover{{background:#bbf7d0!important;}}')
@@ -9669,6 +9672,14 @@ def pestana_principiante():
             _wiz_parts.append(f'{_sb}{{{_cmn}background:#dbeafe!important;border:2px solid #2563eb!important;color:#1d4ed8!important;cursor:default!important;}}')
         else:
             _wiz_parts.append(f'{_sb}{{{_cmn}background:#f1f5f9!important;border:2px solid #e2e8f0!important;color:#94a3b8!important;cursor:default!important;}}')
+    # Botón "Anterior" (col 1 de la fila nav) — reborde azul
+    _wiz_parts.append(
+        f'{_nav_base}:nth-child(1) .stButton > button{{'
+        f'border:2px solid #2563eb!important;color:#2563eb!important;'
+        f'background:white!important;font-weight:600!important;}}'
+        f'{_nav_base}:nth-child(1) .stButton > button:hover{{'
+        f'background:#eff6ff!important;}}'
+    )
     _wiz_parts.append('</style>')
     st.markdown(''.join(_wiz_parts), unsafe_allow_html=True)
 
@@ -9685,7 +9696,6 @@ def pestana_principiante():
             else:
                 _bg, _brd, _tc, _op = '#f8fafc', '#e2e8f0', '#94a3b8', '.4'
 
-            # Parte superior de la tarjeta (sin borde inferior — el botón lo cierra)
             st.markdown(
                 f'<div style="background:{_bg};border:2px solid {_brd};border-bottom:none;'
                 f'border-radius:10px 10px 0 0;text-align:center;height:80px;'
@@ -9696,7 +9706,6 @@ def pestana_principiante():
                 f'</div>',
                 unsafe_allow_html=True
             )
-            # Botón "Paso X" cierra visualmente la tarjeta
             _paso_lbl = 'Paso ' + str(_wi)
             if _is_done:
                 if st.button(_paso_lbl, key=f'_pp_goto_{_wi}', use_container_width=True):
@@ -9707,7 +9716,8 @@ def pestana_principiante():
             else:
                 st.button(_paso_lbl, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
 
-    # Navegación: fila separada bajo los boxes, sin solapamiento
+    # Fila de navegación — anchor propio para CSS del botón Anterior
+    st.markdown('<span id="pp-nav-anc" style="display:none"></span>', unsafe_allow_html=True)
     st.markdown('<div style="margin-top:10px"></div>', unsafe_allow_html=True)
     _nav_l, _nav_c, _nav_r = st.columns([1, 2, 1])
     with _nav_l:
