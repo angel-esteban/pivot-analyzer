@@ -9512,11 +9512,6 @@ def pestana_principiante():
 
     _CSS = """
     <style>
-    .pp-stepper{display:flex;gap:0;margin-bottom:1.5rem}
-    .pp-step{flex:1;padding:10px 6px;text-align:center;font-size:.78rem;
-             font-weight:600;border-bottom:3px solid #e2e8f0;color:#94a3b8;cursor:default}
-    .pp-step.active{border-bottom:3px solid #2563eb;color:#2563eb}
-    .pp-step.done{border-bottom:3px solid #16a34a;color:#16a34a}
     .pp-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.2rem 1.4rem;margin:.6rem 0}
     .pp-title{font-size:1.15rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem}
     .pp-edu{background:#eff6ff;border-left:4px solid #2563eb;padding:.7rem 1rem;
@@ -9524,14 +9519,21 @@ def pestana_principiante():
     .pp-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;margin:2px}
     .pp-score-bar{height:14px;border-radius:7px;background:#e2e8f0;margin:.4rem 0}
     .pp-score-fill{height:14px;border-radius:7px}
+    .pp-wiz-card{border-radius:10px;padding:10px 12px;border:2px solid #e2e8f0;
+                 background:#f8fafc;text-align:center;min-height:80px}
+    .pp-wiz-active{border-color:#2563eb;background:#eff6ff}
+    .pp-wiz-done{border-color:#16a34a;background:#f0fdf4}
+    .pp-wiz-num{font-size:1.5rem;font-weight:900;margin-bottom:2px}
+    .pp-wiz-name{font-size:.75rem;font-weight:600;color:#475569;line-height:1.2}
     </style>
     """
     st.markdown(_CSS, unsafe_allow_html=True)
 
+    # ── Cabecera: "Selecciona un valor:" ─────────────────────────────────────
     st.markdown(
-        '<h2 style="color:#1e3a5f;margin-bottom:.2rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
-        '<p style="color:#64748b;margin-bottom:1rem">Sigue estos 4 pasos para analizar cualquier valor '
-        'de forma ordenada. Cada paso explica <b>qu&#233; es</b> y <b>qu&#233; significa para ti</b>.</p>',
+        '<h2 style="color:#1e3a5f;margin-bottom:.3rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
+        '<p style="color:#1e3a5f;font-weight:700;font-size:1rem;margin-bottom:.4rem">'
+        '&#128073; Selecciona un valor:</p>',
         unsafe_allow_html=True
     )
 
@@ -9624,6 +9626,13 @@ def pestana_principiante():
         st.session_state["_pp_step"]   = 1
         st.session_state["_pp_data"]   = None
 
+    st.markdown(
+        '<p style="color:#64748b;font-size:.88rem;margin:.5rem 0 .8rem">'
+        'Sigue estos 4 pasos para analizar cualquier valor de forma ordenada. '
+        'Cada paso explica <b>qu&#233; es</b> y <b>qu&#233; significa para ti</b>.</p>',
+        unsafe_allow_html=True
+    )
+
     _ticker = st.session_state.get("_pp_ticker", "")
     _step   = st.session_state.get("_pp_step", 1)
 
@@ -9632,19 +9641,63 @@ def pestana_principiante():
         st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
         return
 
-    _pasos = [
-        "&#127758; Contexto Macro",
-        "&#127959;&#65039; Estructura",
-        "&#128678; Momento",
-        "&#128204; Niveles",
+    # ── Wizard de 4 tarjetas ─────────────────────────────────────────────────
+    _PASOS_WIZ = [
+        ("🌍", "Contexto Macro"),
+        ("🏗️", "Estructura"),
+        ("⚡", "Momento"),
+        ("📌", "Niveles"),
     ]
-    _step_html = '<div class="pp-stepper">'
-    for i, lbl in enumerate(_pasos, 1):
-        cls = "active" if i == _step else ("done" if i < _step else "")
-        _step_html += f'<div class="pp-step {cls}">{lbl}</div>'
-    _step_html += "</div>"
-    st.markdown(_step_html, unsafe_allow_html=True)
-    st.progress(_step / 4)
+    _wiz_cols = st.columns(4)
+    for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
+        with _wiz_cols[_wi - 1]:
+            _is_active = (_wi == _step)
+            _is_done   = (_wi < _step)
+            _bg   = "#eff6ff" if _is_active else ("#f0fdf4" if _is_done else "#f8fafc")
+            _bord = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#e2e8f0")
+            _ncol = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#94a3b8")
+            _badge = ("● ACTIVO" if _is_active
+                      else "✓ Hecho" if _is_done else f"○ Paso {_wi}")
+            _badge_bg = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#94a3b8")
+            st.markdown(
+                f'<div style="border-radius:10px;padding:10px 8px;border:2px solid {_bord};'
+                f'background:{_bg};text-align:center">'
+                f'<div style="font-size:1.4rem">{_wico}</div>'
+                f'<div style="font-size:.78rem;font-weight:700;color:{_ncol};'
+                f'line-height:1.3;margin:3px 0">{_wnm}</div>'
+                f'<span style="background:{_badge_bg};color:white;border-radius:10px;'
+                f'font-size:.65rem;font-weight:700;padding:2px 7px">{_badge}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            # Botón de navegación directa (todos los pasos ya visitados o activo)
+            if not _is_active and (_is_done or _wi == _step + 1):
+                _btn_lbl = f"Ir al paso {_wi}" if _is_done else "Siguiente →"
+                if st.button(_btn_lbl, key=f"_pp_wiz_goto_{_wi}",
+                             use_container_width=True):
+                    st.session_state["_pp_step"] = _wi
+                    st.rerun()
+            # Botones de navegación en la tarjeta ACTIVA
+            if _is_active:
+                _nav_l, _nav_r = st.columns(2)
+                with _nav_l:
+                    if _wi > 1:
+                        if st.button("← Ant.", key="_pp_wiz_prev",
+                                     use_container_width=True):
+                            st.session_state["_pp_step"] = _wi - 1
+                            st.rerun()
+                with _nav_r:
+                    if _wi < 4:
+                        if st.button("Sig. →", key="_pp_wiz_next", type="primary",
+                                     use_container_width=True):
+                            st.session_state["_pp_step"] = _wi + 1
+                            st.rerun()
+                    else:
+                        if st.button("📄 Informe", key="_pp_wiz_report", type="primary",
+                                     use_container_width=True):
+                            st.session_state["_pp_jump_to_analisis"] = True
+                            st.rerun()
+    st.markdown("<div style='margin-bottom:.8rem'></div>", unsafe_allow_html=True)
 
     # Cargar datos una vez por ticker
     if (st.session_state.get("_pp_data") is None
@@ -10005,18 +10058,22 @@ def pestana_principiante():
             st.session_state["_pp_jump_to_analisis"] = True
             st.rerun()
 
-    # ── Navegación ────────────────────────────────────────────────────────────
+    # ── Navegación inferior ───────────────────────────────────────────────────
     st.markdown("---")
     _nl, _nr = st.columns(2)
     with _nl:
         if _step > 1:
-            if st.button("&#8592; Paso anterior", key="_pp_prev"):
+            if st.button("← Paso anterior", key="_pp_prev", use_container_width=True):
                 st.session_state["_pp_step"] = _step - 1
                 st.rerun()
     with _nr:
         if _step < 4:
-            if st.button("Paso siguiente &#8594;", type="primary", key="_pp_next", use_container_width=True):
+            if st.button("Paso siguiente →", type="primary", key="_pp_next", use_container_width=True):
                 st.session_state["_pp_step"] = _step + 1
+                st.rerun()
+        else:
+            if st.button("📄 Ver informe completo", type="primary", key="_pp_next_last", use_container_width=True):
+                st.session_state["_pp_jump_to_analisis"] = True
                 st.rerun()
 
 def pestaña_cartera():
