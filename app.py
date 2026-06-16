@@ -9559,147 +9559,21 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
                 unsafe_allow_html=True
             )
 
-def pestana_principiante():
-    """Wizard de 4 pasos: Macro → Diagnóstico → Semáforo → Niveles."""
 
-    _CSS = """
-    <style>
-    .pp-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.2rem 1.4rem;margin:.6rem 0}
-    .pp-title{font-size:1.15rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem}
-    .pp-edu{background:#eff6ff;border-left:4px solid #2563eb;padding:.7rem 1rem;
-            border-radius:0 8px 8px 0;font-size:.88rem;color:#1e40af;margin:.8rem 0}
-    .pp-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;margin:2px}
-    .pp-score-bar{height:14px;border-radius:7px;background:#e2e8f0;margin:.4rem 0}
-    .pp-score-fill{height:14px;border-radius:7px}
-    .pp-wiz-card{border-radius:10px;padding:10px 12px;border:2px solid #e2e8f0;
-                 background:#f8fafc;text-align:center;min-height:80px}
-    .pp-wiz-active{border-color:#2563eb;background:#eff6ff}
-    .pp-wiz-done{border-color:#16a34a;background:#f0fdf4}
-    .pp-wiz-num{font-size:1.5rem;font-weight:900;margin-bottom:2px}
-    .pp-wiz-name{font-size:.75rem;font-weight:600;color:#475569;line-height:1.2}
-    </style>
+@st.fragment
+def _pp_wizard_fragment():
+    """Fragmento del wizard ¿Por dónde empiezo?
+    Solo este bloque se re-ejecuta al navegar entre pasos.
+    La app completa NO se re-ejecuta -> navegación instantánea.
     """
-    st.markdown(_CSS, unsafe_allow_html=True)
-
-    # ── Cabecera: "Selecciona un valor:" ─────────────────────────────────────
-    st.markdown(
-        '<h2 style="color:#1e3a5f;margin-bottom:.3rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
-        '<p style="color:#1e3a5f;font-weight:700;font-size:1rem;margin-bottom:.4rem">'
-        '&#128073; Selecciona un valor:</p>',
-        unsafe_allow_html=True
-    )
-
-    # ── Selector igual que en Análisis Técnico ───────────────────────────────
-    def _on_mercado_pp_change():
-        """Al cambiar el índice en ¿Por dónde empiezo?, limpiar ticker y valor previos."""
-        st.session_state.pop("_pp_ticker", None)
-        st.session_state.pop("_pp_ready", None)
-        st.session_state.pop("_pp_valor_sel", None)
-        st.session_state.pop("_pp_ticker_input", None)
-        st.session_state["_pp_data"] = None
-        st.session_state["_pp_step"] = 1
-
-    # ── Sync AT → PP: si AT tiene un análisis activo y PP está vacío ────
-    _AT_MKT_OPTS = [
-        "✏️ Escribir manualmente",
-        "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
-        "🌍 Eurostoxx 50",
-        "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
-        "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
-        "📊 ETFs UCITS",
-    ]
-    _at_mkt = st.session_state.get("mercado_sel", "")
-    _at_val = st.session_state.get("valor_mercado_sel", "")
-    _at_tik = (st.session_state.get("ticker_manual_input") or
-               st.session_state.get("ultimo_ticker", ""))
-    # Solo sincronizamos si PP no tiene un análisis propio en curso
-    if _at_tik and not st.session_state.get("_pp_ticker"):
-        if _at_mkt and _at_mkt in _AT_MKT_OPTS:
-            st.session_state["_pp_mercado_sel"] = _at_mkt
-            if _at_val:
-                st.session_state.setdefault("_pp_valor_sel", _at_val)
-        else:
-            st.session_state["_pp_mercado_sel"] = "✏️ Escribir manualmente"
-        st.session_state["_pp_ticker"] = _at_tik
-
-    _col1, _col2, _col4 = st.columns([2, 3, 1])
-    with _col1:
-        _mercado_pp = st.selectbox(
-            "🗂️ Índice / Mercado",
-            ["✏️ Escribir manualmente",
-             "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
-             "🌍 Eurostoxx 50",
-             "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
-             "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
-             "📊 ETFs UCITS"],
-            key="_pp_mercado_sel",
-            on_change=_on_mercado_pp_change,
-            help="Selecciona un índice o escribe el ticker manualmente."
-        )
-    with _col2:
-        if _mercado_pp == "✏️ Escribir manualmente":
-            _ticker_in = st.text_input(
-                "🔎 Ticker",
-                value=st.session_state.get("_pp_ticker", st.session_state.get("ultimo_ticker", "")),
-                placeholder="Ejemplo: REP.MC, BBVA.MC, AAPL",
-                key="_pp_ticker_input",
-                help="Símbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=París · .L=Londres · .AS=Ámsterdam"
-            ).upper().strip()
-        elif _mercado_pp == "📊 ETFs UCITS":
-            _cat_c, _etf_c = st.columns([1, 2])
-            with _cat_c:
-                _cat_pp = st.selectbox("📂 Categoría", list(ETFS_UCITS.keys()), key="_pp_etf_cat")
-            with _etf_c:
-                _etfs_pp = ETFS_UCITS[_cat_pp]
-                _etf_nom = st.selectbox("🔎 ETF", list(_etfs_pp.keys()), key="_pp_etf_nom")
-                _ticker_in = _etfs_pp[_etf_nom]
-        else:
-            with st.spinner(f"Cargando {_mercado_pp}..."):
-                _tickers_pp = obtener_tickers_mercado(_mercado_pp)
-            if _tickers_pp:
-                _pp_vmk_opts  = list(_tickers_pp.keys())
-                _pp_vmk_saved = st.session_state.get("_pp_valor_sel", "")
-                if _pp_vmk_saved and _pp_vmk_saved not in _pp_vmk_opts:
-                    st.session_state["_pp_valor_sel"] = _pp_vmk_opts[0]
-                _nom_pp = st.selectbox(
-                    f"🔎 Valor — {_mercado_pp}", _pp_vmk_opts,
-                    key="_pp_valor_sel",
-                    help=f"Valores del {_mercado_pp}."
-                )
-                _ticker_in = _tickers_pp[_nom_pp]
-            else:
-                st.warning("No se pudieron cargar los tickers. Escribe el ticker manualmente.")
-                _ticker_in = st.text_input("🔎 Ticker", value="", key="_pp_ticker_fallback").upper().strip()
-    with _col4:
-        st.markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
-        _analizar = st.button("🔍 Analizar", type="primary", key="_pp_btn_analizar", use_container_width=True)
-
-    if _analizar and _ticker_in:
-        st.session_state["_pp_ticker"]    = _ticker_in
-        st.session_state["_pp_step"]      = 1
-        st.session_state["_pp_max_step"]  = 1
-        st.session_state["_pp_data"]      = None
-        st.session_state["_pp_ready"]     = True
-
-    st.markdown(
-        '<p style="color:#64748b;font-size:.88rem;margin:.5rem 0 .8rem">'
-        'Sigue estos 4 pasos para analizar cualquier valor de forma ordenada. '
-        'Cada paso explica <b>qu&#233; es</b> y <b>qu&#233; significa para ti</b>.</p>',
-        unsafe_allow_html=True
-    )
-
-    _ticker   = st.session_state.get("_pp_ticker", "")
-    _pp_ready = st.session_state.get("_pp_ready", False)
-    _step     = st.session_state.get("_pp_step", 1)
+    _ticker = st.session_state.get("_pp_ticker", "")
+    if not _ticker:
+        return
+    _step = st.session_state.get("_pp_step", 1)
     # max_step: garantiza que pasos ya visitados conservan borde verde al retroceder
     if _step > st.session_state.get("_pp_max_step", 1):
         st.session_state["_pp_max_step"] = _step
     _max_step = st.session_state.get("_pp_max_step", _step)
-
-    if not _ticker or not _pp_ready:
-        st.info("Selecciona un mercado y un valor, o escribe el ticker, y pulsa **Analizar**.")
-        st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
-        return
 
     # ── Wizard de 4 tarjetas ─────────────────────────────────────────────────
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
@@ -9752,7 +9626,7 @@ def pestana_principiante():
             if st.button('📄 Ver informe completo', key='_pp_wiz_rep', type='primary',
                          use_container_width=True):
                 st.session_state['_pp_jump_to_analisis'] = True
-                st.rerun()
+                st.rerun(scope="app")
     st.markdown('<div style="margin-bottom:.4rem"></div>', unsafe_allow_html=True)
 
     # Cargar datos una vez por ticker
@@ -10112,7 +9986,7 @@ def pestana_principiante():
                 st.session_state["_pending_ticker"]       = d["ticker"]
                 st.session_state.pop("_pending_valor", None)
             st.session_state["_pp_jump_to_analisis"] = True
-            st.rerun()
+            st.rerun(scope="app")
 
     # ── Navegación inferior ───────────────────────────────────────────────────
     st.markdown("---")
@@ -10130,7 +10004,146 @@ def pestana_principiante():
         else:
             if st.button("📄 Ver informe completo", type="primary", key="_pp_next_last", use_container_width=True):
                 st.session_state["_pp_jump_to_analisis"] = True
-                st.rerun()
+                st.rerun(scope="app")
+
+def pestana_principiante():
+    """Wizard de 4 pasos: Macro → Diagnóstico → Semáforo → Niveles."""
+
+    _CSS = """
+    <style>
+    .pp-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.2rem 1.4rem;margin:.6rem 0}
+    .pp-title{font-size:1.15rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem}
+    .pp-edu{background:#eff6ff;border-left:4px solid #2563eb;padding:.7rem 1rem;
+            border-radius:0 8px 8px 0;font-size:.88rem;color:#1e40af;margin:.8rem 0}
+    .pp-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;margin:2px}
+    .pp-score-bar{height:14px;border-radius:7px;background:#e2e8f0;margin:.4rem 0}
+    .pp-score-fill{height:14px;border-radius:7px}
+    .pp-wiz-card{border-radius:10px;padding:10px 12px;border:2px solid #e2e8f0;
+                 background:#f8fafc;text-align:center;min-height:80px}
+    .pp-wiz-active{border-color:#2563eb;background:#eff6ff}
+    .pp-wiz-done{border-color:#16a34a;background:#f0fdf4}
+    .pp-wiz-num{font-size:1.5rem;font-weight:900;margin-bottom:2px}
+    .pp-wiz-name{font-size:.75rem;font-weight:600;color:#475569;line-height:1.2}
+    </style>
+    """
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+    # ── Cabecera: "Selecciona un valor:" ─────────────────────────────────────
+    st.markdown(
+        '<h2 style="color:#1e3a5f;margin-bottom:.3rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
+        '<p style="color:#1e3a5f;font-weight:700;font-size:1rem;margin-bottom:.4rem">'
+        '&#128073; Selecciona un valor:</p>',
+        unsafe_allow_html=True
+    )
+
+    # ── Selector igual que en Análisis Técnico ───────────────────────────────
+    def _on_mercado_pp_change():
+        """Al cambiar el índice en ¿Por dónde empiezo?, limpiar ticker y valor previos."""
+        st.session_state.pop("_pp_ticker", None)
+        st.session_state.pop("_pp_ready", None)
+        st.session_state.pop("_pp_valor_sel", None)
+        st.session_state.pop("_pp_ticker_input", None)
+        st.session_state["_pp_data"] = None
+        st.session_state["_pp_step"] = 1
+
+    # ── Sync AT → PP: si AT tiene un análisis activo y PP está vacío ────
+    _AT_MKT_OPTS = [
+        "✏️ Escribir manualmente",
+        "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+        "🌍 Eurostoxx 50",
+        "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+        "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+        "📊 ETFs UCITS",
+    ]
+    _at_mkt = st.session_state.get("mercado_sel", "")
+    _at_val = st.session_state.get("valor_mercado_sel", "")
+    _at_tik = (st.session_state.get("ticker_manual_input") or
+               st.session_state.get("ultimo_ticker", ""))
+    # Solo sincronizamos si PP no tiene un análisis propio en curso
+    if _at_tik and not st.session_state.get("_pp_ticker"):
+        if _at_mkt and _at_mkt in _AT_MKT_OPTS:
+            st.session_state["_pp_mercado_sel"] = _at_mkt
+            if _at_val:
+                st.session_state.setdefault("_pp_valor_sel", _at_val)
+        else:
+            st.session_state["_pp_mercado_sel"] = "✏️ Escribir manualmente"
+        st.session_state["_pp_ticker"] = _at_tik
+
+    _col1, _col2, _col4 = st.columns([2, 3, 1])
+    with _col1:
+        _mercado_pp = st.selectbox(
+            "🗂️ Índice / Mercado",
+            ["✏️ Escribir manualmente",
+             "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+             "🌍 Eurostoxx 50",
+             "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+             "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+             "📊 ETFs UCITS"],
+            key="_pp_mercado_sel",
+            on_change=_on_mercado_pp_change,
+            help="Selecciona un índice o escribe el ticker manualmente."
+        )
+    with _col2:
+        if _mercado_pp == "✏️ Escribir manualmente":
+            _ticker_in = st.text_input(
+                "🔎 Ticker",
+                value=st.session_state.get("_pp_ticker", st.session_state.get("ultimo_ticker", "")),
+                placeholder="Ejemplo: REP.MC, BBVA.MC, AAPL",
+                key="_pp_ticker_input",
+                help="Símbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=París · .L=Londres · .AS=Ámsterdam"
+            ).upper().strip()
+        elif _mercado_pp == "📊 ETFs UCITS":
+            _cat_c, _etf_c = st.columns([1, 2])
+            with _cat_c:
+                _cat_pp = st.selectbox("📂 Categoría", list(ETFS_UCITS.keys()), key="_pp_etf_cat")
+            with _etf_c:
+                _etfs_pp = ETFS_UCITS[_cat_pp]
+                _etf_nom = st.selectbox("🔎 ETF", list(_etfs_pp.keys()), key="_pp_etf_nom")
+                _ticker_in = _etfs_pp[_etf_nom]
+        else:
+            with st.spinner(f"Cargando {_mercado_pp}..."):
+                _tickers_pp = obtener_tickers_mercado(_mercado_pp)
+            if _tickers_pp:
+                _pp_vmk_opts  = list(_tickers_pp.keys())
+                _pp_vmk_saved = st.session_state.get("_pp_valor_sel", "")
+                if _pp_vmk_saved and _pp_vmk_saved not in _pp_vmk_opts:
+                    st.session_state["_pp_valor_sel"] = _pp_vmk_opts[0]
+                _nom_pp = st.selectbox(
+                    f"🔎 Valor — {_mercado_pp}", _pp_vmk_opts,
+                    key="_pp_valor_sel",
+                    help=f"Valores del {_mercado_pp}."
+                )
+                _ticker_in = _tickers_pp[_nom_pp]
+            else:
+                st.warning("No se pudieron cargar los tickers. Escribe el ticker manualmente.")
+                _ticker_in = st.text_input("🔎 Ticker", value="", key="_pp_ticker_fallback").upper().strip()
+    with _col4:
+        st.markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
+        _analizar = st.button("🔍 Analizar", type="primary", key="_pp_btn_analizar", use_container_width=True)
+
+    if _analizar and _ticker_in:
+        st.session_state["_pp_ticker"]    = _ticker_in
+        st.session_state["_pp_step"]      = 1
+        st.session_state["_pp_max_step"]  = 1
+        st.session_state["_pp_data"]      = None
+        st.session_state["_pp_ready"]     = True
+
+    st.markdown(
+        '<p style="color:#64748b;font-size:.88rem;margin:.5rem 0 .8rem">'
+        'Sigue estos 4 pasos para analizar cualquier valor de forma ordenada. '
+        'Cada paso explica <b>qu&#233; es</b> y <b>qu&#233; significa para ti</b>.</p>',
+        unsafe_allow_html=True
+    )
+
+    _ticker   = st.session_state.get("_pp_ticker", "")
+    _pp_ready = st.session_state.get("_pp_ready", False)
+
+    if not _ticker or not _pp_ready:
+        st.info("Selecciona un mercado y un valor, o escribe el ticker, y pulsa **Analizar**.")
+        st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
+        return
+
+    _pp_wizard_fragment()
 
 def pestaña_cartera():
     """Pestaña de gestión de carteras personales del usuario."""
