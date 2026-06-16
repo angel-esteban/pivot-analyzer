@@ -9626,18 +9626,18 @@ def pestana_principiante():
         st.success(f"&#9989; **Has completado el an&#225;lisis guiado de {nombre} ({d['ticker']})**")
         if st.button("&#128202; Ver an&#225;lisis t&#233;cnico completo", type="primary", key="_pp_btn_full"):
             st.session_state["ultimo_ticker"] = d["ticker"]
-            # Propagar selección de mercado/valor desde ¿Por dónde empiezo? a Análisis Técnico
+            # Usar claves _pending_* para evitar StreamlitAPIException:
+            # no se puede escribir en la clave de un widget ya renderizado en este run.
+            # _render_analisis() las lee y aplica ANTES de crear los widgets.
             _pp_mkt = st.session_state.get("_pp_mercado_sel", "✏️ Escribir manualmente")
             if _pp_mkt not in ("✏️ Escribir manualmente", "📊 ETFs UCITS"):
-                # Usuario eligió un índice → propagar mercado y nombre del valor
-                st.session_state["mercado_sel"]      = _pp_mkt
-                st.session_state["valor_mercado_sel"] = st.session_state.get("_pp_valor_sel", "")
-                # Limpiar entrada manual para evitar conflicto
-                st.session_state.pop("ticker_manual_input", None)
+                st.session_state["_pending_mercado"]      = _pp_mkt
+                st.session_state["_pending_valor"]        = st.session_state.get("_pp_valor_sel", "")
+                st.session_state.pop("_pending_ticker", None)
             else:
-                # Modo manual o ETF → pasar ticker directamente
-                st.session_state["mercado_sel"]         = "✏️ Escribir manualmente"
-                st.session_state["ticker_manual_input"] = d["ticker"]
+                st.session_state["_pending_mercado"]      = "✏️ Escribir manualmente"
+                st.session_state["_pending_ticker"]       = d["ticker"]
+                st.session_state.pop("_pending_valor", None)
             st.session_state["_pp_jump_to_analisis"] = True
             st.rerun()
 
@@ -10428,6 +10428,15 @@ def pantalla_analisis():
         st.session_state.pop("ticker_manual_input", None)
 
     def _render_analisis():
+        # Aplicar valores pendientes del salto desde ¿Por dónde empiezo?
+        # DEBE hacerse antes de renderizar cualquier widget para evitar StreamlitAPIException
+        if "_pending_mercado" in st.session_state:
+            st.session_state["mercado_sel"] = st.session_state.pop("_pending_mercado")
+        if "_pending_valor" in st.session_state:
+            st.session_state["valor_mercado_sel"] = st.session_state.pop("_pending_valor")
+        if "_pending_ticker" in st.session_state:
+            st.session_state["ticker_manual_input"] = st.session_state.pop("_pending_ticker")
+
         # Leer valores de sistema/tolerancia desde session_state (se renderizan más abajo)
         _sistema_default = st.session_state.get("sistema_sel_key", list(SISTEMAS_PIVOT.keys())[0])
         _tol_default      = st.session_state.get("tolerancia_key", 0.20)
