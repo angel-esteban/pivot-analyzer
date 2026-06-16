@@ -9650,85 +9650,81 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # CSS: botones-tarjeta para pasos hechos + botones integrados en activo
-    st.markdown("""<style>
-.pp-done-card button{background:#f0fdf4!important;border:2px solid #16a34a!important;
-  border-radius:10px!important;height:80px!important;color:#15803d!important;
-  font-weight:700!important;white-space:normal!important;line-height:1.3!important;
-  font-size:.85rem!important;}
-.pp-done-card button:hover{background:#dcfce7!important;}
-.pp-act-top{background:#eff6ff;border:2px solid #2563eb;border-radius:10px 10px 0 0;
-  padding:10px 8px 8px;text-align:center;margin-bottom:0}
-.pp-act-btns .stButton button{border-radius:0!important;border-top:none!important;
-  background:#dbeafe!important;border-color:#2563eb!important;color:#1e40af!important;
-  font-weight:600!important;}
-.pp-act-btns .stButton button[kind="primary"]{background:#2563eb!important;color:white!important;}
-.pp-act-btns{border:2px solid #2563eb;border-top:none;border-radius:0 0 10px 10px;
-  padding:4px;background:#eff6ff;}
-</style>""", unsafe_allow_html=True)
+    # CSS por nth-child: único enfoque fiable para estilizar botones por columna en Streamlit
+    _wiz_css = ['<style>']
+    for _ci in range(1, 5):
+        _ci_done = (_ci != _step and _ci <= _max_step)
+        _ci_pend = (_ci > _max_step)
+        _sel = (f'div[data-testid="stHorizontalBlock"]'
+                f' > div[data-testid="column"]:nth-child({_ci})'
+                f' > div > div .stButton > button')
+        if _ci_done:
+            _wiz_css.append(
+                f'{_sel}{{background:#f0fdf4!important;border:2px solid #16a34a!important;'
+                f'border-radius:10px!important;min-height:82px!important;height:auto!important;'
+                f'color:#15803d!important;font-weight:700!important;font-size:.82rem!important;'
+                f'white-space:pre-wrap!important;line-height:1.35!important;}}'
+            )
+            _wiz_css.append(
+                f'{_sel}:hover{{background:#dcfce7!important;border-color:#15803d!important;}}'
+            )
+        elif _ci_pend:
+            _wiz_css.append(
+                f'{_sel}{{background:#f8fafc!important;border:2px solid #e2e8f0!important;'
+                f'border-radius:10px!important;min-height:82px!important;height:auto!important;'
+                f'color:#94a3b8!important;font-weight:600!important;font-size:.82rem!important;'
+                f'white-space:pre-wrap!important;line-height:1.35!important;'
+                f'pointer-events:none!important;cursor:default!important;}}'
+            )
+    _wiz_css.append('</style>')
+    st.markdown(''.join(_wiz_css), unsafe_allow_html=True)
 
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
             _is_done   = (_wi != _step and _wi <= _max_step)
-            _is_pend   = (_wi > _max_step)
 
             if _is_done:
-                # Tarjeta verde clicable — implementada como botón estilizado
-                st.markdown('<div class="pp-done-card">', unsafe_allow_html=True)
-                if st.button(f"{_wico}  {_wnm}", key=f"_pp_goto_{_wi}",
-                             use_container_width=True):
-                    st.session_state["_pp_step"] = _wi
+                _lbl_done = _wico + '  ' + _wnm
+                if st.button(_lbl_done, key=f'_pp_goto_{_wi}', use_container_width=True):
+                    st.session_state['_pp_step'] = _wi
                     st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
 
             elif _is_active:
-                # Parte superior de la tarjeta activa (HTML)
+                # Tarjeta superior azul (sin badge ACTIVO)
                 st.markdown(
-                    f'<div class="pp-act-top">'
-                    f'<div style="font-size:1.4rem">{_wico}</div>'
-                    f'<div style="font-size:.78rem;font-weight:700;color:#2563eb;margin:3px 0">{_wnm}</div>'
-                    f'<span style="background:#2563eb;color:white;border-radius:10px;'
-                    f'font-size:.65rem;font-weight:700;padding:2px 7px">● ACTIVO</span>'
+                    f'<div style="background:#eff6ff;border:2px solid #2563eb;'
+                    f'border-radius:10px 10px 0 0;padding:12px 8px 10px;text-align:center">'
+                    f'<div style="font-size:1.5rem">{_wico}</div>'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#2563eb;margin:4px 0">{_wnm}</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
-                # Botones integrados (visual: parte inferior de la tarjeta)
-                st.markdown('<div class="pp-act-btns">', unsafe_allow_html=True)
+                # Botones en fila como extensión inferior de la tarjeta
                 _na, _nb = st.columns(2)
                 with _na:
                     if _wi > 1:
-                        if st.button("← Ant.", key="_pp_wiz_prev", use_container_width=True):
-                            st.session_state["_pp_step"] = _wi - 1
+                        if st.button('← Ant.', key='_pp_wiz_prev', use_container_width=True):
+                            st.session_state['_pp_step'] = _wi - 1
                             st.rerun()
-                    else:
-                        st.markdown("<div style='height:38px'></div>", unsafe_allow_html=True)
                 with _nb:
                     if _wi < 4:
-                        if st.button("Sig. →", key="_pp_wiz_next", type="primary",
+                        if st.button('Sig. →', key='_pp_wiz_next', type='primary',
                                      use_container_width=True):
-                            st.session_state["_pp_max_step"] = max(_max_step, _wi + 1)
-                            st.session_state["_pp_step"] = _wi + 1
+                            st.session_state['_pp_max_step'] = max(_max_step, _wi + 1)
+                            st.session_state['_pp_step'] = _wi + 1
                             st.rerun()
                     else:
-                        if st.button("📄 Informe", key="_pp_wiz_rep", type="primary",
+                        if st.button('📄 Informe', key='_pp_wiz_rep', type='primary',
                                      use_container_width=True):
-                            st.session_state["_pp_jump_to_analisis"] = True
+                            st.session_state['_pp_jump_to_analisis'] = True
                             st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
 
             else:  # pendiente
-                st.markdown(
-                    f'<div style="background:#f8fafc;border:2px solid #e2e8f0;'
-                    f'border-radius:10px;padding:10px 8px;text-align:center;'
-                    f'min-height:80px;display:flex;flex-direction:column;'
-                    f'align-items:center;justify-content:center">'
-                    f'<div style="font-size:1.4rem;opacity:.45">{_wico}</div>'
-                    f'<div style="font-size:.78rem;font-weight:600;color:#94a3b8;margin:3px 0">{_wnm}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
+                _lbl_pend = _wico + '  ' + _wnm
+                st.button(_lbl_pend, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
+
     st.markdown("<div style='margin-bottom:.6rem'></div>", unsafe_allow_html=True)
 
     # Cargar datos una vez por ticker
