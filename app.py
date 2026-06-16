@@ -9650,38 +9650,8 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # Anchor + CSS en un único bloque. Usa ~ (general sibling) para mayor robustez.
-    _wiz_base = ('div[data-testid="stMarkdown"]:has(#pp-wiz-anc)'
-                 ' ~ div[data-testid="stHorizontalBlock"]'
-                 ' > div[data-testid="column"]')
-    _nav_base  = ('div[data-testid="stMarkdown"]:has(#pp-nav-anc)'
-                  ' ~ div[data-testid="stHorizontalBlock"]'
-                  ' > div[data-testid="column"]')
-    _cmn = ('border-top:none!important;border-radius:0 0 8px 8px!important;'
-            'padding:3px 6px!important;font-size:.74rem!important;'
-            'min-height:26px!important;height:26px!important;font-weight:700!important;')
-    _wiz_parts = ['<span id="pp-wiz-anc" style="display:none"></span><style>']
-    for _ci in range(1, 5):
-        _sb = f'{_wiz_base}:nth-child({_ci}) .stButton > button'
-        _ci_done = (_ci != _step and _ci <= _max_step)
-        _ci_act  = (_ci == _step)
-        if _ci_done:
-            _wiz_parts.append(f'{_sb}{{{_cmn}background:#dcfce7!important;border:2px solid #16a34a!important;color:#15803d!important;}}')
-            _wiz_parts.append(f'{_sb}:hover{{background:#bbf7d0!important;}}')
-        elif _ci_act:
-            _wiz_parts.append(f'{_sb}{{{_cmn}background:#dbeafe!important;border:2px solid #2563eb!important;color:#1d4ed8!important;cursor:default!important;}}')
-        else:
-            _wiz_parts.append(f'{_sb}{{{_cmn}background:#f1f5f9!important;border:2px solid #e2e8f0!important;color:#94a3b8!important;cursor:default!important;}}')
-    # Botón "Anterior" (col 1 de la fila nav) — reborde azul
-    _wiz_parts.append(
-        f'{_nav_base}:nth-child(1) .stButton > button{{'
-        f'border:2px solid #2563eb!important;color:#2563eb!important;'
-        f'background:white!important;font-weight:600!important;}}'
-        f'{_nav_base}:nth-child(1) .stButton > button:hover{{'
-        f'background:#eff6ff!important;}}'
-    )
-    _wiz_parts.append('</style>')
-    st.markdown(''.join(_wiz_parts), unsafe_allow_html=True)
+    # Anchor CSS para marker de posición
+    st.markdown('<span id="pp-wiz-anc" style="display:none"></span>', unsafe_allow_html=True)
 
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
@@ -9716,7 +9686,66 @@ def pestana_principiante():
             else:
                 st.button(_paso_lbl, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
 
-    # Fila de navegación — anchor propio para CSS del botón Anterior
+    # JS vía components para estilizar botones Paso X y botón Anterior
+    _done_list = [i for i in range(1, 5) if i != _step and i <= _max_step]
+    _js_wiz = f'''<script>
+(function(){{
+  var done={_done_list};
+  var act={_step};
+  var tries=0;
+  function run(){{
+    tries++;
+    if(tries>40)return;
+    var doc=window.parent.document;
+    var anc=doc.getElementById('pp-wiz-anc');
+    if(!anc){{setTimeout(run,100);return;}}
+    var md=anc.closest('[data-testid="stMarkdown"]');
+    if(!md){{setTimeout(run,100);return;}}
+    var hb=md.nextElementSibling;
+    while(hb&&hb.getAttribute('data-testid')!=='stHorizontalBlock')hb=hb.nextElementSibling;
+    if(!hb){{setTimeout(run,100);return;}}
+    var cols=hb.querySelectorAll(':scope>[data-testid="column"]');
+    if(cols.length<4){{setTimeout(run,100);return;}}
+    var ok=true;
+    cols.forEach(function(col,i){{
+      var idx=i+1;
+      var btn=col.querySelector('.stButton>button');
+      if(!btn){{ok=false;return;}}
+      var base='border-top:none;border-radius:0 0 8px 8px;padding:3px 6px;font-size:.74rem;min-height:26px;height:26px;font-weight:700;width:100%;cursor:pointer;';
+      if(done.indexOf(idx)>=0){{
+        btn.setAttribute('style',base+'background:#dcfce7;border:2px solid #16a34a;color:#15803d;');
+      }}else if(idx===act){{
+        btn.setAttribute('style',base+'background:#dbeafe;border:2px solid #2563eb;color:#1d4ed8;cursor:default;');
+      }}else{{
+        btn.setAttribute('style',base+'background:#f1f5f9;border:2px solid #e2e8f0;color:#94a3b8;cursor:default;');
+      }}
+    }});
+    if(!ok)setTimeout(run,100);
+    // Botón Anterior: reborde azul
+    var navAnc=doc.getElementById('pp-nav-anc');
+    if(navAnc){{
+      var navMd=navAnc.closest('[data-testid="stMarkdown"]');
+      if(navMd){{
+        var navHb=navMd.nextElementSibling;
+        while(navHb&&navHb.getAttribute('data-testid')!=='stHorizontalBlock')navHb=navHb.nextElementSibling;
+        if(navHb){{
+          var navCol=navHb.querySelector(':scope>[data-testid="column"]');
+          if(navCol){{
+            var prevBtn=navCol.querySelector('.stButton>button');
+            if(prevBtn&&!prevBtn.disabled)prevBtn.setAttribute('style','border:2px solid #2563eb;color:#2563eb;background:white;font-weight:600;border-radius:8px;padding:6px 12px;width:100%;');
+          }}
+        }}
+      }}
+    }}
+  }}
+  setTimeout(run,80);
+  setTimeout(run,250);
+  setTimeout(run,600);
+}})();
+</script>'''
+    _st_components.html(_js_wiz, height=0)
+
+    # Navegación
     st.markdown('<span id="pp-nav-anc" style="display:none"></span>', unsafe_allow_html=True)
     st.markdown('<div style="margin-top:10px"></div>', unsafe_allow_html=True)
     _nav_l, _nav_c, _nav_r = st.columns([1, 2, 1])
