@@ -4515,71 +4515,157 @@ def pestaña_macro():
     fig_fx = _macro_chart(h_fx, unidad="", fecha_inicio=_fecha_ini)
     st.plotly_chart(fig_fx, use_container_width=True, config={"displayModeBar": False})
 
-    # ── COMMODITIES ──────────────────────────────────────────────────────────
-    st.markdown("#### 🛢️ Commodities")
-    tickers_comm = {
-        "Oro (USD/oz)":      ("GC=F",
-                              "Oro en futuros (USD/oz troy). Refugio clásico: sube con incertidumbre, "
-                              "dólar débil e inflación."),
-        "Brent (USD/b)":     ("BZ=F",
-                              "Petróleo Brent en futuros (USD/barril). Referencia europea del crudo."),
-        "WTI (USD/b)":       ("CL=F",
-                              "West Texas Intermediate, referencia EEUU. Cotiza con descuento vs Brent."),
-        "Gas Natural (USD)": ("NG=F",
-                              "Gas Natural Henry Hub (USD/MMBTU). Alta correlación con precios "
-                              "energéticos europeos desde el shock 2021-22."),
+    # ── METALES PRECIOSOS ────────────────────────────────────────────────────
+    st.markdown("#### 🥇 Metales preciosos")
+    _tickers_metales = {
+        "Oro (USD/oz)":   ("GC=F",
+                           "Oro en futuros (USD/oz troy). Refugio clásico: sube con incertidumbre, "
+                           "dólar débil e inflación. Históricamente inverso al dólar y a tipos reales."),
+        "Plata (USD/oz)": ("SI=F",
+                           "Plata en futuros (USD/oz). Doble función: refugio de valor y metal industrial. "
+                           "Mayor volatilidad que el oro; ratio Oro/Plata como indicador de ciclo."),
+        "Cobre (USD/lb)": ("HG=F",
+                           "Cobre en futuros (USD/lb). 'Doctor Cobre': indicador adelantado del ciclo "
+                           "industrial global. Cae antes de recesiones, sube antes de expansiones."),
+        "Platino (USD/oz)":("PL=F",
+                            "Platino en futuros (USD/oz). Metal industrial y de inversión. "
+                            "Muy ligado a la industria del automóvil (catalizadores)."),
     }
-    cols_comm = st.columns(4)
-    for i, (nombre, (tkr, tooltip)) in enumerate(tickers_comm.items()):
-        precio, delta = obtener_precio_macro(tkr)
-        with cols_comm[i]:
-            st.metric(nombre, f"{precio:.2f}" if precio else "—",
-                      delta=f"{delta:+.2f}%" if delta else None, help=tooltip)
-
-    # Gráfico histórico — Commodities
-    with st.spinner("Cargando histórico commodities..."):
-        h_comm = {n: obtener_historico_yf(tkr, _yf_period)
-                  for n, (tkr, _) in tickers_comm.items()}
-    fig_comm = _macro_chart(h_comm, unidad=" USD", fecha_inicio=_fecha_ini)
-    st.plotly_chart(fig_comm, use_container_width=True, config={"displayModeBar": False})
+    _cols_met = st.columns(4)
+    for _i, (_nom, (_tkr, _tip)) in enumerate(_tickers_metales.items()):
+        _pm, _pd = obtener_precio_macro(_tkr)
+        with _cols_met[_i]:
+            st.metric(_nom, f"{_pm:.2f}" if _pm else "—",
+                      delta=f"{_pd:+.2f}%" if _pd else None, help=_tip)
+    with st.spinner("Cargando histórico metales..."):
+        _h_metales = {n: obtener_historico_yf(tkr, _yf_period)
+                      for n, (tkr, _) in _tickers_metales.items()}
+    # Normalizar a base 100 para comparar escalas distintas (oz vs lb)
+    import pandas as _pd_mod
+    _h_met_norm = {}
+    for _nm, _hdf in _h_metales.items():
+        if _hdf is not None and not _hdf.empty:
+            _base = float(_hdf["Close"].dropna().iloc[0])
+            if _base:
+                _hdf2 = _hdf.copy()
+                _hdf2["Close"] = _hdf2["Close"] / _base * 100
+                _h_met_norm[_nm] = _hdf2
+    if _h_met_norm:
+        _fig_met = _macro_chart(_h_met_norm, unidad=" (base 100)", fecha_inicio=_fecha_ini)
+        st.plotly_chart(_fig_met, use_container_width=True, config={"displayModeBar": False})
+        st.caption("Gráfico normalizado a base 100 desde el inicio del período — muestra rendimiento relativo, no precios absolutos.")
 
     st.divider()
 
-    # ── PETRÓLEO ─────────────────────────────────────────────────────────────
-    st.markdown("#### 🛢️ Petróleo — Brent vs WTI")
-    _col_b, _col_w, _col_spread, _col_ng = st.columns(4)
+    # ── ENERGÍA ───────────────────────────────────────────────────────────────
+    st.markdown("#### ⚡ Energía — Petróleo y Gas")
     _brent_p, _brent_d = obtener_precio_macro("BZ=F")
     _wti_p,   _wti_d   = obtener_precio_macro("CL=F")
     _ng_p,    _ng_d    = obtener_precio_macro("NG=F")
+    _heat_p,  _heat_d  = obtener_precio_macro("HO=F")   # Heating Oil
+    _col_b, _col_w, _col_spread, _col_ng = st.columns(4)
     with _col_b:
         st.metric("Brent (USD/b)", f"{_brent_p:.2f}" if _brent_p else "—",
-                  delta=f"{_brent_d:+.2f}% (día)" if _brent_d else None,
+                  delta=f"{_brent_d:+.2f}%" if _brent_d else None,
                   help="Petróleo Brent futuros. Referencia europea y global del crudo.")
     with _col_w:
         st.metric("WTI (USD/b)", f"{_wti_p:.2f}" if _wti_p else "—",
-                  delta=f"{_wti_d:+.2f}% (día)" if _wti_d else None,
+                  delta=f"{_wti_d:+.2f}%" if _wti_d else None,
                   help="West Texas Intermediate. Referencia EEUU. Suele cotizar con descuento vs Brent.")
     with _col_spread:
         if _brent_p and _wti_p:
-            st.metric("Spread Brent-WTI", f"{(_brent_p - _wti_p):.2f} USD",
-                      help="Diferencial Brent menos WTI. Históricamente 0-5 USD positivo.")
+            _spread_val = _brent_p - _wti_p
+            st.metric("Spread Brent-WTI", f"{_spread_val:.2f} USD",
+                      help="Diferencial Brent menos WTI. Históricamente 0-5 USD positivo. "
+                           "Ampliación indica tensión logística o calidad diferencial.")
         else:
             st.metric("Spread Brent-WTI", "—")
     with _col_ng:
-        st.metric("Gas Natural (USD)", f"{_ng_p:.3f}" if _ng_p else "—",
-                  delta=f"{_ng_d:+.2f}% (día)" if _ng_d else None,
-                  help="Gas Natural Henry Hub (USD/MMBTU).")
-    with st.spinner("Cargando histórico Petróleo..."):
+        st.metric("Gas Natural (USD/MMBTU)", f"{_ng_p:.3f}" if _ng_p else "—",
+                  delta=f"{_ng_d:+.2f}%" if _ng_d else None,
+                  help="Gas Natural Henry Hub (USD/MMBTU). Alta correlación con precios "
+                       "energéticos europeos desde el shock 2021-22.")
+    # Gráfico interactivo con doble eje Y y selector de series
+    with st.spinner("Cargando histórico energía..."):
         _h_brent = obtener_historico_yf("BZ=F", _yf_period)
         _h_wti   = obtener_historico_yf("CL=F", _yf_period)
         _h_ng    = obtener_historico_yf("NG=F", _yf_period)
-    _fig_oil = _macro_chart({"Brent (USD/b)": _h_brent, "WTI (USD/b)": _h_wti},
-                            unidad=" USD/b", fecha_inicio=_fecha_ini, height=250)
-    st.plotly_chart(_fig_oil, use_container_width=True, config={"displayModeBar": False})
-    st.caption("Gas Natural Henry Hub (USD/MMBTU)")
-    _fig_ng = _macro_chart({"Gas Natural": _h_ng}, unidad=" USD", fecha_inicio=_fecha_ini, height=180)
-    _fig_ng.update_traces(line_color="#f59e0b")
-    st.plotly_chart(_fig_ng, use_container_width=True, config={"displayModeBar": False})
+
+    _series_energia = {
+        "Brent (USD/b)":           (_h_brent, "y1", "#2563eb"),
+        "WTI (USD/b)":             (_h_wti,   "y1", "#16a34a"),
+        "Gas Natural (USD/MMBTU)": (_h_ng,    "y2", "#f59e0b"),
+    }
+    _sel_energia = st.multiselect(
+        "Series a mostrar",
+        list(_series_energia.keys()),
+        default=["Brent (USD/b)", "WTI (USD/b)"],
+        key="_macro_energia_sel",
+        help="Brent y WTI comparten eje izquierdo (USD/b). Gas Natural usa eje derecho (USD/MMBTU)."
+    )
+
+    import plotly.graph_objects as _go_en
+    _fig_en = _go_en.Figure()
+    _has_y1 = any(_series_energia[s][1] == "y1" for s in _sel_energia)
+    _has_y2 = any(_series_energia[s][1] == "y2" for s in _sel_energia)
+
+    for _sname in _sel_energia:
+        _hdf, _yaxis, _color = _series_energia[_sname]
+        if _hdf is None or (hasattr(_hdf, "empty") and _hdf.empty):
+            continue
+        _hdf2 = _hdf.copy()
+        if hasattr(_hdf2.index, "tz") and _hdf2.index.tz is not None:
+            _hdf2.index = _hdf2.index.tz_localize(None)
+        if _fecha_ini is not None:
+            _fi2 = _fecha_ini.tz_localize(None) if hasattr(_fecha_ini, "tz") and _fecha_ini.tz else _fecha_ini
+            _hdf2 = _hdf2[_hdf2.index >= _fi2]
+        if _hdf2.empty:
+            continue
+        _unit = " USD/b" if _yaxis == "y1" else " USD/MMBTU"
+        _fig_en.add_trace(_go_en.Scatter(
+            x=_hdf2.index, y=_hdf2["Close"].values,
+            mode="lines", name=_sname,
+            line=dict(color=_color, width=2),
+            yaxis=_yaxis,
+            hovertemplate=f"<b>{_sname}</b><br>%{{x|%b %Y}}: %{{y:.2f}}{_unit}<extra></extra>"
+        ))
+
+    _yaxis1_cfg = dict(
+        title=dict(text="USD / barril", font=dict(size=11, color="#64748b")),
+        showgrid=True, gridcolor="#f1f5f9",
+        tickfont=dict(size=11), ticksuffix=" $",
+        visible=_has_y1,
+    )
+    _yaxis2_cfg = dict(
+        title=dict(text="USD / MMBTU", font=dict(size=11, color="#f59e0b")),
+        overlaying="y", side="right",
+        showgrid=False,
+        tickfont=dict(size=11, color="#f59e0b"),
+        ticksuffix=" $",
+        visible=_has_y2,
+    )
+    _fig_en.update_layout(
+        height=300,
+        margin=dict(l=0, r=10, t=10, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, font=dict(size=11)),
+        hovermode="x unified",
+        plot_bgcolor="white", paper_bgcolor="white",
+        xaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                   tickformat="%b %Y", tickfont=dict(size=11)),
+        yaxis=_yaxis1_cfg,
+        yaxis2=_yaxis2_cfg,
+    )
+    if not _sel_energia:
+        st.info("Selecciona al menos una serie para mostrar el gráfico.")
+    else:
+        st.plotly_chart(_fig_en, use_container_width=True, config={"displayModeBar": False})
+        if _has_y1 and _has_y2:
+            st.caption("Eje izquierdo: Brent / WTI (USD/b) · Eje derecho: Gas Natural (USD/MMBTU)")
+        elif _has_y1:
+            st.caption("Brent vs WTI — misma escala (USD/barril). Spread histórico: 1-5 USD.")
+        else:
+            st.caption("Gas Natural Henry Hub (USD/MMBTU).")
 
     st.divider()
 
