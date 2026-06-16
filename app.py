@@ -6226,14 +6226,94 @@ tr:nth-child(even) td { background:#f8fafc; }
                 '<p style="font-size:10px;color:#94a3b8;margin-top:4px">'
                 'Ordenado por TER. &#11088; = ETF analizado.</p>'
             )
+        # Ficha enriquecida desde etf_universe.json
+        _eu = ETF_UNIVERSE.get("etfs", {}).get(ticker, {})
+        _eu_html = ""
+        if _eu:
+            _rep_map  = {"fisica_completa": ("Física completa","#166534"),
+                         "fisica_muestreo": ("Física (muestreo)","#16a34a"),
+                         "sintetica_swap":  ("Sintética (swap)","#b45309")}
+            _rep_txt, _rep_col = _rep_map.get(_eu.get("replica",""), (_eu.get("replica","—"),"#64748b"))
+            _dist_c = "#166534" if _eu.get("politica_dividendos") == "acumulacion" else "#1d4ed8"
+            _dist_t = "Acumulación" if _eu.get("politica_dividendos") == "acumulacion" else "Distribución"
+            _srri   = _eu.get("srri")
+            _srri_b = ("&#9632;" * _srri + "&#9633;" * (7 - _srri)) if _srri else "—"
+            _pat    = _eu.get("patrimonio_meur_aprox")
+            _pos    = _eu.get("num_posiciones_aprox")
+            _cob    = _eu.get("cobertura_divisa") or ""
+            # Geo + sector bars
+            def _bar_rows(d, bg):
+                rows = ""
+                for k, v in list(d.items())[:5]:
+                    w = min(int(v*1.5), 150)
+                    rows += (f'<tr><td style="font-size:10px;color:#334155;padding:1px 6px 1px 0;'
+                             f'min-width:120px;white-space:nowrap">{k}</td>'
+                             f'<td><div style="background:{bg};border-radius:3px;height:8px;width:{w}px;'
+                             f'display:inline-block"></div></td>'
+                             f'<td style="font-size:10px;font-weight:700;color:#334155;padding-left:4px">{v}%</td></tr>')
+                return rows
+            _geo_rows = _bar_rows(_eu.get("exposicion_geografica_top", {}), "#bfdbfe")
+            _sec_rows = _bar_rows(_eu.get("exposicion_sectorial_top", {}),  "#bbf7d0")
+            _eu_html = (
+                '<table style="width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:11px">'
+                '<thead><tr style="background:#1e3a5f;color:white">'
+                '<th style="padding:4px 8px;text-align:left;width:25%">Campo</th>'
+                '<th style="padding:4px 8px;text-align:left;width:25%">Valor</th>'
+                '<th style="padding:4px 8px;text-align:left;width:25%">Campo</th>'
+                '<th style="padding:4px 8px;text-align:left;width:25%">Valor</th>'
+                '</tr></thead><tbody>'
+                f'<tr style="background:#f8fafc"><td style="padding:3px 8px;color:#64748b">Gestora</td>'
+                f'<td style="padding:3px 8px;font-weight:600">{_eu.get("gestora","—")}</td>'
+                f'<td style="padding:3px 8px;color:#64748b">ISIN</td>'
+                f'<td style="padding:3px 8px;font-family:monospace">{_eu.get("isin","—")}</td></tr>'
+                f'<tr><td style="padding:3px 8px;color:#64748b">&Iacute;ndice</td>'
+                f'<td style="padding:3px 8px;font-weight:600" colspan="3">{_eu.get("indice_replicado","—")}</td></tr>'
+                f'<tr style="background:#f8fafc"><td style="padding:3px 8px;color:#64748b">TER</td>'
+                f'<td style="padding:3px 8px;font-weight:700;color:#1e3a5f">{_eu.get("ter_pct","—"):.2f}%</td>'
+                f'<td style="padding:3px 8px;color:#64748b">R&eacute;plica</td>'
+                f'<td style="padding:3px 8px;font-weight:600;color:{_rep_col}">{_rep_txt}</td></tr>'
+                f'<tr><td style="padding:3px 8px;color:#64748b">Pol&iacute;tica</td>'
+                f'<td style="padding:3px 8px;font-weight:600;color:{_dist_c}">{_dist_t}</td>'
+                f'<td style="padding:3px 8px;color:#64748b">Divisa</td>'
+                f'<td style="padding:3px 8px">{_eu.get("divisa_base","—")}{"&nbsp;· cob. " + _cob if _cob else ""}</td></tr>'
+                f'<tr style="background:#f8fafc"><td style="padding:3px 8px;color:#64748b">Posiciones</td>'
+                f'<td style="padding:3px 8px">~{_pos:,}' if _pos else f'<td style="padding:3px 8px">—'
+                f'</td><td style="padding:3px 8px;color:#64748b">AUM aprox.</td>'
+                f'<td style="padding:3px 8px">~{_pat:,}&nbsp;M€</td></tr>' if _pat else
+                f'<td style="padding:3px 8px;color:#64748b">AUM aprox.</td><td style="padding:3px 8px">—</td></tr>'
+                f'<tr><td style="padding:3px 8px;color:#64748b">Riesgo SRRI</td>'
+                f'<td style="padding:3px 8px;font-family:monospace">{_srri_b}&nbsp;({_srri}/7)</td>'
+                f'<td></td><td></td></tr>'
+                '</tbody></table>'
+            )
+            # Geo + sector en 2 columnas
+            if _geo_rows or _sec_rows:
+                _eu_html += (
+                    '<table style="width:100%;border-collapse:collapse;margin:6px 0"><tbody><tr valign="top">'
+                    f'<td style="width:50%;padding-right:12px">'
+                    f'<div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:4px">🌍 Exposición geográfica</div>'
+                    f'<table><tbody>{_geo_rows}</tbody></table></td>'
+                    f'<td style="width:50%">'
+                    f'<div style="font-size:11px;font-weight:700;color:#1e293b;margin-bottom:4px">📊 Exposición sectorial</div>'
+                    f'<table><tbody>{_sec_rows}</tbody></table></td>'
+                    '</tr></tbody></table>'
+                )
+            # Descripción
+            _desc = _eu.get("descripcion","")
+            _nota = _eu.get("nota_fiscal_es","")
+            if _desc:
+                _eu_html += (f'<div style="background:#f1f5f9;border-left:3px solid #6366f1;'
+                             f'padding:8px 10px;font-size:11px;color:#334155;margin:6px 0;border-radius:3px">'
+                             f'{_desc}</div>')
+            if _nota:
+                _eu_html += (f'<div style="background:#fefce8;border-left:3px solid #ca8a04;'
+                             f'padding:8px 10px;font-size:11px;color:#713f12;margin:4px 0;border-radius:3px">'
+                             f'&#127963; <strong>Nota fiscal (España):</strong> {_nota}</div>')
+
         fund_section = (
             '<div class="card">'
-            '<h2>&#128203; Datos Fundamentales</h2>'
-            '<p style="color:#64748b;font-size:0.9rem;margin:6px 0 8px">'
-            '&#9888; <strong>No aplica</strong> &mdash; Los ETFs no tienen an&aacute;lisis fundamental propio '
-            '(PER, BPA, capitalizaci&oacute;n, etc.). '
-            'Eval&uacute;a el ETF por su &iacute;ndice replicado, TER, AUM y tracking error.'
-            '</p>'
+            '<h2>&#128203; Ficha ETF</h2>'
+            + _eu_html
             + _comp_table_html +
             '</div>'
         )
@@ -8286,13 +8366,117 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Paragraph(_strip(_sv_t), _p(fontSize=7.5, textColor=_sv_c)))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
-    _pdf_sh("🏦 Datos Fundamentales", historia)
+    _pdf_sh("🏦 Ficha ETF", historia)
     if tipo_activo == "etf":
-        historia.append(Paragraph(
-            "No aplica — Los ETFs no tienen análisis fundamental propio (PER, BPA, capitalización, etc.). "
-            "Evalúa el ETF por su índice replicado, TER, AUM y tracking error.",
-            _p(fontSize=8, textColor=colors.HexColor("#64748b"))
-        ))
+        # ── Datos desde etf_universe.json ─────────────────────────────
+        _eu_pdf = ETF_UNIVERSE.get("etfs", {}).get(ticker, {})
+        if _eu_pdf:
+            _rep_map_pdf = {"fisica_completa": "Física completa",
+                            "fisica_muestreo": "Física (muestreo)",
+                            "sintetica_swap":  "Sintética (swap)"}
+            _rep_p  = _rep_map_pdf.get(_eu_pdf.get("replica",""), _eu_pdf.get("replica","—"))
+            _dist_p = "Acumulación" if _eu_pdf.get("politica_dividendos") == "acumulacion" else "Distribución"
+            _srri_p = _eu_pdf.get("srri")
+            _pat_p  = _eu_pdf.get("patrimonio_meur_aprox")
+            _pos_p  = _eu_pdf.get("num_posiciones_aprox")
+            _cob_p  = _eu_pdf.get("cobertura_divisa") or ""
+            _C1 = colors.HexColor("#1e3a5f")
+            _BG = colors.HexColor("#f8fafc")
+            _meta_rows_pdf = [
+                [Paragraph("Campo", _p(7, colors.white, "Helvetica-Bold")),
+                 Paragraph("Valor", _p(7, colors.white, "Helvetica-Bold")),
+                 Paragraph("Campo", _p(7, colors.white, "Helvetica-Bold")),
+                 Paragraph("Valor", _p(7, colors.white, "Helvetica-Bold"))],
+                [Paragraph("Gestora",  _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_eu_pdf.get("gestora","—"), _p(7, fontName="Helvetica-Bold")),
+                 Paragraph("ISIN",     _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_eu_pdf.get("isin","—"),    _p(7))],
+                [Paragraph("Índice",   _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_eu_pdf.get("indice_replicado","—"), _p(7, fontName="Helvetica-Bold")),
+                 Paragraph("", _p(7)), Paragraph("", _p(7))],
+                [Paragraph("TER",      _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(f"{_eu_pdf.get('ter_pct',0):.2f}%", _p(7, fontName="Helvetica-Bold")),
+                 Paragraph("Réplica",  _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_rep_p,     _p(7, fontName="Helvetica-Bold"))],
+                [Paragraph("Política", _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_dist_p,    _p(7, fontName="Helvetica-Bold")),
+                 Paragraph("Divisa",   _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(_eu_pdf.get("divisa_base","—") + (" · cob. " + _cob_p if _cob_p else ""), _p(7))],
+                [Paragraph("Posiciones", _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(f"~{_pos_p:,}" if _pos_p else "—", _p(7)),
+                 Paragraph("AUM aprox.", _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(f"~{_pat_p:,} M€" if _pat_p else "—", _p(7))],
+                [Paragraph("SRRI",     _p(7, colors.HexColor("#64748b"))),
+                 Paragraph(f"{_srri_p}/7" if _srri_p else "—", _p(7, fontName="Helvetica-Bold")),
+                 Paragraph("", _p(7)), Paragraph("", _p(7))],
+            ]
+            _t_meta = Table(_meta_rows_pdf, colWidths=[2.8*cm, 5.8*cm, 2.8*cm, 6.6*cm])
+            _t_meta.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0), (-1,0), _C1),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.HexColor("#f8fafc"), colors.white]),
+                ("GRID",          (0,0), (-1,-1), 0.2, colors.HexColor("#e2e8f0")),
+                ("TOPPADDING",    (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("LEFTPADDING",   (0,0), (-1,-1), 4),
+                ("SPAN",          (1,2), (3,2)),   # índice ocupa 3 celdas
+            ]))
+            historia.append(_t_meta)
+            historia.append(Spacer(1, 0.2*cm))
+            # Geo + sector side by side
+            _geo_pdf = _eu_pdf.get("exposicion_geografica_top", {})
+            _sec_pdf = _eu_pdf.get("exposicion_sectorial_top",  {})
+            if _geo_pdf or _sec_pdf:
+                def _geo_tbl(d):
+                    rows = [[Paragraph("País/Región", _p(6.5, colors.HexColor("#64748b"))),
+                             Paragraph("%", _p(6.5, colors.HexColor("#64748b")))]]
+                    for k, v in list(d.items())[:5]:
+                        rows.append([Paragraph(k, _p(6.5)),
+                                     Paragraph(f"{v}%", _p(6.5, fontName="Helvetica-Bold"))])
+                    t = Table(rows, colWidths=[3.5*cm, 1.3*cm])
+                    t.setStyle(TableStyle([
+                        ("ROWBACKGROUNDS",(0,0),(-1,-1),[colors.HexColor("#eff6ff"), colors.white]),
+                        ("GRID",(0,0),(-1,-1),0.2,colors.HexColor("#dbeafe")),
+                        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+                        ("LEFTPADDING",(0,0),(-1,-1),3),
+                    ]))
+                    return t
+                def _sec_tbl(d):
+                    rows = [[Paragraph("Sector", _p(6.5, colors.HexColor("#64748b"))),
+                             Paragraph("%", _p(6.5, colors.HexColor("#64748b")))]]
+                    for k, v in list(d.items())[:5]:
+                        rows.append([Paragraph(k[:28], _p(6.5)),
+                                     Paragraph(f"{v}%", _p(6.5, fontName="Helvetica-Bold"))])
+                    t = Table(rows, colWidths=[4.2*cm, 1.3*cm])
+                    t.setStyle(TableStyle([
+                        ("ROWBACKGROUNDS",(0,0),(-1,-1),[colors.HexColor("#f0fdf4"), colors.white]),
+                        ("GRID",(0,0),(-1,-1),0.2,colors.HexColor("#bbf7d0")),
+                        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+                        ("LEFTPADDING",(0,0),(-1,-1),3),
+                    ]))
+                    return t
+                _side = Table([[_geo_tbl(_geo_pdf), _sec_tbl(_sec_pdf)]],
+                              colWidths=[5.5*cm, 6.5*cm])
+                _side.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
+                                           ("LEFTPADDING",(0,0),(-1,-1),0),
+                                           ("RIGHTPADDING",(0,0),(-1,-1),6)]))
+                historia.append(_side)
+                historia.append(Spacer(1, 0.15*cm))
+            # Descripción y nota fiscal
+            _desc_p = _eu_pdf.get("descripcion","")
+            _nota_p = _eu_pdf.get("nota_fiscal_es","")
+            if _desc_p:
+                historia.append(Paragraph(_desc_p,
+                    _p(fontSize=7.5, textColor=colors.HexColor("#334155"))))
+                historia.append(Spacer(1, 0.1*cm))
+            if _nota_p:
+                historia.append(Paragraph(f"🏛️ Nota fiscal (España): {_nota_p}",
+                    _p(fontSize=7.5, textColor=colors.HexColor("#713f12"))))
+                historia.append(Spacer(1, 0.15*cm))
+        else:
+            historia.append(Paragraph(
+                "Evalúa el ETF por su índice replicado, TER, AUM y tracking error.",
+                _p(fontSize=8, textColor=colors.HexColor("#64748b"))
+            ))
         _cat_etf_pdf = _ETFS_CATEGORIA.get(ticker)
         _comp_pdf = obtener_comparativa_etf(_cat_etf_pdf, ticker) if _cat_etf_pdf else []
         if _comp_pdf:
