@@ -45,6 +45,20 @@ def _load_sector_knowledge() -> dict:
 
 SECTOR_KNOWLEDGE = _load_sector_knowledge()
 
+def _load_json_kb(filename: str) -> dict:
+    """Carga un JSON de conocimiento desde la carpeta de la app."""
+    try:
+        _base = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
+        _fp = _os_mod.path.join(_base, filename)
+        with open(_fp, 'r', encoding='utf-8') as _f:
+            return _json_mod.load(_f)
+    except Exception:
+        return {}
+
+MACRO_KNOWLEDGE  = _load_json_kb('macro_indicators.json')
+CRISIS_PATTERNS  = _load_json_kb('crisis_patterns.json')
+GLOSARIO_KB      = _load_json_kb('glosario.json')
+
 # Technical indicators — pandas_ta con fallback manual
 try:
     import pandas_ta as ta
@@ -4564,6 +4578,177 @@ def pestaña_macro():
     fig_vix.add_hline(y=15, line_dash="dot", line_color="#16a34a",
                       annotation_text="Complacencia (15)", annotation_position="right")
     st.plotly_chart(fig_vix, use_container_width=True, config={"displayModeBar": False})
+
+
+    st.markdown("---")
+    # ── GUÍA DE INDICADORES ─────────────────────────────────────────────────
+    with st.expander("📚 Guía de Indicadores Macro — Umbrales y señales de alarma", expanded=False):
+        _mk_ind = MACRO_KNOWLEDGE.get("indicadores", {})
+        if _mk_ind:
+            _cats = MACRO_KNOWLEDGE.get("categorias", {})
+            for _cat_key, _cat_info in _cats.items():
+                _cat_ids = _cat_info.get("indicadores", [])
+                _cat_inds = [(_iid, _mk_ind[_iid]) for _iid in _cat_ids if _iid in _mk_ind]
+                if not _cat_inds:
+                    continue
+                st.markdown(
+                    f'<div style="font-size:.9rem;font-weight:700;color:#1e3a5f;'
+                    f'margin:1rem 0 .4rem;border-bottom:2px solid #e2e8f0;padding-bottom:4px">'
+                    f'{_cat_info.get("emoji","")} {_cat_info.get("nombre","")}</div>',
+                    unsafe_allow_html=True
+                )
+                for _iid, _ind in _cat_inds:
+                    with st.expander(
+                        f'{_ind.get("emoji","")} {_ind.get("nombre", _iid)}', expanded=False
+                    ):
+                        st.markdown(
+                            f'<p style="font-size:.86rem;color:#334155;margin:.2rem 0 .6rem">'
+                            f'{_ind.get("descripcion","")}</p>',
+                            unsafe_allow_html=True
+                        )
+                        # Umbrales
+                        _umbrales = _ind.get("umbrales", {})
+                        if _umbrales:
+                            _COLOR_MAP = {
+                                "verde": ("#f0fdf4", "#16a34a"),
+                                "amarillo": ("#fefce8", "#ca8a04"),
+                                "naranja": ("#fff7ed", "#ea580c"),
+                                "rojo": ("#fef2f2", "#dc2626"),
+                            }
+                            st.markdown(
+                                '<div style="font-size:.8rem;font-weight:700;color:#475569;margin:.3rem 0">Umbrales:</div>',
+                                unsafe_allow_html=True
+                            )
+                            for _uk, _uv in _umbrales.items():
+                                _clr = _uv.get("color", "amarillo")
+                                _bg, _border = _COLOR_MAP.get(_clr, ("#f8fafc", "#94a3b8"))
+                                st.markdown(
+                                    f'<div style="background:{_bg};border-left:3px solid {_border};'
+                                    f'padding:.4rem .7rem;border-radius:0 6px 6px 0;margin:3px 0;font-size:.82rem">'
+                                    f'<b style="color:{_border}">{_uv.get("rango","")}</b> — '
+                                    f'{_uv.get("descripcion","")}</div>',
+                                    unsafe_allow_html=True
+                                )
+                        # Señales de alarma
+                        _alarmas = _ind.get("señales_alarma", [])
+                        if _alarmas:
+                            st.markdown(
+                                '<div style="font-size:.8rem;font-weight:700;color:#991b1b;margin:.5rem 0 .2rem">'
+                                '⚠️ Señales de alarma:</div>',
+                                unsafe_allow_html=True
+                            )
+                            for _al in _alarmas:
+                                st.markdown(
+                                    f'<div style="font-size:.81rem;color:#7f1d1d;'
+                                    f'padding:2px 0 2px .8rem;border-left:2px solid #fca5a5">{_al}</div>',
+                                    unsafe_allow_html=True
+                                )
+                        # Historia de referencia
+                        _hist_ref = _ind.get("historia_referencia", {})
+                        if _hist_ref:
+                            st.markdown(
+                                '<div style="font-size:.8rem;font-weight:700;color:#475569;margin:.5rem 0 .2rem">'
+                                '📖 Referencias históricas:</div>',
+                                unsafe_allow_html=True
+                            )
+                            for _hk, _hv in _hist_ref.items():
+                                st.markdown(
+                                    f'<div style="font-size:.81rem;color:#334155;'
+                                    f'padding:2px 0 2px .8rem;border-left:2px solid #bfdbfe">'
+                                    f'<b>{_hk.replace("_"," ").title()}:</b> {_hv}</div>',
+                                    unsafe_allow_html=True
+                                )
+        else:
+            st.info("No se pudo cargar macro_indicators.json")
+
+    # ── MEMORIA DE CRISIS ────────────────────────────────────────────────────
+    with st.expander("📉 Memoria de Crisis — Episodios históricos 1979–2023", expanded=False):
+        _cp = CRISIS_PATTERNS.get("crisis", {})
+        if _cp:
+            st.markdown(
+                '<p style="font-size:.86rem;color:#475569;margin-bottom:.8rem">'
+                'Base de conocimiento PRISMA-IB. Cada crisis incluye analogías y disanalogías '
+                'explícitas — el patrón que comparte con otras y lo que la hace única.</p>',
+                unsafe_allow_html=True
+            )
+            for _cid, _crisis in _cp.items():
+                _grav = _crisis.get("gravedad", 5)
+                _gcol = "#dc2626" if _grav >= 9 else ("#ea580c" if _grav >= 7 else "#ca8a04")
+                with st.expander(
+                    f'{_crisis.get("emoji","")} {_crisis.get("nombre", _cid)}  '
+                    f'({_crisis.get("periodo","")})',
+                    expanded=False
+                ):
+                    # Header con gravedad y tipo
+                    _tipos_str = " · ".join(_crisis.get("tipo", []))
+                    st.markdown(
+                        f'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.6rem">'
+                        f'<span style="background:#fef2f2;color:{_gcol};border:1px solid {_gcol}44;'
+                        f'padding:2px 10px;border-radius:20px;font-size:.78rem;font-weight:700">'
+                        f'Gravedad {_grav}/10</span>'
+                        + "".join(
+                            f'<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;'
+                            f'padding:2px 10px;border-radius:20px;font-size:.78rem">{_t}</span>'
+                            for _t in _crisis.get("tipo", [])
+                        )
+                        + "</div>",
+                        unsafe_allow_html=True
+                    )
+                    # Detonante
+                    _det = _crisis.get("detonante", {})
+                    if _det:
+                        st.markdown(
+                            f'<div style="background:#f8fafc;border-left:3px solid #2563eb;'
+                            f'padding:.5rem .8rem;border-radius:0 6px 6px 0;margin:.3rem 0;font-size:.84rem">'
+                            f'<b>🔥 Detonante:</b> {_det.get("evento","")}</div>',
+                            unsafe_allow_html=True
+                        )
+                        if _det.get("contexto"):
+                            st.markdown(
+                                f'<div style="font-size:.82rem;color:#475569;padding:.2rem .8rem">'
+                                f'{_det.get("contexto","")}</div>',
+                                unsafe_allow_html=True
+                            )
+                    # Magnitud
+                    _mag = _crisis.get("magnitud_mercado", {})
+                    if _mag:
+                        _mag_items = " &nbsp;·&nbsp; ".join(
+                            f'<b>{k.replace("_"," ")}:</b> {v}'
+                            for k, v in list(_mag.items())[:4]
+                        )
+                        st.markdown(
+                            f'<div style="background:#fff7ed;border-left:3px solid #ea580c;'
+                            f'padding:.4rem .8rem;border-radius:0 6px 6px 0;margin:.3rem 0;'
+                            f'font-size:.81rem;color:#7c2d12">'
+                            f'📊 {_mag_items}</div>',
+                            unsafe_allow_html=True
+                        )
+                    # Señales previas
+                    _sp = _crisis.get("señales_previas", [])
+                    if _sp:
+                        st.markdown(
+                            '<div style="font-size:.8rem;font-weight:700;color:#475569;margin:.4rem 0 .2rem">'
+                            '🔍 Señales previas:</div>',
+                            unsafe_allow_html=True
+                        )
+                        for _s in _sp[:4]:
+                            st.markdown(
+                                f'<div style="font-size:.81rem;color:#334155;'
+                                f'padding:2px 0 2px .8rem;border-left:2px solid #d1d5db">{_s}</div>',
+                                unsafe_allow_html=True
+                            )
+                    # Lección operativa
+                    _lec = _crisis.get("leccion_operativa", "")
+                    if _lec:
+                        st.markdown(
+                            f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;'
+                            f'padding:.5rem .8rem;border-radius:0 6px 6px 0;margin:.5rem 0;'
+                            f'font-size:.83rem;color:#166534">'
+                            f'💡 <b>Lección operativa:</b> {_lec}</div>',
+                            unsafe_allow_html=True
+                        )
+        else:
+            st.info("No se pudo cargar crisis_patterns.json")
 
     st.markdown("---")
     st.caption("**Fuentes:** BCE Statistical Data Warehouse · BIS WS_CBPOL · BLS · "
@@ -14236,6 +14421,85 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 
     # ---- TAB AYUDA ----
     with tab_ayuda:
+        # ── GLOSARIO ────────────────────────────────────────────────────
+        _gl_terms  = GLOSARIO_KB.get("terminos", {})
+        _gl_abbrev = GLOSARIO_KB.get("abreviaturas", {})
+        if _gl_terms or _gl_abbrev:
+            st.markdown("### 📖 Glosario Financiero")
+            st.markdown(
+                '<p style="font-size:.88rem;color:#64748b;margin-bottom:1rem">'
+                'Definiciones de los términos y abreviaturas usados en la aplicación. '
+                'Escribe cualquier término para buscarlo.</p>',
+                unsafe_allow_html=True
+            )
+            _gl_buscar = st.text_input(
+                "🔎 Buscar término", placeholder="NIM, PER, doom loop, carry trade...",
+                key="_gl_search"
+            ).lower().strip()
+
+            # Filtrar términos
+            if _gl_buscar:
+                _gl_t_fil = {
+                    k: v for k, v in _gl_terms.items()
+                    if _gl_buscar in k.lower()
+                    or _gl_buscar in v.get("nombre_completo","").lower()
+                    or _gl_buscar in v.get("definicion","").lower()
+                }
+                _gl_a_fil = {k: v for k, v in _gl_abbrev.items() if _gl_buscar in k.lower() or _gl_buscar in v.lower()}
+            else:
+                _gl_t_fil = _gl_terms
+                _gl_a_fil = _gl_abbrev
+
+            # Mostrar términos
+            if _gl_t_fil:
+                st.markdown(
+                    '<div style="font-size:.9rem;font-weight:700;color:#1e3a5f;'
+                    'margin:1rem 0 .4rem;border-bottom:2px solid #e2e8f0;padding-bottom:4px">'
+                    f'📘 Términos ({len(_gl_t_fil)})</div>',
+                    unsafe_allow_html=True
+                )
+                for _tk, _tv in sorted(_gl_t_fil.items()):
+                    with st.expander(f'**{_tk}** — {_tv.get("nombre_completo","")}', expanded=bool(_gl_buscar)):
+                        st.markdown(
+                            f'<p style="font-size:.86rem;color:#334155;margin:.2rem 0">'
+                            f'{_tv.get("definicion","")}</p>',
+                            unsafe_allow_html=True
+                        )
+                        if _tv.get("ejemplo"):
+                            st.markdown(
+                                f'<div style="background:#eff6ff;border-left:3px solid #2563eb;'
+                                f'padding:.4rem .7rem;border-radius:0 6px 6px 0;font-size:.82rem;'
+                                f'color:#1e40af;margin:.4rem 0">'
+                                f'📌 <b>Ejemplo:</b> {_tv.get("ejemplo","")}</div>',
+                                unsafe_allow_html=True
+                            )
+
+            # Mostrar abreviaturas
+            if _gl_a_fil:
+                st.markdown(
+                    '<div style="font-size:.9rem;font-weight:700;color:#1e3a5f;'
+                    'margin:1.2rem 0 .4rem;border-bottom:2px solid #e2e8f0;padding-bottom:4px">'
+                    f'🔤 Abreviaturas ({len(_gl_a_fil)})</div>',
+                    unsafe_allow_html=True
+                )
+                # Grid de 2 columnas
+                _gl_a_list = sorted(_gl_a_fil.items())
+                _gl_mid = (len(_gl_a_list) + 1) // 2
+                _gl_c1, _gl_c2 = st.columns(2)
+                for _ai, (_ak, _av) in enumerate(_gl_a_list):
+                    _col = _gl_c1 if _ai < _gl_mid else _gl_c2
+                    with _col:
+                        st.markdown(
+                            f'<div style="padding:3px 0;font-size:.83rem;color:#334155">'
+                            f'<b style="color:#1e3a5f;min-width:80px;display:inline-block">{_ak}</b> {_av}</div>',
+                            unsafe_allow_html=True
+                        )
+
+            if _gl_buscar and not _gl_t_fil and not _gl_a_fil:
+                st.info(f"Sin resultados para \"{_gl_buscar}\". Prueba con otro término.")
+
+            st.divider()
+
         st.markdown("### Guía rápida de Pivot Points")
         st.markdown("""
 **Pivot Point (PP)** — Nivel de equilibrio calculado con datos de la sesión anterior (máx, mín, cierre).
