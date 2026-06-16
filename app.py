@@ -9650,17 +9650,23 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # Altura fija para todas las tarjetas del wizard
-    _WIZ_H_CARD = '80px'
-    _WIZ_H_TOTAL = '128px'  # card + botones (activo) = misma altura visual que done/pend
+    # CSS: botones Ant/Sig del paso activo pequeños y sin borde superior (integrados en la tarjeta)
+    _wiz_btn_sel = (f'div[data-testid="stHorizontalBlock"]'
+                    f' > div[data-testid="column"]:nth-child({_step})'
+                    f' div[data-testid="stHorizontalBlock"] .stButton > button')
+    st.markdown(f'<style>'
+                f'{_wiz_btn_sel}{{'
+                f'border-top:none!important;border-radius:0 0 8px 8px!important;'
+                f'padding:3px 6px!important;font-size:.72rem!important;'
+                f'min-height:26px!important;height:26px!important;'
+                f'background:#dbeafe!important;border-color:#2563eb!important;'
+                f'color:#1e40af!important;font-weight:600!important;}}'
+                f'{_wiz_btn_sel}[kind="primary"]{{'
+                f'background:#2563eb!important;color:white!important;}}'
+                f'</style>', unsafe_allow_html=True)
 
-    # CSS global: anula gap entre tarjeta activa (top) y sus botones para que parezcan uno solo
-    st.markdown("""<style>
-div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='stHorizontalBlock'] .stButton > button {
-  border-radius:0 0 8px 8px!important; border-top:none!important;
-  background:#dbeafe!important; border-color:#2563eb!important; color:#1e40af!important; font-weight:600!important;
-}
-</style>""", unsafe_allow_html=True)
+    _WIZ_H = '112px'   # altura fija igual para done/activo/pending
+    _WIZ_H_TOP = '86px' # parte superior del activo (el resto son los botones)
 
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
@@ -9669,33 +9675,32 @@ div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='st
             _is_done   = (_wi != _step and _wi <= _max_step)
 
             if _is_done:
-                # Tarjeta estática verde — mismo tamaño que activo (card+botones)
                 st.markdown(
                     f'<div style="background:#f0fdf4;border:2px solid #16a34a;'
-                    f'border-radius:10px;padding:0;text-align:center;'
-                    f'height:{_WIZ_H_TOTAL};display:flex;flex-direction:column;'
-                    f'align-items:center;justify-content:center;box-sizing:border-box">'
-                    f'<div style="font-size:1.4rem">{_wico}</div>'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#15803d;margin:5px 0 3px">{_wnm}</div>'
-                    f'<div style="font-size:.68rem;color:#16a34a">✓ Completado</div>'
+                    f'border-radius:10px;text-align:center;height:{_WIZ_H};'
+                    f'display:flex;flex-direction:column;align-items:center;'
+                    f'justify-content:center;box-sizing:border-box">'
+                    f'<div style="font-size:1.35rem">{_wico}</div>'
+                    f'<div style="font-size:.8rem;font-weight:700;color:#15803d;margin:4px 0 2px">{_wnm}</div>'
+                    f'<div style="font-size:.7rem;font-weight:600;color:#16a34a">Paso {_wi}</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
 
             elif _is_active:
-                # Parte superior azul de la tarjeta activa
+                # Parte superior: misma altura que done menos la franja de botones (~26px)
                 st.markdown(
-                    f'<div class="pp-wiz-active-top" style="background:#eff6ff;border:2px solid #2563eb;'
-                    f'border-radius:10px 10px 0 0;padding:0;text-align:center;'
-                    f'height:{_WIZ_H_CARD};display:flex;flex-direction:column;'
-                    f'align-items:center;justify-content:center;box-sizing:border-box;'
-                    f'border-bottom:none">'
-                    f'<div style="font-size:1.4rem">{_wico}</div>'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#2563eb;margin:5px 0">{_wnm}</div>'
+                    f'<div style="background:#eff6ff;border:2px solid #2563eb;border-bottom:none;'
+                    f'border-radius:10px 10px 0 0;text-align:center;height:{_WIZ_H_TOP};'
+                    f'display:flex;flex-direction:column;align-items:center;'
+                    f'justify-content:center;box-sizing:border-box">'
+                    f'<div style="font-size:1.35rem">{_wico}</div>'
+                    f'<div style="font-size:.8rem;font-weight:700;color:#2563eb;margin:4px 0 2px">{_wnm}</div>'
+                    f'<div style="font-size:.7rem;font-weight:600;color:#2563eb">Paso {_wi}</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
-                # Botones Ant/Sig — extensión inferior de la tarjeta azul
+                # Botones pequeños integrados en la base de la tarjeta
                 _na, _nb = st.columns(2)
                 with _na:
                     if _wi > 1:
@@ -9703,7 +9708,9 @@ div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='st
                             st.session_state['_pp_step'] = _wi - 1
                             st.rerun()
                     else:
-                        st.markdown('<div style="height:38px"></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="height:26px;background:#dbeafe;'
+                                    f'border:2px solid #2563eb;border-top:none;'
+                                    f'border-radius:0 0 0 8px"></div>', unsafe_allow_html=True)
                 with _nb:
                     if _wi < 4:
                         if st.button('Sig. →', key='_pp_wiz_next', type='primary',
@@ -9712,7 +9719,7 @@ div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='st
                             st.session_state['_pp_step'] = _wi + 1
                             st.rerun()
                     else:
-                        if st.button('📄 Informe', key='_pp_wiz_rep', type='primary',
+                        if st.button('📄 Ver informe', key='_pp_wiz_rep', type='primary',
                                      use_container_width=True):
                             st.session_state['_pp_jump_to_analisis'] = True
                             st.rerun()
@@ -9720,11 +9727,12 @@ div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='st
             else:  # pendiente
                 st.markdown(
                     f'<div style="background:#f8fafc;border:2px solid #e2e8f0;'
-                    f'border-radius:10px;padding:0;text-align:center;'
-                    f'height:{_WIZ_H_TOTAL};display:flex;flex-direction:column;'
-                    f'align-items:center;justify-content:center;box-sizing:border-box">'
-                    f'<div style="font-size:1.4rem;opacity:.4">{_wico}</div>'
-                    f'<div style="font-size:.82rem;font-weight:600;color:#94a3b8;margin:5px 0">{_wnm}</div>'
+                    f'border-radius:10px;text-align:center;height:{_WIZ_H};'
+                    f'display:flex;flex-direction:column;align-items:center;'
+                    f'justify-content:center;box-sizing:border-box">'
+                    f'<div style="font-size:1.35rem;opacity:.4">{_wico}</div>'
+                    f'<div style="font-size:.8rem;font-weight:600;color:#94a3b8;margin:4px 0 2px">{_wnm}</div>'
+                    f'<div style="font-size:.7rem;font-weight:600;color:#cbd5e1">Paso {_wi}</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
