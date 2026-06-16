@@ -9650,50 +9650,64 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # Marcador único para selector CSS sin afectar otros bloques de la página
-    st.markdown('<span id="pp-wiz-anc" style="display:none"></span>', unsafe_allow_html=True)
-
-    # CSS: estiliza cada botón-tarjeta por posición nth-child dentro del bloque wizard
+    # CSS + anchor en un único st.markdown para que el selector + (adjacent sibling) funcione
     _wiz_base = ('div[data-testid="stMarkdown"]:has(#pp-wiz-anc)'
                  ' + div[data-testid="stHorizontalBlock"]'
                  ' > div[data-testid="column"]')
-    _wiz_btn_common = ('min-height:105px!important;height:auto!important;'
-                       'white-space:pre-wrap!important;line-height:1.45!important;'
-                       'border-radius:10px!important;font-size:.83rem!important;'
-                       'font-weight:700!important;transition:none!important;'
-                       'padding:10px 6px!important;')
-    _wiz_css = ['<style>']
+    _wiz_parts = ['<span id="pp-wiz-anc" style="display:none"></span><style>']
     for _ci in range(1, 5):
-        _s = f'{_wiz_base}:nth-child({_ci}) .stButton > button'
+        _sb = f'{_wiz_base}:nth-child({_ci}) .stButton > button'
         _ci_done = (_ci != _step and _ci <= _max_step)
         _ci_act  = (_ci == _step)
+        _cmn = ('border-top:none!important;border-radius:0 0 8px 8px!important;'
+                'padding:3px 6px!important;font-size:.74rem!important;'
+                'min-height:26px!important;height:26px!important;font-weight:700!important;')
         if _ci_done:
-            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#f0fdf4!important;border:2px solid #16a34a!important;color:#15803d!important;}}')
-            _wiz_css.append(f'{_s}:hover{{background:#dcfce7!important;}}')
+            _wiz_parts.append(f'{_sb}{{{_cmn}background:#dcfce7!important;border:2px solid #16a34a!important;color:#15803d!important;}}')
+            _wiz_parts.append(f'{_sb}:hover{{background:#bbf7d0!important;}}')
         elif _ci_act:
-            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#eff6ff!important;border:2px solid #2563eb!important;color:#2563eb!important;cursor:default!important;}}')
+            _wiz_parts.append(f'{_sb}{{{_cmn}background:#dbeafe!important;border:2px solid #2563eb!important;color:#1d4ed8!important;cursor:default!important;}}')
         else:
-            _wiz_css.append(f'{_s}{{{_wiz_btn_common}background:#f8fafc!important;border:2px solid #e2e8f0!important;color:#94a3b8!important;}}')
-    _wiz_css.append('</style>')
-    st.markdown(''.join(_wiz_css), unsafe_allow_html=True)
+            _wiz_parts.append(f'{_sb}{{{_cmn}background:#f1f5f9!important;border:2px solid #e2e8f0!important;color:#94a3b8!important;cursor:default!important;}}')
+    _wiz_parts.append('</style>')
+    st.markdown(''.join(_wiz_parts), unsafe_allow_html=True)
 
-    # Renderizar las 4 tarjetas como botones
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
             _is_done   = (_wi != _step and _wi <= _max_step)
-            _lbl = _wico + '\n' + _wnm + '\nPaso ' + str(_wi)
+
             if _is_done:
-                if st.button(_lbl, key=f'_pp_goto_{_wi}', use_container_width=True):
+                _bg, _brd, _tc, _op = '#f0fdf4', '#16a34a', '#15803d', '1'
+            elif _is_active:
+                _bg, _brd, _tc, _op = '#eff6ff', '#2563eb', '#2563eb', '1'
+            else:
+                _bg, _brd, _tc, _op = '#f8fafc', '#e2e8f0', '#94a3b8', '.4'
+
+            # Parte superior de la tarjeta (sin borde inferior — el botón lo cierra)
+            st.markdown(
+                f'<div style="background:{_bg};border:2px solid {_brd};border-bottom:none;'
+                f'border-radius:10px 10px 0 0;text-align:center;height:80px;'
+                f'display:flex;flex-direction:column;align-items:center;'
+                f'justify-content:center;box-sizing:border-box">'
+                f'<div style="font-size:1.4rem;opacity:{_op}">{_wico}</div>'
+                f'<div style="font-size:.82rem;font-weight:700;color:{_tc};margin:4px 0">{_wnm}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            # Botón "Paso X" cierra visualmente la tarjeta
+            _paso_lbl = 'Paso ' + str(_wi)
+            if _is_done:
+                if st.button(_paso_lbl, key=f'_pp_goto_{_wi}', use_container_width=True):
                     st.session_state['_pp_step'] = _wi
                     st.rerun()
             elif _is_active:
-                st.button(_lbl, key=f'_pp_act_{_wi}', use_container_width=True)
+                st.button(_paso_lbl, key=f'_pp_act_{_wi}', use_container_width=True)
             else:
-                st.button(_lbl, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
+                st.button(_paso_lbl, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
 
-    # Botones de navegación: fila separada debajo de las tarjetas, sin solapamiento
+    # Navegación: fila separada bajo los boxes, sin solapamiento
     st.markdown('<div style="margin-top:10px"></div>', unsafe_allow_html=True)
     _nav_l, _nav_c, _nav_r = st.columns([1, 2, 1])
     with _nav_l:
