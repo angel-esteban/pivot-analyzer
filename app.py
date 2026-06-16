@@ -9529,17 +9529,6 @@ def pestana_principiante():
     """
     st.markdown(_CSS, unsafe_allow_html=True)
 
-    # ── Navegación por query_params desde tarjetas HTML ──────────────────────
-    if 'pp_goto' in st.query_params:
-        try:
-            _qp_step = int(st.query_params['pp_goto'])
-            if 1 <= _qp_step <= 4:
-                st.session_state['_pp_step'] = _qp_step
-        except Exception:
-            pass
-        st.query_params.clear()
-        st.rerun()
-
     # ── Cabecera: "Selecciona un valor:" ─────────────────────────────────────
     st.markdown(
         '<h2 style="color:#1e3a5f;margin-bottom:.3rem">&#129959; &#191;Por d&#243;nde empiezo?</h2>'
@@ -9661,64 +9650,92 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # CSS: borde gris oscuro en botón Anterior (secondary) y estilos globales wizard
-    st.markdown("""<style>
-/* Botón Anterior — borde gris oscuro visible */
-button[data-testid="baseButton-secondary"]:not([disabled]) {
-    border: 2px solid #6b7280 !important;
-    color: #374151 !important;
-}
-button[data-testid="baseButton-secondary"]:not([disabled]):hover {
-    border-color: #4b5563 !important;
-    background: #f9fafb !important;
-}
-</style>""", unsafe_allow_html=True)
+    # Colores por estado
+    _WIZ_COLORS = {}
+    for _ci in range(1, 5):
+        _ci_done = (_ci != _step and _ci <= _max_step)
+        _ci_act  = (_ci == _step)
+        if _ci_done:
+            _WIZ_COLORS[_ci] = ('f0fdf4','16a34a','15803d','1','dcfce7','16a34a','15803d')
+        elif _ci_act:
+            _WIZ_COLORS[_ci] = ('eff6ff','2563eb','2563eb','1','dbeafe','2563eb','1d4ed8')
+        else:
+            _WIZ_COLORS[_ci] = ('f8fafc','e2e8f0','94a3b8','.4','f1f5f9','d1d5db','9ca3af')
+
+    # Construir CSS para inyectar en <head> vía JS (persiste entre rerenders)
+    _wiz_css_lines = []
+    for _ci in range(1, 5):
+        _bg,_brd,_tc,_op,_btn_bg,_btn_brd,_btn_tc = _WIZ_COLORS[_ci]
+        _wiz_css_lines.append(
+            'div[data-testid="column"]:has(#pp-col-' + str(_ci) + ') button[data-testid]{'
+            'border-top:none!important;border-radius:0 0 8px 8px!important;'
+            'padding:4px 6px!important;font-size:.74rem!important;'
+            'min-height:26px!important;height:26px!important;font-weight:700!important;'
+            'background:#' + _btn_bg + '!important;'
+            'border:2px solid #' + _btn_brd + '!important;'
+            'color:#' + _btn_tc + '!important;}'
+        )
+    # Botón Anterior: borde gris oscuro
+    _wiz_css_lines.append(
+        'button[data-testid="baseButton-secondary"]:not([disabled]){'
+        'border:2px solid #6b7280!important;color:#374151!important;}'
+    )
+    _wiz_css_joined = ' '.join(_wiz_css_lines)
+
+    # JS: inyecta <style> en document.head del parent (persiste tras rerenders)
+    _js_src = (
+        '<script>'
+        '(function(){'
+        '  function go(){'
+        '    var doc=window.parent.document;'
+        '    var pid="pp-wiz-sty";'
+        '    var ex=doc.getElementById(pid);'
+        '    if(ex)ex.remove();'
+        '    var s=doc.createElement("style");'
+        '    s.id=pid;'
+        '    s.textContent=' + repr(_wiz_css_joined) + ';'
+        '    doc.head.appendChild(s);'
+        '  }'
+        '  go();setTimeout(go,400);'
+        '})();'
+        '</script>'
+    )
+    _st_components.html(_js_src, height=0)
 
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
+        _bg,_brd,_tc,_op,_btn_bg,_btn_brd,_btn_tc = _WIZ_COLORS[_wi]
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
             _is_done   = (_wi != _step and _wi <= _max_step)
 
-            if _is_done:
-                _bg, _brd, _tc, _op = '#f0fdf4', '#16a34a', '#15803d', '1'
-                _btn_bg, _btn_brd, _btn_tc = '#dcfce7', '#16a34a', '#15803d'
-            elif _is_active:
-                _bg, _brd, _tc, _op = '#eff6ff', '#2563eb', '#2563eb', '1'
-                _btn_bg, _btn_brd, _btn_tc = '#dbeafe', '#2563eb', '#1d4ed8'
-            else:
-                _bg, _brd, _tc, _op = '#f8fafc', '#e2e8f0', '#94a3b8', '.4'
-                _btn_bg, _btn_brd, _btn_tc = '#f1f5f9', '#e2e8f0', '#94a3b8'
+            # Marcador único para selector CSS :has(#pp-col-N)
+            st.markdown('<span id="pp-col-' + str(_wi) + '" style="display:none"></span>',
+                        unsafe_allow_html=True)
 
-            # Parte superior: icono + nombre
+            # Tarjeta superior HTML
             st.markdown(
-                f'<div style="background:{_bg};border:2px solid {_brd};border-bottom:none;'
-                f'border-radius:10px 10px 0 0;text-align:center;height:80px;'
-                f'display:flex;flex-direction:column;align-items:center;'
-                f'justify-content:center;box-sizing:border-box">'
-                f'<div style="font-size:1.4rem;opacity:{_op}">{_wico}</div>'
-                f'<div style="font-size:.82rem;font-weight:700;color:{_tc};margin:4px 0">{_wnm}</div>'
-                f'</div>',
+                '<div style="background:#' + _bg + ';border:2px solid #' + _brd + ';border-bottom:none;'
+                'border-radius:10px 10px 0 0;text-align:center;height:80px;'
+                'display:flex;flex-direction:column;align-items:center;'
+                'justify-content:center;box-sizing:border-box">'
+                '<div style="font-size:1.4rem;opacity:' + _op + '">' + _wico + '</div>'
+                '<div style="font-size:.82rem;font-weight:700;color:#' + _tc + ';margin:4px 0">' + _wnm + '</div>'
+                '</div>',
                 unsafe_allow_html=True
             )
 
-            # Parte inferior: "Paso X" como HTML puro (no st.button)
-            _paso_lbl = f'Paso {_wi}'
-            _paso_base = (f'display:block;text-align:center;box-sizing:border-box;'
-                          f'background:{_btn_bg};border:2px solid {_btn_brd};'
-                          f'border-top:none;border-radius:0 0 8px 8px;'
-                          f'color:{_btn_tc};font-weight:700;font-size:.74rem;'
-                          f'padding:4px 6px;line-height:18px;text-decoration:none;')
+            # Botón "Paso X" — funcional, estilizado por CSS inyectado en head
+            _paso_lbl = 'Paso ' + str(_wi)
             if _is_done:
-                st.markdown(
-                    f'<a href="?pp_goto={_wi}" style="{_paso_base}cursor:pointer;">{_paso_lbl}</a>',
-                    unsafe_allow_html=True
-                )
+                if st.button(_paso_lbl, key='_pp_goto_' + str(_wi), use_container_width=True):
+                    st.session_state['_pp_step'] = _wi
+                    st.rerun()
+            elif _is_active:
+                st.button(_paso_lbl, key='_pp_act_' + str(_wi), use_container_width=True)
             else:
-                st.markdown(
-                    f'<div style="{_paso_base}cursor:default;">{_paso_lbl}</div>',
-                    unsafe_allow_html=True
-                )
+                st.button(_paso_lbl, key='_pp_pend_' + str(_wi),
+                          use_container_width=True, disabled=True)
 
     # Navegación
     st.markdown('<div style="margin-top:12px"></div>', unsafe_allow_html=True)
