@@ -9394,6 +9394,29 @@ def pestana_principiante():
         st.session_state["_pp_data"] = None
         st.session_state["_pp_step"] = 1
 
+    # ── Sync AT → PP: si AT tiene un análisis activo y PP está vacío ────
+    _AT_MKT_OPTS = [
+        "✏️ Escribir manualmente",
+        "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+        "🌍 Eurostoxx 50",
+        "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+        "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+        "📊 ETFs UCITS",
+    ]
+    _at_mkt = st.session_state.get("mercado_sel", "")
+    _at_val = st.session_state.get("valor_mercado_sel", "")
+    _at_tik = (st.session_state.get("ticker_manual_input") or
+               st.session_state.get("ultimo_ticker", ""))
+    # Solo sincronizamos si PP no tiene un análisis propio en curso
+    if _at_tik and not st.session_state.get("_pp_ticker"):
+        if _at_mkt and _at_mkt in _AT_MKT_OPTS:
+            st.session_state["_pp_mercado_sel"] = _at_mkt
+            if _at_val:
+                st.session_state.setdefault("_pp_valor_sel", _at_val)
+        else:
+            st.session_state["_pp_mercado_sel"] = "✏️ Escribir manualmente"
+        st.session_state["_pp_ticker"] = _at_tik
+
     _col1, _col2, _col4 = st.columns([2, 3, 1])
     with _col1:
         _mercado_pp = st.selectbox(
@@ -9429,8 +9452,12 @@ def pestana_principiante():
             with st.spinner(f"Cargando {_mercado_pp}..."):
                 _tickers_pp = obtener_tickers_mercado(_mercado_pp)
             if _tickers_pp:
+                _pp_vmk_opts  = list(_tickers_pp.keys())
+                _pp_vmk_saved = st.session_state.get("_pp_valor_sel", "")
+                if _pp_vmk_saved and _pp_vmk_saved not in _pp_vmk_opts:
+                    st.session_state["_pp_valor_sel"] = _pp_vmk_opts[0]
                 _nom_pp = st.selectbox(
-                    f"🔎 Valor — {_mercado_pp}", list(_tickers_pp.keys()),
+                    f"🔎 Valor — {_mercado_pp}", _pp_vmk_opts,
                     key="_pp_valor_sel",
                     help=f"Valores del {_mercado_pp}."
                 )
