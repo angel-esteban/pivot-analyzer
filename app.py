@@ -6091,7 +6091,7 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f'<div class="tf-block">'
                 f'<div class="tf-title">&#9658; {tf}</div>'
                 f'<table>'
-                f'<thead><tr><th>Nivel</th><th>Precio</th><th>Dist.</th></tr></thead>'
+                f'<thead><tr><th>Nivel</th><th>Precio</th><th>Distancia al precio</th></tr></thead>'
                 f'<tbody>{filas}</tbody>'
                 f'</table>'
                 f'</div>'
@@ -6355,7 +6355,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             )
         niv_html = (
             f'<table><thead><tr>'
-            f'<th>Precio</th><th>Dist.</th><th>Pivot</th><th>Media</th><th>Tipo</th>'
+            f'<th>Precio</th><th>Distancia al precio</th><th>Pivot</th><th>Media</th><th>Tipo</th>'
             f'</tr></thead><tbody>{niv_rows}</tbody></table>'
             if niv_rows else '<div style="color:#94a3b8;font-size:12px">Sin niveles dentro de la tolerancia activa</div>'
         )
@@ -8100,7 +8100,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         hdr = [Paragraph(tf, S_MH)]
         if not datos_tf:
             return hdr + [Paragraph("Sin datos", S_NRM)]
-        filas = [["Nv", "Precio", "Dist."]]
+        filas = [["Nv", "Precio", "Distancia al precio"]]
         tipos = []
         for nv in NIV:
             if nv not in datos_tf or nv.startswith("_"):
@@ -8240,7 +8240,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         # Niveles reforzados
         if niveles_reforzados:
             niv_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
-                       for h in ["Precio", "Dist.", "Pivot", "Media", "Tipo"]]
+                       for h in ["Precio", "Distancia al precio", "Pivot", "Media", "Tipo"]]
             niv_rows_pdf = [niv_hdr]
             for nr in niveles_reforzados[:8]:
                 tipo_color = VE if "soporte" in nr.get("tipo","").lower() else RO
