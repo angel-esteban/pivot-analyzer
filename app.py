@@ -33,11 +33,30 @@ import json as _json_mod
 import os as _os_mod
 
 # ── Base de conocimiento sectorial GICS ─────────────────────────────────
+def _find_kb_file(filename: str) -> str:
+    """Localiza un fichero JSON de conocimiento usando múltiples estrategias de ruta."""
+    _candidates = []
+    # 1. Mismo directorio que app.py (local y Streamlit Cloud si están juntos)
+    try:
+        _candidates.append(_os_mod.path.join(
+            _os_mod.path.dirname(_os_mod.path.abspath(__file__)), filename))
+    except Exception:
+        pass
+    # 2. Directorio de trabajo actual (Streamlit Cloud suele usar el raíz del repo)
+    _candidates.append(_os_mod.path.join(_os_mod.getcwd(), filename))
+    # 3. Subdirectorio 'data' por si se organiza así en el repo
+    _candidates.append(_os_mod.path.join(_os_mod.getcwd(), 'data', filename))
+    for _p in _candidates:
+        if _os_mod.path.isfile(_p):
+            return _p
+    return ""
+
 def _load_sector_knowledge() -> dict:
     """Carga sector_knowledge.json desde la misma carpeta que app.py."""
     try:
-        _base = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
-        _fp = _os_mod.path.join(_base, 'sector_knowledge.json')
+        _fp = _find_kb_file('sector_knowledge.json')
+        if not _fp:
+            return {}
         with open(_fp, 'r', encoding='utf-8') as _f:
             return _json_mod.load(_f)
     except Exception:
@@ -48,8 +67,9 @@ SECTOR_KNOWLEDGE = _load_sector_knowledge()
 def _load_json_kb(filename: str) -> dict:
     """Carga un JSON de conocimiento desde la carpeta de la app."""
     try:
-        _base = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
-        _fp = _os_mod.path.join(_base, filename)
+        _fp = _find_kb_file(filename)
+        if not _fp:
+            return {}
         with open(_fp, 'r', encoding='utf-8') as _f:
             return _json_mod.load(_f)
     except Exception:
