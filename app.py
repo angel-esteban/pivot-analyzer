@@ -9622,9 +9622,10 @@ def pestana_principiante():
         _analizar = st.button("🔍 Analizar", type="primary", key="_pp_btn_analizar", use_container_width=True)
 
     if _analizar and _ticker_in:
-        st.session_state["_pp_ticker"] = _ticker_in
-        st.session_state["_pp_step"]   = 1
-        st.session_state["_pp_data"]   = None
+        st.session_state["_pp_ticker"]    = _ticker_in
+        st.session_state["_pp_step"]      = 1
+        st.session_state["_pp_max_step"]  = 1
+        st.session_state["_pp_data"]      = None
 
     st.markdown(
         '<p style="color:#64748b;font-size:.88rem;margin:.5rem 0 .8rem">'
@@ -9635,6 +9636,10 @@ def pestana_principiante():
 
     _ticker = st.session_state.get("_pp_ticker", "")
     _step   = st.session_state.get("_pp_step", 1)
+    # max_step: garantiza que pasos ya visitados conservan borde verde al retroceder
+    if _step > st.session_state.get("_pp_max_step", 1):
+        st.session_state["_pp_max_step"] = _step
+    _max_step = st.session_state.get("_pp_max_step", _step)
 
     if not _ticker:
         st.info("Selecciona un mercado y un valor, o escribe el ticker, y pulsa **Analizar**.")
@@ -9642,62 +9647,89 @@ def pestana_principiante():
         return
 
     # ── Wizard de 4 tarjetas ─────────────────────────────────────────────────
-    _PASOS_WIZ = [
-        ("🌍", "Contexto Macro"),
-        ("🏗️", "Estructura"),
-        ("⚡", "Momento"),
-        ("📌", "Niveles"),
-    ]
+    _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
+                  ("⚡", "Momento"),        ("📌", "Niveles")]
+
+    # CSS: botones-tarjeta para pasos hechos + botones integrados en activo
+    st.markdown("""<style>
+.pp-done-card button{background:#f0fdf4!important;border:2px solid #16a34a!important;
+  border-radius:10px!important;height:80px!important;color:#15803d!important;
+  font-weight:700!important;white-space:normal!important;line-height:1.3!important;
+  font-size:.85rem!important;}
+.pp-done-card button:hover{background:#dcfce7!important;}
+.pp-act-top{background:#eff6ff;border:2px solid #2563eb;border-radius:10px 10px 0 0;
+  padding:10px 8px 8px;text-align:center;margin-bottom:0}
+.pp-act-btns .stButton button{border-radius:0!important;border-top:none!important;
+  background:#dbeafe!important;border-color:#2563eb!important;color:#1e40af!important;
+  font-weight:600!important;}
+.pp-act-btns .stButton button[kind="primary"]{background:#2563eb!important;color:white!important;}
+.pp-act-btns{border:2px solid #2563eb;border-top:none;border-radius:0 0 10px 10px;
+  padding:4px;background:#eff6ff;}
+</style>""", unsafe_allow_html=True)
+
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
-            _is_done   = (_wi < _step)
-            _bg   = "#eff6ff" if _is_active else ("#f0fdf4" if _is_done else "#f8fafc")
-            _bord = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#e2e8f0")
-            _ncol = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#94a3b8")
-            _badge = ("● ACTIVO" if _is_active
-                      else "✓ Hecho" if _is_done else f"○ Paso {_wi}")
-            _badge_bg = "#2563eb" if _is_active else ("#16a34a" if _is_done else "#94a3b8")
-            st.markdown(
-                f'<div style="border-radius:10px;padding:10px 8px;border:2px solid {_bord};'
-                f'background:{_bg};text-align:center">'
-                f'<div style="font-size:1.4rem">{_wico}</div>'
-                f'<div style="font-size:.78rem;font-weight:700;color:{_ncol};'
-                f'line-height:1.3;margin:3px 0">{_wnm}</div>'
-                f'<span style="background:{_badge_bg};color:white;border-radius:10px;'
-                f'font-size:.65rem;font-weight:700;padding:2px 7px">{_badge}</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            # Botón de navegación directa (todos los pasos ya visitados o activo)
-            if not _is_active and (_is_done or _wi == _step + 1):
-                _btn_lbl = f"Ir al paso {_wi}" if _is_done else "Siguiente →"
-                if st.button(_btn_lbl, key=f"_pp_wiz_goto_{_wi}",
+            _is_done   = (_wi != _step and _wi <= _max_step)
+            _is_pend   = (_wi > _max_step)
+
+            if _is_done:
+                # Tarjeta verde clicable — implementada como botón estilizado
+                st.markdown('<div class="pp-done-card">', unsafe_allow_html=True)
+                if st.button(f"{_wico}  {_wnm}", key=f"_pp_goto_{_wi}",
                              use_container_width=True):
                     st.session_state["_pp_step"] = _wi
                     st.rerun()
-            # Botones de navegación en la tarjeta ACTIVA
-            if _is_active:
-                _nav_l, _nav_r = st.columns(2)
-                with _nav_l:
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            elif _is_active:
+                # Parte superior de la tarjeta activa (HTML)
+                st.markdown(
+                    f'<div class="pp-act-top">'
+                    f'<div style="font-size:1.4rem">{_wico}</div>'
+                    f'<div style="font-size:.78rem;font-weight:700;color:#2563eb;margin:3px 0">{_wnm}</div>'
+                    f'<span style="background:#2563eb;color:white;border-radius:10px;'
+                    f'font-size:.65rem;font-weight:700;padding:2px 7px">● ACTIVO</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                # Botones integrados (visual: parte inferior de la tarjeta)
+                st.markdown('<div class="pp-act-btns">', unsafe_allow_html=True)
+                _na, _nb = st.columns(2)
+                with _na:
                     if _wi > 1:
-                        if st.button("← Ant.", key="_pp_wiz_prev",
-                                     use_container_width=True):
+                        if st.button("← Ant.", key="_pp_wiz_prev", use_container_width=True):
                             st.session_state["_pp_step"] = _wi - 1
                             st.rerun()
-                with _nav_r:
+                    else:
+                        st.markdown("<div style='height:38px'></div>", unsafe_allow_html=True)
+                with _nb:
                     if _wi < 4:
                         if st.button("Sig. →", key="_pp_wiz_next", type="primary",
                                      use_container_width=True):
+                            st.session_state["_pp_max_step"] = max(_max_step, _wi + 1)
                             st.session_state["_pp_step"] = _wi + 1
                             st.rerun()
                     else:
-                        if st.button("📄 Informe", key="_pp_wiz_report", type="primary",
+                        if st.button("📄 Informe", key="_pp_wiz_rep", type="primary",
                                      use_container_width=True):
                             st.session_state["_pp_jump_to_analisis"] = True
                             st.rerun()
-    st.markdown("<div style='margin-bottom:.8rem'></div>", unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            else:  # pendiente
+                st.markdown(
+                    f'<div style="background:#f8fafc;border:2px solid #e2e8f0;'
+                    f'border-radius:10px;padding:10px 8px;text-align:center;'
+                    f'min-height:80px;display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center">'
+                    f'<div style="font-size:1.4rem;opacity:.45">{_wico}</div>'
+                    f'<div style="font-size:.78rem;font-weight:600;color:#94a3b8;margin:3px 0">{_wnm}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+    st.markdown("<div style='margin-bottom:.6rem'></div>", unsafe_allow_html=True)
 
     # Cargar datos una vez por ticker
     if (st.session_state.get("_pp_data") is None
