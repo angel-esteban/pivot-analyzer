@@ -12813,13 +12813,13 @@ si hay noticias negativas, o si el volumen en la zona fue muy bajo.
                 _hs_titulo = "El soporte más próximo es un hueco alcista"
                 _hs_dist_txt = f"a un {abs(_hc_dist):.1f}% por debajo del precio actual"
                 _hs_texto = (
-                    f"El hueco abierto más cercano es alcista y está **{_hs_dist_txt}** "
+                    f"El hueco abierto más cercano es alcista y está <b>{_hs_dist_txt}</b> "
                     f"(zona {_hc_low:.4f}–{_hc_high:.4f}, tamaño {_hc_size:.1f}%). "
-                    f"Lleva **{_hc_dias} sesiones** sin cerrarse. "
+                    f"Lleva <b>{_hc_dias} sesiones</b> sin cerrarse. "
                     "Un hueco alcista es una zona donde el precio subió de golpe sin negociarse — "
                     "los inversores que compraron antes de ese salto obtuvieron ganancias inesperadas "
                     "y, si el precio vuelve a esa zona, suelen recomprar con convicción. "
-                    "Eso convierte esa zona en un **suelo natural**: si el precio cae hasta ahí, "
+                    "Eso convierte esa zona en un <b>suelo natural</b>: si el precio cae hasta ahí, "
                     "es razonable esperar que aparezca demanda compradora."
                 )
                 if _hc_size >= 2.0:
@@ -12838,14 +12838,14 @@ si hay noticias negativas, o si el volumen en la zona fue muy bajo.
                 _hs_titulo = "La resistencia más próxima es un hueco bajista"
                 _hs_dist_txt = f"a un {abs(_hc_dist):.1f}% por encima del precio actual"
                 _hs_texto = (
-                    f"El hueco abierto más cercano es bajista y está **{_hs_dist_txt}** "
+                    f"El hueco abierto más cercano es bajista y está <b>{_hs_dist_txt}</b> "
                     f"(zona {_hc_low:.4f}–{_hc_high:.4f}, tamaño {_hc_size:.1f}%). "
-                    f"Lleva **{_hc_dias} sesiones** sin cerrarse. "
+                    f"Lleva <b>{_hc_dias} sesiones</b> sin cerrarse. "
                     "Un hueco bajista es una zona donde el precio cayó de golpe — "
                     "los inversores que compraron antes de esa caída quedaron con pérdidas "
                     "y, cuando el precio recupera hasta esa zona, tienden a vender "
                     "para «salir sin pérdidas». Esa presión vendedora convierte la zona "
-                    "en un **techo natural**: si el precio sube hasta ahí, "
+                    "en un <b>techo natural</b>: si el precio sube hasta ahí, "
                     "es razonable anticipar resistencia."
                 )
                 if _hc_size >= 2.0:
