@@ -8381,34 +8381,36 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _pos_p  = _eu_pdf.get("num_posiciones_aprox")
             _cob_p  = _eu_pdf.get("cobertura_divisa") or ""
             _C1 = colors.HexColor("#1e3a5f")
-            _BG = colors.HexColor("#f8fafc")
+            # estilos usando la firma correcta: _p(**kw)
+            _ps_hdr  = _p(fontSize=7, fontName="Helvetica-Bold", textColor=colors.white)
+            _ps_lbl  = _p(fontSize=7, textColor=colors.HexColor("#64748b"))
+            _ps_val  = _p(fontSize=7)
+            _ps_bold = _p(fontSize=7, fontName="Helvetica-Bold")
             _meta_rows_pdf = [
-                [Paragraph("Campo", _p(7, colors.white, "Helvetica-Bold")),
-                 Paragraph("Valor", _p(7, colors.white, "Helvetica-Bold")),
-                 Paragraph("Campo", _p(7, colors.white, "Helvetica-Bold")),
-                 Paragraph("Valor", _p(7, colors.white, "Helvetica-Bold"))],
-                [Paragraph("Gestora",  _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_eu_pdf.get("gestora","—"), _p(7, fontName="Helvetica-Bold")),
-                 Paragraph("ISIN",     _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_eu_pdf.get("isin","—"),    _p(7))],
-                [Paragraph("Índice",   _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_eu_pdf.get("indice_replicado","—"), _p(7, fontName="Helvetica-Bold")),
-                 Paragraph("", _p(7)), Paragraph("", _p(7))],
-                [Paragraph("TER",      _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(f"{_eu_pdf.get('ter_pct',0):.2f}%", _p(7, fontName="Helvetica-Bold")),
-                 Paragraph("Réplica",  _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_rep_p,     _p(7, fontName="Helvetica-Bold"))],
-                [Paragraph("Política", _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_dist_p,    _p(7, fontName="Helvetica-Bold")),
-                 Paragraph("Divisa",   _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(_eu_pdf.get("divisa_base","—") + (" · cob. " + _cob_p if _cob_p else ""), _p(7))],
-                [Paragraph("Posiciones", _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(f"~{_pos_p:,}" if _pos_p else "—", _p(7)),
-                 Paragraph("AUM aprox.", _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(f"~{_pat_p:,} M€" if _pat_p else "—", _p(7))],
-                [Paragraph("SRRI",     _p(7, colors.HexColor("#64748b"))),
-                 Paragraph(f"{_srri_p}/7" if _srri_p else "—", _p(7, fontName="Helvetica-Bold")),
-                 Paragraph("", _p(7)), Paragraph("", _p(7))],
+                [Paragraph("Campo", _ps_hdr), Paragraph("Valor", _ps_hdr),
+                 Paragraph("Campo", _ps_hdr), Paragraph("Valor", _ps_hdr)],
+                [Paragraph("Gestora",  _ps_lbl),
+                 Paragraph(_eu_pdf.get("gestora","—"), _ps_bold),
+                 Paragraph("ISIN",     _ps_lbl),
+                 Paragraph(_eu_pdf.get("isin","—"),    _ps_val)],
+                [Paragraph("Índice",   _ps_lbl),
+                 Paragraph(_eu_pdf.get("indice_replicado","—"), _ps_bold),
+                 Paragraph("", _ps_val), Paragraph("", _ps_val)],
+                [Paragraph("TER",      _ps_lbl),
+                 Paragraph(f"{_eu_pdf.get('ter_pct',0):.2f}%", _ps_bold),
+                 Paragraph("Réplica",  _ps_lbl),
+                 Paragraph(_rep_p,     _ps_bold)],
+                [Paragraph("Política", _ps_lbl),
+                 Paragraph(_dist_p,    _ps_bold),
+                 Paragraph("Divisa",   _ps_lbl),
+                 Paragraph(_eu_pdf.get("divisa_base","—") + (" · cob. " + _cob_p if _cob_p else ""), _ps_val)],
+                [Paragraph("Posiciones", _ps_lbl),
+                 Paragraph(f"~{_pos_p:,}" if _pos_p else "—", _ps_val),
+                 Paragraph("AUM aprox.", _ps_lbl),
+                 Paragraph(f"~{_pat_p:,} M€" if _pat_p else "—", _ps_val)],
+                [Paragraph("SRRI",     _ps_lbl),
+                 Paragraph(f"{_srri_p}/7" if _srri_p else "—", _ps_bold),
+                 Paragraph("", _ps_val), Paragraph("", _ps_val)],
             ]
             _t_meta = Table(_meta_rows_pdf, colWidths=[2.8*cm, 5.8*cm, 2.8*cm, 6.6*cm])
             _t_meta.setStyle(TableStyle([
@@ -8418,7 +8420,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 ("TOPPADDING",    (0,0), (-1,-1), 2),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 2),
                 ("LEFTPADDING",   (0,0), (-1,-1), 4),
-                ("SPAN",          (1,2), (3,2)),   # índice ocupa 3 celdas
+                ("SPAN",          (1,2), (3,2)),
             ]))
             historia.append(_t_meta)
             historia.append(Spacer(1, 0.2*cm))
@@ -8426,12 +8428,13 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _geo_pdf = _eu_pdf.get("exposicion_geografica_top", {})
             _sec_pdf = _eu_pdf.get("exposicion_sectorial_top",  {})
             if _geo_pdf or _sec_pdf:
+                _ps_g6l  = _p(fontSize=6.5, textColor=colors.HexColor("#64748b"))
+                _ps_g6v  = _p(fontSize=6.5)
+                _ps_g6b  = _p(fontSize=6.5, fontName="Helvetica-Bold")
                 def _geo_tbl(d):
-                    rows = [[Paragraph("País/Región", _p(6.5, colors.HexColor("#64748b"))),
-                             Paragraph("%", _p(6.5, colors.HexColor("#64748b")))]]
+                    rows = [[Paragraph("País/Región", _ps_g6l), Paragraph("%", _ps_g6l)]]
                     for k, v in list(d.items())[:5]:
-                        rows.append([Paragraph(k, _p(6.5)),
-                                     Paragraph(f"{v}%", _p(6.5, fontName="Helvetica-Bold"))])
+                        rows.append([Paragraph(k, _ps_g6v), Paragraph(f"{v}%", _ps_g6b)])
                     t = Table(rows, colWidths=[3.5*cm, 1.3*cm])
                     t.setStyle(TableStyle([
                         ("ROWBACKGROUNDS",(0,0),(-1,-1),[colors.HexColor("#eff6ff"), colors.white]),
@@ -8441,11 +8444,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     ]))
                     return t
                 def _sec_tbl(d):
-                    rows = [[Paragraph("Sector", _p(6.5, colors.HexColor("#64748b"))),
-                             Paragraph("%", _p(6.5, colors.HexColor("#64748b")))]]
+                    rows = [[Paragraph("Sector", _ps_g6l), Paragraph("%", _ps_g6l)]]
                     for k, v in list(d.items())[:5]:
-                        rows.append([Paragraph(k[:28], _p(6.5)),
-                                     Paragraph(f"{v}%", _p(6.5, fontName="Helvetica-Bold"))])
+                        rows.append([Paragraph(k[:28], _ps_g6v), Paragraph(f"{v}%", _ps_g6b)])
                     t = Table(rows, colWidths=[4.2*cm, 1.3*cm])
                     t.setStyle(TableStyle([
                         ("ROWBACKGROUNDS",(0,0),(-1,-1),[colors.HexColor("#f0fdf4"), colors.white]),
@@ -8469,7 +8470,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     _p(fontSize=7.5, textColor=colors.HexColor("#334155"))))
                 historia.append(Spacer(1, 0.1*cm))
             if _nota_p:
-                historia.append(Paragraph(f"🏛️ Nota fiscal (España): {_nota_p}",
+                historia.append(Paragraph(f"Nota fiscal (Espana): {_nota_p}",
                     _p(fontSize=7.5, textColor=colors.HexColor("#713f12"))))
                 historia.append(Spacer(1, 0.15*cm))
         else:
