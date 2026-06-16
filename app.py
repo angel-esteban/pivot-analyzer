@@ -9650,34 +9650,17 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # CSS por nth-child: único enfoque fiable para estilizar botones por columna en Streamlit
-    _wiz_css = ['<style>']
-    for _ci in range(1, 5):
-        _ci_done = (_ci != _step and _ci <= _max_step)
-        _ci_pend = (_ci > _max_step)
-        _sel = (f'div[data-testid="stHorizontalBlock"]'
-                f' > div[data-testid="column"]:nth-child({_ci})'
-                f' > div > div .stButton > button')
-        if _ci_done:
-            _wiz_css.append(
-                f'{_sel}{{background:#f0fdf4!important;border:2px solid #16a34a!important;'
-                f'border-radius:10px!important;min-height:82px!important;height:auto!important;'
-                f'color:#15803d!important;font-weight:700!important;font-size:.82rem!important;'
-                f'white-space:pre-wrap!important;line-height:1.35!important;}}'
-            )
-            _wiz_css.append(
-                f'{_sel}:hover{{background:#dcfce7!important;border-color:#15803d!important;}}'
-            )
-        elif _ci_pend:
-            _wiz_css.append(
-                f'{_sel}{{background:#f8fafc!important;border:2px solid #e2e8f0!important;'
-                f'border-radius:10px!important;min-height:82px!important;height:auto!important;'
-                f'color:#94a3b8!important;font-weight:600!important;font-size:.82rem!important;'
-                f'white-space:pre-wrap!important;line-height:1.35!important;'
-                f'pointer-events:none!important;cursor:default!important;}}'
-            )
-    _wiz_css.append('</style>')
-    st.markdown(''.join(_wiz_css), unsafe_allow_html=True)
+    # Altura fija para todas las tarjetas del wizard
+    _WIZ_H_CARD = '80px'
+    _WIZ_H_TOTAL = '128px'  # card + botones (activo) = misma altura visual que done/pend
+
+    # CSS global: anula gap entre tarjeta activa (top) y sus botones para que parezcan uno solo
+    st.markdown("""<style>
+div.pp-wiz-active-top + div[data-testid='stVerticalBlock'] > div[data-testid='stHorizontalBlock'] .stButton > button {
+  border-radius:0 0 8px 8px!important; border-top:none!important;
+  background:#dbeafe!important; border-color:#2563eb!important; color:#1e40af!important; font-weight:600!important;
+}
+</style>""", unsafe_allow_html=True)
 
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
@@ -9686,28 +9669,41 @@ def pestana_principiante():
             _is_done   = (_wi != _step and _wi <= _max_step)
 
             if _is_done:
-                _lbl_done = _wico + '  ' + _wnm
-                if st.button(_lbl_done, key=f'_pp_goto_{_wi}', use_container_width=True):
-                    st.session_state['_pp_step'] = _wi
-                    st.rerun()
-
-            elif _is_active:
-                # Tarjeta superior azul (sin badge ACTIVO)
+                # Tarjeta estática verde — mismo tamaño que activo (card+botones)
                 st.markdown(
-                    f'<div style="background:#eff6ff;border:2px solid #2563eb;'
-                    f'border-radius:10px 10px 0 0;padding:12px 8px 10px;text-align:center">'
-                    f'<div style="font-size:1.5rem">{_wico}</div>'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#2563eb;margin:4px 0">{_wnm}</div>'
+                    f'<div style="background:#f0fdf4;border:2px solid #16a34a;'
+                    f'border-radius:10px;padding:0;text-align:center;'
+                    f'height:{_WIZ_H_TOTAL};display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center;box-sizing:border-box">'
+                    f'<div style="font-size:1.4rem">{_wico}</div>'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#15803d;margin:5px 0 3px">{_wnm}</div>'
+                    f'<div style="font-size:.68rem;color:#16a34a">✓ Completado</div>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
-                # Botones en fila como extensión inferior de la tarjeta
+
+            elif _is_active:
+                # Parte superior azul de la tarjeta activa
+                st.markdown(
+                    f'<div class="pp-wiz-active-top" style="background:#eff6ff;border:2px solid #2563eb;'
+                    f'border-radius:10px 10px 0 0;padding:0;text-align:center;'
+                    f'height:{_WIZ_H_CARD};display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center;box-sizing:border-box;'
+                    f'border-bottom:none">'
+                    f'<div style="font-size:1.4rem">{_wico}</div>'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#2563eb;margin:5px 0">{_wnm}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                # Botones Ant/Sig — extensión inferior de la tarjeta azul
                 _na, _nb = st.columns(2)
                 with _na:
                     if _wi > 1:
                         if st.button('← Ant.', key='_pp_wiz_prev', use_container_width=True):
                             st.session_state['_pp_step'] = _wi - 1
                             st.rerun()
+                    else:
+                        st.markdown('<div style="height:38px"></div>', unsafe_allow_html=True)
                 with _nb:
                     if _wi < 4:
                         if st.button('Sig. →', key='_pp_wiz_next', type='primary',
@@ -9722,8 +9718,16 @@ def pestana_principiante():
                             st.rerun()
 
             else:  # pendiente
-                _lbl_pend = _wico + '  ' + _wnm
-                st.button(_lbl_pend, key=f'_pp_pend_{_wi}', use_container_width=True, disabled=True)
+                st.markdown(
+                    f'<div style="background:#f8fafc;border:2px solid #e2e8f0;'
+                    f'border-radius:10px;padding:0;text-align:center;'
+                    f'height:{_WIZ_H_TOTAL};display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center;box-sizing:border-box">'
+                    f'<div style="font-size:1.4rem;opacity:.4">{_wico}</div>'
+                    f'<div style="font-size:.82rem;font-weight:600;color:#94a3b8;margin:5px 0">{_wnm}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
     st.markdown("<div style='margin-bottom:.6rem'></div>", unsafe_allow_html=True)
 
