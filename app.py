@@ -78,6 +78,8 @@ def _load_json_kb(filename: str) -> dict:
 MACRO_KNOWLEDGE  = _load_json_kb('macro_indicators.json')
 CRISIS_PATTERNS  = _load_json_kb('crisis_patterns.json')
 GLOSARIO_KB      = _load_json_kb('glosario.json')
+ETF_UNIVERSE     = _load_json_kb('etf_universe.json')
+RATIOS_REF       = _load_json_kb('ratios_referencia.json')
 
 # Fallback manual: tickers conocidos cuyo sector yfinance a veces omite
 TICKER_SECTOR_FALLBACK = {
@@ -10590,9 +10592,10 @@ def pantalla_analisis():
                            f"Beta < 1: menos volátil. Beta < 0: correlación inversa.")
 
         st.markdown(
-            f'<p style="font-size:0.88rem;color:#444;margin:4px 0 0 0">'
-            f'<b>{nombre}</b> · {tipo_activo.upper()} · '
-            f'Datos cargados: <b>{ts_str}</b> · Retraso ~15 min</p>',
+            f'<p style="margin:6px 0 0 0">'
+            f'<span style="font-size:1.25rem;font-weight:700;color:#1e3a5f">{nombre}</span>'
+            f'<span style="font-size:0.85rem;color:#64748b"> · {tipo_activo.upper()} · '
+            f'Datos cargados: <b>{ts_str}</b> · Retraso ~15 min</span></p>',
             unsafe_allow_html=True
         )
 
@@ -13230,6 +13233,75 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     _rc[5].markdown(f'<span style="font-size:0.75rem;color:#64748b">{_e["indice"]}</span>',
                                     unsafe_allow_html=True)
                 st.caption("Ordenado por TER (menor = más barato). AUM y rentabilidad 1A desde Yahoo Finance.")
+            # ── Ficha detallada desde etf_universe.json ───────────────
+            _eu_data = ETF_UNIVERSE.get("etfs", {}).get(ticker_activo)
+            if _eu_data:
+                with st.expander("📋 Ficha técnica completa del ETF", expanded=False):
+                    _c1, _c2, _c3 = st.columns(3)
+                    _rep_color = {"fisica_completa": "#166534", "fisica_muestreo": "#16a34a",
+                                  "sintetica_swap": "#b45309"}.get(_eu_data.get("replica",""), "#64748b")
+                    _rep_txt   = {"fisica_completa": "Física completa", "fisica_muestreo": "Física (muestreo)",
+                                  "sintetica_swap": "Sintética (swap)"}.get(_eu_data.get("replica",""), _eu_data.get("replica","—"))
+                    _dist_color = "#166534" if _eu_data.get("politica_dividendos") == "acumulacion" else "#1d4ed8"
+                    _dist_txt   = "Acumulación" if _eu_data.get("politica_dividendos") == "acumulacion" else "Distribución"
+                    with _c1:
+                        st.markdown(f"**Gestora:** {_eu_data.get('gestora','—')}")
+                        st.markdown(f"**ISIN:** `{_eu_data.get('isin','—')}`")
+                        st.markdown(f"**Índice:** {_eu_data.get('indice_replicado','—')}")
+                    with _c2:
+                        _srri = _eu_data.get("srri")
+                        _srri_bar = "🟩" * (_srri or 0) + "⬜" * (7 - (_srri or 0))
+                        st.markdown(f"**TER:** `{_eu_data.get('ter_pct','—'):.2f}%`")
+                        st.markdown(f"**Réplica:** <span style='color:{_rep_color};font-weight:600'>{_rep_txt}</span>", unsafe_allow_html=True)
+                        st.markdown(f"**Política:** <span style='color:{_dist_color};font-weight:600'>{_dist_txt}</span>", unsafe_allow_html=True)
+                    with _c3:
+                        _pat = _eu_data.get("patrimonio_meur_aprox")
+                        _pos = _eu_data.get("num_posiciones_aprox")
+                        _cob = _eu_data.get("cobertura_divisa")
+                        st.markdown(f"**Divisa base:** {_eu_data.get('divisa_base','—')}" +
+                                    (f" · cobertura {_cob}" if _cob else ""))
+                        st.markdown(f"**Posiciones:** ~{_pos:,}" if _pos else "**Posiciones:** —")
+                        st.markdown(f"**AUM aprox:** ~{_pat:,} M€" if _pat else "**AUM aprox.:** —")
+                        if _srri:
+                            st.markdown(f"**Riesgo SRRI:** {_srri_bar} ({_srri}/7)")
+                    # Exposición geográfica y sectorial
+                    _geo = _eu_data.get("exposicion_geografica_top", {})
+                    _sec = _eu_data.get("exposicion_sectorial_top", {})
+                    _g1, _g2 = st.columns(2)
+                    with _g1:
+                        if _geo:
+                            st.markdown("**🌍 Exposición geográfica top:**")
+                            for _pais, _pct in list(_geo.items())[:5]:
+                                _bar_w = int(_pct * 1.2)
+                                st.markdown(
+                                    f'<div style="display:flex;align-items:center;gap:6px;margin:1px 0">'
+                                    f'<span style="font-size:.8rem;min-width:100px;color:#334155">{_pais}</span>'
+                                    f'<div style="background:#dbeafe;border-radius:3px;height:10px;width:{_bar_w}px"></div>'
+                                    f'<span style="font-size:.8rem;color:#1e40af;font-weight:600">{_pct}%</span></div>',
+                                    unsafe_allow_html=True)
+                    with _g2:
+                        if _sec:
+                            st.markdown("**📊 Exposición sectorial top:**")
+                            for _s, _p in list(_sec.items())[:5]:
+                                _bar_w2 = int(_p * 1.2)
+                                st.markdown(
+                                    f'<div style="display:flex;align-items:center;gap:6px;margin:1px 0">'
+                                    f'<span style="font-size:.8rem;min-width:130px;color:#334155">{_s}</span>'
+                                    f'<div style="background:#dcfce7;border-radius:3px;height:10px;width:{_bar_w2}px"></div>'
+                                    f'<span style="font-size:.8rem;color:#166534;font-weight:600">{_p}%</span></div>',
+                                    unsafe_allow_html=True)
+                    # Descripción y nota fiscal
+                    _desc = _eu_data.get("descripcion","")
+                    _nota = _eu_data.get("nota_fiscal_es","")
+                    if _desc:
+                        st.markdown(f'<div style="background:#f8fafc;border-left:3px solid #6366f1;padding:8px 12px;'
+                                    f'border-radius:4px;font-size:.84rem;color:#334155;margin-top:8px">{_desc}</div>',
+                                    unsafe_allow_html=True)
+                    if _nota:
+                        st.markdown(f'<div style="background:#fefce8;border-left:3px solid #ca8a04;padding:8px 12px;'
+                                    f'border-radius:4px;font-size:.82rem;color:#713f12;margin-top:6px">'
+                                    f'🏛️ <b>Nota fiscal (España):</b> {_nota}</div>',
+                                    unsafe_allow_html=True)
         elif fundamentales:
             fund_items = [(k, v) for k, v in fundamentales.items() if v not in ("—", "")]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
@@ -13238,6 +13310,93 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 with cols_f[i % 5]:
                     st.metric(k, v, help=TOOLTIPS.get(k))
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # ── Semáforo de valoración vs sector histórico (ratios_referencia.json) ──
+            _sector_yf_ratio = (info.get("sector") or
+                                TICKER_SECTOR_FALLBACK.get(ticker_activo.upper(), ""))
+            _rr_sectores = RATIOS_REF.get("sectores", {})
+            _rr_sector   = _rr_sectores.get(_sector_yf_ratio)
+            if _rr_sector:
+                with st.expander(f"📐 Valoración relativa vs histórico sectorial — {_rr_sector.get('nombre_es', _sector_yf_ratio)}", expanded=True):
+                    def _semaforo_ratio(label, valor_raw, p25, p50, p75, invertido=False, sufijo="x", nota=""):
+                        """Compara un ratio actual vs percentiles históricos y pinta semáforo."""
+                        if valor_raw is None or p25 is None or p75 is None:
+                            return
+                        try:
+                            v = float(valor_raw)
+                        except (TypeError, ValueError):
+                            return
+                        if invertido:  # FCF yield: alto = barato
+                            if v >= p75:   color,txt,bg = "#166534","Barato histórico","#dcfce7"
+                            elif v >= p50: color,txt,bg = "#16a34a","Zona media-baja","#f0fdf4"
+                            elif v >= p25: color,txt,bg = "#ca8a04","Zona media-alta","#fefce8"
+                            else:          color,txt,bg = "#dc2626","Caro histórico","#fef2f2"
+                        else:
+                            if v <= p25:   color,txt,bg = "#166534","Barato histórico","#dcfce7"
+                            elif v <= p50: color,txt,bg = "#16a34a","Zona media-baja","#f0fdf4"
+                            elif v <= p75: color,txt,bg = "#ca8a04","Zona media-alta","#fefce8"
+                            else:          color,txt,bg = "#dc2626","Caro histórico","#fef2f2"
+                        _p25s = f"{p25:.1f}" if p25 else "—"
+                        _p50s = f"{p50:.1f}" if p50 else "—"
+                        _p75s = f"{p75:.1f}" if p75 else "—"
+                        st.markdown(
+                            f'<div style="background:{bg};border-radius:8px;padding:8px 12px;margin:4px 0">'
+                            f'<div style="display:flex;justify-content:space-between;align-items:center">'
+                            f'<span style="font-size:.85rem;font-weight:700;color:#1e293b">{label}</span>'
+                            f'<span style="font-size:1.1rem;font-weight:800;color:{color}">'
+                            f'{v:.1f}{sufijo} — {txt}</span></div>'
+                            f'<div style="font-size:.75rem;color:#64748b;margin-top:2px">'
+                            f'Rango histórico sector: p25={_p25s}{sufijo} · p50={_p50s}{sufijo} · p75={_p75s}{sufijo}'
+                            + (f' · {nota}' if nota else '') +
+                            f'</div></div>',
+                            unsafe_allow_html=True)
+
+                    _per_raw  = info.get("trailingPE")
+                    _eveb_raw = info.get("enterpriseToEbitda")
+                    _pb_raw   = info.get("priceToBook")
+                    _fc_raw   = info.get("freeCashflow")
+                    _mc_raw   = info.get("marketCap")
+                    _fcf_yield_raw = ((_fc_raw / _mc_raw * 100) if _fc_raw and _mc_raw and _mc_raw > 0 else None)
+
+                    _per_d  = _rr_sector.get("per", {})
+                    _ev_d   = _rr_sector.get("ev_ebitda", {})
+                    _fcf_d  = _rr_sector.get("fcf_yield", {})
+                    _pb_d   = _rr_sector.get("pb", {})
+
+                    _any_shown = False
+                    if _per_raw and _per_d.get("p25"):
+                        _semaforo_ratio("PER (trailing)", _per_raw,
+                                        _per_d["p25"], _per_d["p50"], _per_d["p75"],
+                                        nota=_per_d.get("metrica_preferida",""))
+                        _any_shown = True
+                    if _eveb_raw and _ev_d.get("p25"):
+                        _semaforo_ratio("EV/EBITDA", _eveb_raw,
+                                        _ev_d["p25"], _ev_d["p50"], _ev_d["p75"],
+                                        nota=_ev_d.get("nota",""))
+                        _any_shown = True
+                    if _fcf_yield_raw and _fcf_d.get("p25_pct"):
+                        _semaforo_ratio("FCF Yield", _fcf_yield_raw,
+                                        _fcf_d["p25_pct"], _fcf_d["p50_pct"], _fcf_d["p75_pct"],
+                                        invertido=True, sufijo="%",
+                                        nota=_fcf_d.get("nota",""))
+                        _any_shown = True
+                    if _pb_raw and _pb_d.get("p25"):
+                        _semaforo_ratio("P/Book", _pb_raw,
+                                        _pb_d["p25"], _pb_d["p50"], _pb_d["p75"])
+                        _any_shown = True
+
+                    if not _any_shown:
+                        st.caption("yfinance no devolvió ratios de valoración para este ticker.")
+
+                    # Alertas del sector
+                    _alertas = _rr_sector.get("alertas", [])
+                    if _alertas:
+                        st.markdown('<div style="margin-top:8px;padding:8px 12px;background:#f1f5f9;'
+                                    'border-radius:6px;font-size:.82rem;color:#475569">'
+                                    '<b>⚡ Alertas del sector:</b><br>' +
+                                    "<br>".join(f"• {a}" for a in _alertas) +
+                                    '</div>', unsafe_allow_html=True)
+                    st.caption("📌 Rangos históricos: percentil 25/50/75 del sector (Damodaran NYU, Bloomberg 1995-2025). [VERIFICAR] con análisis propio.")
 
         st.divider()
 

@@ -1,0 +1,564 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "fecha": "2026-01",
+    "fuente": "Bloomberg, Damodaran NYU Stern, histórico S&P 500 y STOXX 600 (1995-2025)",
+    "nota": "Rangos percentil 25/50/75 del periodo completo. Contexto: valoraciones post-2020 elevadas por tipos cero — el p75 histórico puede estar infravalorado vs medias recientes.",
+    "metodologia": "p25=barato_historico, p50=zona_media, p75=caro_historico. FCF yield: inverso — yield alto = barato.",
+    "sectores_gics": [
+      "Technology",
+      "Financial Services",
+      "Healthcare",
+      "Consumer Cyclical",
+      "Consumer Defensive",
+      "Industrials",
+      "Energy",
+      "Utilities",
+      "Real Estate",
+      "Basic Materials",
+      "Communication Services"
+    ]
+  },
+  "sectores": {
+    "Technology": {
+      "nombre_es": "Tecnología",
+      "per": {
+        "p25": 18,
+        "p50": 26,
+        "p75": 38,
+        "nota": "Prima estructural por crecimiento. En recesión puede comprarse <18x si los fundamentales aguantan. Post-2020 llegó a >40x — no sostenible sin tipos cero.",
+        "metrica_preferida": "PER + EV/FCF — el EBITDA no captura bien el capex de software"
+      },
+      "ev_ebitda": {
+        "p25": 11,
+        "p50": 17,
+        "p75": 25,
+        "nota": "Para software SaaS usar EV/FCF o EV/Revenue. EV/EBITDA más útil en semiconductores y hardware."
+      },
+      "fcf_yield": {
+        "p25_pct": 2.0,
+        "p50_pct": 3.5,
+        "p75_pct": 6.0,
+        "nota": "Yield <2% = valoración muy exigente. >6% = descuento significativo o deterioro de negocio. Verificar calidad del FCF (capex vs D&A).",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 3.5,
+        "p50": 6.0,
+        "p75": 12.0,
+        "nota": "Alta para empresas con activos intangibles dominantes."
+      },
+      "roe_referencia_pct": {
+        "bajo": 15,
+        "medio": 25,
+        "alto": 40
+      },
+      "alertas": [
+        "PER >40x sin crecimiento >20% CAGR = señal de riesgo",
+        "Comparar siempre con crecimiento esperado: PEG = PER / crecimiento EPS",
+        "En tipos altos (>4%), las duraciones largas de tech castigan más que otros sectores"
+      ]
+    },
+    "Financial Services": {
+      "nombre_es": "Servicios Financieros",
+      "per": {
+        "p25": 7,
+        "p50": 11,
+        "p75": 16,
+        "nota": "Bancos: PER histórico deprimido por regulación y ciclicidad. En ciclo alcista de tipos mejora ROE y PER puede expandirse. En recesión con morosidad alta puede comprarse <8x.",
+        "metrica_preferida": "P/BV (Price to Book) — más relevante que PER para bancos"
+      },
+      "ev_ebitda": {
+        "p25": null,
+        "p50": null,
+        "p75": null,
+        "nota": "EV/EBITDA NO aplica a bancos y aseguradoras. La deuda es materia prima, no estructura de capital. Usar P/BV y ROE."
+      },
+      "fcf_yield": {
+        "p25_pct": 5.0,
+        "p50_pct": 8.0,
+        "p75_pct": 12.0,
+        "nota": "Para bancos interpretar como rentabilidad sobre recursos propios. FCF difícil de calcular en entidades financieras — usar beneficio neto / precio.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 0.6,
+        "p50": 1.0,
+        "p75": 1.8,
+        "nota": "P/BV <1 históricamente señal de oportunidad si ROE > coste de capital. Crisis 2008-12: bancos a 0.3-0.5x BV."
+      },
+      "roe_referencia_pct": {
+        "bajo": 6,
+        "medio": 10,
+        "alto": 15
+      },
+      "alertas": [
+        "P/BV <0.7 con ROE >10% = señal de infravaloración histórica",
+        "Curva de tipos: spread largo-corto determina margen bancario (NIM)",
+        "Morosidad (NPL ratio) y cobertura: indicadores adelantados de deterioro"
+      ]
+    },
+    "Healthcare": {
+      "nombre_es": "Salud",
+      "per": {
+        "p25": 14,
+        "p50": 20,
+        "p75": 28,
+        "nota": "Farmacéuticas grandes: prima por pipeline y patentes. Biotech sin ingresos: no aplica PER — usar EV/ventas o valor de pipeline. Defensivo: aguanta en recesión.",
+        "metrica_preferida": "PER + EV/EBITDA — FCF yield para farmacéuticas maduras"
+      },
+      "ev_ebitda": {
+        "p25": 9,
+        "p50": 13,
+        "p75": 20,
+        "nota": "Farmacéutica grande: 11-14x razonable. Biotech con ingresos: 15-25x. Medtech: 14-22x."
+      },
+      "fcf_yield": {
+        "p25_pct": 3.0,
+        "p50_pct": 5.0,
+        "p75_pct": 8.0,
+        "nota": "Farmacéuticas generan FCF elevado con capex bajo relativo a ingresos. FCF yield >6% puede ser señal de infravaloración.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 2.5,
+        "p50": 4.0,
+        "p75": 8.0,
+        "nota": "Alta por intangibles (patentes). Farmacéutica pura puede superar 10x BV."
+      },
+      "roe_referencia_pct": {
+        "bajo": 12,
+        "medio": 20,
+        "alto": 35
+      },
+      "alertas": [
+        "Cliff de patentes: revisar calendario de vencimientos de las 3 moléculas principales",
+        "Biotech: EV/ventas más relevante si EBITDA negativo",
+        "Pricing power en EEUU bajo presión política (IRA Act 2022)"
+      ]
+    },
+    "Consumer Cyclical": {
+      "nombre_es": "Consumo Discrecional",
+      "per": {
+        "p25": 10,
+        "p50": 16,
+        "p75": 24,
+        "nota": "Muy cíclico: comprar en recesión (PER aparentemente alto por beneficios deprimidos), vender en expansión tardía. Retailers: <12x = zona interesante. Lujo: 20-35x normal por pricing power.",
+        "metrica_preferida": "EV/EBITDA + PER normalizado (promedio 5 años)"
+      },
+      "ev_ebitda": {
+        "p25": 6,
+        "p50": 9,
+        "p75": 14,
+        "nota": "Retail físico: 4-7x. E-commerce: 12-20x. Lujo (LVMH, Inditex): 12-18x por márgenes y pricing power."
+      },
+      "fcf_yield": {
+        "p25_pct": 4.0,
+        "p50_pct": 6.5,
+        "p75_pct": 10.0,
+        "nota": "Automotriz y retail con altos capex: normalizar FCF. En ciclo bajo el FCF puede caer abruptamente.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 1.5,
+        "p50": 3.0,
+        "p75": 6.0,
+        "nota": "Retail con activos físicos bajos puede cotizar a >5x BV. Automotriz a 0.5-1.5x BV por activos intensivos."
+      },
+      "roe_referencia_pct": {
+        "bajo": 8,
+        "medio": 15,
+        "alto": 25
+      },
+      "alertas": [
+        "PER en pico de ciclo engañoso: usar beneficios normalizados",
+        "Deuda neta / EBITDA >3x en consumo cíclico = riesgo elevado en recesión",
+        "Inditex / lujo europeo: cotiza con prima estructural por modelo de negocio"
+      ]
+    },
+    "Consumer Defensive": {
+      "nombre_es": "Consumo Básico",
+      "per": {
+        "p25": 14,
+        "p50": 19,
+        "p75": 25,
+        "nota": "Prima defensiva: beneficios estables justifican PER más alto que cíclicos. En tipos altos la prima se comprime (compiten con renta fija). <16x = zona de compra histórica.",
+        "metrica_preferida": "PER + FCF yield — empresas maduras con dividendos"
+      },
+      "ev_ebitda": {
+        "p25": 9,
+        "p50": 13,
+        "p75": 18,
+        "nota": "Alimentación y bebidas: 11-15x. Tabaco: 7-10x (descuento estructural por ESG). Distribución: 8-12x."
+      },
+      "fcf_yield": {
+        "p25_pct": 3.5,
+        "p50_pct": 5.5,
+        "p75_pct": 8.0,
+        "nota": "FCF yield >6% en consumo básico = zona de compra históricamente sólida. Generan FCF consistente.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 2.5,
+        "p50": 4.5,
+        "p75": 8.0,
+        "nota": "Alta por marcas intangibles. Nestlé/Unilever: 6-10x BV normal."
+      },
+      "roe_referencia_pct": {
+        "bajo": 12,
+        "medio": 20,
+        "alto": 35
+      },
+      "alertas": [
+        "En entorno de tipos altos: prima de defensivos se reduce — compiten con bonos",
+        "Pricing power testado post-2022: las que lo mantuvieron = ventaja competitiva real",
+        "Volumen vs precio: crecimiento de ingresos sostenible requiere ambos"
+      ]
+    },
+    "Industrials": {
+      "nombre_es": "Industriales",
+      "per": {
+        "p25": 12,
+        "p50": 17,
+        "p75": 24,
+        "nota": "Heterogéneo: aeroespacial (Airbus, Boeing) 18-28x; maquinaria industrial 12-18x; transporte 10-16x. Usar PER normalizado por ciclo.",
+        "metrica_preferida": "EV/EBITDA + backlog / book-to-bill para aeroespacial y defensa"
+      },
+      "ev_ebitda": {
+        "p25": 7,
+        "p50": 11,
+        "p75": 16,
+        "nota": "Aeroespacial/Defensa: 12-18x por visibilidad de backlog. Maquinaria: 8-12x. Logística: 6-10x."
+      },
+      "fcf_yield": {
+        "p25_pct": 3.5,
+        "p50_pct": 6.0,
+        "p75_pct": 9.0,
+        "nota": "Industriales maduros generan FCF elevado. Capex de mantenimiento vs crecimiento: distinguir en el análisis.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 1.5,
+        "p50": 2.8,
+        "p75": 5.0,
+        "nota": "Variable por intensidad de activos. Ferroviario y utilities industriales: 1.5-2.5x BV."
+      },
+      "roe_referencia_pct": {
+        "bajo": 8,
+        "medio": 14,
+        "alto": 22
+      },
+      "alertas": [
+        "Backlog y book-to-bill: indicadores adelantados más fiables que PER en aeroespacial",
+        "Márgenes EBIT: muy dispersos (3% en transporte, 15%+ en maquinaria especializada)",
+        "Ciclicidad: ajustar múltiplos en función de posición en ciclo de capex global"
+      ]
+    },
+    "Energy": {
+      "nombre_es": "Energía",
+      "per": {
+        "p25": 6,
+        "p50": 11,
+        "p75": 18,
+        "nota": "PER muy volátil por precio del crudo/gas. PER en fondo de ciclo (precio bajo) puede ser infinito por pérdidas. Usar EV/EBITDA y FCF yield como métricas principales.",
+        "metrica_preferida": "EV/EBITDA + FCF yield — el PER es engañoso en ciclos de commodities"
+      },
+      "ev_ebitda": {
+        "p25": 3,
+        "p50": 6,
+        "p75": 10,
+        "nota": "Integradas (Repsol, BP, Shell): 3.5-6x en precio de crudo medio. <4x = zona de compra histórica. >9x = precio del petróleo muy alto descontado."
+      },
+      "fcf_yield": {
+        "p25_pct": 5.0,
+        "p50_pct": 9.0,
+        "p75_pct": 15.0,
+        "nota": "FCF yield >10% en integradas = señal de infravaloración o ciclo de precio alto. Verificar precio del crudo implícito en el FCF.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 0.6,
+        "p50": 1.1,
+        "p75": 2.0,
+        "nota": "En fondo de ciclo: P/BV <0.8 históricamente. Activos petrolíferos sufren deterioro por transición energética."
+      },
+      "roe_referencia_pct": {
+        "bajo": 5,
+        "medio": 12,
+        "alto": 20
+      },
+      "alertas": [
+        "Siempre indicar precio del crudo/gas implícito en la valoración",
+        "Stranded assets: riesgo de deterioro de reservas por transición energética",
+        "Breakeven de producción: comparar vs precio spot — empresas con <$35/b son robustas"
+      ]
+    },
+    "Utilities": {
+      "nombre_es": "Servicios Públicos",
+      "per": {
+        "p25": 11,
+        "p50": 16,
+        "p75": 22,
+        "nota": "Valoración defensiva similar a bonos. Muy sensible a tipos de interés: en tipos altos se comprimen múltiplos. <13x = zona históricamente barata.",
+        "metrica_preferida": "PER + EV/EBITDA + dividend yield — activos regulados con flujos predecibles"
+      },
+      "ev_ebitda": {
+        "p25": 7,
+        "p50": 10,
+        "p75": 14,
+        "nota": "Utilities reguladas (eléctricas, gasistas): 8-12x. Utilities en transición energética (Iberdrola, Enel): 9-13x por prima de renovables."
+      },
+      "fcf_yield": {
+        "p25_pct": 3.0,
+        "p50_pct": 5.0,
+        "p75_pct": 8.0,
+        "nota": "FCF deprimido por alto capex de inversión en renovables. Usar FFFO (Funds From Operations) o FCF ajustado por capex regulatorio.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 1.0,
+        "p50": 1.5,
+        "p75": 2.5,
+        "nota": "Activos intensivos regulados: P/BV 1-2x normal. Prima por concesiones y base de activos regulada (RAB)."
+      },
+      "roe_referencia_pct": {
+        "bajo": 6,
+        "medio": 10,
+        "alto": 15
+      },
+      "alertas": [
+        "Duración larga: comportamiento similar a bono de largo plazo vs tipos",
+        "Riesgo regulatorio: cambio de tarifa/concesión impacta directo en valoración",
+        "Capex de renovables: genera deuda elevada — vigilar cobertura de intereses"
+      ]
+    },
+    "Real Estate": {
+      "nombre_es": "Inmobiliario / REITs",
+      "per": {
+        "p25": null,
+        "p50": null,
+        "p75": null,
+        "nota": "PER NO aplica a REITs: las amortizaciones distorsionan el beneficio neto. Usar P/FFO (Price/Funds From Operations) o P/AFFO.",
+        "metrica_preferida": "P/FFO (10-20x histórico) y dividend yield (4-8%)"
+      },
+      "ev_ebitda": {
+        "p25": 12,
+        "p50": 18,
+        "p75": 28,
+        "nota": "EV/EBITDA de REITs elevado por naturaleza del sector. Preferible usar NAV (Net Asset Value) y descuento/prima sobre NAV."
+      },
+      "fcf_yield": {
+        "p25_pct": 3.5,
+        "p50_pct": 6.0,
+        "p75_pct": 9.0,
+        "nota": "Para REITs usar dividend yield en su lugar. REITs legalmente obligados a distribuir >90% del FFO. Yield >7% históricamente zona de compra.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 0.7,
+        "p50": 1.1,
+        "p75": 2.0,
+        "nota": "P/NAV (vs P/BV contable) es la métrica relevante. Descuento NAV >20% históricamente señal de oportunidad."
+      },
+      "roe_referencia_pct": {
+        "bajo": 4,
+        "medio": 8,
+        "alto": 14
+      },
+      "alertas": [
+        "USAR P/FFO no PER — la amortización inmobiliaria es contable, no económica",
+        "Sensibilidad extrema a tipos: subida de tipos = coste de deuda sube + descuento de flujos",
+        "Loan-to-Value (LTV): >50% en entorno de tipos altos = riesgo de refinanciación"
+      ]
+    },
+    "Basic Materials": {
+      "nombre_es": "Materiales Básicos",
+      "per": {
+        "p25": 7,
+        "p50": 12,
+        "p75": 20,
+        "nota": "Muy cíclico. En pico de ciclo (precio de commodities alto) el PER parece barato. En fondo de ciclo las pérdidas hacen el PER negativo. Usar EV/EBITDA normalizado.",
+        "metrica_preferida": "EV/EBITDA normalizado por precio de commodity al precio medio del ciclo"
+      },
+      "ev_ebitda": {
+        "p25": 4,
+        "p50": 7,
+        "p75": 12,
+        "nota": "Acero: 3-6x. Minería diversificada (BHP, Rio Tinto): 4-8x. Química especializada: 7-12x. Papel/envases: 6-9x."
+      },
+      "fcf_yield": {
+        "p25_pct": 4.0,
+        "p50_pct": 8.0,
+        "p75_pct": 14.0,
+        "nota": "En pico de ciclo de commodities el FCF yield puede superar 20%: señal de que el precio spot no es sostenible, no de infravaloración permanente.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 0.6,
+        "p50": 1.2,
+        "p75": 2.2,
+        "nota": "En recesión de commodities: P/BV <0.7. Mineras con activos de calidad: rara vez <0.5x BV."
+      },
+      "roe_referencia_pct": {
+        "bajo": 5,
+        "medio": 12,
+        "alto": 25
+      },
+      "alertas": [
+        "Normalizar siempre por precio de commodity a precio medio del ciclo (5-10 años)",
+        "Coste de producción cash vs precio spot: indica margen de seguridad",
+        "Transición energética: cobre, litio, cobalto con demanda estructural alcista"
+      ]
+    },
+    "Communication Services": {
+      "nombre_es": "Comunicaciones",
+      "per": {
+        "p25": 11,
+        "p50": 17,
+        "p75": 28,
+        "nota": "Sector heterogéneo: telecos (PER 8-14x, alta deuda, dividendos altos) vs plataformas digitales (Meta, Alphabet: PER 18-30x por crecimiento). Separar al analizar.",
+        "metrica_preferida": "PER + EV/EBITDA para telecos; EV/EBITDA + PER para plataformas"
+      },
+      "ev_ebitda": {
+        "p25": 5,
+        "p50": 9,
+        "p75": 15,
+        "nota": "Telecos europeas: 4-7x EBITDA (Telefónica: histórico 3.5-6x). Plataformas digitales: 12-20x. Media tradicional: 5-9x."
+      },
+      "fcf_yield": {
+        "p25_pct": 4.0,
+        "p50_pct": 7.0,
+        "p75_pct": 12.0,
+        "nota": "Telecos maduros: FCF yield >8% históricamente señal de infravaloración. Las plataformas digitales tienen FCF yield bajo pero creciente.",
+        "interpretacion": "alto_yield_barato"
+      },
+      "pb": {
+        "p25": 1.0,
+        "p50": 2.0,
+        "p75": 5.0,
+        "nota": "Telecos: 1-2x BV (activos físicos intensivos). Plataformas: 5-20x BV (intangibles dominantes)."
+      },
+      "roe_referencia_pct": {
+        "bajo": 8,
+        "medio": 15,
+        "alto": 30
+      },
+      "alertas": [
+        "Telecos: deuda neta/EBITDA >3x = alarma. Telefónica histórico: 2.5-4x",
+        "Plataformas digitales: riesgo regulatorio antimonopolio (EEUU, UE)",
+        "Separar teleco maduro de plataforma digital al comparar múltiplos"
+      ]
+    }
+  },
+  "tipos_empresa": {
+    "growth": {
+      "descripcion": "Crecimiento ingresos >15% CAGR, márgenes en expansión, reinversión alta, dividendo bajo o nulo",
+      "per": {
+        "zona_compra": "<25",
+        "zona_justa": "25-40",
+        "zona_cara": ">40"
+      },
+      "ev_ebitda": {
+        "zona_compra": "<15",
+        "zona_justa": "15-25",
+        "zona_cara": ">25"
+      },
+      "fcf_yield_pct": {
+        "zona_compra": ">4",
+        "zona_justa": "2-4",
+        "zona_cara": "<2"
+      },
+      "peg_ratio": {
+        "zona_compra": "<1",
+        "zona_justa": "1-2",
+        "zona_cara": ">2"
+      },
+      "nota": "PEG (PER/crecimiento EPS) es más útil que PER aislado. PEG <1 históricamente señal de infravaloración para growth."
+    },
+    "value": {
+      "descripcion": "Crecimiento moderado <10%, márgenes estables, balance sólido, dividendo moderado",
+      "per": {
+        "zona_compra": "<12",
+        "zona_justa": "12-18",
+        "zona_cara": ">22"
+      },
+      "ev_ebitda": {
+        "zona_compra": "<7",
+        "zona_justa": "7-12",
+        "zona_cara": ">14"
+      },
+      "fcf_yield_pct": {
+        "zona_compra": ">8",
+        "zona_justa": "5-8",
+        "zona_cara": "<4"
+      },
+      "pb": {
+        "zona_compra": "<1.2",
+        "zona_justa": "1.2-2.5",
+        "zona_cara": ">3"
+      },
+      "nota": "Para value: FCF yield y P/BV más relevantes que PER. Buscar catalizador de rerating — value sin catalizador es value trap."
+    },
+    "dividend": {
+      "descripcion": "Dividendo >3.5%, payout sostenible <75% del FCF, negocio maduro estable",
+      "per": {
+        "zona_compra": "<14",
+        "zona_justa": "14-20",
+        "zona_cara": ">24"
+      },
+      "ev_ebitda": {
+        "zona_compra": "<8",
+        "zona_justa": "8-13",
+        "zona_cara": ">16"
+      },
+      "fcf_yield_pct": {
+        "zona_compra": ">7",
+        "zona_justa": "4-7",
+        "zona_cara": "<4"
+      },
+      "dividend_yield_pct": {
+        "zona_atractiva": ">4.5",
+        "zona_media": "3-4.5",
+        "zona_baja": "<3"
+      },
+      "payout_fcf": {
+        "sostenible": "<65",
+        "tension": "65-80",
+        "insostenible": ">85"
+      },
+      "nota": "Verificar siempre la cobertura del dividendo: FCF / dividendo total. Yield alto con payout >85% del FCF es señal de recorte inminente."
+    }
+  },
+  "semaforo_valoracion": {
+    "descripcion": "Tabla de señales para comparar ratio actual contra rango histórico del sector",
+    "logica": {
+      "muy_barato": "ratio < p25 del sector (o FCF yield > p75)",
+      "barato": "ratio entre p25 y p50",
+      "zona_media": "ratio entre p50 y p75",
+      "caro": "ratio > p75 del sector",
+      "muy_caro": "ratio > p75 * 1.3 (30% sobre el percentil 75 histórico)"
+    },
+    "colores": {
+      "muy_barato": "verde_oscuro",
+      "barato": "verde",
+      "zona_media": "amarillo",
+      "caro": "naranja",
+      "muy_caro": "rojo"
+    },
+    "advertencia": "El ratio actual lo provee yfinance (trailingPE, enterpriseToEbitda, freeCashflowYield). Verificar que no esté distorsionado por extraordinarios."
+  },
+  "campos_yfinance": {
+    "per_trailing": "trailingPE",
+    "per_forward": "forwardPE",
+    "ev_ebitda": "enterpriseToEbitda",
+    "pb": "priceToBook",
+    "ps": "priceToSalesTrailing12Months",
+    "fcf": "freeCashflow",
+    "market_cap": "marketCap",
+    "dividend_yield": "dividendYield",
+    "payout_ratio": "payoutRatio",
+    "roe": "returnOnEquity",
+    "roa": "returnOnAssets",
+    "nota": "FCF yield = freeCashflow / marketCap * 100. Calcular en la app."
+  }
+}

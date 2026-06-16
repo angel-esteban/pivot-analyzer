@@ -1,0 +1,1390 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "fecha": "2026-01",
+    "nota": "TER y datos a enero 2026. [VERIFICAR] TER puede cambiar si la gestora lo modifica.",
+    "campos": "ticker, gestora, isin, indice_replicado, ter_pct, replica, divisa_base, cobertura_divisa, politica_dividendos, num_posiciones_aprox, patrimonio_meur_aprox, srri, exposicion_geografica_top, exposicion_sectorial_top, descripcion, nota_fiscal_es"
+  },
+  "etfs": {
+    "IWDA.AS": {
+      "nombre": "iShares Core MSCI World UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B4L5Y983",
+      "indice_replicado": "MSCI World",
+      "ter_pct": 0.2,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1450,
+      "patrimonio_meur_aprox": 70000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 70,
+        "Japón": 6,
+        "Reino Unido": 4,
+        "Francia": 3,
+        "Canadá": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 25,
+        "Financiero": 16,
+        "Salud": 12,
+        "Consumo Discrecional": 11,
+        "Industriales": 10
+      },
+      "descripcion": "Referencia de mercado para el inversor pasivo en renta variable desarrollada global. El más grande de Europa por patrimonio en su categoría.",
+      "nota_fiscal_es": "Acumulación: reinvierte dividendos sin retención en origen. No tributa en España hasta la venta. Sin traspaso fiscal a otros fondos."
+    },
+    "VWRL.AS": {
+      "nombre": "Vanguard FTSE All-World UCITS ETF (USD, Dist)",
+      "gestora": "Vanguard",
+      "isin": "IE00B3RBWM25",
+      "indice_replicado": "FTSE All-World",
+      "ter_pct": 0.22,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 3700,
+      "patrimonio_meur_aprox": 15000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 63,
+        "Japón": 6,
+        "Reino Unido": 4,
+        "China": 3,
+        "Francia": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 24,
+        "Financiero": 16,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 10
+      },
+      "descripcion": "Incluye emergentes (~10%). Distribución trimestral de dividendos. Más amplio que MSCI World. Opción Acc: VWCE.",
+      "nota_fiscal_es": "Distribución: dividendos tributan como rendimiento de capital mobiliario (IRPF 19-28%). Desventaja fiscal vs acumulación para inversores en fase de acumulación."
+    },
+    "VWCE.DE": {
+      "nombre": "Vanguard FTSE All-World UCITS ETF (USD, Acc)",
+      "gestora": "Vanguard",
+      "isin": "IE00BK5BQT80",
+      "indice_replicado": "FTSE All-World",
+      "ter_pct": 0.22,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 3700,
+      "patrimonio_meur_aprox": 28000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 63,
+        "Japón": 6,
+        "Reino Unido": 4,
+        "China": 3,
+        "Francia": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 24,
+        "Financiero": 16,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 10
+      },
+      "descripcion": "Versión acumulación del VWRL. Mercados desarrollados + emergentes en un solo vehículo. Rival directo de IWDA con algo más de diversificación.",
+      "nota_fiscal_es": "Acumulación: fiscalmente eficiente. Sin peaje fiscal entre acumulación y reinversión."
+    },
+    "XDWD.DE": {
+      "nombre": "Xtrackers MSCI World Swap UCITS ETF 1C",
+      "gestora": "DWS / Xtrackers",
+      "isin": "IE00BJ0KDQ92",
+      "indice_replicado": "MSCI World",
+      "ter_pct": 0.19,
+      "replica": "sintetica_swap",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1500,
+      "patrimonio_meur_aprox": 6000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 70,
+        "Japón": 6,
+        "Reino Unido": 4,
+        "Francia": 3,
+        "Canadá": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 25,
+        "Financiero": 16,
+        "Salud": 12,
+        "Consumo Discrecional": 11,
+        "Industriales": 10
+      },
+      "descripcion": "Réplica sintética mediante swap. Menor TER que IWDA. Riesgo de contraparte teórico aunque colateralizado. Fiscalmente equivalente en España.",
+      "nota_fiscal_es": "Réplica sintética: misma tributación en España que física. El swap reduce tracking error."
+    },
+    "PRNA.PA": {
+      "nombre": "Amundi Prime All Country World UCITS ETF DR (C)",
+      "gestora": "Amundi",
+      "isin": "LU2089238203",
+      "indice_replicado": "Solactive GBS Global Markets Large & Mid Cap",
+      "ter_pct": 0.05,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1500,
+      "patrimonio_meur_aprox": 1200,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 65,
+        "Japón": 6,
+        "China": 4,
+        "Reino Unido": 4,
+        "Francia": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 24,
+        "Financiero": 16,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 10
+      },
+      "descripcion": "TER 0.05%: el más barato de su categoría en Europa. Incluye emergentes. Patrimonio todavía limitado vs IWDA/VWCE — riesgo de cierre menor pero presente.",
+      "nota_fiscal_es": "Acumulación con réplica física. Menor liquidez que IWDA en momentos de estrés."
+    },
+    "IUSQ.DE": {
+      "nombre": "iShares MSCI ACWI UCITS ETF (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B6R52259",
+      "indice_replicado": "MSCI ACWI",
+      "ter_pct": 0.2,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 2300,
+      "patrimonio_meur_aprox": 12000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 63,
+        "Japón": 6,
+        "Reino Unido": 4,
+        "China": 3,
+        "Francia": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 24,
+        "Financiero": 16,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 10
+      },
+      "descripcion": "Alternativa de BlackRock al VWCE. MSCI ACWI vs FTSE All-World: diferencias marginales de composición (~2400 vs 3700 posiciones).",
+      "nota_fiscal_es": "Acumulación. Sin ventaja fiscal vs VWCE para inversor español."
+    },
+    "SXR8.DE": {
+      "nombre": "iShares Core S&P 500 UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B5BMR087",
+      "indice_replicado": "S&P 500",
+      "ter_pct": 0.07,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 503,
+      "patrimonio_meur_aprox": 80000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 31,
+        "Financiero": 14,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 9
+      },
+      "descripcion": "El ETF S&P 500 de mayor patrimonio en Europa. Réplica física completa. Referencia para posición núcleo en renta variable americana.",
+      "nota_fiscal_es": "Acumulación. Los dividendos de las acciones USA (WHT 15%) se retienen antes de entrar al fondo — no recuperables en IRPF directamente."
+    },
+    "VUSA.AS": {
+      "nombre": "Vanguard S&P 500 UCITS ETF (USD, Dist)",
+      "gestora": "Vanguard",
+      "isin": "IE00B3XXRP09",
+      "indice_replicado": "S&P 500",
+      "ter_pct": 0.07,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 503,
+      "patrimonio_meur_aprox": 45000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 31,
+        "Financiero": 14,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 9
+      },
+      "descripcion": "Versión distribución del S&P 500 de Vanguard. Dividendo trimestral. Equivalente a SXR8 excepto política de distribución.",
+      "nota_fiscal_es": "Distribución: dividendos trimestrales tributan en IRPF. Para inversores que necesitan flujo de caja o en fase de rentas."
+    },
+    "IUSA.AS": {
+      "nombre": "iShares S&P 500 UCITS ETF (Dist)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE0031442068",
+      "indice_replicado": "S&P 500",
+      "ter_pct": 0.07,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 503,
+      "patrimonio_meur_aprox": 12000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 31,
+        "Financiero": 14,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 9
+      },
+      "descripcion": "Versión histórica de iShares S&P 500 con distribución. Muy líquido. Rival de VUSA.",
+      "nota_fiscal_es": "Distribución trimestral. Fiscalmente menos eficiente que SXR8 para inversores en acumulación."
+    },
+    "SPYL.DE": {
+      "nombre": "Invesco S&P 500 UCITS ETF A (Acc)",
+      "gestora": "Invesco",
+      "isin": "IE000716YHJ7",
+      "indice_replicado": "S&P 500",
+      "ter_pct": 0.03,
+      "replica": "sintetica_swap",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 503,
+      "patrimonio_meur_aprox": 8000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 31,
+        "Financiero": 14,
+        "Salud": 11,
+        "Consumo Discrecional": 10,
+        "Industriales": 9
+      },
+      "descripcion": "TER 0.03%: el más barato del S&P 500 en Europa. Réplica sintética vía swap. Ventaja: WHT 0% sobre dividendos USA por estructura del swap — puede superar en retorno neto a réplicas físicas.",
+      "nota_fiscal_es": "Swap: el fondo no sufre WHT americano (15%) sobre dividendos. Potencial ventaja de ~0.3-0.5% anual vs réplica física. Riesgo contraparte colateralizado."
+    },
+    "CNDX.L": {
+      "nombre": "iShares Nasdaq 100 UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B53SZB19",
+      "indice_replicado": "Nasdaq 100",
+      "ter_pct": 0.33,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 101,
+      "patrimonio_meur_aprox": 14000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 95,
+        "Israel": 2,
+        "Otros": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 50,
+        "Consumo Discrecional": 18,
+        "Comunicaciones": 16,
+        "Salud": 6,
+        "Industriales": 4
+      },
+      "descripcion": "Las 100 mayores no financieras del Nasdaq. Alta concentración en tecnología. Volatilidad superior al S&P 500. SRRI 6 vs 5 del S&P 500.",
+      "nota_fiscal_es": "TER elevado (0.33%) vs S&P 500. Cotizado en Londres en GBP aunque subyacente USD."
+    },
+    "XNAS.DE": {
+      "nombre": "Xtrackers Nasdaq 100 Swap UCITS ETF 1C",
+      "gestora": "DWS / Xtrackers",
+      "isin": "IE00BMFKG444",
+      "indice_replicado": "Nasdaq 100",
+      "ter_pct": 0.2,
+      "replica": "sintetica_swap",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 101,
+      "patrimonio_meur_aprox": 4000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 95,
+        "Israel": 2,
+        "Otros": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 50,
+        "Consumo Discrecional": 18,
+        "Comunicaciones": 16,
+        "Salud": 6,
+        "Industriales": 4
+      },
+      "descripcion": "Alternativa más barata al CNDX. Réplica sintética. WHT 0% beneficioso en índices de alto dividendo, aunque Nasdaq 100 tiene yield bajo.",
+      "nota_fiscal_es": "Cotizado en EUR en Xetra. Más accesible para broker europeo que CNDX (GBP)."
+    },
+    "CS51.DE": {
+      "nombre": "iShares Core Euro Stoxx 50 UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B53L3W79",
+      "indice_replicado": "Euro Stoxx 50",
+      "ter_pct": 0.1,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 50,
+      "patrimonio_meur_aprox": 8000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Francia": 34,
+        "Alemania": 27,
+        "España": 9,
+        "Países Bajos": 9,
+        "Italia": 7
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 21,
+        "Industriales": 15,
+        "Tecnología": 14,
+        "Consumo Discrecional": 12,
+        "Salud": 10
+      },
+      "descripcion": "Referencia de la eurozona. 50 valores. Sin riesgo divisa. Alta exposición a banca (Santander, BBVA, BNP, ING). Menor diversificación vs STOXX 600.",
+      "nota_fiscal_es": "Denominado en EUR: sin riesgo FX. Acumulación."
+    },
+    "EXSA.DE": {
+      "nombre": "iShares STOXX Europe 600 UCITS ETF (DE)",
+      "gestora": "BlackRock / iShares",
+      "isin": "DE0002635307",
+      "indice_replicado": "STOXX Europe 600",
+      "ter_pct": 0.2,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 600,
+      "patrimonio_meur_aprox": 9000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 23,
+        "Francia": 17,
+        "Suiza": 14,
+        "Alemania": 14,
+        "Países Bajos": 7
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 18,
+        "Salud": 14,
+        "Industriales": 13,
+        "Consumo Discrecional": 10,
+        "Consumo Básico": 9
+      },
+      "descripcion": "Europa ampliada (UK incluido). Más diversificado y más value que Euro Stoxx 50. Incluye Suiza (Nestlé, Novartis, Roche) que añade defensivo.",
+      "nota_fiscal_es": "Estructura alemana (DE): réplica física. Dividendos del subyacente retenidos y acumulados."
+    },
+    "VEUR.AS": {
+      "nombre": "Vanguard FTSE Developed Europe UCITS ETF (Acc)",
+      "gestora": "Vanguard",
+      "isin": "IE00BKX55T58",
+      "indice_replicado": "FTSE Developed Europe",
+      "ter_pct": 0.12,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1300,
+      "patrimonio_meur_aprox": 3500,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 24,
+        "Francia": 16,
+        "Suiza": 14,
+        "Alemania": 14,
+        "Países Bajos": 7
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 18,
+        "Salud": 14,
+        "Industriales": 13,
+        "Consumo Básico": 10,
+        "Consumo Discrecional": 9
+      },
+      "descripcion": "Mayor número de posiciones que EXSA. TER competitivo. Incluye small y mid caps europeas — algo más de diversificación real.",
+      "nota_fiscal_es": "Irlandés (IE). Acumulación. TER intermedio entre EXSA y fondos activos europeos."
+    },
+    "SPEU.DE": {
+      "nombre": "SPDR MSCI Europe UCITS ETF",
+      "gestora": "State Street / SPDR",
+      "isin": "IE00BKWQ0D84",
+      "indice_replicado": "MSCI Europe",
+      "ter_pct": 0.12,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 430,
+      "patrimonio_meur_aprox": 1200,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 23,
+        "Francia": 17,
+        "Suiza": 14,
+        "Alemania": 13,
+        "Países Bajos": 7
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 18,
+        "Salud": 14,
+        "Industriales": 13,
+        "Consumo Básico": 10,
+        "Consumo Discrecional": 9
+      },
+      "descripcion": "Alternativa de State Street al EXSA/VEUR. Patrimonio menor — considerar liquidez. MSCI Europe vs STOXX 600: diferencias marginales.",
+      "nota_fiscal_es": "Mismo tratamiento que EXSA. Menor patrimonio implica spreads algo más amplios."
+    },
+    "CE9.PA": {
+      "nombre": "Amundi MSCI Europe UCITS ETF DR EUR (C)",
+      "gestora": "Amundi",
+      "isin": "LU1681042864",
+      "indice_replicado": "MSCI Europe",
+      "ter_pct": 0.15,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 430,
+      "patrimonio_meur_aprox": 2000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 23,
+        "Francia": 17,
+        "Suiza": 14,
+        "Alemania": 13,
+        "Países Bajos": 7
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 18,
+        "Salud": 14,
+        "Industriales": 13,
+        "Consumo Básico": 10,
+        "Consumo Discrecional": 9
+      },
+      "descripcion": "Versión Amundi del MSCI Europe. TER superior a VEUR. Cotizado en París en EUR.",
+      "nota_fiscal_es": "Estructura luxemburguesa (LU). Acumulación."
+    },
+    "IS3N.DE": {
+      "nombre": "iShares Core MSCI EM IMI UCITS ETF (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BKM4GZ66",
+      "indice_replicado": "MSCI Emerging Markets IMI",
+      "ter_pct": 0.18,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 3000,
+      "patrimonio_meur_aprox": 20000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "China": 27,
+        "India": 19,
+        "Taiwan": 17,
+        "Corea del Sur": 12,
+        "Brasil": 5
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 27,
+        "Financiero": 22,
+        "Consumo Discrecional": 13,
+        "Industriales": 9,
+        "Materiales": 7
+      },
+      "descripcion": "Referencia en emergentes UCITS. IMI incluye small caps. Alta exposición China/Taiwan — riesgo geopolítico estructural. SRRI 6: mayor volatilidad que RV desarrollada.",
+      "nota_fiscal_es": "WHT elevado en algunos mercados emergentes (China, India). Acumulación. No swap — réplica física con muestreo."
+    },
+    "VFEM.AS": {
+      "nombre": "Vanguard FTSE Emerging Markets UCITS ETF (Acc)",
+      "gestora": "Vanguard",
+      "isin": "IE00B3VVMM84",
+      "indice_replicado": "FTSE Emerging Markets",
+      "ter_pct": 0.22,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1800,
+      "patrimonio_meur_aprox": 3500,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "China": 25,
+        "India": 20,
+        "Taiwan": 17,
+        "Corea del Sur": 12,
+        "Brasil": 5
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 26,
+        "Financiero": 23,
+        "Consumo Discrecional": 13,
+        "Industriales": 9,
+        "Materiales": 7
+      },
+      "descripcion": "Diferencia vs IS3N: FTSE clasifica Corea del Sur como desarrollado (no emergente). Composición algo diferente. Menor patrimonio que IS3N.",
+      "nota_fiscal_es": "Acumulación. TER ligeramente superior a IS3N."
+    },
+    "PAEM.PA": {
+      "nombre": "Amundi MSCI Emerging Markets UCITS ETF DR EUR (C)",
+      "gestora": "Amundi",
+      "isin": "LU1681045370",
+      "indice_replicado": "MSCI Emerging Markets",
+      "ter_pct": 0.2,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1400,
+      "patrimonio_meur_aprox": 2000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "China": 27,
+        "India": 19,
+        "Taiwan": 17,
+        "Corea del Sur": 12,
+        "Brasil": 5
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 27,
+        "Financiero": 22,
+        "Consumo Discrecional": 13,
+        "Industriales": 9,
+        "Materiales": 7
+      },
+      "descripcion": "Alternativa Amundi en emergentes MSCI. No incluye small caps (diferencia vs IS3N IMI). Cotizado en París.",
+      "nota_fiscal_es": "Luxemburgo (LU). Acumulación."
+    },
+    "CNYA.L": {
+      "nombre": "iShares MSCI China UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BJ38QD84",
+      "indice_replicado": "MSCI China",
+      "ter_pct": 0.4,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 700,
+      "patrimonio_meur_aprox": 1500,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "China": 100
+      },
+      "exposicion_sectorial_top": {
+        "Consumo Discrecional": 24,
+        "Financiero": 22,
+        "Tecnología": 18,
+        "Industriales": 10,
+        "Comunicaciones": 9
+      },
+      "descripcion": "Exposición concentrada a China: riesgo regulatorio, geopolítico y de VIE structures. Alta volatilidad. No apto para núcleo de cartera conservadora.",
+      "nota_fiscal_es": "TER alto (0.40%). Riesgo divisa CNH/USD. SRRI 6."
+    },
+    "IEGA.AS": {
+      "nombre": "iShares Core Euro Government Bond UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B4WXJJ64",
+      "indice_replicado": "Bloomberg Euro Government Bond",
+      "ter_pct": 0.09,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 350,
+      "patrimonio_meur_aprox": 8000,
+      "srri": 4,
+      "exposicion_geografica_top": {
+        "Italia": 24,
+        "Francia": 23,
+        "Alemania": 18,
+        "España": 16,
+        "Países Bajos": 6
+      },
+      "exposicion_sectorial_top": {
+        "Deuda soberana eurozona": 100
+      },
+      "descripcion": "Referencia en renta fija soberana eurozona. Duración ~7 años: sensible a tipos (cada 1% de subida → ~7% de caída en precio). Sin riesgo divisa.",
+      "nota_fiscal_es": "SRRI 4. Acumulación. Alta sensibilidad a tipos BCE. Lección 2022: caída ~18% en precio con subida de tipos."
+    },
+    "IEAC.AS": {
+      "nombre": "iShares Euro Corporate Bond UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B3F81R35",
+      "indice_replicado": "Bloomberg Euro Corporate Bond",
+      "ter_pct": 0.2,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 3500,
+      "patrimonio_meur_aprox": 7000,
+      "srri": 4,
+      "exposicion_geografica_top": {
+        "Francia": 22,
+        "Alemania": 16,
+        "España": 12,
+        "Países Bajos": 11,
+        "Italia": 9
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 40,
+        "Industriales": 25,
+        "Servicios Públicos": 15,
+        "Consumo": 10,
+        "Telecomunicaciones": 5
+      },
+      "descripcion": "Bonos corporativos investment grade en EUR. Spread adicional vs soberano a cambio de riesgo crédito. Rating medio BBB+. Duración ~4.5 años.",
+      "nota_fiscal_es": "Menor duración que IEGA: algo menos sensible a tipos. Riesgo crédito adicional."
+    },
+    "VETY.AS": {
+      "nombre": "Vanguard EUR Eurozone Government Bond UCITS ETF (Dist)",
+      "gestora": "Vanguard",
+      "isin": "IE00BZ163G84",
+      "indice_replicado": "Bloomberg Euro Government Float Adjusted",
+      "ter_pct": 0.07,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 380,
+      "patrimonio_meur_aprox": 2000,
+      "srri": 4,
+      "exposicion_geografica_top": {
+        "Italia": 25,
+        "Francia": 22,
+        "Alemania": 18,
+        "España": 16,
+        "Países Bajos": 6
+      },
+      "exposicion_sectorial_top": {
+        "Deuda soberana eurozona": 100
+      },
+      "descripcion": "Rival de IEGA con TER más bajo. Distribución de cupones: conveniente para inversores que necesitan flujo de renta.",
+      "nota_fiscal_es": "Distribución: cupones tributan como rendimiento de capital mobiliario. TER 0.07% es muy competitivo para RF soberana."
+    },
+    "EAGA.PA": {
+      "nombre": "Amundi Euro Aggregate Bond UCITS ETF DR EUR (C)",
+      "gestora": "Amundi",
+      "isin": "LU1681046186",
+      "indice_replicado": "Bloomberg Euro Aggregate",
+      "ter_pct": 0.14,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 2000,
+      "patrimonio_meur_aprox": 1500,
+      "srri": 4,
+      "exposicion_geografica_top": {
+        "Francia": 20,
+        "Alemania": 16,
+        "Italia": 15,
+        "España": 12,
+        "Países Bajos": 10
+      },
+      "exposicion_sectorial_top": {
+        "Deuda soberana": 55,
+        "Corporativo IG": 35,
+        "Supranacional": 10
+      },
+      "descripcion": "Combina soberano y corporativo IG. Alternativa a tener IEGA + IEAC por separado. Exposición más amplia con un solo ETF.",
+      "nota_fiscal_es": "Luxemburgo (LU). Acumulación. TER intermedio."
+    },
+    "IBTM.L": {
+      "nombre": "iShares $ Treasury Bond 7-10yr UCITS ETF EUR Hedged (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BD8PGZ49",
+      "indice_replicado": "ICE US Treasury 7-10Y EUR Hedged",
+      "ter_pct": 0.1,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": "EUR/USD",
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 23,
+      "patrimonio_meur_aprox": 1800,
+      "srri": 4,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Treasuries EEUU 7-10 años": 100
+      },
+      "descripcion": "Treasuries americanos con cobertura de divisa EUR/USD. Acceso al tramo 7-10 años de la curva USA sin riesgo USD. Refugio cuando Fed baja tipos.",
+      "nota_fiscal_es": "Cobertura tiene coste implícito ~diferencial tipos EUR-USD. Con EUR < USD, la cobertura cuesta ~2-3% anual sobre TER declarado."
+    },
+    "GHYS.L": {
+      "nombre": "iShares Global High Yield Corp Bond EUR Hedged UCITS ETF (Dist)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B74DQ490",
+      "indice_replicado": "Markit iBoxx Global High Yield EUR Hedged",
+      "ter_pct": 0.5,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": "EUR multimoneda",
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 1200,
+      "patrimonio_meur_aprox": 2500,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 55,
+        "Europa": 35,
+        "Otros": 10
+      },
+      "exposicion_sectorial_top": {
+        "Consumo Discrecional": 20,
+        "Industriales": 18,
+        "Energía": 15,
+        "TMT": 14,
+        "Salud": 10
+      },
+      "descripcion": "High yield (sub-investment grade, BB/B/CCC). Alto cupón, alto riesgo crédito. Comportamiento más correlacionado con RV que con RF soberana. Distribución mensual.",
+      "nota_fiscal_es": "TER 0.50% más coste de cobertura. Distribución mensual: conveniente para rentas pero fiscalmente intensivo."
+    },
+    "IQQH.DE": {
+      "nombre": "iShares Global Clean Energy UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B1XNHC34",
+      "indice_replicado": "S&P Global Clean Energy",
+      "ter_pct": 0.65,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 100,
+      "patrimonio_meur_aprox": 3500,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 35,
+        "China": 20,
+        "España": 8,
+        "Brasil": 6,
+        "Dinamarca": 6
+      },
+      "exposicion_sectorial_top": {
+        "Utilities renovables": 60,
+        "Tecnología energética": 25,
+        "Industriales": 10,
+        "Materiales": 5
+      },
+      "descripcion": "Alta volatilidad sectorial. Muy sensible a tipos de interés (renewables son capital-intensivas = deuda). Perdió >50% en 2022-23 con subida de tipos.",
+      "nota_fiscal_es": "TER 0.65% muy elevado para renta variable. Alta concentración sectorial: no apto como posición núcleo. SRRI 6."
+    },
+    "2B76.DE": {
+      "nombre": "iShares Automation & Robotics UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BYZK4552",
+      "indice_replicado": "STOXX Global Automation & Robotics",
+      "ter_pct": 0.4,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 130,
+      "patrimonio_meur_aprox": 4000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 40,
+        "Japón": 25,
+        "Alemania": 8,
+        "Corea": 6,
+        "Suiza": 5
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología industrial": 45,
+        "Electrónica": 25,
+        "Software": 15,
+        "Robótica": 10,
+        "Otros": 5
+      },
+      "descripcion": "Exposición a la cadena de valor de automatización y robótica. Temático con horizonte 10+ años. Solapamiento significativo con índices de tecnología/industriales.",
+      "nota_fiscal_es": "TER 0.40%. Sectorial temático: usar como satélite, no núcleo."
+    },
+    "SEMI.L": {
+      "nombre": "Global X Semiconductor UCITS ETF USD (Acc)",
+      "gestora": "Global X",
+      "isin": "IE0003dwsemi",
+      "indice_replicado": "Solactive Global Semiconductor",
+      "ter_pct": 0.5,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 30,
+      "patrimonio_meur_aprox": 1200,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 60,
+        "Taiwan": 15,
+        "Corea del Sur": 12,
+        "Países Bajos": 7,
+        "Japón": 4
+      },
+      "exposicion_sectorial_top": {
+        "Semiconductores diseño": 40,
+        "Semiconductores fab": 30,
+        "Equipos semiconductores": 20,
+        "Materiales": 10
+      },
+      "descripcion": "Ciclo semiconductor: muy volátil. Picos y valles pronunciados ligados a capex tecnológico y ciclo de inventarios. Alta concentración (30 valores).",
+      "nota_fiscal_es": "TER 0.50%. Concentrado: top 10 posiciones ~60% del ETF."
+    },
+    "HEAL.L": {
+      "nombre": "iShares Healthcare Innovation UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BYZK4669",
+      "indice_replicado": "STOXX Global Digital Security",
+      "ter_pct": 0.4,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 130,
+      "patrimonio_meur_aprox": 1500,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 65,
+        "Suiza": 8,
+        "Dinamarca": 6,
+        "Alemania": 5,
+        "Japón": 4
+      },
+      "exposicion_sectorial_top": {
+        "Biotecnología": 35,
+        "Dispositivos médicos": 25,
+        "Salud digital": 20,
+        "Farmacéutica innovadora": 15,
+        "Genómica": 5
+      },
+      "descripcion": "Salud innovadora: biotech + medtech + salud digital. Alta volatilidad por concentración en biotech (eventos binarios de ensayos clínicos). Defensivo en ciclo, pero no en valoración.",
+      "nota_fiscal_es": "TER 0.40%. Riesgo binario en posiciones biotech individuales."
+    },
+    "IESW.DE": {
+      "nombre": "iShares MSCI World ESG Enhanced UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BHZRR030",
+      "indice_replicado": "MSCI World ESG Enhanced Focus",
+      "ter_pct": 0.2,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1100,
+      "patrimonio_meur_aprox": 3000,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 68,
+        "Japón": 7,
+        "Reino Unido": 4,
+        "Francia": 3,
+        "Canadá": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 27,
+        "Financiero": 15,
+        "Salud": 13,
+        "Consumo Discrecional": 11,
+        "Industriales": 10
+      },
+      "descripcion": "MSCI World con filtros ESG y bajas emisiones de carbono. Excluye tabaco, armamento controvertido, carbón térmico. Tracking error vs MSCI World puro ~0.5-1% anual.",
+      "nota_fiscal_es": "TER igual que IWDA (0.20%) pero con sesgo sectorial — menor peso en energía/materiales. Denominado en EUR."
+    },
+    "EQQQ.L": {
+      "nombre": "Invesco EQQQ Nasdaq-100 UCITS ETF (Dist)",
+      "gestora": "Invesco",
+      "isin": "IE0032077012",
+      "indice_replicado": "Nasdaq 100",
+      "ter_pct": 0.3,
+      "replica": "sintetica_swap",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 101,
+      "patrimonio_meur_aprox": 6000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 95,
+        "Israel": 2,
+        "Otros": 3
+      },
+      "exposicion_sectorial_top": {
+        "Tecnología": 50,
+        "Consumo Discrecional": 18,
+        "Comunicaciones": 16,
+        "Salud": 6,
+        "Industriales": 4
+      },
+      "descripcion": "Nasdaq 100 distribución de Invesco. Réplica sintética (swap). Distribución trimestral. Rival de CNDX con coste algo menor.",
+      "nota_fiscal_es": "Distribución: dividendos trimestrales tributan en IRPF. TER 0.30% vs 0.33% de CNDX."
+    },
+    "WBAT.L": {
+      "nombre": "WisdomTree Battery Solutions UCITS ETF USD (Acc)",
+      "gestora": "WisdomTree",
+      "isin": "IE00BKLF1R75",
+      "indice_replicado": "WisdomTree Battery Solutions",
+      "ter_pct": 0.4,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 45,
+      "patrimonio_meur_aprox": 350,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "China": 30,
+        "EEUU": 25,
+        "Corea del Sur": 15,
+        "Japón": 10,
+        "Alemania": 8
+      },
+      "exposicion_sectorial_top": {
+        "Minerales baterías": 30,
+        "Fabricantes baterías": 30,
+        "Vehículo eléctrico": 25,
+        "Almacenamiento energía": 15
+      },
+      "descripcion": "Temático puro en baterías y almacenamiento energético. Alta concentración China. Patrimonio reducido (riesgo de cierre). Dependiente del ciclo EV.",
+      "nota_fiscal_es": "TER 0.40%. Patrimonio ~350M€: vigilar liquidez y riesgo de cierre del ETF."
+    },
+    "IGLN.L": {
+      "nombre": "iShares Physical Gold ETC",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B4ND3602",
+      "indice_replicado": "LBMA Gold Price PM",
+      "ter_pct": 0.12,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1,
+      "patrimonio_meur_aprox": 12000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "Oro físico LBMA": 100
+      },
+      "exposicion_sectorial_top": {
+        "Oro físico": 100
+      },
+      "descripcion": "ETC (no ETF) respaldado por oro físico. Cada participación representa fracción de lingote. Sin contraparte: el oro está en bóveda. No genera cupón ni dividendo.",
+      "nota_fiscal_es": "Tributación como ganancia/pérdida patrimonial en IRPF. Sin régimen de traspaso entre fondos. TER bajo (0.12%) para oro físico."
+    },
+    "IJPA.AS": {
+      "nombre": "iShares Core MSCI Japan IMI UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B4L5YX21",
+      "indice_replicado": "MSCI Japan IMI",
+      "ter_pct": 0.12,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1200,
+      "patrimonio_meur_aprox": 2500,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Japón": 100
+      },
+      "exposicion_sectorial_top": {
+        "Industriales": 22,
+        "Consumo Discrecional": 18,
+        "Tecnología": 15,
+        "Salud": 10,
+        "Financiero": 10
+      },
+      "descripcion": "Exposición a Japón con divisa sin cubrir (riesgo JPY/EUR). IMI incluye small caps. Atractivo por reformas corporativas (mejora de ROE, buybacks) en curso desde 2023.",
+      "nota_fiscal_es": "Riesgo divisa JPY: altamente volátil. Sin cobertura — la apreciación/depreciación del yen impacta directamente."
+    },
+    "VJPN.AS": {
+      "nombre": "Vanguard FTSE Japan UCITS ETF (Acc)",
+      "gestora": "Vanguard",
+      "isin": "IE00B95PGT31",
+      "indice_replicado": "FTSE Japan",
+      "ter_pct": 0.15,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 500,
+      "patrimonio_meur_aprox": 600,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Japón": 100
+      },
+      "exposicion_sectorial_top": {
+        "Industriales": 22,
+        "Consumo Discrecional": 18,
+        "Tecnología": 15,
+        "Salud": 10,
+        "Financiero": 10
+      },
+      "descripcion": "Rival de IJPA. Menos posiciones (500 vs 1200 — sin small caps). TER ligeramente superior. Patrimonio mucho menor.",
+      "nota_fiscal_es": "Mismo riesgo JPY sin cobertura. TER 0.15% frente a 0.12% de IJPA."
+    },
+    "XMJP.DE": {
+      "nombre": "Xtrackers MSCI Japan Swap UCITS ETF 1C",
+      "gestora": "DWS / Xtrackers",
+      "isin": "IE00BJ0KDR08",
+      "indice_replicado": "MSCI Japan",
+      "ter_pct": 0.09,
+      "replica": "sintetica_swap",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 230,
+      "patrimonio_meur_aprox": 800,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Japón": 100
+      },
+      "exposicion_sectorial_top": {
+        "Industriales": 22,
+        "Consumo Discrecional": 18,
+        "Tecnología": 15,
+        "Salud": 10,
+        "Financiero": 10
+      },
+      "descripcion": "TER más bajo de los tres Japón (0.09%). Swap: WHT 0% sobre dividendos japoneses (vs 15% en física) — ventaja real en rendimiento neto.",
+      "nota_fiscal_es": "Sintético: beneficio de 0% WHT en dividendos japoneses puede añadir ~0.5% anual vs réplica física."
+    },
+    "IPRP.AS": {
+      "nombre": "iShares European Property Yield UCITS ETF EUR (Dist)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B0M63284",
+      "indice_replicado": "FTSE EPRA/NAREIT Europe Dividend+",
+      "ter_pct": 0.4,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 60,
+      "patrimonio_meur_aprox": 1800,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 35,
+        "Suecia": 15,
+        "Alemania": 14,
+        "Francia": 12,
+        "Países Bajos": 10
+      },
+      "exposicion_sectorial_top": {
+        "REITs diversificados": 30,
+        "Logística": 20,
+        "Residencial": 18,
+        "Oficinas": 15,
+        "Comercial": 12
+      },
+      "descripcion": "REITs europeos con sesgo yield. Distribución trimestral. Muy sensible a tipos de interés: caída ~35% en 2022 con subida de tipos. Solo valores con yield mínimo del 2%.",
+      "nota_fiscal_es": "Distribución: dividendos de REITs tributan como capital mobiliario. TER 0.40% + retención dividendos subyacente."
+    },
+    "IWDP.AS": {
+      "nombre": "iShares Developed Markets Property Yield UCITS ETF EUR (Dist)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B1FZS350",
+      "indice_replicado": "FTSE EPRA/NAREIT Developed",
+      "ter_pct": 0.59,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "distribucion",
+      "num_posiciones_aprox": 340,
+      "patrimonio_meur_aprox": 1500,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "EEUU": 65,
+        "Japón": 11,
+        "Australia": 7,
+        "Reino Unido": 5,
+        "Singapur": 3
+      },
+      "exposicion_sectorial_top": {
+        "REITs industriales/logística": 28,
+        "REITs residenciales": 20,
+        "REITs salud": 12,
+        "REITs oficinas": 10,
+        "REITs comerciales": 10
+      },
+      "descripcion": "REITs globales desarrollados. Exposición dominante a REITs USA. TER 0.59%: de los más caros del universo UCITS. Alto riesgo USD sin cobertura.",
+      "nota_fiscal_es": "TER 0.59% muy elevado. Riesgo USD significativo. Distribución trimestral."
+    },
+    "XREA.DE": {
+      "nombre": "Xtrackers FTSE EPRA/NAREIT Developed Europe Real Estate UCITS ETF 1C",
+      "gestora": "DWS / Xtrackers",
+      "isin": "IE00B4MD3Y73",
+      "indice_replicado": "FTSE EPRA/NAREIT Developed Europe",
+      "ter_pct": 0.33,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 80,
+      "patrimonio_meur_aprox": 900,
+      "srri": 5,
+      "exposicion_geografica_top": {
+        "Reino Unido": 32,
+        "Suecia": 16,
+        "Alemania": 14,
+        "Francia": 12,
+        "Países Bajos": 10
+      },
+      "exposicion_sectorial_top": {
+        "REITs diversificados": 28,
+        "Logística": 22,
+        "Residencial": 18,
+        "Oficinas": 14,
+        "Comercial": 12
+      },
+      "descripcion": "REITs europeos en versión acumulación. Fiscalmente más eficiente que IPRP para inversor en fase de acumulación. TER 0.33% frente a 0.40% de IPRP.",
+      "nota_fiscal_es": "Acumulación: sin peaje fiscal en dividendos recibidos del subyacente. TER moderado."
+    },
+    "CMOD.L": {
+      "nombre": "iShares Diversified Commodity Swap UCITS ETF (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BDFL4P12",
+      "indice_replicado": "Bloomberg Commodity ex Agri & Livestock Capped",
+      "ter_pct": 0.19,
+      "replica": "sintetica_swap",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 20,
+      "patrimonio_meur_aprox": 2000,
+      "srri": 5,
+      "exposicion_geografica_top": {},
+      "exposicion_sectorial_top": {
+        "Energía": 30,
+        "Metales industriales": 28,
+        "Metales preciosos": 25,
+        "Materiales blandos": 17
+      },
+      "descripcion": "Diversificación en materias primas mediante swap de índice (sin rollover físico de futuros). Excluye agricultura y ganadería. Cobertura inflacionista. Sin exposición directa a empresas.",
+      "nota_fiscal_es": "ETC sintético: tributación como ganancia patrimonial. Riesgo de contraparte del swap colateralizado."
+    },
+    "SGLD.L": {
+      "nombre": "Invesco Physical Gold ETC",
+      "gestora": "Invesco",
+      "isin": "IE00B579F325",
+      "indice_replicado": "LBMA Gold Price PM",
+      "ter_pct": 0.12,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1,
+      "patrimonio_meur_aprox": 3000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "Oro físico LBMA": 100
+      },
+      "exposicion_sectorial_top": {
+        "Oro físico": 100
+      },
+      "descripcion": "ETC de oro físico de Invesco. Rival de IGLN. Bóveda en JPMorgan Chase. Mismo TER y estructura económica. Diferencia: custodio diferente.",
+      "nota_fiscal_es": "Misma tributación que IGLN. Sin régimen de traspaso entre fondos en España."
+    },
+    "PHAU.L": {
+      "nombre": "WisdomTree Physical Gold ETC",
+      "gestora": "WisdomTree",
+      "isin": "JE00B1VS3770",
+      "indice_replicado": "LBMA Gold Price PM",
+      "ter_pct": 0.39,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1,
+      "patrimonio_meur_aprox": 5500,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "Oro físico LBMA": 100
+      },
+      "exposicion_sectorial_top": {
+        "Oro físico": 100
+      },
+      "descripcion": "Pionero en ETCs de oro físico. TER 0.39%: caro vs IGLN/SGLD (0.12%). Patrimonio elevado por historia. Sin ventaja económica sobre rivales más baratos.",
+      "nota_fiscal_es": "TER 0.39% vs 0.12% de IGLN: diferencia de 0.27% anual acumulada en 10 años es significativa. Cambiar a IGLN/SGLD equivalentes sería ganancia imponible."
+    },
+    "SSLN.L": {
+      "nombre": "iShares Physical Silver ETC",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B4NCWG09",
+      "indice_replicado": "LBMA Silver Price",
+      "ter_pct": 0.2,
+      "replica": "fisica_completa",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1,
+      "patrimonio_meur_aprox": 1200,
+      "srri": 7,
+      "exposicion_geografica_top": {
+        "Plata física LBMA": 100
+      },
+      "exposicion_sectorial_top": {
+        "Plata física": 100
+      },
+      "descripcion": "Plata física. SRRI 7 (máximo): extremadamente volátil. Doble naturaleza — metal precioso (refugio) + industrial (electrónica, solar). Comporta mercados muy delgados.",
+      "nota_fiscal_es": "SRRI 7: volatilidad histórica >30% anual. Para posiciones satélite pequeñas únicamente."
+    },
+    "XEON.DE": {
+      "nombre": "Xtrackers EUR Overnight Rate Swap UCITS ETF 1C",
+      "gestora": "DWS / Xtrackers",
+      "isin": "LU0290358497",
+      "indice_replicado": "Solactive EUR Daily Overnight Rate",
+      "ter_pct": 0.1,
+      "replica": "sintetica_swap",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1,
+      "patrimonio_meur_aprox": 3000,
+      "srri": 1,
+      "exposicion_geografica_top": {
+        "Eurozona": 100
+      },
+      "exposicion_sectorial_top": {
+        "Depósito overnight (€STR)": 100
+      },
+      "descripcion": "Monetario en EUR: replica el tipo €STR (antes EONIA). Equivalente a tener dinero en cuenta remunerada al tipo overnight del BCE. Capital estable, rentabilidad variable con tipos.",
+      "nota_fiscal_es": "SRRI 1: capital prácticamente estable. Sin volatilidad de precio. Acumulación: eficiente vs cuenta corriente con retención en origen. Útil como aparcamiento de liquidez."
+    },
+    "CSH2.PA": {
+      "nombre": "Amundi Euro Liquidity Short Term UCITS ETF DR EUR (C)",
+      "gestora": "Amundi",
+      "isin": "LU1190417599",
+      "indice_replicado": "ICE BofA Euro Government Bill",
+      "ter_pct": 0.07,
+      "replica": "fisica_completa",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 5,
+      "patrimonio_meur_aprox": 4000,
+      "srri": 1,
+      "exposicion_geografica_top": {
+        "Deuda soberana eurozona a corto plazo": 100
+      },
+      "exposicion_sectorial_top": {
+        "Letras soberanas eurozona": 100
+      },
+      "descripcion": "Alternativa de Amundi al XEON. Letras soberanas eurozona corto plazo. TER 0.07%: más barato que XEON (0.10%). Alta liquidez. Plataforma principal: Euronext Paris.",
+      "nota_fiscal_es": "SRRI 1. Acumulación. TER 0.07% lo hace más eficiente que XEON para montos significativos."
+    },
+    "IUSN.DE": {
+      "nombre": "iShares MSCI World Small Cap UCITS ETF EUR (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00BF4RFH31",
+      "indice_replicado": "MSCI World Small Cap",
+      "ter_pct": 0.35,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 3400,
+      "patrimonio_meur_aprox": 5000,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 60,
+        "Japón": 16,
+        "Canadá": 5,
+        "Reino Unido": 4,
+        "Australia": 3
+      },
+      "exposicion_sectorial_top": {
+        "Industriales": 22,
+        "Financiero": 18,
+        "Consumo Discrecional": 15,
+        "Salud": 12,
+        "Tecnología": 11
+      },
+      "descripcion": "Complemento al IWDA para capturar prima de small cap. Históricamente outperforma large cap en largos plazos pero con mayor volatilidad. Alta exposición a EEUU.",
+      "nota_fiscal_es": "TER 0.35% moderado para small caps. SRRI 6."
+    },
+    "ZPRX.DE": {
+      "nombre": "SPDR MSCI Europe Small Cap UCITS ETF",
+      "gestora": "State Street / SPDR",
+      "isin": "IE00BSPLC298",
+      "indice_replicado": "MSCI Europe Small Cap",
+      "ter_pct": 0.3,
+      "replica": "fisica_muestreo",
+      "divisa_base": "EUR",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 950,
+      "patrimonio_meur_aprox": 800,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "Reino Unido": 28,
+        "Suecia": 14,
+        "Alemania": 12,
+        "Suiza": 10,
+        "Francia": 9
+      },
+      "exposicion_sectorial_top": {
+        "Industriales": 25,
+        "Consumo Discrecional": 16,
+        "Financiero": 15,
+        "Salud": 12,
+        "Tecnología": 10
+      },
+      "descripcion": "Small caps europeas. Más sesgo value que IUSN (USA-heavy). Históricamente más volátil y correlacionado con ciclo europeo. Patrimonio reducido.",
+      "nota_fiscal_es": "TER 0.30%. Menor liquidez que IUSN por patrimonio más pequeño (~800M€)."
+    },
+    "RUSS.L": {
+      "nombre": "iShares MSCI USA Small Cap UCITS ETF USD (Acc)",
+      "gestora": "BlackRock / iShares",
+      "isin": "IE00B3VWHH21",
+      "indice_replicado": "MSCI USA Small Cap",
+      "ter_pct": 0.43,
+      "replica": "fisica_muestreo",
+      "divisa_base": "USD",
+      "cobertura_divisa": null,
+      "politica_dividendos": "acumulacion",
+      "num_posiciones_aprox": 1800,
+      "patrimonio_meur_aprox": 1800,
+      "srri": 6,
+      "exposicion_geografica_top": {
+        "EEUU": 100
+      },
+      "exposicion_sectorial_top": {
+        "Financiero": 20,
+        "Industriales": 18,
+        "Salud": 15,
+        "Consumo Discrecional": 13,
+        "Tecnología": 12
+      },
+      "descripcion": "Small caps USA. TER 0.43%: caro. Más correlacionado con ciclo doméstico USA que el S&P 500. Sensible a tipos: muchas small caps muy apalancadas.",
+      "nota_fiscal_es": "TER 0.43% elevado. Considerar si la prima small cap compensa el coste adicional a largo plazo."
+    }
+  }
+}
