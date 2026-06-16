@@ -14,6 +14,9 @@ from datetime import datetime, timedelta, date
 import bcrypt
 import io
 import traceback
+import uuid as _uuid_mod
+import hashlib as _hashlib_mod
+from pathlib import Path as _Path
 
 # PDF generation
 from reportlab.lib.pagesizes import A4
@@ -1583,6 +1586,53 @@ def login_usuario(username: str, password: str):
         return None
 
 
+# ── Sesiones persistentes (sobreviven F5) ─────────────────────────────────
+_SESS_FILE = _Path(__file__).parent / ".pivot_sessions.json"
+
+def _sess_load():
+    try:
+        if _SESS_FILE.exists():
+            return _json_mod.loads(_SESS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+def _sess_save(d: dict):
+    try:
+        _SESS_FILE.write_text(_json_mod.dumps(d), encoding="utf-8")
+    except Exception:
+        pass
+
+def _sess_create(user: dict) -> str:
+    token = _hashlib_mod.sha256(
+        f"{user['username']}{_uuid_mod.uuid4()}".encode()
+    ).hexdigest()[:40]
+    d = _sess_load()
+    d[token] = user["username"]
+    if len(d) > 200:
+        d = dict(list(d.items())[-200:])
+    _sess_save(d)
+    return token
+
+def _sess_get_user(token: str):
+    if not token:
+        return None
+    d = _sess_load()
+    username = d.get(token)
+    if not username:
+        return None
+    try:
+        datos = db_select("usuarios", {"username": username, "activo": True})
+        return datos[0] if datos else None
+    except Exception:
+        return None
+
+def _sess_delete(token: str):
+    d = _sess_load()
+    d.pop(token, None)
+    _sess_save(d)
+
+
 def pantalla_login():
     # CSS específico del login — card unificada, sin "Press Enter to apply"
     st.markdown("""
@@ -1645,6 +1695,8 @@ def pantalla_login():
                     if user:
                         st.session_state["usuario"] = user
                         st.session_state["_post_login_loading"] = True
+                        _tok = _sess_create(user)
+                        st.query_params["s"] = _tok
                         st.rerun()
                     else:
                         st.error("Usuario o contraseña incorrectos, o cuenta desactivada.")
@@ -9541,6 +9593,7 @@ def pestana_principiante():
     def _on_mercado_pp_change():
         """Al cambiar el índice en ¿Por dónde empiezo?, limpiar ticker y valor previos."""
         st.session_state.pop("_pp_ticker", None)
+        st.session_state.pop("_pp_ready", None)
         st.session_state.pop("_pp_valor_sel", None)
         st.session_state.pop("_pp_ticker_input", None)
         st.session_state["_pp_data"] = None
@@ -9626,6 +9679,7 @@ def pestana_principiante():
         st.session_state["_pp_step"]      = 1
         st.session_state["_pp_max_step"]  = 1
         st.session_state["_pp_data"]      = None
+        st.session_state["_pp_ready"]     = True
 
     st.markdown(
         '<p style="color:#64748b;font-size:.88rem;margin:.5rem 0 .8rem">'
@@ -9634,14 +9688,15 @@ def pestana_principiante():
         unsafe_allow_html=True
     )
 
-    _ticker = st.session_state.get("_pp_ticker", "")
-    _step   = st.session_state.get("_pp_step", 1)
+    _ticker   = st.session_state.get("_pp_ticker", "")
+    _pp_ready = st.session_state.get("_pp_ready", False)
+    _step     = st.session_state.get("_pp_step", 1)
     # max_step: garantiza que pasos ya visitados conservan borde verde al retroceder
     if _step > st.session_state.get("_pp_max_step", 1):
         st.session_state["_pp_max_step"] = _step
     _max_step = st.session_state.get("_pp_max_step", _step)
 
-    if not _ticker:
+    if not _ticker or not _pp_ready:
         st.info("Selecciona un mercado y un valor, o escribe el ticker, y pulsa **Analizar**.")
         st.caption("Ejemplos: `BBVA.MC` (BBVA), `IBE.MC` (Iberdrola), `AAPL` (Apple), `SPY` (S&P 500 ETF)")
         return
@@ -10796,6 +10851,8 @@ def pantalla_analisis():
             st.rerun()
     with _b2:
         if st.button("⏻ Salir", key="logout"):
+            _sess_delete(st.query_params.get("s", ""))
+            st.query_params.clear()
             del st.session_state["usuario"]
             st.rerun()
 
@@ -15309,6 +15366,18 @@ def _pantalla_cargando():
 
 
 def main():
+    # Restaurar sesión desde token en URL (sobrevive F5 / refresco de página)
+    if "usuario" not in st.session_state:
+        _tok_url = st.query_params.get("s", "")
+        if _tok_url:
+            _user_restored = _sess_get_user(_tok_url)
+            if _user_restored:
+                st.session_state["usuario"] = _user_restored
+                st.rerun()
+            else:
+                # Token inválido o expirado — limpiar URL
+                st.query_params.clear()
+
     if "usuario" not in st.session_state:
         pantalla_login()
     elif st.session_state.pop("_post_login_loading", False):
