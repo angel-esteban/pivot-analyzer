@@ -9616,8 +9616,11 @@ def pestana_principiante():
 
         st.success(f"&#9989; **Has completado el an&#225;lisis guiado de {nombre} ({d['ticker']})**")
         if st.button("&#128202; Ver an&#225;lisis t&#233;cnico completo", type="primary", key="_pp_btn_full"):
-            st.session_state["ultimo_ticker"] = d["ticker"]
-            st.info("Ve a la pesta&#241;a **&#128200; An&#225;lisis T&#233;cnico** para ver el an&#225;lisis completo.")
+            st.session_state["ultimo_ticker"]       = d["ticker"]
+            st.session_state["mercado_sel"]         = "✏️ Escribir manualmente"
+            st.session_state["ticker_manual_input"] = d["ticker"]
+            st.session_state["_pp_jump_to_analisis"] = True
+            st.rerun()
 
     # ── Navegación ────────────────────────────────────────────────────────────
     st.markdown("---")
@@ -10360,6 +10363,27 @@ def pantalla_analisis():
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("📖 Ayuda")
+
+    # Auto-jump a Análisis Técnico si viene desde ¿Por dónde empiezo?
+    if st.session_state.get("_pp_jump_to_analisis"):
+        del st.session_state["_pp_jump_to_analisis"]
+        _st_components.html("""<script>
+(function() {
+    function _clickAnalisisTab() {
+        var tabs = window.parent.document.querySelectorAll('[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].innerText.indexOf('\u00c1n') !== -1 || tabs[i].innerText.indexOf('lisis T') !== -1 || tabs[i].innerText.indexOf('An\u00e1lisis') !== -1) {
+                tabs[i].click(); return true;
+            }
+        }
+        return false;
+    }
+    // Intentar varios timings para asegurar que las tabs están renderizadas
+    if (!_clickAnalisisTab()) {
+        setTimeout(function(){ if(!_clickAnalisisTab()){ setTimeout(_clickAnalisisTab, 400); } }, 200);
+    }
+})();
+</script>""", height=0)
 
     tab_objs = st.tabs(tabs_list)
     tab_analisis   = tab_objs[0]
