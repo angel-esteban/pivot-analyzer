@@ -9650,92 +9650,33 @@ def pestana_principiante():
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
                   ("⚡", "Momento"),        ("📌", "Niveles")]
 
-    # Colores por estado
-    _WIZ_COLORS = {}
-    for _ci in range(1, 5):
-        _ci_done = (_ci != _step and _ci <= _max_step)
-        _ci_act  = (_ci == _step)
-        if _ci_done:
-            _WIZ_COLORS[_ci] = ('f0fdf4','16a34a','15803d','1','dcfce7','16a34a','15803d')
-        elif _ci_act:
-            _WIZ_COLORS[_ci] = ('eff6ff','2563eb','2563eb','1','dbeafe','2563eb','1d4ed8')
-        else:
-            _WIZ_COLORS[_ci] = ('f8fafc','e2e8f0','94a3b8','.4','f1f5f9','d1d5db','9ca3af')
-
-    # Construir CSS para inyectar en <head> vía JS (persiste entre rerenders)
-    _wiz_css_lines = []
-    for _ci in range(1, 5):
-        _bg,_brd,_tc,_op,_btn_bg,_btn_brd,_btn_tc = _WIZ_COLORS[_ci]
-        _wiz_css_lines.append(
-            'div[data-testid="column"]:has(#pp-col-' + str(_ci) + ') button[data-testid]{'
-            'border-top:none!important;border-radius:0 0 8px 8px!important;'
-            'padding:4px 6px!important;font-size:.74rem!important;'
-            'min-height:26px!important;height:26px!important;font-weight:700!important;'
-            'background:#' + _btn_bg + '!important;'
-            'border:2px solid #' + _btn_brd + '!important;'
-            'color:#' + _btn_tc + '!important;}'
-        )
-    # Botón Anterior: borde gris oscuro
-    _wiz_css_lines.append(
-        'button[data-testid="baseButton-secondary"]:not([disabled]){'
-        'border:2px solid #6b7280!important;color:#374151!important;}'
-    )
-    _wiz_css_joined = ' '.join(_wiz_css_lines)
-
-    # JS: inyecta <style> en document.head del parent (persiste tras rerenders)
-    _js_src = (
-        '<script>'
-        '(function(){'
-        '  function go(){'
-        '    var doc=window.parent.document;'
-        '    var pid="pp-wiz-sty";'
-        '    var ex=doc.getElementById(pid);'
-        '    if(ex)ex.remove();'
-        '    var s=doc.createElement("style");'
-        '    s.id=pid;'
-        '    s.textContent=' + repr(_wiz_css_joined) + ';'
-        '    doc.head.appendChild(s);'
-        '  }'
-        '  go();setTimeout(go,400);'
-        '})();'
-        '</script>'
-    )
-    _st_components.html(_js_src, height=0)
-
     _wiz_cols = st.columns(4)
     for _wi, (_wico, _wnm) in enumerate(_PASOS_WIZ, 1):
-        _bg,_brd,_tc,_op,_btn_bg,_btn_brd,_btn_tc = _WIZ_COLORS[_wi]
         with _wiz_cols[_wi - 1]:
             _is_active = (_wi == _step)
             _is_done   = (_wi != _step and _wi <= _max_step)
 
-            # Marcador único para selector CSS :has(#pp-col-N)
-            st.markdown('<span id="pp-col-' + str(_wi) + '" style="display:none"></span>',
-                        unsafe_allow_html=True)
+            if _is_done:
+                _bg, _brd, _tc, _op = '#f0fdf4', '#16a34a', '#15803d', '1'
+                _paso_color = '#16a34a'
+            elif _is_active:
+                _bg, _brd, _tc, _op = '#eff6ff', '#2563eb', '#2563eb', '1'
+                _paso_color = '#2563eb'
+            else:
+                _bg, _brd, _tc, _op = '#f8fafc', '#e2e8f0', '#94a3b8', '.4'
+                _paso_color = '#94a3b8'
 
-            # Tarjeta superior HTML
             st.markdown(
-                '<div style="background:#' + _bg + ';border:2px solid #' + _brd + ';border-bottom:none;'
-                'border-radius:10px 10px 0 0;text-align:center;height:80px;'
-                'display:flex;flex-direction:column;align-items:center;'
-                'justify-content:center;box-sizing:border-box">'
+                '<div style="background:' + _bg + ';border:2px solid ' + _brd + ';'
+                'border-radius:10px;text-align:center;padding:12px 8px 10px;'
+                'box-sizing:border-box;min-height:110px;display:flex;flex-direction:column;'
+                'align-items:center;justify-content:center;gap:4px">'
                 '<div style="font-size:1.4rem;opacity:' + _op + '">' + _wico + '</div>'
-                '<div style="font-size:.82rem;font-weight:700;color:#' + _tc + ';margin:4px 0">' + _wnm + '</div>'
+                '<div style="font-size:.85rem;font-weight:700;color:' + _tc + '">' + _wnm + '</div>'
+                '<div style="font-size:.75rem;font-weight:600;color:' + _paso_color + ';margin-top:4px">Paso ' + str(_wi) + '</div>'
                 '</div>',
                 unsafe_allow_html=True
             )
-
-            # Botón "Paso X" — funcional, estilizado por CSS inyectado en head
-            _paso_lbl = 'Paso ' + str(_wi)
-            if _is_done:
-                if st.button(_paso_lbl, key='_pp_goto_' + str(_wi), use_container_width=True):
-                    st.session_state['_pp_step'] = _wi
-                    st.rerun()
-            elif _is_active:
-                st.button(_paso_lbl, key='_pp_act_' + str(_wi), use_container_width=True)
-            else:
-                st.button(_paso_lbl, key='_pp_pend_' + str(_wi),
-                          use_container_width=True, disabled=True)
 
     # Navegación
     st.markdown('<div style="margin-top:12px"></div>', unsafe_allow_html=True)
