@@ -4518,44 +4518,104 @@ def pestaña_macro():
     # ── METALES PRECIOSOS ────────────────────────────────────────────────────
     st.markdown("#### 🥇 Metales preciosos")
     _tickers_metales = {
-        "Oro (USD/oz)":   ("GC=F",
-                           "Oro en futuros (USD/oz troy). Refugio clásico: sube con incertidumbre, "
-                           "dólar débil e inflación. Históricamente inverso al dólar y a tipos reales."),
-        "Plata (USD/oz)": ("SI=F",
-                           "Plata en futuros (USD/oz). Doble función: refugio de valor y metal industrial. "
-                           "Mayor volatilidad que el oro; ratio Oro/Plata como indicador de ciclo."),
-        "Cobre (USD/lb)": ("HG=F",
-                           "Cobre en futuros (USD/lb). 'Doctor Cobre': indicador adelantado del ciclo "
-                           "industrial global. Cae antes de recesiones, sube antes de expansiones."),
+        "Oro (USD/oz)":    ("GC=F",
+                            "Oro en futuros (USD/oz troy). Refugio clásico: sube con incertidumbre, "
+                            "dólar débil e inflación. Históricamente inverso al dólar y a tipos reales."),
+        "Plata (USD/oz)":  ("SI=F",
+                            "Plata en futuros (USD/oz). Doble función: refugio de valor y metal industrial. "
+                            "Mayor volatilidad que el oro; ratio Oro/Plata como indicador de ciclo."),
+        "Cobre (USD/lb)":  ("HG=F",
+                            "Cobre en futuros (USD/lb). 'Doctor Cobre': indicador adelantado del ciclo "
+                            "industrial global. Cae antes de recesiones, sube antes de expansiones."),
         "Platino (USD/oz)":("PL=F",
                             "Platino en futuros (USD/oz). Metal industrial y de inversión. "
                             "Muy ligado a la industria del automóvil (catalizadores)."),
     }
+    _met_colores = {
+        "Oro (USD/oz)":    "#f59e0b",
+        "Plata (USD/oz)":  "#94a3b8",
+        "Cobre (USD/lb)":  "#dc2626",
+        "Platino (USD/oz)":"#7c3aed",
+    }
+    # Precios actuales para detectar si las escalas son homogéneas
+    _met_precios = {}
     _cols_met = st.columns(4)
     for _i, (_nom, (_tkr, _tip)) in enumerate(_tickers_metales.items()):
         _pm, _pd = obtener_precio_macro(_tkr)
+        _met_precios[_nom] = _pm
         with _cols_met[_i]:
             st.metric(_nom, f"{_pm:.2f}" if _pm else "—",
                       delta=f"{_pd:+.2f}%" if _pd else None, help=_tip)
     with st.spinner("Cargando histórico metales..."):
         _h_metales = {n: obtener_historico_yf(tkr, _yf_period)
-                      for n, (tkr, _) in _tickers_metales.items()}
-    # Normalizar a base 100 para comparar escalas distintas (oz vs lb)
-    import pandas as _pd_mod
-    _h_met_norm = {}
-    for _nm, _hdf in _h_metales.items():
-        if _hdf is not None and not _hdf.empty:
-            _serie = _hdf if hasattr(_hdf, "iloc") else _hdf
-            _clean = _serie.dropna()
-            if len(_clean) == 0:
-                continue
-            _base = float(_clean.iloc[0])
-            if _base:
-                _h_met_norm[_nm] = _serie / _base * 100
-    if _h_met_norm:
-        _fig_met = _macro_chart(_h_met_norm, unidad=" (base 100)", fecha_inicio=_fecha_ini)
-        st.plotly_chart(_fig_met, use_container_width=True, config={"displayModeBar": False})
-        st.caption("Gráfico normalizado a base 100 desde el inicio del período — muestra rendimiento relativo, no precios absolutos.")
+                      for n, (tkr, _) in _tickers_metales.items()
+                      if obtener_historico_yf(tkr, _yf_period) is not None}
+    _met_disponibles = [n for n in _tickers_metales if n in _h_metales and
+                        _h_metales[n] is not None and not _h_metales[n].empty]
+    if _met_disponibles:
+        st.session_state.setdefault("_macro_metales_sel", ["Oro (USD/oz)"])
+        _sel_metales = st.multiselect(
+            "Series a mostrar (máx. 2)",
+            _met_disponibles,
+            key="_macro_metales_sel",
+            max_selections=2,
+            help="Selecciona 1 o 2 metales. Si sus escalas difieren mucho, "
+                 "el segundo metal usará el eje derecho automáticamente."
+        )
+        if not _sel_metales:
+            st.info("Selecciona al menos un metal para mostrar el gráfico.")
+        else:
+            import plotly.graph_objects as _go_met
+            _fig_met2 = _go_met.Figure()
+            # Detectar si se necesita doble eje (ratio de precios actuales > 5x)
+            _dual_met = False
+            if len(_sel_metales) == 2:
+                _p1 = _met_precios.get(_sel_metales[0]) or 1
+                _p2 = _met_precios.get(_sel_metales[1]) or 1
+                _dual_met = (max(_p1, _p2) / min(_p1, _p2)) > 5
+            for _mi, _snom in enumerate(_sel_metales):
+                _hserie = _h_metales[_snom].copy()
+                if hasattr(_hserie.index, "tz") and _hserie.index.tz is not None:
+                    _hserie.index = _hserie.index.tz_localize(None)
+                if _fecha_ini is not None:
+                    _fi3 = _fecha_ini.tz_localize(None) if hasattr(_fecha_ini, "tz") and _fecha_ini.tz else _fecha_ini
+                    _hserie = _hserie[_hserie.index >= _fi3]
+                if _hserie.empty:
+                    continue
+                _yax = ("y2" if (_dual_met and _mi == 1) else "y")
+                _unit_met = " USD/oz" if "lb" not in _snom else " USD/lb"
+                _fig_met2.add_trace(_go_met.Scatter(
+                    x=_hserie.index, y=_hserie.values,
+                    mode="lines", name=_snom,
+                    line=dict(color=_met_colores.get(_snom, "#2563eb"), width=2),
+                    yaxis=_yax,
+                    hovertemplate=f"<b>{_snom}</b><br>%{{x|%b %Y}}: %{{y:.2f}}{_unit_met}<extra></extra>"
+                ))
+            _unit1 = " USD/oz" if "lb" not in _sel_metales[0] else " USD/lb"
+            _yax1_cfg = dict(showgrid=True, gridcolor="#f1f5f9",
+                             ticksuffix=" $", tickfont=dict(size=11))
+            _yax2_cfg = dict(overlaying="y", side="right", showgrid=False,
+                             ticksuffix=" $",
+                             tickfont=dict(size=11,
+                                          color=_met_colores.get(_sel_metales[1], "#64748b")
+                                          if len(_sel_metales) > 1 else "#64748b"),
+                             visible=_dual_met)
+            _fig_met2.update_layout(
+                height=300, margin=dict(l=0, r=10, t=10, b=0),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                            xanchor="right", x=1, font=dict(size=11)),
+                hovermode="x unified",
+                plot_bgcolor="white", paper_bgcolor="white",
+                xaxis=dict(showgrid=True, gridcolor="#f1f5f9",
+                           tickformat="%b %Y", tickfont=dict(size=11)),
+                yaxis=_yax1_cfg,
+                yaxis2=_yax2_cfg,
+            )
+            st.plotly_chart(_fig_met2, use_container_width=True,
+                            config={"displayModeBar": False})
+            if _dual_met and len(_sel_metales) == 2:
+                st.caption(f"Eje izquierdo: {_sel_metales[0]} · "
+                           f"Eje derecho: {_sel_metales[1]} (escalas distintas)")
 
     st.divider()
 
@@ -4598,10 +4658,10 @@ def pestaña_macro():
         "WTI (USD/b)":             (_h_wti,   "y1", "#16a34a"),
         "Gas Natural (USD/MMBTU)": (_h_ng,    "y2", "#f59e0b"),
     }
+    st.session_state.setdefault("_macro_energia_sel", ["Brent (USD/b)", "WTI (USD/b)"])
     _sel_energia = st.multiselect(
         "Series a mostrar",
         list(_series_energia.keys()),
-        default=["Brent (USD/b)", "WTI (USD/b)"],
         key="_macro_energia_sel",
         help="Brent y WTI comparten eje izquierdo (USD/b). Gas Natural usa eje derecho (USD/MMBTU)."
     )
