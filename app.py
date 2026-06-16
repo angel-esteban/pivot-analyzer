@@ -4553,7 +4553,8 @@ def pestaña_macro():
     _met_disponibles = [n for n in _tickers_metales if n in _h_metales and
                         _h_metales[n] is not None and not _h_metales[n].empty]
     if _met_disponibles:
-        st.session_state.setdefault("_macro_metales_sel", ["Oro (USD/oz)"])
+        if not st.session_state.get("_macro_metales_sel"):
+            st.session_state["_macro_metales_sel"] = ["Oro (USD/oz)"]
         _sel_metales = st.multiselect(
             "Series a mostrar (máx. 2)",
             _met_disponibles,
@@ -4658,7 +4659,8 @@ def pestaña_macro():
         "WTI (USD/b)":             (_h_wti,   "y1", "#16a34a"),
         "Gas Natural (USD/MMBTU)": (_h_ng,    "y2", "#f59e0b"),
     }
-    st.session_state.setdefault("_macro_energia_sel", ["Brent (USD/b)", "WTI (USD/b)"])
+    if not st.session_state.get("_macro_energia_sel"):
+        st.session_state["_macro_energia_sel"] = ["Brent (USD/b)", "WTI (USD/b)"]
     _sel_energia = st.multiselect(
         "Series a mostrar",
         list(_series_energia.keys()),
