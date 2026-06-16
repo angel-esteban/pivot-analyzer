@@ -9614,14 +9614,14 @@ def _pp_wizard_fragment():
         if _step > 1:
             if st.button('← Paso anterior', key='_pp_wiz_prev', use_container_width=True):
                 st.session_state['_pp_step'] = _step - 1
-                st.rerun()
+                st.rerun(scope="fragment")
     with _nav_r:
         if _step < 4:
             if st.button('Paso siguiente →', key='_pp_wiz_next', type='primary',
                          use_container_width=True):
                 st.session_state['_pp_max_step'] = max(_max_step, _step + 1)
                 st.session_state['_pp_step'] = _step + 1
-                st.rerun()
+                st.rerun(scope="fragment")
         else:
             if st.button('📄 Ver informe completo', key='_pp_wiz_rep', type='primary',
                          use_container_width=True):
@@ -9995,12 +9995,12 @@ def _pp_wizard_fragment():
         if _step > 1:
             if st.button("← Paso anterior", key="_pp_prev", use_container_width=True):
                 st.session_state["_pp_step"] = _step - 1
-                st.rerun()
+                st.rerun(scope="fragment")
     with _nr:
         if _step < 4:
             if st.button("Paso siguiente →", type="primary", key="_pp_next", use_container_width=True):
                 st.session_state["_pp_step"] = _step + 1
-                st.rerun()
+                st.rerun(scope="fragment")
         else:
             if st.button("📄 Ver informe completo", type="primary", key="_pp_next_last", use_container_width=True):
                 st.session_state["_pp_jump_to_analisis"] = True
