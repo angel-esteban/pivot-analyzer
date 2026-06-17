@@ -8939,7 +8939,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 # =============================================================================
 
 def panel_admin():
-    st.markdown("## ⚙️ Gestión de Usuarios")
+    """Panel de administración: lista de usuarios → perfil editable (estilo Mi Perfil)."""
+    _sel_id = st.session_state.get("_adm_sel_uid")
 
     try:
         usuarios = db_select("usuarios")
@@ -8948,165 +8949,210 @@ def panel_admin():
         st.error(f"Error al obtener usuarios: {e}")
         return
 
-    # ── LISTA DE USUARIOS ────────────────────────────────────────────────────
-    st.markdown(f"**{len(usuarios)} usuario{'s' if len(usuarios)!=1 else ''} registrado{'s' if len(usuarios)!=1 else ''}** — selecciona uno para gestionarlo.")
-
-    # Cabecera de la tabla
-    _hc = st.columns([2.5, 2, 1.5, 1.5, 1])
-    for _txt, _col in zip(["Usuario / Nombre", "Email", "Rol / Último acceso", "Estado", ""], _hc):
-        _col.markdown(f"<span style='font-size:.75rem;font-weight:700;color:#94a3b8;text-transform:uppercase'>{_txt}</span>", unsafe_allow_html=True)
-    st.markdown("<hr style='margin:4px 0 8px;border-color:#e2e8f0'>", unsafe_allow_html=True)
-
-    # Filas clicables
-    _sel_id = st.session_state.get("_adm_sel_uid")
-    for u in usuarios:
-        _uid   = u["id"]
-        _is_sel = _uid == _sel_id
-        _bg    = "background:#eff6ff;border-radius:6px;padding:2px 4px;" if _is_sel else ""
-        c1, c2, c3, c4, c5 = st.columns([2.5, 2, 1.5, 1.5, 1])
-        with c1:
-            st.markdown(
-                f'<div style="{_bg}"><b>{u["username"]}</b><br>'
-                f'<span style="font-size:.8rem;color:#64748b">{u.get("nombre","")}</span></div>',
-                unsafe_allow_html=True)
-        with c2:
-            _em = u.get("email","") or "—"
-            st.markdown(f'<span style="font-size:.82rem;color:#475569">{_em}</span>', unsafe_allow_html=True)
-        with c3:
-            _ul = str(u.get("ultimo_acceso",""))[:16] if u.get("ultimo_acceso") else "—"
-            st.markdown(
-                f'<span style="font-size:.8rem;font-weight:600;color:#0369a1">{u.get("rol","usuario")}</span><br>'
-                f'<span style="font-size:.75rem;color:#94a3b8">{_ul}</span>',
-                unsafe_allow_html=True)
-        with c4:
-            _activo = u.get("activo", True)
-            _estado_color = "#16a34a" if _activo else "#dc2626"
-            _estado_txt   = "Activo" if _activo else "Inactivo"
-            st.markdown(
-                f'<span style="font-size:.8rem;font-weight:700;color:{_estado_color}">● {_estado_txt}</span>',
-                unsafe_allow_html=True)
-        with c5:
-            _btn_lbl = "✏️ Editar" if not _is_sel else "▲ Cerrar"
-            if st.button(_btn_lbl, key=f"sel_{_uid}", use_container_width=True):
-                if _is_sel:
-                    st.session_state.pop("_adm_sel_uid", None)
-                else:
-                    st.session_state["_adm_sel_uid"] = _uid
-                st.rerun()
-
-    # ── PANEL DEL USUARIO SELECCIONADO ──────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # VISTA A: PERFIL DEL USUARIO SELECCIONADO
+    # ══════════════════════════════════════════════════════════════════════════
     _u_sel = next((u for u in usuarios if u["id"] == _sel_id), None) if _sel_id else None
     if _u_sel:
-        st.markdown("<hr style='margin:12px 0 8px'>", unsafe_allow_html=True)
-        _es_superadmin_u = _u_sel.get("rol") == "superadmin"
-        _em_cur = _u_sel.get("email","") or ""
+        if st.button("← Volver a la lista", key="adm_back"):
+            st.session_state.pop("_adm_sel_uid", None)
+            st.rerun()
+
+        _es_sa    = _u_sel.get("rol") == "superadmin"
         _activo_u = _u_sel.get("activo", True)
+        _em_cur   = _u_sel.get("email", "") or ""
+        _uid      = _u_sel["id"]
+        _nombre_u = _u_sel.get("nombre", "") or _u_sel["username"]
+        _initials = "".join(w[0].upper() for w in _nombre_u.split() if w)[:2] or "U"
+        _rol_u    = _u_sel.get("rol", "usuario")
+        _rol_color = {"superadmin": "#7c3aed", "admin": "#0369a1"}.get(_rol_u, "#64748b")
+        _ac_color  = "#16a34a" if _activo_u else "#dc2626"
 
+        # — Ficha de identidad —
+        st.markdown("## 👤 Perfil de usuario")
         st.markdown(
-            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:12px">'
-            f'<span style="font-size:1rem;font-weight:700">{_u_sel["username"]}</span>'
-            f' &nbsp;<span style="font-size:.8rem;color:#64748b">{_u_sel.get("nombre","")}</span>'
-            f' &nbsp;<span style="background:#eff6ff;color:#1d4ed8;font-size:.72rem;font-weight:700;'
-            f'padding:1px 7px;border-radius:10px">{_u_sel.get("rol","usuario")}</span>'
-            f'</div>',
-            unsafe_allow_html=True)
+            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;'
+            f'padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px">'
+            f'<div style="background:#dbeafe;color:#1d4ed8;border-radius:50%;'
+            f'width:46px;height:46px;display:flex;align-items:center;justify-content:center;'
+            f'font-size:1.15rem;font-weight:800;flex-shrink:0">{_initials}</div>'
+            f'<div>'
+            f'<div style="font-weight:700;font-size:.95rem">{_nombre_u}'
+            f' <span style="font-size:.8rem;font-weight:400;color:#64748b">@{_u_sel["username"]}</span></div>'
+            f'<div style="margin-top:5px;display:flex;gap:8px;align-items:center">'
+            f'<span style="background:{_rol_color};color:#fff;font-size:.7rem;font-weight:700;'
+            f'padding:1px 8px;border-radius:20px">{_rol_u.upper()}</span>'
+            f'<span style="font-size:.78rem;font-weight:600;color:{_ac_color}">● {"Activo" if _activo_u else "Inactivo"}</span>'
+            f'</div></div></div>',
+            unsafe_allow_html=True
+        )
+        st.divider()
 
-        _pa, _pb, _pc = st.columns(3)
+        # — Email (mismo estilo que Mi Perfil) —
+        st.markdown("### ✉️ Email para recibir informes")
+        if not _smtp_cfg_ok():
+            st.info(
+                "📧 El servicio de email no está configurado en este servidor. "
+                "Puedes guardar el email igualmente — estará listo cuando se active."
+            )
+        with st.form(f"adm_email_{_uid}"):
+            _new_email = st.text_input(
+                "Dirección de email",
+                value=_em_cur,
+                placeholder="nombre@ejemplo.com",
+                help="Email al que se enviarán los informes PDF de este usuario.",
+            )
+            _save_email = st.form_submit_button("💾 Guardar email", type="primary")
+        if _save_email:
+            _ne = _new_email.strip().lower()
+            if _ne and ("@" not in _ne or "." not in _ne):
+                st.warning("Introduce una dirección de email válida.")
+            else:
+                try:
+                    db_update("usuarios", {"email": _ne}, "id", _uid)
+                    st.success(f"✅ Email guardado: **{_ne}**" if _ne else "Email eliminado.")
+                    st.rerun()
+                except Exception as _ex:
+                    st.error(str(_ex))
 
-        # Columna A: Email
-        with _pa:
-            st.markdown("**✉️ Email**")
-            with st.form(f"form_email_{_sel_id}"):
-                _new_email_u = st.text_input("Email", value=_em_cur,
-                                              placeholder="nombre@ejemplo.com", label_visibility="collapsed")
-                if st.form_submit_button("💾 Guardar email", use_container_width=True):
-                    _ne = _new_email_u.strip().lower()
-                    if _ne and ("@" not in _ne or "." not in _ne):
-                        st.error("Email inválido.")
-                    else:
-                        try:
-                            db_update("usuarios", {"email": _ne}, "id", _sel_id)
-                            st.success("✅ Guardado")
-                            st.rerun()
-                        except Exception as _ex:
-                            st.error(str(_ex))
-
-        # Columna B: Contraseña
-        with _pb:
-            st.markdown("**🔑 Contraseña**")
-            with st.form(f"form_pass_{_sel_id}"):
-                _np = st.text_input("Nueva contraseña", type="password", label_visibility="collapsed",
-                                     placeholder="Nueva contraseña")
-                _cp = st.text_input("Confirmar", type="password", label_visibility="collapsed",
-                                     placeholder="Confirmar contraseña")
+        # — Contraseña —
+        st.divider()
+        with st.expander("🔑 Cambiar contraseña"):
+            with st.form(f"adm_pass_{_uid}"):
+                _np = st.text_input("Nueva contraseña", type="password", placeholder="Nueva contraseña")
+                _cp = st.text_input("Confirmar contraseña", type="password", placeholder="Confirmar")
                 if st.form_submit_button("💾 Cambiar contraseña", use_container_width=True):
-                    if _np and _np == _cp:
+                    if not _np:
+                        st.warning("Introduce la nueva contraseña.")
+                    elif _np != _cp:
+                        st.error("Las contraseñas no coinciden.")
+                    else:
                         try:
-                            db_update("usuarios", {"password_hash": hash_password(_np)}, "id", _sel_id)
-                            st.success("✅ Actualizada")
+                            db_update("usuarios", {"password_hash": hash_password(_np)}, "id", _uid)
+                            st.success("✅ Contraseña actualizada.")
                         except Exception as _ex:
                             st.error(str(_ex))
-                    elif _np != _cp:
-                        st.error("No coinciden.")
-                    else:
-                        st.warning("Introduce la contraseña.")
 
-        # Columna C: Estado y acciones
-        with _pc:
-            st.markdown("**🔧 Acciones**")
-            if not _es_superadmin_u:
-                if _activo_u:
-                    if st.button("⛔ Desactivar cuenta", key=f"des2_{_sel_id}", use_container_width=True):
-                        db_update("usuarios", {"activo": False}, "id", _sel_id)
+        # — Acciones de administración (solo si no es superadmin) —
+        if not _es_sa:
+            st.divider()
+            with st.expander("🔧 Administración de cuenta"):
+                _ca, _cb = st.columns(2)
+                with _ca:
+                    _new_rol = st.selectbox(
+                        "Rol", ["usuario", "admin"],
+                        index=0 if _rol_u == "usuario" else 1,
+                        key=f"rol_sel_{_uid}"
+                    )
+                    if st.button("💾 Guardar rol", key=f"save_rol_{_uid}", use_container_width=True):
+                        db_update("usuarios", {"rol": _new_rol}, "id", _uid)
+                        st.success(f"Rol actualizado a **{_new_rol}**.")
                         st.rerun()
-                else:
-                    if st.button("✅ Activar cuenta", key=f"act2_{_sel_id}", use_container_width=True):
-                        db_update("usuarios", {"activo": True}, "id", _sel_id)
-                        st.rerun()
-                st.markdown("")
-                if st.button("🗑️ Eliminar usuario", key=f"del2_{_sel_id}",
-                              use_container_width=True, type="primary"):
-                    db_delete("usuarios", "id", _sel_id)
+                with _cb:
+                    if _activo_u:
+                        if st.button("⛔ Desactivar", key=f"des_{_uid}", use_container_width=True):
+                            db_update("usuarios", {"activo": False}, "id", _uid)
+                            st.rerun()
+                    else:
+                        if st.button("✅ Activar", key=f"act_{_uid}", use_container_width=True):
+                            db_update("usuarios", {"activo": True}, "id", _uid)
+                            st.rerun()
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.error("⚠️ Zona peligrosa")
+                if st.button("🗑️ Eliminar usuario permanentemente",
+                              key=f"del_{_uid}", use_container_width=True, type="primary"):
+                    db_delete("usuarios", "id", _uid)
                     st.session_state.pop("_adm_sel_uid", None)
                     st.rerun()
-            else:
-                st.caption("El superadmin no puede ser modificado desde aquí.")
+        return
 
-    st.divider()
+    # ══════════════════════════════════════════════════════════════════════════
+    # VISTA B: LISTA DE USUARIOS
+    # ══════════════════════════════════════════════════════════════════════════
+    _lh1, _lh2 = st.columns([5, 1])
+    with _lh1:
+        st.markdown("## ⚙️ Gestión de Usuarios")
+        st.caption(
+            f"{len(usuarios)} usuario{'s' if len(usuarios)!=1 else ''} registrado{'s' if len(usuarios)!=1 else ''}. "
+            "Haz clic en **Ver →** para editar el perfil de un usuario."
+        )
+    with _lh2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("➕ Nuevo", key="adm_show_new", use_container_width=True):
+            st.session_state["_adm_show_new"] = not st.session_state.get("_adm_show_new", False)
+            st.rerun()
 
-    # ── CREAR NUEVO USUARIO ──────────────────────────────────────────────────
-    st.markdown("### ➕ Nuevo usuario")
-    with st.form("nuevo_usuario"):
-        col1, col2 = st.columns(2)
-        with col1:
-            nuevo_user   = st.text_input("Username")
-            nuevo_nombre = st.text_input("Nombre completo")
-            nuevo_email_adm = st.text_input("Email (opcional)")
-        with col2:
-            nuevo_pass = st.text_input("Contraseña", type="password")
-            nuevo_rol  = st.selectbox("Rol", ["usuario", "admin"])
-        submitted = st.form_submit_button("Crear usuario", type="primary")
-        if submitted:
-            if nuevo_user and nuevo_pass and nuevo_nombre:
-                try:
-                    ph = hash_password(nuevo_pass)
-                    _nu_extra = {}
-                    if nuevo_email_adm.strip():
-                        _nu_extra["email"] = nuevo_email_adm.strip().lower()
-                    db_insert("usuarios", {
-                        "username": nuevo_user,
-                        "nombre":   nuevo_nombre,
-                        "password_hash": ph,
-                        "rol":   nuevo_rol,
-                        "activo": True,
-                        **_nu_extra,
-                    })
-                    st.success(f"✅ Usuario '{nuevo_user}' creado.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al crear usuario: {e}")
-            else:
-                st.warning("Completa todos los campos obligatorios.")
+    # Cabecera tabla
+    _hc = st.columns([2.5, 2.5, 1.2, 1.2, 0.8])
+    for _txt, _col in zip(["Usuario / Nombre", "Email", "Rol", "Estado", ""], _hc):
+        _col.markdown(
+            f"<span style='font-size:.74rem;font-weight:700;color:#94a3b8;text-transform:uppercase'>{_txt}</span>",
+            unsafe_allow_html=True
+        )
+    st.markdown("<hr style='margin:4px 0 6px;border-color:#e2e8f0'>", unsafe_allow_html=True)
+
+    for u in usuarios:
+        _uid = u["id"]
+        c1, c2, c3, c4, c5 = st.columns([2.5, 2.5, 1.2, 1.2, 0.8])
+        with c1:
+            st.markdown(
+                f'<b style="font-size:.85rem">{u["username"]}</b>'
+                f'<span style="font-size:.78rem;color:#64748b;display:block">{u.get("nombre","")}</span>',
+                unsafe_allow_html=True)
+        with c2:
+            _em = u.get("email", "") or "—"
+            st.markdown(f'<span style="font-size:.82rem;color:#475569">{_em}</span>', unsafe_allow_html=True)
+        with c3:
+            _rc = {"superadmin": "#7c3aed", "admin": "#0369a1"}.get(u.get("rol", ""), "#64748b")
+            st.markdown(
+                f'<span style="color:{_rc};font-size:.8rem;font-weight:700">{u.get("rol","usuario")}</span>',
+                unsafe_allow_html=True)
+        with c4:
+            _ac = u.get("activo", True)
+            st.markdown(
+                f'<span style="font-size:.8rem;font-weight:600;color:{"#16a34a" if _ac else "#dc2626"}">● {"Activo" if _ac else "Inactivo"}</span>',
+                unsafe_allow_html=True)
+        with c5:
+            if st.button("Ver →", key=f"ver_{_uid}", use_container_width=True):
+                st.session_state["_adm_sel_uid"] = _uid
+                st.rerun()
+
+    # Formulario de nuevo usuario (desplegable)
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.session_state.get("_adm_show_new"):
+        st.markdown("### ➕ Nuevo usuario")
+        with st.form("nuevo_usuario"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_user      = st.text_input("Username")
+                nuevo_nombre    = st.text_input("Nombre completo")
+                nuevo_email_adm = st.text_input("Email (opcional)")
+            with col2:
+                nuevo_pass = st.text_input("Contraseña", type="password")
+                nuevo_rol  = st.selectbox("Rol", ["usuario", "admin"])
+            submitted = st.form_submit_button("Crear usuario", type="primary")
+            if submitted:
+                if nuevo_user and nuevo_pass and nuevo_nombre:
+                    try:
+                        ph = hash_password(nuevo_pass)
+                        _nu_extra = {}
+                        if nuevo_email_adm.strip():
+                            _nu_extra["email"] = nuevo_email_adm.strip().lower()
+                        db_insert("usuarios", {
+                            "username":      nuevo_user,
+                            "nombre":        nuevo_nombre,
+                            "password_hash": ph,
+                            "rol":           nuevo_rol,
+                            "activo":        True,
+                            **_nu_extra,
+                        })
+                        st.session_state.pop("_adm_show_new", None)
+                        st.success(f"✅ Usuario '{nuevo_user}' creado.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al crear usuario: {e}")
+                else:
+                    st.warning("Completa todos los campos obligatorios.")
 
 
 # =============================================================================
@@ -11089,7 +11135,7 @@ def pantalla_analisis():
 
     # Navegación
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?"]
-    if es_superadmin:
+    if es_admin:
         tabs_list.append("⚙️ Usuarios")
     tabs_list.append("👤 Mi Perfil")
     tabs_list.append("📖 Ayuda")
@@ -11145,7 +11191,7 @@ def pantalla_analisis():
     tab_principiante = tab_objs[6]
 
     tab_perfil = tab_objs[7] if len(tab_objs) > 7 else None
-    if es_superadmin and len(tab_objs) >= 10:
+    if es_admin and len(tab_objs) >= 10:
         tab_admin = tab_objs[8]
         tab_ayuda = tab_objs[9]
     else:
@@ -15575,7 +15621,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             )
 
     # ---- TAB ADMIN ----
-    if es_superadmin and tab_admin:
+    if es_admin and tab_admin:
         with tab_admin:
             panel_admin()
 
