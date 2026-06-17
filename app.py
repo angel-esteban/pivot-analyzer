@@ -10975,6 +10975,70 @@ def pestaña_cartera():
     _render_tipo("swing",       tab_swg)
 
 
+@st.dialog("👤 Mi Perfil", width="large")
+def _dialog_perfil_usuario():
+    """Diálogo de perfil — se abre desde el pill de cabecera."""
+    _u = st.session_state.get("usuario", {})
+    _rol_d = _u.get("rol", "usuario")
+    _rol_colors = {"superadmin": "#7c3aed", "admin": "#0369a1"}
+    _rc = _rol_colors.get(_rol_d, "#64748b")
+    st.markdown(
+        f"**Usuario:** `{_u.get('username','')}` &nbsp;·&nbsp; "
+        f"**Nombre:** {_u.get('nombre','')} &nbsp;·&nbsp; "
+        f"<span style='color:{_rc};font-weight:700'>{_rol_d}</span>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+    st.markdown("### ✉️ Email para recibir informes")
+    _em_act = _u.get("email", "") or ""
+    if not _smtp_cfg_ok():
+        st.info("📧 El servicio de email no está configurado en este servidor. Puedes guardar tu email igualmente — estará listo cuando se active.")
+    with st.form("dlg_email_perfil"):
+        _em_new = st.text_input(
+            "Tu dirección de email",
+            value=_em_act,
+            placeholder="nombre@ejemplo.com",
+            help="Se usará para enviarte los informes PDF generados en la app.",
+        )
+        _em_save = st.form_submit_button("💾 Guardar email", type="primary")
+    if _em_save:
+        _em_new = _em_new.strip().lower()
+        if _em_new and ("@" not in _em_new or "." not in _em_new):
+            st.warning("Introduce una dirección de email válida.")
+        else:
+            if actualizar_email_usuario(_u["id"], _em_new):
+                st.session_state["usuario"]["email"] = _em_new
+                st.success(f"✅ Email guardado: **{_em_new}**" if _em_new else "Email eliminado.")
+            else:
+                st.error("Error al guardar. Inténtalo de nuevo.")
+    _em_ok = st.session_state["usuario"].get("email") or ""
+    if _em_ok and _smtp_cfg_ok():
+        st.divider()
+        st.markdown("#### 🧪 Probar envío")
+        st.caption("Envía un email de prueba para confirmar que tu dirección funciona.")
+        if st.button("📨 Enviar email de prueba", key="dlg_test_email"):
+            import io as _io2
+            from reportlab.platypus import SimpleDocTemplate, Paragraph
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet
+            _tb = _io2.BytesIO()
+            SimpleDocTemplate(_tb, pagesize=A4).build(
+                [Paragraph("Email de prueba — PivotAnalyzer", getSampleStyleSheet()["Normal"])]
+            )
+            with st.spinner("Enviando..."):
+                _ok_t, _err_t = enviar_informe_email(_em_ok, "TEST", "Email de prueba", _tb.getvalue())
+            if _ok_t:
+                st.success(f"✅ Email enviado a **{_em_ok}**. Revisa tu bandeja.")
+            else:
+                st.error(f"❌ Error: {_err_t}")
+    st.divider()
+    st.markdown(
+        "ℹ️ Una vez guardado tu email, aparecerá un botón **✉️ Enviar por email** "
+        "junto al botón de descarga PDF en las pestañas **📈 Análisis Técnico** y **🎯 Estrategia**."
+    )
+
+
+
 def pantalla_analisis():
     usuario = st.session_state["usuario"]
     es_admin = usuario.get("rol") in ("superadmin", "admin")
@@ -11121,7 +11185,7 @@ def pantalla_analisis():
             st.markdown(_avatar_html, unsafe_allow_html=True)
             st.divider()
             if st.button("⚙️  Mi Perfil", key="pop_goto_perfil", use_container_width=True):
-                st.session_state["_nav_to_perfil"] = True
+                st.session_state["_open_perfil_dialog"] = True
                 st.rerun()
             if st.button("🔄  Refrescar datos", key="pop_refresh_data", use_container_width=True):
                 st.cache_data.clear()
@@ -11137,28 +11201,12 @@ def pantalla_analisis():
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?"]
     if es_admin:
         tabs_list.append("⚙️ Usuarios")
-    tabs_list.append("👤 Mi Perfil")
     tabs_list.append("📖 Ayuda")
 
-    # Auto-jump a Mi Perfil desde el icono ⚙️ de cabecera
-    if st.session_state.get("_nav_to_perfil"):
-        del st.session_state["_nav_to_perfil"]
-        _st_components.html("""<script>
-(function() {
-    function _clickPerfilTab() {
-        var tabs = window.parent.document.querySelectorAll('[role="tab"]');
-        for (var i = 0; i < tabs.length; i++) {
-            if (tabs[i].innerText.indexOf('Perfil') !== -1) {
-                tabs[i].click(); return true;
-            }
-        }
-        return false;
-    }
-    if (!_clickPerfilTab()) {
-        setTimeout(function(){ if(!_clickPerfilTab()){ setTimeout(_clickPerfilTab, 400); } }, 200);
-    }
-})();
-</script>""", height=0)
+    # Diálogo Mi Perfil — abierto desde pill de cabecera
+    if st.session_state.get("_open_perfil_dialog"):
+        del st.session_state["_open_perfil_dialog"]
+        _dialog_perfil_usuario()
 
     # Auto-jump a Análisis Técnico si viene desde ¿Por dónde empiezo?
     if st.session_state.get("_pp_jump_to_analisis"):
@@ -11190,16 +11238,14 @@ def pantalla_analisis():
     tab_cartera    = tab_objs[5]
     tab_principiante = tab_objs[6]
 
-    # Cuando es_admin: tabs=[..7 base.., Usuarios(7), MiPerfil(8), Ayuda(9)]
-    # Cuando no admin: tabs=[..7 base.., MiPerfil(7), Ayuda(8)]
-    if es_admin and len(tab_objs) >= 10:
-        tab_admin  = tab_objs[7]   # ⚙️ Usuarios
-        tab_perfil = tab_objs[8]   # 👤 Mi Perfil
-        tab_ayuda  = tab_objs[9]   # 📖 Ayuda
+    # tabs=[..7 base.., Usuarios(7) si admin, Ayuda(7 o 8)]
+    if es_admin and len(tab_objs) >= 9:
+        tab_admin = tab_objs[7]   # ⚙️ Usuarios
+        tab_ayuda = tab_objs[8]   # 📖 Ayuda
     else:
-        tab_admin  = None
-        tab_perfil = tab_objs[7] if len(tab_objs) > 7 else None
-        tab_ayuda  = tab_objs[-1]
+        tab_admin = None
+        tab_ayuda = tab_objs[7] if len(tab_objs) > 7 else tab_objs[-1]
+    tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
 
     # ---- TAB ANÁLISIS ----
     def _on_mercado_at_change():
@@ -15541,87 +15587,6 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     with tab_principiante:
         pestana_principiante()
 
-
-    # ---- TAB MI PERFIL ----
-    if tab_perfil:
-        with tab_perfil:
-            _prf_u = usuario
-            st.markdown("## 👤 Mi Perfil")
-            st.markdown(
-                f"**Usuario:** `{_prf_u.get('username', '')}` &nbsp;·&nbsp; "
-                f"**Nombre:** {_prf_u.get('nombre', '')} &nbsp;·&nbsp; "
-                f"**Rol:** `{_prf_u.get('rol', 'usuario')}`"
-            )
-            st.divider()
-
-            # ── Email para informes ───────────────────────────────────────────
-            st.markdown("### ✉️ Email para recibir informes")
-            _prf_email_act = _prf_u.get("email", "") or ""
-
-            if not _smtp_cfg_ok():
-                st.info(
-                    "📧 El servicio de email no está configurado en este servidor. "
-                    "Puedes guardar tu email igualmente — estará listo cuando se active."
-                )
-
-            with st.form("form_email_perfil"):
-                _prf_email_new = st.text_input(
-                    "Tu dirección de email",
-                    value=_prf_email_act,
-                    placeholder="nombre@ejemplo.com",
-                    help="Se usará para enviarte los informes PDF generados en la app.",
-                )
-                _prf_submit = st.form_submit_button("💾 Guardar email", type="primary")
-
-            if _prf_submit:
-                _prf_email_new = _prf_email_new.strip().lower()
-                if _prf_email_new and "@" in _prf_email_new and "." in _prf_email_new:
-                    if actualizar_email_usuario(_prf_u["id"], _prf_email_new):
-                        st.session_state["usuario"]["email"] = _prf_email_new
-                        st.success(f"✅ Email guardado: **{_prf_email_new}**")
-                    else:
-                        st.error("Error al guardar el email. Inténtalo de nuevo.")
-                elif _prf_email_new == "":
-                    if actualizar_email_usuario(_prf_u["id"], ""):
-                        st.session_state["usuario"]["email"] = ""
-                        st.info("Email eliminado.")
-                else:
-                    st.warning("Introduce una dirección de email válida.")
-
-            # ── Test de envío ─────────────────────────────────────────────────
-            _prf_email_ok = (st.session_state["usuario"].get("email") or "")
-            if _prf_email_ok and _smtp_cfg_ok():
-                st.divider()
-                st.markdown("#### 🧪 Probar envío")
-                st.caption(
-                    "Envía un email de prueba para confirmar que tu dirección funciona correctamente."
-                )
-                if st.button("📨 Enviar email de prueba", key="btn_test_email"):
-                    _test_pdf = io.BytesIO()
-                    # Minimal PDF (1 byte placeholder — real PDF via simple text)
-                    from reportlab.platypus import SimpleDocTemplate
-                    from reportlab.lib.pagesizes import A4
-                    _test_doc = SimpleDocTemplate(_test_pdf, pagesize=A4)
-                    from reportlab.platypus import Paragraph
-                    from reportlab.lib.styles import getSampleStyleSheet
-                    _test_doc.build([Paragraph("Email de prueba — PivotAnalyzer", getSampleStyleSheet()["Normal"])])
-                    _test_bytes = _test_pdf.getvalue()
-                    with st.spinner("Enviando email de prueba..."):
-                        _ok_t, _err_t = enviar_informe_email(
-                            _prf_email_ok, "TEST", "Email de prueba", _test_bytes
-                        )
-                    if _ok_t:
-                        st.success(f"✅ Email de prueba enviado a **{_prf_email_ok}**. Revisa tu bandeja.")
-                    else:
-                        st.error(f"❌ Error al enviar: {_err_t}")
-
-            st.divider()
-            st.markdown("#### ℹ️ ¿Cómo funciona?")
-            st.markdown(
-                "Una vez guardado tu email, aparecerá un botón **✉️ Enviar por email** "
-                "junto al botón de descarga PDF en las pestañas **📈 Análisis Técnico** y **🎯 Estrategia**. "
-                "El informe se envía como archivo adjunto directamente a tu dirección."
-            )
 
     # ---- TAB ADMIN ----
     if es_admin and tab_admin:
