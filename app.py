@@ -11019,32 +11019,60 @@ def pantalla_analisis():
         unsafe_allow_html=True
     )
 
-    # Botones compactos alineados a la derecha
+    # Menú de usuario — popover estilo avatar (reemplaza los 3 botones)
     st.markdown("""
     <style>
-        .btn-row-header { display:flex; justify-content:flex-end;
-                          gap:8px; margin:-0.2rem 0 0.4rem; }
-        .btn-row-header .stButton > button {
-            width:auto !important; padding:0.28rem 0.75rem !important;
-            font-size:0.78rem !important;
+        /* Estilo del botón trigger del popover de usuario */
+        .stPopover > div > button {
+            background: rgba(30,58,95,0.9) !important;
+            border: 1px solid rgba(147,197,253,0.4) !important;
+            color: #e2e8f0 !important;
+            border-radius: 20px !important;
+            font-size: 0.78rem !important;
+            padding: 0.28rem 0.85rem !important;
+            font-weight: 600 !important;
+        }
+        .stPopover > div > button:hover {
+            background: rgba(29,78,216,0.85) !important;
+            border-color: rgba(147,197,253,0.7) !important;
         }
     </style>
     """, unsafe_allow_html=True)
-    _bs, _b_cfg, _b1, _b2 = st.columns([7, 1, 1, 1.3])
-    with _b_cfg:
-        if st.button("⚙️", key="goto_perfil", help="Mi Perfil — email y configuración"):
-            st.session_state["_nav_to_perfil"] = True
-            st.rerun()
-    with _b1:
-        if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
-            st.cache_data.clear()
-            st.rerun()
-    with _b2:
-        if st.button("⏻ Salir", key="logout"):
-            _sess_delete(st.query_params.get("s", ""))
-            st.query_params.clear()
-            del st.session_state["usuario"]
-            st.rerun()
+    _hdr_sp, _hdr_pop_col = st.columns([5, 2])
+    with _hdr_pop_col:
+        _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
+        _usr_email_hdr = usuario.get("email", "") or ""
+        with st.popover(f"👤 {_uname}", use_container_width=True):
+            _avatar_html = (
+                f'<div style="padding:4px 0 2px">'
+                f'<div style="font-size:1.1rem;font-weight:800;color:#1d4ed8;'
+                f'background:#dbeafe;border-radius:50%;width:40px;height:40px;'
+                f'display:flex;align-items:center;justify-content:center;'
+                f'margin-bottom:8px;letter-spacing:-0.01em">{_uinitials}</div>'
+                f'<div style="font-weight:700;font-size:0.88rem;color:#0f172a">{_uname}</div>'
+            )
+            if _usr_email_hdr:
+                _avatar_html += (
+                    f'<div style="font-size:0.74rem;color:#64748b;margin-top:1px;'
+                    f'word-break:break-all">{_usr_email_hdr}</div>'
+                )
+            if _rol_badge:
+                _avatar_html += f'<div style="margin-top:5px">{_rol_badge}</div>'
+            _avatar_html += '</div>'
+            st.markdown(_avatar_html, unsafe_allow_html=True)
+            st.divider()
+            if st.button("⚙️  Mi Perfil", key="pop_goto_perfil", use_container_width=True):
+                st.session_state["_nav_to_perfil"] = True
+                st.rerun()
+            if st.button("🔄  Refrescar datos", key="pop_refresh_data", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+            st.divider()
+            if st.button("⏻  Salir", key="pop_logout", use_container_width=True):
+                _sess_delete(st.query_params.get("s", ""))
+                st.query_params.clear()
+                del st.session_state["usuario"]
+                st.rerun()
 
     # Navegación
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?"]
