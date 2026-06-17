@@ -11750,6 +11750,7 @@ def _dialog_perfil_usuario():
 
 def pantalla_analisis():
     usuario = st.session_state["usuario"]
+    uid = usuario["id"]  # shorthand usado en la función
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
 
@@ -11872,7 +11873,7 @@ def pantalla_analisis():
             unsafe_allow_html=True
         )
     with _hdr_bell:
-        _notifs = _obtener_notificaciones_no_leidas(uid)
+        _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
         _bell_label = f"🔔 **{_n_notif}**" if _n_notif > 0 else "🔔"
         with st.popover(_bell_label, use_container_width=True):
