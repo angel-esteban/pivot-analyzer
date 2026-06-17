@@ -34,6 +34,11 @@ import psycopg2.extras
 import requests
 import json as _json_mod
 import os as _os_mod
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders as _email_encoders
 
 # ── Base de conocimiento sectorial GICS ─────────────────────────────────
 def _find_kb_file(filename: str) -> str:
@@ -982,6 +987,96 @@ def db_delete(tabla: str, filtro_col: str, filtro_val):
 # =============================================================================
 # FUNCIONES DE ALERTAS DE PRECIO (PostgreSQL)
 # =============================================================================
+
+
+# =============================================================================
+# EMAIL — Envío de informes PDF por SMTP
+# =============================================================================
+
+def _smtp_cfg_ok() -> bool:
+    """True si st.secrets tiene la config SMTP mínima."""
+    try:
+        return bool(st.secrets.get("SMTP_HOST") and st.secrets.get("SMTP_USER") and st.secrets.get("SMTP_PASSWORD"))
+    except Exception:
+        return False
+
+
+def enviar_informe_email(destinatario: str, ticker: str, nombre: str,
+                          pdf_bytes: bytes) -> tuple:
+    """Envía el informe PDF como adjunto por SMTP.
+    Devuelve (True, "") en éxito o (False, msg_error) en fallo.
+    Requiere en st.secrets: SMTP_HOST, SMTP_PORT (opt, def 587),
+    SMTP_USER, SMTP_PASSWORD, SMTP_FROM (opt).
+    """
+    try:
+        host  = st.secrets.get("SMTP_HOST", "")
+        port  = int(st.secrets.get("SMTP_PORT", 587))
+        user  = st.secrets.get("SMTP_USER", "")
+        pwd   = st.secrets.get("SMTP_PASSWORD", "")
+        from_ = st.secrets.get("SMTP_FROM", user)
+
+        if not all([host, user, pwd]):
+            return False, "SMTP no configurado (faltan SMTP_HOST / SMTP_USER / SMTP_PASSWORD en secrets)."
+
+        msg = MIMEMultipart()
+        msg["From"]    = from_
+        msg["To"]      = destinatario
+        msg["Subject"] = f"Informe de análisis: {nombre} ({ticker})"
+
+        cuerpo = (
+            f"Hola,\n\n"
+            f"Adjunto encontrarás el informe de análisis técnico de {nombre} ({ticker}).\n"
+            f"Ha sido generado por PivotAnalyzer.\n\n"
+            f"Un saludo."
+        )
+        msg.attach(MIMEText(cuerpo, "plain", "utf-8"))
+
+        adjunto = MIMEBase("application", "pdf")
+        adjunto.set_payload(pdf_bytes)
+        _email_encoders.encode_base64(adjunto)
+        adjunto.add_header(
+            "Content-Disposition",
+            f'attachment; filename="Informe_{ticker}.pdf"'
+        )
+        msg.attach(adjunto)
+
+        with smtplib.SMTP(host, port, timeout=15) as srv:
+            srv.ehlo()
+            srv.starttls()
+            srv.login(user, pwd)
+            srv.send_message(msg)
+
+        return True, ""
+    except Exception as _e:
+        return False, str(_e)
+
+
+
+
+def inicializar_email_usuario():
+    """Añade la columna email a la tabla usuarios si no existe (idempotente)."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE usuarios
+                ADD COLUMN IF NOT EXISTS email TEXT;
+            """)
+            conn.commit()
+    except Exception:
+        pass
+    finally:
+        release_db_connection(conn)
+
+
+def actualizar_email_usuario(user_id: int, email: str) -> bool:
+    """Guarda el email del usuario. Devuelve True si OK."""
+    try:
+        db_update("usuarios", {"email": email.strip().lower()}, "id", user_id)
+        return True
+    except Exception:
+        return False
+
 
 def inicializar_tabla_alertas():
     """Crea la tabla alertas_precio si no existe (idempotente)."""
@@ -8853,88 +8948,165 @@ def panel_admin():
         st.error(f"Error al obtener usuarios: {e}")
         return
 
-    st.markdown(f"**{len(usuarios)} usuarios registrados**")
+    # ── LISTA DE USUARIOS ────────────────────────────────────────────────────
+    st.markdown(f"**{len(usuarios)} usuario{'s' if len(usuarios)!=1 else ''} registrado{'s' if len(usuarios)!=1 else ''}** — selecciona uno para gestionarlo.")
 
+    # Cabecera de la tabla
+    _hc = st.columns([2.5, 2, 1.5, 1.5, 1])
+    for _txt, _col in zip(["Usuario / Nombre", "Email", "Rol / Último acceso", "Estado", ""], _hc):
+        _col.markdown(f"<span style='font-size:.75rem;font-weight:700;color:#94a3b8;text-transform:uppercase'>{_txt}</span>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:4px 0 8px;border-color:#e2e8f0'>", unsafe_allow_html=True)
+
+    # Filas clicables
+    _sel_id = st.session_state.get("_adm_sel_uid")
     for u in usuarios:
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 1.5, 1, 1])
-        with col1:
-            st.markdown(f"**{u['username']}**  \n{u.get('nombre','')}")
-        with col2:
-            ultimo = u.get('ultimo_acceso')
-            ultimo_str = str(ultimo)[:16] if ultimo else '—'
-            st.markdown(f"`{u.get('rol','usuario')}`  \n{ultimo_str}")
-        with col3:
-            estado = "✅ Activo" if u.get("activo") else "⛔ Inactivo"
-            st.markdown(estado)
-        with col4:
-            if u.get("rol") != "superadmin":
-                if u.get("activo"):
-                    if st.button("Desactivar", key=f"des_{u['id']}"):
-                        db_update("usuarios", {"activo": False}, "id", u["id"])
+        _uid   = u["id"]
+        _is_sel = _uid == _sel_id
+        _bg    = "background:#eff6ff;border-radius:6px;padding:2px 4px;" if _is_sel else ""
+        c1, c2, c3, c4, c5 = st.columns([2.5, 2, 1.5, 1.5, 1])
+        with c1:
+            st.markdown(
+                f'<div style="{_bg}"><b>{u["username"]}</b><br>'
+                f'<span style="font-size:.8rem;color:#64748b">{u.get("nombre","")}</span></div>',
+                unsafe_allow_html=True)
+        with c2:
+            _em = u.get("email","") or "—"
+            st.markdown(f'<span style="font-size:.82rem;color:#475569">{_em}</span>', unsafe_allow_html=True)
+        with c3:
+            _ul = str(u.get("ultimo_acceso",""))[:16] if u.get("ultimo_acceso") else "—"
+            st.markdown(
+                f'<span style="font-size:.8rem;font-weight:600;color:#0369a1">{u.get("rol","usuario")}</span><br>'
+                f'<span style="font-size:.75rem;color:#94a3b8">{_ul}</span>',
+                unsafe_allow_html=True)
+        with c4:
+            _activo = u.get("activo", True)
+            _estado_color = "#16a34a" if _activo else "#dc2626"
+            _estado_txt   = "Activo" if _activo else "Inactivo"
+            st.markdown(
+                f'<span style="font-size:.8rem;font-weight:700;color:{_estado_color}">● {_estado_txt}</span>',
+                unsafe_allow_html=True)
+        with c5:
+            _btn_lbl = "✏️ Editar" if not _is_sel else "▲ Cerrar"
+            if st.button(_btn_lbl, key=f"sel_{_uid}", use_container_width=True):
+                if _is_sel:
+                    st.session_state.pop("_adm_sel_uid", None)
+                else:
+                    st.session_state["_adm_sel_uid"] = _uid
+                st.rerun()
+
+    # ── PANEL DEL USUARIO SELECCIONADO ──────────────────────────────────────
+    _u_sel = next((u for u in usuarios if u["id"] == _sel_id), None) if _sel_id else None
+    if _u_sel:
+        st.markdown("<hr style='margin:12px 0 8px'>", unsafe_allow_html=True)
+        _es_superadmin_u = _u_sel.get("rol") == "superadmin"
+        _em_cur = _u_sel.get("email","") or ""
+        _activo_u = _u_sel.get("activo", True)
+
+        st.markdown(
+            f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:12px">'
+            f'<span style="font-size:1rem;font-weight:700">{_u_sel["username"]}</span>'
+            f' &nbsp;<span style="font-size:.8rem;color:#64748b">{_u_sel.get("nombre","")}</span>'
+            f' &nbsp;<span style="background:#eff6ff;color:#1d4ed8;font-size:.72rem;font-weight:700;'
+            f'padding:1px 7px;border-radius:10px">{_u_sel.get("rol","usuario")}</span>'
+            f'</div>',
+            unsafe_allow_html=True)
+
+        _pa, _pb, _pc = st.columns(3)
+
+        # Columna A: Email
+        with _pa:
+            st.markdown("**✉️ Email**")
+            with st.form(f"form_email_{_sel_id}"):
+                _new_email_u = st.text_input("Email", value=_em_cur,
+                                              placeholder="nombre@ejemplo.com", label_visibility="collapsed")
+                if st.form_submit_button("💾 Guardar email", use_container_width=True):
+                    _ne = _new_email_u.strip().lower()
+                    if _ne and ("@" not in _ne or "." not in _ne):
+                        st.error("Email inválido.")
+                    else:
+                        try:
+                            db_update("usuarios", {"email": _ne}, "id", _sel_id)
+                            st.success("✅ Guardado")
+                            st.rerun()
+                        except Exception as _ex:
+                            st.error(str(_ex))
+
+        # Columna B: Contraseña
+        with _pb:
+            st.markdown("**🔑 Contraseña**")
+            with st.form(f"form_pass_{_sel_id}"):
+                _np = st.text_input("Nueva contraseña", type="password", label_visibility="collapsed",
+                                     placeholder="Nueva contraseña")
+                _cp = st.text_input("Confirmar", type="password", label_visibility="collapsed",
+                                     placeholder="Confirmar contraseña")
+                if st.form_submit_button("💾 Cambiar contraseña", use_container_width=True):
+                    if _np and _np == _cp:
+                        try:
+                            db_update("usuarios", {"password_hash": hash_password(_np)}, "id", _sel_id)
+                            st.success("✅ Actualizada")
+                        except Exception as _ex:
+                            st.error(str(_ex))
+                    elif _np != _cp:
+                        st.error("No coinciden.")
+                    else:
+                        st.warning("Introduce la contraseña.")
+
+        # Columna C: Estado y acciones
+        with _pc:
+            st.markdown("**🔧 Acciones**")
+            if not _es_superadmin_u:
+                if _activo_u:
+                    if st.button("⛔ Desactivar cuenta", key=f"des2_{_sel_id}", use_container_width=True):
+                        db_update("usuarios", {"activo": False}, "id", _sel_id)
                         st.rerun()
                 else:
-                    if st.button("Activar", key=f"act_{u['id']}"):
-                        db_update("usuarios", {"activo": True}, "id", u["id"])
+                    if st.button("✅ Activar cuenta", key=f"act2_{_sel_id}", use_container_width=True):
+                        db_update("usuarios", {"activo": True}, "id", _sel_id)
                         st.rerun()
-        with col5:
-            if u.get("rol") != "superadmin":
-                if st.button("🗑️", key=f"del_{u['id']}", help="Eliminar usuario"):
-                    db_delete("usuarios", "id", u["id"])
+                st.markdown("")
+                if st.button("🗑️ Eliminar usuario", key=f"del2_{_sel_id}",
+                              use_container_width=True, type="primary"):
+                    db_delete("usuarios", "id", _sel_id)
+                    st.session_state.pop("_adm_sel_uid", None)
                     st.rerun()
+            else:
+                st.caption("El superadmin no puede ser modificado desde aquí.")
 
     st.divider()
 
-    # Crear nuevo usuario
+    # ── CREAR NUEVO USUARIO ──────────────────────────────────────────────────
     st.markdown("### ➕ Nuevo usuario")
     with st.form("nuevo_usuario"):
         col1, col2 = st.columns(2)
         with col1:
-            nuevo_user = st.text_input("Username")
+            nuevo_user   = st.text_input("Username")
             nuevo_nombre = st.text_input("Nombre completo")
+            nuevo_email_adm = st.text_input("Email (opcional)")
         with col2:
             nuevo_pass = st.text_input("Contraseña", type="password")
-            nuevo_rol = st.selectbox("Rol", ["usuario", "admin"])
-        submitted = st.form_submit_button("Crear usuario")
+            nuevo_rol  = st.selectbox("Rol", ["usuario", "admin"])
+        submitted = st.form_submit_button("Crear usuario", type="primary")
         if submitted:
             if nuevo_user and nuevo_pass and nuevo_nombre:
                 try:
                     ph = hash_password(nuevo_pass)
+                    _nu_extra = {}
+                    if nuevo_email_adm.strip():
+                        _nu_extra["email"] = nuevo_email_adm.strip().lower()
                     db_insert("usuarios", {
                         "username": nuevo_user,
-                        "nombre": nuevo_nombre,
+                        "nombre":   nuevo_nombre,
                         "password_hash": ph,
-                        "rol": nuevo_rol,
+                        "rol":   nuevo_rol,
                         "activo": True,
+                        **_nu_extra,
                     })
                     st.success(f"✅ Usuario '{nuevo_user}' creado.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al crear usuario: {e}")
             else:
-                st.warning("Completa todos los campos.")
-
-    st.divider()
-
-    # Cambiar contraseña
-    st.markdown("### 🔑 Cambiar contraseña")
-    with st.form("cambiar_pass"):
-        users_list = [u["username"] for u in usuarios]
-        sel_user = st.selectbox("Usuario", users_list)
-        nueva_pass = st.text_input("Nueva contraseña", type="password")
-        confirmar = st.text_input("Confirmar contraseña", type="password")
-        submitted2 = st.form_submit_button("Cambiar contraseña")
-        if submitted2:
-            if nueva_pass and nueva_pass == confirmar:
-                try:
-                    ph = hash_password(nueva_pass)
-                    db_update("usuarios", {"password_hash": ph}, "username", sel_user)
-                    st.success(f"✅ Contraseña de '{sel_user}' actualizada.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            elif nueva_pass != confirmar:
-                st.error("Las contraseñas no coinciden.")
-            else:
-                st.warning("Introduce la nueva contraseña.")
+                st.warning("Completa todos los campos obligatorios.")
 
 
 # =============================================================================
@@ -10810,6 +10982,7 @@ def pantalla_analisis():
         inicializar_tabla_alertas()
         inicializar_tabla_data_jobs()
         inicializar_tabla_carteras()
+        inicializar_email_usuario()
         st.session_state["_app_init_done"] = True
     verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede (guarded internamente)
 
@@ -10857,7 +11030,11 @@ def pantalla_analisis():
         }
     </style>
     """, unsafe_allow_html=True)
-    _bs, _b1, _b2 = st.columns([8, 1, 1.3])
+    _bs, _b_cfg, _b1, _b2 = st.columns([7, 1, 1, 1.3])
+    with _b_cfg:
+        if st.button("⚙️", key="goto_perfil", help="Mi Perfil — email y configuración"):
+            st.session_state["_nav_to_perfil"] = True
+            st.rerun()
     with _b1:
         if st.button("🔄", key="refresh_data", help="Limpiar caché y recargar todos los datos"):
             st.cache_data.clear()
@@ -10873,7 +11050,28 @@ def pantalla_analisis():
     tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?"]
     if es_superadmin:
         tabs_list.append("⚙️ Usuarios")
+    tabs_list.append("👤 Mi Perfil")
     tabs_list.append("📖 Ayuda")
+
+    # Auto-jump a Mi Perfil desde el icono ⚙️ de cabecera
+    if st.session_state.get("_nav_to_perfil"):
+        del st.session_state["_nav_to_perfil"]
+        _st_components.html("""<script>
+(function() {
+    function _clickPerfilTab() {
+        var tabs = window.parent.document.querySelectorAll('[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].innerText.indexOf('Perfil') !== -1) {
+                tabs[i].click(); return true;
+            }
+        }
+        return false;
+    }
+    if (!_clickPerfilTab()) {
+        setTimeout(function(){ if(!_clickPerfilTab()){ setTimeout(_clickPerfilTab, 400); } }, 200);
+    }
+})();
+</script>""", height=0)
 
     # Auto-jump a Análisis Técnico si viene desde ¿Por dónde empiezo?
     if st.session_state.get("_pp_jump_to_analisis"):
@@ -10905,9 +11103,10 @@ def pantalla_analisis():
     tab_cartera    = tab_objs[5]
     tab_principiante = tab_objs[6]
 
-    if es_superadmin and len(tab_objs) >= 9:
-        tab_admin = tab_objs[7]
-        tab_ayuda = tab_objs[8]
+    tab_perfil = tab_objs[7] if len(tab_objs) > 7 else None
+    if es_superadmin and len(tab_objs) >= 10:
+        tab_admin = tab_objs[8]
+        tab_ayuda = tab_objs[9]
     else:
         tab_admin = None
         tab_ayuda = tab_objs[-1]
@@ -13985,13 +14184,33 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             analisis_vol=analisis_vol,
                             puntuacion_tec=puntuacion_tec,
                         )
-                    st.download_button(
-                        label="📄 Descargar PDF",
-                        data=pdf_bytes,
-                        file_name=f"{ticker_activo}_{ts}.pdf",
-                        mime="application/pdf",
-                        key="dl_pdf",
-                    )
+                    _at_dl_c1, _at_dl_c2 = st.columns(2)
+                    with _at_dl_c1:
+                        st.download_button(
+                            label="📄 Descargar PDF",
+                            data=pdf_bytes,
+                            file_name=f"{ticker_activo}_{ts}.pdf",
+                            mime="application/pdf",
+                            key="dl_pdf",
+                            use_container_width=True,
+                        )
+                    with _at_dl_c2:
+                        _at_usr_email = usuario.get("email", "") or ""
+                        if _smtp_cfg_ok():
+                            if _at_usr_email:
+                                if st.button("✉️ Enviar por email", key="email_pdf_at",
+                                             use_container_width=True):
+                                    with st.spinner("Enviando..."):
+                                        _ok_e, _err_e = enviar_informe_email(
+                                            _at_usr_email, ticker_activo, nombre, pdf_bytes)
+                                    if _ok_e:
+                                        st.success(f"✅ Enviado a {_at_usr_email}")
+                                    else:
+                                        st.error(f"Error: {_err_e}")
+                            else:
+                                st.button("✉️ Enviar por email", key="email_pdf_at_dis",
+                                          disabled=True, use_container_width=True,
+                                          help="Añade tu email en 👤 Mi Perfil")
 
 
     # ---- RENDER TAB ANÁLISIS (función anidada para que los return no salgan de pantalla_analisis) ----
@@ -15170,8 +15389,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                             st.session_state["est_inf_file"] = (
                                 f"{ed['ticker']}_estrategia_{_ts_dl}.pdf"
                             )
-                    st.session_state["est_inf_data"] = _raw
-                    st.session_state["est_inf_ts"]   = _ts_dl
+                    st.session_state["est_inf_data"]   = _raw
+                    st.session_state["est_inf_ts"]     = _ts_dl
+                    st.session_state["est_inf_ticker"] = ed["ticker"]
+                    st.session_state["est_inf_nombre"] = ed["nombre"]
                     st.rerun()
 
             with _col_dl_est:
@@ -15190,6 +15411,26 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     _ts_val = st.session_state.get("est_inf_ts", "")
                     if _ts_val:
                         st.caption(f"Generado: {_ts_val}")
+                    # ── Email (solo PDF) ──────────────────────────────
+                    if _dl_fmt == "pdf" and _smtp_cfg_ok():
+                        _est_usr_email = usuario.get("email", "") or ""
+                        if _est_usr_email:
+                            if st.button("✉️ Enviar PDF por email", key="email_est",
+                                         use_container_width=True):
+                                with st.spinner("Enviando..."):
+                                    _ok_e2, _err_e2 = enviar_informe_email(
+                                        _est_usr_email,
+                                        st.session_state.get("est_inf_ticker", ""),
+                                        st.session_state.get("est_inf_nombre", ""),
+                                        st.session_state["est_inf_data"])
+                                if _ok_e2:
+                                    st.success(f"✅ Enviado a {_est_usr_email}")
+                                else:
+                                    st.error(f"Error: {_err_e2}")
+                        else:
+                            st.button("✉️ Enviar PDF por email", key="email_est_dis",
+                                      disabled=True, use_container_width=True,
+                                      help="Añade tu email en 👤 Mi Perfil")
 
     # ---- TAB IA ----
     with tab_ia:
@@ -15209,6 +15450,88 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     # ---- TAB ¿POR DÓNDE EMPIEZO? ----
     with tab_principiante:
         pestana_principiante()
+
+
+    # ---- TAB MI PERFIL ----
+    if tab_perfil:
+        with tab_perfil:
+            _prf_u = usuario
+            st.markdown("## 👤 Mi Perfil")
+            st.markdown(
+                f"**Usuario:** `{_prf_u.get('username', '')}` &nbsp;·&nbsp; "
+                f"**Nombre:** {_prf_u.get('nombre', '')} &nbsp;·&nbsp; "
+                f"**Rol:** `{_prf_u.get('rol', 'usuario')}`"
+            )
+            st.divider()
+
+            # ── Email para informes ───────────────────────────────────────────
+            st.markdown("### ✉️ Email para recibir informes")
+            _prf_email_act = _prf_u.get("email", "") or ""
+
+            if not _smtp_cfg_ok():
+                st.info(
+                    "📧 El servicio de email no está configurado en este servidor. "
+                    "Puedes guardar tu email igualmente — estará listo cuando se active."
+                )
+
+            with st.form("form_email_perfil"):
+                _prf_email_new = st.text_input(
+                    "Tu dirección de email",
+                    value=_prf_email_act,
+                    placeholder="nombre@ejemplo.com",
+                    help="Se usará para enviarte los informes PDF generados en la app.",
+                )
+                _prf_submit = st.form_submit_button("💾 Guardar email", type="primary")
+
+            if _prf_submit:
+                _prf_email_new = _prf_email_new.strip().lower()
+                if _prf_email_new and "@" in _prf_email_new and "." in _prf_email_new:
+                    if actualizar_email_usuario(_prf_u["id"], _prf_email_new):
+                        st.session_state["usuario"]["email"] = _prf_email_new
+                        st.success(f"✅ Email guardado: **{_prf_email_new}**")
+                    else:
+                        st.error("Error al guardar el email. Inténtalo de nuevo.")
+                elif _prf_email_new == "":
+                    if actualizar_email_usuario(_prf_u["id"], ""):
+                        st.session_state["usuario"]["email"] = ""
+                        st.info("Email eliminado.")
+                else:
+                    st.warning("Introduce una dirección de email válida.")
+
+            # ── Test de envío ─────────────────────────────────────────────────
+            _prf_email_ok = (st.session_state["usuario"].get("email") or "")
+            if _prf_email_ok and _smtp_cfg_ok():
+                st.divider()
+                st.markdown("#### 🧪 Probar envío")
+                st.caption(
+                    "Envía un email de prueba para confirmar que tu dirección funciona correctamente."
+                )
+                if st.button("📨 Enviar email de prueba", key="btn_test_email"):
+                    _test_pdf = io.BytesIO()
+                    # Minimal PDF (1 byte placeholder — real PDF via simple text)
+                    from reportlab.platypus import SimpleDocTemplate
+                    from reportlab.lib.pagesizes import A4
+                    _test_doc = SimpleDocTemplate(_test_pdf, pagesize=A4)
+                    from reportlab.platypus import Paragraph
+                    from reportlab.lib.styles import getSampleStyleSheet
+                    _test_doc.build([Paragraph("Email de prueba — PivotAnalyzer", getSampleStyleSheet()["Normal"])])
+                    _test_bytes = _test_pdf.getvalue()
+                    with st.spinner("Enviando email de prueba..."):
+                        _ok_t, _err_t = enviar_informe_email(
+                            _prf_email_ok, "TEST", "Email de prueba", _test_bytes
+                        )
+                    if _ok_t:
+                        st.success(f"✅ Email de prueba enviado a **{_prf_email_ok}**. Revisa tu bandeja.")
+                    else:
+                        st.error(f"❌ Error al enviar: {_err_t}")
+
+            st.divider()
+            st.markdown("#### ℹ️ ¿Cómo funciona?")
+            st.markdown(
+                "Una vez guardado tu email, aparecerá un botón **✉️ Enviar por email** "
+                "junto al botón de descarga PDF en las pestañas **📈 Análisis Técnico** y **🎯 Estrategia**. "
+                "El informe se envía como archivo adjunto directamente a tu dirección."
+            )
 
     # ---- TAB ADMIN ----
     if es_superadmin and tab_admin:
