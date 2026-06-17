@@ -14995,13 +14995,13 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     "≥3.5% atractivo · 2-3.5% aceptable · <2% insuficiente"))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
-                    f"{'Bajo SMA200 — zona de valor ✅' if _sma200 > 0 and _precio < _sma200 else f'Sobre SMA200 +{(_precio/_sma200-1)*100:.1f}% — precio caro' if _sma200 > 0 else ''}"))
+                    f"{'El precio está por debajo de su media de los últimos 200 días — históricamente un buen momento para entrar ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días — puede que no sea el mejor momento de entrada' if _sma200 > 0 else ''}"))
                 c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
                     f"RSI {_rsi:.0f}",
-                    f"{'Zona óptima de entrada ✅' if _rsi < 45 else 'Aceptable, sin urgencia ⚠️' if _rsi < 55 else 'Precio técnicamente caro para entrada ❌'}"))
+                    f"{'El RSI indica que el valor ha corregido lo suficiente — buen momento para considerar la entrada ✅' if _rsi < 45 else 'El RSI está en zona neutral, sin señales extremas — entrada aceptable si el resto de indicadores acompañan ⚠️' if _rsi < 55 else 'El RSI indica que el valor lleva una racha alcista fuerte — entrar ahora asume más riesgo de corrección a corto plazo ❌'}"))
                 c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
                     f"Posición 52W: {_pos52:.0f}% del rango",
-                    f"{'Zona baja — buen precio relativo ✅' if _pos52 < 35 else 'Zona media ⚠️' if _pos52 < 60 else 'Cerca de máximos anuales ❌'}"))
+                    f"{'El precio está cerca de los mínimos del año — históricamente un buen punto de entrada ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual — ni caro ni barato en términos recientes ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año — entrar ahora significa pagar más por el mismo dividendo ❌'}"))
                 c.append(_criterio(2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
                     f"Payout ratio {_payout:.0f}%" if _payout else "Payout no disponible",
                     f"{'Sostenible ✅' if _payout < 70 else 'Ajustado ⚠️' if _payout < 90 else 'Riesgo de recorte ❌'}"))
@@ -15156,11 +15156,11 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         puntos.append(f"⚠️ Yield (rentabilidad) del {_yv:.1f}% — retorno por dividendo modesto para estrategia de rentas pura.")
                     if _sma200 > 0 and _precio > _sma200:
                         gap = (_precio / _sma200 - 1) * 100
-                        puntos.append(f"❌ Precio un {gap:.1f}% sobre SMA200 — no es zona de valor. Esperar retroceso hacia {_sma200:.2f}€ mejora significativamente el yield (rentabilidad) efectivo de entrada.")
+                        puntos.append(f"❌ El precio está un {gap:.1f}% por encima de su media de los últimos 200 días. Si esperas a que retroceda hacia los {_sma200:.2f}€, mejorarías significativamente la rentabilidad por dividendo que obtendrías al entrar.")
                     elif _sma200 > 0:
-                        puntos.append(f"✅ Precio bajo SMA200 — compras en zona de valor histórico.")
+                        puntos.append(f"✅ El precio está por debajo de su media de los últimos 200 días, lo que históricamente ha sido un buen momento para entrar.")
                     if _pos52 > 70:
-                        puntos.append(f"❌ Precio en el {_pos52:.0f}% del rango anual — cerca de máximos. El coste de oportunidad de esperar una corrección es bajo.")
+                        puntos.append(f"❌ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango anual). Esperar una corrección no tiene un coste alto y mejoraría el precio de entrada.")
                     if _payout > 0 and _payout < 70:
                         puntos.append(f"✅ Payout del {_payout:.0f}% — dividendo bien cubierto por beneficios.")
                     elif _payout >= 70:
@@ -15230,9 +15230,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         puntos.append(f"{'✅' if _pe < 15 else '⚠️' if _pe < 22 else '❌'} PER {_pe:.1f}x — {'precio atractivo respecto a beneficios' if _pe < 15 else 'valoración razonable' if _pe < 22 else 'precio exigente para estrategia valor'}.")
                     if _sma200 > 0:
                         d = (_precio / _sma200 - 1) * 100
-                        puntos.append(f"{'✅' if d < -3 else '⚠️' if abs(d) < 3 else '❌'} Cotiza a {d:+.1f}% {'bajo' if d < 0 else 'sobre'} SMA200 — referencia de valor histórico.")
+                        puntos.append(f"{'✅' if d < -3 else '⚠️' if abs(d) < 3 else '❌'} El precio cotiza un {abs(d):.1f}% {'por debajo' if d < 0 else 'por encima'} de su media de los últimos 200 días — {'comprar por debajo de ella equivale a hacerlo con descuento respecto al precio medio histórico' if d < -3 else 'está cerca de su precio medio histórico, ni caro ni barato en términos de largo plazo' if abs(d) < 3 else 'está por encima de su precio medio histórico, lo que reduce el margen de seguridad para una estrategia de valor'}.")
                     if _pos52 > 65:
-                        puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual. Valor genuino raramente se encuentra cerca de máximos.")
+                        puntos.append(f"⚠️ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango). Una empresa realmente infravalorada rara vez cotiza en máximos — merece la pena revisar si la tesis de descuento sigue siendo sólida.")
                     if _div_alc:
                         puntos.append("✅ OBV/Volumen mostrando acumulación — señal de que el mercado ya reconoce el descuento.")
                     if _pe > 0 and _pe < 15 and _pos52 < 40 and (_sma200 == 0 or _precio < _sma200):
