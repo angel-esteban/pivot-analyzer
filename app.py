@@ -14710,35 +14710,19 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "- Verde **6.5 – 10** Sesgo alcista"
                 )
                 st.markdown("**Puntuaciones por escenario — referencia rápida:**")
-                _tabla_ref = {
-                    "Componente":        ["ATH", "SMA200", "Resistencias", "Fibonacci", "RSI", "Volumen"],
-                    "Bajista (1-3)":     [
-                        "Lejos del maximo",
-                        "Tendencia bajista",
-                        "En resistencia / sin soporte",
-                        "Swing roto / retroceso 78.6%",
-                        "Sobrecompra extrema / zona bajista",
-                        "Volumen seco",
-                    ],
-                    "Neutro (4-6)":      [
-                        "Aproximandose",
-                        "Plana",
-                        "Zona media",
-                        "Retrocesos medios",
-                        "Zona neutra",
-                        "Normal",
-                    ],
-                    "Alcista (7-9)":     [
-                        "En ATH / Subida libre",
-                        "Tendencia / Giro alcista",
-                        "En soporte / sin resistencia",
-                        "Extension / zona dorada",
-                        "Zona alcista / sobreventa",
-                        "Alto / excepcional",
-                    ],
-                }
                 import pandas as _pd2
-                st.dataframe(_pd2.DataFrame(_tabla_ref), hide_index=True, use_container_width=True)
+                _tabla_ref = _pd2.DataFrame({
+                    "Componente":    ("ATH", "SMA200", "Resistencias", "Fibonacci", "RSI", "Volumen"),
+                    "Bajista (1-3)": ("Lejos del maximo", "Tendencia bajista",
+                                      "En resistencia / sin soporte", "Swing roto / retroceso 78.6%",
+                                      "Sobrecompra extrema / zona bajista", "Volumen seco"),
+                    "Neutro (4-6)":  ("Aproximandose", "Plana", "Zona media",
+                                      "Retrocesos medios", "Zona neutra", "Normal"),
+                    "Alcista (7-9)": ("En ATH / Subida libre", "Tendencia / Giro alcista",
+                                      "En soporte / sin resistencia", "Extension / zona dorada",
+                                      "Zona alcista / sobreventa", "Alto / excepcional"),
+                })
+                st.dataframe(_tabla_ref, hide_index=True, use_container_width=True)
                 st.caption(
                     "Analisis educativo. No constituye asesoramiento personalizado "
                     "de inversion bajo MiFID II. El analisis tecnico no predice "
@@ -15981,8 +15965,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     _resist_str = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "resistencia siguiente"
                     if _sar == "alcista" and not _div_baj and 55 <= _rsi <= 70 and _vslope > 0:
                         _dist_sma50 = ((_precio / _sma50 - 1) * 100) if _sma50 > 0 else 0
+                        _dist_label = "margen razonable" if _dist_sma50 < 8 else "algo sobreextendido; considerar esperar retroceso a SMA50"
                         rec = (f"Momentum activo y limpio. Entrada válida ahora con stop bajo SMA50 ({_sma50_str}). "
-                               f"El precio está un {_dist_sma50:.1f}% sobre SMA50 — {'margen razonable' if _dist_sma50 < 8 else 'algo sobreextendido; considerar esperar retroceso a SMA50'}. "
+                               f"El precio está un {_dist_sma50:.1f}% sobre SMA50 — {_dist_label}. "
                                f"Objetivo: {_resist_str}. Trailing stop al 8% desde máximos una vez en beneficio.")
                     elif _div_baj:
                         rec = ("⛔ No entrar. Divergencia bajista activa — el momentum se agota aunque el precio aguante. "
@@ -16028,7 +16013,8 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         puntos.append(f"✅ RSI en {_rsi:.0f} — sobrecompra técnica. Zona históricamente de menor retorno esperado.")
                     if _div_rsi_baj or _div_mcd_baj:
                         _tipos_sal = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
-                        puntos.append(f"✅ Divergencia bajista en {', '.join(_tipos_sal)} — señal de agotamiento de alta fiabilidad.")
+                        _tipos_sal_str = ", ".join(_tipos_sal)
+                        puntos.append(f"✅ Divergencia bajista en {_tipos_sal_str} — señal de agotamiento de alta fiabilidad.")
                     if _pos52 > 85:
                         puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual — precio cerca de máximos. Asimetría riesgo/recompensa desfavorable.")
                     if _obvs < -0.001:
@@ -16037,7 +16023,8 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
                     if _div_rsi_baj or _div_mcd_baj or (_obvs < -0.001):
                         _tipos_baj = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
-                        rec = (f"⚠️ Señales de distribución activas ({', '.join(_tipos_baj) if _tipos_baj else 'OBV'}). "
+                        _tipos_baj_txt = ", ".join(_tipos_baj) if _tipos_baj else "OBV"
+                        rec = (f"⚠️ Señales de distribución activas ({_tipos_baj_txt}). "
                                f"Acción: reducir 40-50% de la posición al precio actual. "
                                f"Ajustar stop del resto al soporte técnico más reciente. "
                                f"Si RSI supera 75 o hay cruce bajista MACD: cerrar posición completa.")
@@ -16061,8 +16048,12 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 "🛡️ Señal de Salida":  (_build_salida,     "#dc2626"),
             }
 
-            _keys_show = (list(_est_map.keys()) if _est_sel == "Todas"
-                          else ([_est_sel] if _est_sel in _est_map else []))
+            if _est_sel == "Todas":
+                _keys_show = list(_est_map.keys())
+            elif _est_sel in _est_map:
+                _keys_show = [_est_sel]
+            else:
+                _keys_show = []
 
             for _k in _keys_show:
                 _bfn, _col   = _est_map[_k]
@@ -16130,11 +16121,13 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                 ts          = ed["ts"],
                                 estrategias = _est_data,
                             )
+                        _ticker_e = ed["ticker"]
+                        _ts_e = datetime.now().strftime("%Y%m%d_%H%M")
                         if _fmt_e == "HTML":
                             st.download_button(
                                 "⬇️ Descargar HTML",
                                 data      = _html_e.encode("utf-8"),
-                                file_name = f"estrategia_{ed['ticker']}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                                file_name = f"estrategia_{_ticker_e}_{_ts_e}.html",
                                 mime      = "text/html",
                                 key       = "dl_est_html",
                             )
@@ -16145,9 +16138,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                 st.download_button(
                                     "⬇️ Descargar PDF",
                                     data      = _pdf_e,
-                                    file_name = f"estrategia_{ed['ticker']}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                    file_name = f"estrategia_{_ticker_e}_{_ts_e}.pdf",
                                     mime      = "application/pdf",
                                     key       = "dl_est_pdf",
                                 )
                             except Exception as _ex_pdf:
                                 st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
+
