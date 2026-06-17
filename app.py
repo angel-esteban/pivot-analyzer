@@ -10996,66 +10996,68 @@ def pantalla_analisis():
                        'padding:2px 7px;border-radius:20px;font-weight:700">ADMIN</span>'),
     }.get(_rol, "")
 
-    st.markdown(
-        f'''<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
-            padding:14px 20px 12px;border-radius:0 0 12px 12px;
-            margin:0 -1.25rem 0;display:flex;align-items:center;
-            justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.18);
-            min-height:60px;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="background:rgba(255,255,255,0.12);border-radius:8px;
-                        padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
-            <div>
-              <div style="color:#fff;font-size:1.05rem;font-weight:800;
-                          letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
-              <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
-                Análisis financiero multi-método</div>
-            </div>
-          </div>
-          <div style="width:220px"></div>
-        </div>''',
-        unsafe_allow_html=True
-    )
-
-    # Menú de usuario — popover integrado en cabecera con margin-top negativo
+    # ── Cabecera: columnas nativas con gradiente vía CSS :has() ──────────────
     st.markdown("""
     <style>
-    /* ── Ancora: levanta las columnas del popover al interior del gradiente ── */
-    div:has(#__pivot_hdr_anch) + div {
-        margin-top: -52px !important;
-        position: relative;
-        z-index: 99;
+    /* Gradiente sobre el bloque de columnas del header */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
+        background: linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%) !important;
+        border-radius: 0 0 12px 12px !important;
+        padding: 6px 20px 6px !important;
+        margin: -1rem -1.25rem 0.5rem !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.18) !important;
+        align-items: center !important;
     }
-    /* ── Botón trigger del popover: texto blanco sobre fondo semitransparente ── */
-    [data-testid="stPopover"] button {
-        background: rgba(255,255,255,0.10) !important;
-        border: 1px solid rgba(255,255,255,0.28) !important;
+    /* Centrar verticalmente la columna del popover */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:last-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+    }
+    /* Botón trigger — pill blanco translúcido */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
+        background: rgba(255,255,255,0.12) !important;
+        border: 1px solid rgba(255,255,255,0.30) !important;
         border-radius: 20px !important;
         font-weight: 600 !important;
         font-size: 0.78rem !important;
-        padding: 0.3rem 0.9rem !important;
+        padding: 0.35rem 1rem !important;
         color: #f1f5f9 !important;
+        white-space: nowrap !important;
     }
-    [data-testid="stPopover"] button:hover {
-        background: rgba(255,255,255,0.20) !important;
-        border-color: rgba(255,255,255,0.5) !important;
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button:hover {
+        background: rgba(255,255,255,0.22) !important;
+        border-color: rgba(255,255,255,0.55) !important;
     }
-    /* Streamlit envuelve el texto del botón en <p> — forzar color blanco */
-    [data-testid="stPopover"] button p {
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button p {
         color: #f1f5f9 !important;
         font-size: 0.78rem !important;
         font-weight: 600 !important;
     }
     </style>
-    <span id="__pivot_hdr_anch" style="display:none"></span>
     """, unsafe_allow_html=True)
-    _hdr_sp, _hdr_pop_col = st.columns([5, 2])
-    with _hdr_pop_col:
+    _hdr_left, _hdr_right = st.columns([3, 1])
+    with _hdr_left:
+        st.markdown(
+            f'''<span id="__pivot_hdr_logo" style="display:none"></span>
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+              <div style="background:rgba(255,255,255,0.12);border-radius:8px;
+                          padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
+              <div>
+                <div style="color:#fff;font-size:1.05rem;font-weight:800;
+                            letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
+                <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
+                  Análisis financiero multi-método</div>
+              </div>
+            </div>''',
+            unsafe_allow_html=True
+        )
+    with _hdr_right:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
         _usr_email_hdr = usuario.get("email", "") or ""
         with st.popover(f"👤 {_uname}", use_container_width=True):
             _avatar_html = (
-                f'<div style="padding:4px 0 2px">'
+                f'<div style="padding:4px 0 6px">'
                 f'<div style="font-size:1.1rem;font-weight:800;color:#1d4ed8;'
                 f'background:#dbeafe;border-radius:50%;width:40px;height:40px;'
                 f'display:flex;align-items:center;justify-content:center;'
