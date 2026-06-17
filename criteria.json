@@ -1,0 +1,645 @@
+{
+  "meta": {
+    "version": "1.0",
+    "fuente_datos": "yfinance",
+    "nota": "Fuente única de verdad: los textos de guía y los parámetros de evaluación del screening comparten este archivo. Cualquier cambio de umbral se refleja automáticamente en ambos.",
+    "ultima_revision": "2026-06-17",
+    "operadores": {
+      "gte":      "mayor o igual que `umbral_ok`",
+      "lte":      "menor o igual que `umbral_ok`",
+      "between":  "entre `min` y `max` (inclusive)",
+      "gt":       "estrictamente mayor que `umbral_ok`",
+      "lt":       "estrictamente menor que `umbral_ok`",
+      "in_list":  "el valor está en `valores_ok`",
+      "computed": "requiere cálculo — ver campo `funcion`"
+    },
+    "fuentes": {
+      "yfinance_info":     "campo directo de ticker.info (diccionario)",
+      "yfinance_historia": "requiere ticker.history() o ticker.dividends",
+      "calculado":         "se calcula combinando varios campos de ticker.info"
+    }
+  },
+  "carteras": {
+
+    "dividendos": {
+      "titulo":   "💰 Cartera de Dividendos",
+      "subtitulo": "La idea es sencilla: inviertes para cobrar, no para vender. Cada acción que compras es como un pequeño inquilino que te paga una renta periódica. Con el tiempo, si reinviertes esos pagos, el efecto del interés compuesto hace el trabajo pesado por ti.",
+      "composicion": [
+        {
+          "peso_pct": "60–70%",
+          "nombre":   "Acciones individuales de dividendo",
+          "descripcion": "El núcleo de la cartera. Buscas empresas que lleven años pagando dividendos sin recortarlos — utilities, bancos sólidos, telecomunicaciones, consumo básico. La clave es la consistencia, no el rendimiento más alto."
+        },
+        {
+          "peso_pct": "20–30%",
+          "nombre":   "ETFs o fondos de dividendo UCITS",
+          "descripcion": "Para el inversor que prefiere no analizar empresa por empresa, un ETF de dividendo compra docenas de ellas de golpe. Te da diversificación geográfica y sectorial sin trabajo extra."
+        },
+        {
+          "peso_pct": "5–10%",
+          "nombre":   "Liquidez",
+          "descripcion": "No lo infravalores. Tener algo de efectivo te permite aprovechar caídas para comprar más barato, o reinvertir los dividendos cobrados en el momento oportuno."
+        }
+      ],
+      "criterios": [
+        {
+          "id":      "dividend_yield",
+          "nombre":  "Rentabilidad por dividendo",
+          "fuente":  "yfinance_info",
+          "campo":   "dividendYield",
+          "operador": "between",
+          "min":     0.025,
+          "max":     0.08,
+          "umbral_warning_min": 0.015,
+          "umbral_warning_max": 0.09,
+          "peso":    3,
+          "textos": {
+            "guia":    "Busca entre el 2,5% y el 8%. Por debajo del 2,5% el ingreso es marginal; por encima del 8% hay que investigar — a veces es una señal de que el mercado desconfía de que ese dividendo se pueda mantener.",
+            "ok":      "Yield atractivo y dentro del rango sostenible ({valor:.1%}).",
+            "warning": "Yield fuera del rango óptimo ({valor:.1%}) — acceptable pero con reservas.",
+            "ko":      "Yield anómalo ({valor:.1%}): demasiado bajo para estrategia de rentas o posible señal de riesgo de recorte."
+          }
+        },
+        {
+          "id":      "payout_ratio",
+          "nombre":  "Cobertura del dividendo (Payout ratio)",
+          "fuente":  "yfinance_info",
+          "campo":   "payoutRatio",
+          "operador": "lte",
+          "umbral_ok":      0.75,
+          "umbral_warning": 0.90,
+          "peso":    3,
+          "textos": {
+            "guia":    "Es el porcentaje del beneficio que la empresa destina a pagar el dividendo. Si paga el 90% o más, le queda poco margen para imprevistos. Por debajo del 75% en empresas normales es señal de que el dividendo está bien respaldado.",
+            "ok":      "Dividendo bien cubierto: la empresa destina el {valor:.0%} de su beneficio, con margen suficiente para imprevistos.",
+            "warning": "Cobertura ajustada ({valor:.0%}). El dividendo es sostenible a corto plazo, pero sin margen para sorpresas negativas en resultados.",
+            "ko":      "Payout excesivo ({valor:.0%}): la empresa está pagando más de lo que puede permitirse de forma sostenida. Alto riesgo de recorte."
+          }
+        },
+        {
+          "id":      "historial_dividendo",
+          "nombre":  "Historial de pagos continuos",
+          "fuente":  "yfinance_historia",
+          "campo":   "dividends",
+          "funcion": "calcular_anos_dividendo_consecutivo",
+          "operador": "gte",
+          "umbral_ok":      5,
+          "umbral_warning": 3,
+          "peso":    2,
+          "textos": {
+            "guia":    "Al menos 5 años pagando sin recortar. Mejor si ha crecido año a año, aunque sea poco. Una empresa que ha mantenido su dividendo en crisis anteriores es más fiable que una que lo acaba de iniciar.",
+            "ok":      "{valor} años pagando dividendo de forma consecutiva — historial sólido.",
+            "warning": "{valor} años de historial — suficiente para evaluar, pero sin track record largo en ciclos completos.",
+            "ko":      "Historial de dividendo inferior a 3 años o con interrupciones recientes — perfil no apto para cartera de rentas."
+          }
+        },
+        {
+          "id":      "deuda_equity",
+          "nombre":  "Nivel de deuda (Deuda / Equity)",
+          "fuente":  "yfinance_info",
+          "campo":   "debtToEquity",
+          "operador": "lte",
+          "umbral_ok":      150,
+          "umbral_warning": 250,
+          "nota":    "yfinance devuelve debtToEquity en porcentaje: 150 equivale a ratio 1,5×",
+          "peso":    2,
+          "textos": {
+            "guia":    "Una empresa muy endeudada puede verse obligada a recortar el dividendo para pagar intereses. En sectores cíclicos, la deuda debería ser inferior a 1,5 veces los fondos propios.",
+            "ok":      "Deuda controlada (ratio {valor_ratio:.1f}×) — poco riesgo de que la deuda comprometa el dividendo.",
+            "warning": "Deuda elevada (ratio {valor_ratio:.1f}×) — acceptable en utilities o REITs regulados, pero a vigilar en sectores cíclicos.",
+            "ko":      "Deuda muy alta (ratio {valor_ratio:.1f}×) — el pago de intereses puede competir con el dividendo en una desaceleración económica."
+          }
+        },
+        {
+          "id":      "free_cash_flow",
+          "nombre":  "Flujo de caja libre positivo",
+          "fuente":  "calculado",
+          "campos":  ["freeCashflow", "marketCap", "dividendYield"],
+          "funcion": "calcular_fcf_yield_vs_div_yield",
+          "operador": "computed",
+          "peso":    3,
+          "textos": {
+            "guia":    "El dividendo se paga con caja real, no con beneficio contable. Comprueba que la empresa genera más dinero en efectivo del que necesita para mantener el negocio — ese excedente es el que financia tu renta.",
+            "ok":      "El flujo de caja libre cubre holgadamente el dividendo — el pago está respaldado por dinero real.",
+            "warning": "El flujo de caja libre cubre el dividendo de forma justa, sin margen amplio. A vigilar si los resultados empeoran.",
+            "ko":      "El flujo de caja libre es insuficiente para cubrir el dividendo — la empresa podría estar pagándolo con deuda o con reservas."
+          }
+        },
+        {
+          "id":      "sector",
+          "nombre":  "Sector compatible con rentas",
+          "fuente":  "yfinance_info",
+          "campo":   "sector",
+          "operador": "in_list",
+          "valores_ok": [
+            "Utilities", "Consumer Defensive", "Communication Services",
+            "Real Estate", "Healthcare", "Industrials", "Energy", "Financial Services"
+          ],
+          "peso":    1,
+          "textos": {
+            "guia":    "Utilities (eléctricas, agua), consumo básico (alimentación, higiene), telecomunicaciones, REITs (inmobiliario cotizado), salud e infraestructuras. Son negocios con ingresos predecibles, que es lo que necesita una cartera de rentas.",
+            "ok":      "Sector {valor} — negocio con ingresos predecibles, compatible con estrategia de dividendos.",
+            "warning": "Sector {valor} — no es el perfil clásico de dividendo, pero puede ser válido si el resto de criterios son sólidos.",
+            "ko":      "Sector {valor} — sectores con ingresos muy volátiles hacen menos predecible el mantenimiento del dividendo."
+          }
+        },
+        {
+          "id":      "crecimiento_dividendo",
+          "nombre":  "Crecimiento histórico del dividendo (CAGR 5 años)",
+          "fuente":  "yfinance_historia",
+          "campo":   "dividends",
+          "funcion": "calcular_cagr_dividendo_5y",
+          "operador": "gte",
+          "umbral_ok":      0.03,
+          "umbral_warning": 0.0,
+          "peso":    2,
+          "textos": {
+            "guia":    "Un dividendo que crece cada año, aunque sea poco, protege tu renta de la inflación. Lo ideal es que haya crecido al menos un 3% anual de media en los últimos 5 años. Una empresa que mantiene el dividendo plano durante años está perdiendo poder adquisitivo.",
+            "ok":      "El dividendo ha crecido a un ritmo del {valor:.1%} anual en los últimos 5 años — por encima de la inflación media.",
+            "warning": "El dividendo se ha mantenido estable pero sin crecimiento relevante. Protege la renta, pero no la hace crecer.",
+            "ko":      "El dividendo ha caído o no hay historial suficiente para calcular la tendencia."
+          }
+        },
+        {
+          "id":      "free_float",
+          "nombre":  "Porcentaje de acciones en circulación (Free Float)",
+          "fuente":  "calculado",
+          "campos":  ["floatShares", "sharesOutstanding"],
+          "funcion": "calcular_free_float_pct",
+          "operador": "gte",
+          "umbral_ok":      0.25,
+          "umbral_warning": 0.15,
+          "peso":    1,
+          "textos": {
+            "guia":    "El free float es el porcentaje de acciones que realmente se puede comprar y vender en el mercado — el resto está en manos de accionistas de control que no venden. Un free float bajo significa que hay poco papel disponible: si muchos inversores quieren salir a la vez, el precio cae más de lo normal.",
+            "ok":      "Free float del {valor:.0%} — volumen de acciones en circulación suficiente para operar con normalidad.",
+            "warning": "Free float del {valor:.0%} — concentración accionarial significativa. La liquidez puede deteriorarse en momentos de estrés.",
+            "ko":      "Free float del {valor:.0%} — la mayor parte de las acciones están en manos de accionistas de control. Deshacer una posición relevante puede ser difícil sin impactar el precio."
+          }
+        },
+        {
+          "id":      "ev_ebitda",
+          "nombre":  "Valoración relativa (EV/EBITDA)",
+          "fuente":  "yfinance_info",
+          "campo":   "enterpriseToEbitda",
+          "operador": "lte",
+          "umbral_ok":      12.0,
+          "umbral_warning": 18.0,
+          "peso":    1,
+          "textos": {
+            "guia":    "El EV/EBITDA mide cuántas veces estás pagando los beneficios operativos de la empresa. Para una empresa de dividendos, no quieres pagar demasiado caro — la rentabilidad efectiva por dividendo depende del precio que pagues hoy.",
+            "ok":      "EV/EBITDA de {valor:.1f}× — valoración razonable para una empresa de dividendos.",
+            "warning": "EV/EBITDA de {valor:.1f}× — algo elevado. El precio ya descuenta buenas noticias; el margen de seguridad se reduce.",
+            "ko":      "EV/EBITDA de {valor:.1f}× — valoración exigente para un perfil de rentas. El riesgo de revisión a la baja del precio es mayor."
+          }
+        }
+      ]
+    },
+
+    "crecimiento": {
+      "titulo":   "📈 Cartera de Crecimiento",
+      "subtitulo": "Aquí no cobras dividendos — ganas cuando la empresa vale más. La lógica es encontrar negocios que están creciendo rápido y tienen capacidad para seguir haciéndolo durante años. La clave es la paciencia: esta cartera puede perder valor durante meses o años antes de que el mercado reconozca el potencial.",
+      "composicion": [
+        {
+          "peso_pct": "70–80%",
+          "nombre":   "Acciones de crecimiento individuales",
+          "descripcion": "Empresas que crecen sus ingresos a doble dígito, con ventajas competitivas claras. Suelen estar en tecnología, salud, software, consumo digital. No pagan o pagan poco dividendo porque reinvierten todo en crecer."
+        },
+        {
+          "peso_pct": "10–20%",
+          "nombre":   "ETFs sectoriales temáticos UCITS",
+          "descripcion": "Si no quieres elegir empresas concretas en un sector como inteligencia artificial o energías limpias, un ETF temático te da exposición diversificada. Ojo: suelen ser más volátiles que los ETFs de mercado amplio."
+        },
+        {
+          "peso_pct": "5–10%",
+          "nombre":   "Liquidez",
+          "descripcion": "Reserva táctica para aprovechar correcciones. Las empresas de crecimiento caen más en mercados bajistas — tener liquidez te permite comprar más en esos momentos."
+        }
+      ],
+      "criterios": [
+        {
+          "id":      "revenue_growth",
+          "nombre":  "Crecimiento de ingresos",
+          "fuente":  "yfinance_info",
+          "campo":   "revenueGrowth",
+          "operador": "gte",
+          "umbral_ok":      0.15,
+          "umbral_warning": 0.05,
+          "peso":    3,
+          "textos": {
+            "guia":    "Al menos un 15% anual durante los últimos 3 años. Lo importante no es solo el número, sino que el ritmo se mantenga o acelere — una empresa que crece cada vez más despacio está perdiendo impulso.",
+            "ok":      "Crecimiento de ingresos del {valor:.1%} — ritmo de expansión sólido y compatible con tesis de crecimiento.",
+            "warning": "Crecimiento del {valor:.1%} — por debajo del umbral ideal. Aceptable si los márgenes mejoran o si el negocio está en fase de consolidación.",
+            "ko":      "Crecimiento del {valor:.1%} — insuficiente para una cartera de crecimiento. El negocio no está acelerando al ritmo necesario."
+          }
+        },
+        {
+          "id":      "gross_margin",
+          "nombre":  "Margen bruto",
+          "fuente":  "yfinance_info",
+          "campo":   "grossMargins",
+          "operador": "gte",
+          "umbral_ok":      0.40,
+          "umbral_warning": 0.25,
+          "peso":    2,
+          "textos": {
+            "guia":    "Por encima del 40% es señal de que la empresa tiene poder de fijación de precios y que su modelo de negocio escala bien. Un margen bajo en un negocio de crecimiento es una señal de alerta, porque cada euro de ingreso cuesta casi lo mismo de generar.",
+            "ok":      "Margen bruto del {valor:.1%} — el modelo de negocio escala bien y la empresa tiene poder de fijación de precios.",
+            "warning": "Margen bruto del {valor:.1%} — por debajo del ideal. El negocio puede crecer, pero con más presión sobre la rentabilidad.",
+            "ko":      "Margen bruto del {valor:.1%} — demasiado bajo para un negocio de crecimiento. El coste de cada euro de ingreso deja poco margen para invertir en expansión."
+          }
+        },
+        {
+          "id":      "roe",
+          "nombre":  "Retorno sobre fondos propios (ROE)",
+          "fuente":  "yfinance_info",
+          "campo":   "returnOnEquity",
+          "operador": "gte",
+          "umbral_ok":      0.15,
+          "umbral_warning": 0.08,
+          "nota":    "ROE como proxy de ROIC. No disponible directamente en yfinance.",
+          "peso":    2,
+          "textos": {
+            "guia":    "Mide cuánto beneficio genera la empresa por cada euro de capital propio. Por encima del 15% indica que la empresa sabe lo que hace con su dinero — y el tuyo.",
+            "ok":      "ROE del {valor:.1%} — la empresa genera un retorno atractivo sobre el capital que reinvierte.",
+            "warning": "ROE del {valor:.1%} — retorno moderado. Puede mejorar a medida que el negocio escala.",
+            "ko":      "ROE del {valor:.1%} — retorno bajo. La empresa no está generando valor suficiente con el capital que gestiona."
+          }
+        },
+        {
+          "id":      "reinversion",
+          "nombre":  "Política de reinversión (no dividendos)",
+          "fuente":  "yfinance_info",
+          "campo":   "payoutRatio",
+          "operador": "lte",
+          "umbral_ok":      0.20,
+          "umbral_warning": 0.40,
+          "peso":    1,
+          "textos": {
+            "guia":    "Una buena empresa de crecimiento no te paga dividendos porque tiene algo mejor que hacer con ese dinero: expandirse, contratar, desarrollar nuevos productos. Eso es buena señal siempre que el ROE sea alto.",
+            "ok":      "La empresa reinvierte la mayor parte de su beneficio en el negocio — coherente con una estrategia de crecimiento.",
+            "warning": "La empresa reparte parte del beneficio como dividendo. No es un problema si el crecimiento se mantiene, pero reduce el capital disponible para reinvertir.",
+            "ko":      "La empresa destina más del 40% del beneficio a dividendos. Difícilmente compatible con una tesis de crecimiento acelerado."
+          }
+        },
+        {
+          "id":      "operating_margin",
+          "nombre":  "Margen operativo",
+          "fuente":  "yfinance_info",
+          "campo":   "operatingMargins",
+          "operador": "gte",
+          "umbral_ok":      0.10,
+          "umbral_warning": 0.05,
+          "peso":    2,
+          "textos": {
+            "guia":    "El margen operativo muestra cuánto queda de cada euro de ingresos después de pagar los costes del negocio. En empresas de crecimiento, lo importante es que mejore con el tiempo — aunque arranquen con márgenes bajos.",
+            "ok":      "Margen operativo del {valor:.1%} — el negocio ya es rentable a nivel operativo y con capacidad de mejora.",
+            "warning": "Margen operativo del {valor:.1%} — rentabilidad ajustada. Aceptable en fase temprana si la tendencia es claramente positiva.",
+            "ko":      "Margen operativo negativo o muy bajo ({valor:.1%}) — el negocio todavía consume más de lo que genera operativamente. Solo justificable en etapas muy iniciales con crecimiento muy alto."
+          }
+        },
+        {
+          "id":      "deuda",
+          "nombre":  "Nivel de deuda (Deuda / Equity)",
+          "fuente":  "yfinance_info",
+          "campo":   "debtToEquity",
+          "operador": "lte",
+          "umbral_ok":      150,
+          "umbral_warning": 300,
+          "nota":    "yfinance devuelve debtToEquity en porcentaje: 150 equivale a ratio 1,5×",
+          "peso":    1,
+          "textos": {
+            "guia":    "Algo de deuda es aceptable si el negocio crece rápido y genera caja. El problema es cuando una empresa endeudada deja de crecer y tiene que devolver esa deuda con un negocio estancado.",
+            "ok":      "Deuda manejable (ratio {valor_ratio:.1f}×) — nivel compatible con una estrategia de crecimiento.",
+            "warning": "Deuda elevada (ratio {valor_ratio:.1f}×). Aceptable si el crecimiento es muy alto, pero añade riesgo si el negocio frena.",
+            "ko":      "Deuda muy alta (ratio {valor_ratio:.1f}×) — en un escenario de desaceleración, el servicio de la deuda puede frenar la capacidad de reinversión."
+          }
+        },
+        {
+          "id":      "peg_ratio",
+          "nombre":  "PEG ratio (precio vs crecimiento)",
+          "fuente":  "yfinance_info",
+          "campo":   "pegRatio",
+          "operador": "lte",
+          "umbral_ok":      2.0,
+          "umbral_warning": 3.0,
+          "peso":    2,
+          "textos": {
+            "guia":    "El PEG ratio divide el PER entre la tasa de crecimiento esperada. Un PEG de 1 significa que pagas exactamente lo que crece la empresa. Por debajo de 2 es razonable para empresas de calidad; por encima de 3 estás pagando caro el crecimiento y cualquier decepcción en resultados puede provocar una caída importante.",
+            "ok":      "PEG de {valor:.2f} — el precio que pagas está justificado por el ritmo de crecimiento de la empresa.",
+            "warning": "PEG de {valor:.2f} — valoración exigente. El crecimiento tiene que cumplir las expectativas para justificar el precio.",
+            "ko":      "PEG de {valor:.2f} — el mercado ya descuenta un escenario muy optimista. El margen de error es pequeño."
+          }
+        },
+        {
+          "id":      "earnings_growth",
+          "nombre":  "Crecimiento de beneficios",
+          "fuente":  "yfinance_info",
+          "campo":   "earningsGrowth",
+          "operador": "gte",
+          "umbral_ok":      0.10,
+          "umbral_warning": 0.0,
+          "peso":    2,
+          "textos": {
+            "guia":    "Que los ingresos crezcan es necesario, pero no suficiente. Lo importante es que también crezcan los beneficios — si los ingresos suben pero los márgenes se estrechan, la empresa está creciendo a costa de su rentabilidad.",
+            "ok":      "Los beneficios crecieron un {valor:.1%} — el crecimiento de ingresos se está trasladando a la cuenta de resultados.",
+            "warning": "Crecimiento de beneficios bajo o plano ({valor:.1%}). Los márgenes pueden estar bajo presión a pesar del crecimiento en ingresos.",
+            "ko":      "Beneficios cayendo ({valor:.1%}). El negocio crece en ingresos pero pierde rentabilidad — señal de alerta."
+          }
+        },
+        {
+          "id":      "market_cap",
+          "nombre":  "Capitalización mínima (liquidez)",
+          "fuente":  "yfinance_info",
+          "campo":   "marketCap",
+          "operador": "gte",
+          "umbral_ok":      1000000000,
+          "umbral_warning": 300000000,
+          "peso":    1,
+          "textos": {
+            "guia":    "Las empresas muy pequeñas (micro-caps) son más difíciles de analizar, tienen menos cobertura de analistas y pueden ser más volátiles. Para una cartera de crecimiento, una capitalización mínima de 300M€ garantiza cierta madurez del negocio y liquidez suficiente.",
+            "ok":      "Capitalización de {valor_fmt} — empresa con masa crítica suficiente y cobertura de analistas.",
+            "warning": "Capitalización de {valor_fmt} — empresa de tamaño medio-pequeño. Mayor potencial pero también mayor riesgo y menor liquidez.",
+            "ko":      "Capitalización de {valor_fmt} — micro-cap. Análisis más difícil, liquidez reducida y mayor volatilidad."
+          }
+        }
+      ]
+    },
+
+    "indexada": {
+      "titulo":   "🗂️ Cartera Indexada",
+      "subtitulo": "La estrategia más sencilla y, paradójicamente, la que bate a la mayoría de inversores profesionales a largo plazo. En lugar de elegir empresas ganadoras, compras una pequeña parte de todas — o casi todas — a la vez, a través de fondos de bajo coste. Menos decisiones, menos costes, más tiempo para que el mercado trabaje por ti.",
+      "composicion": [
+        {
+          "peso_pct": "50–70%",
+          "nombre":   "ETFs de renta variable global (MSCI World / ACWI)",
+          "descripcion": "El bloque principal. Con un solo ETF tienes exposición a más de 1.500 empresas de los principales países desarrollados. Es la base de casi cualquier cartera indexada sólida."
+        },
+        {
+          "peso_pct": "10–20%",
+          "nombre":   "ETFs de mercados emergentes",
+          "descripcion": "China, India, Brasil, Corea del Sur... mercados con más potencial de crecimiento a largo plazo, pero también con más volatilidad y riesgo político. A mayor horizonte de inversión, más sentido tiene incluirlos."
+        },
+        {
+          "peso_pct": "0–20%",
+          "nombre":   "ETFs de renta fija (bonos)",
+          "descripcion": "Bonos del Estado o corporativos de alta calidad. No crecen mucho, pero amortiguan las caídas de la bolsa. Cuanto más conservador seas o más cerca estés de necesitar el dinero, más peso le das a este bloque."
+        },
+        {
+          "peso_pct": "0–10%",
+          "nombre":   "Liquidez",
+          "descripcion": "Para rebalancear la cartera cuando un bloque crece demasiado respecto a los demás, o para hacer aportaciones periódicas."
+        }
+      ],
+      "nota_screening": "La cartera indexada se construye con ETFs, no con acciones individuales. El screening aplica criterios de calidad para filtrar ETFs candidatos, no empresas.",
+      "criterios": [
+        {
+          "id":      "estructura_ucits",
+          "nombre":  "Estructura legal UCITS",
+          "fuente":  "calculado",
+          "funcion": "verificar_ucits",
+          "operador": "computed",
+          "peso":    3,
+          "textos": {
+            "guia":    "En España, la normativa PRIIPs impide a los inversores minoristas comprar ETFs estadounidenses. Solo puedes comprar ETFs con denominación UCITS, que son los domiciliados en Europa. Tu broker ya te lo filtra automáticamente en la mayoría de casos.",
+            "ok":      "ETF con estructura UCITS — apto para el inversor minorista español.",
+            "warning": "No se ha podido verificar la estructura UCITS — comprueba manualmente en el folleto del fondo.",
+            "ko":      "ETF sin estructura UCITS — no comercializable para minoristas en España según normativa PRIIPs."
+          }
+        },
+        {
+          "id":      "ter",
+          "nombre":  "Coste anual del fondo (TER)",
+          "fuente":  "yfinance_info",
+          "campo":   "annualReportExpenseRatio",
+          "operador": "lte",
+          "umbral_ok":      0.0025,
+          "umbral_warning": 0.0040,
+          "peso":    3,
+          "textos": {
+            "guia":    "El TER (Total Expense Ratio) es lo que te cobra la gestora cada año por tener el fondo. En un índice amplio como el MSCI World, busca por debajo del 0,25%. Puede parecer poco, pero en 20 años la diferencia entre un 0,07% y un 0,50% es enorme.",
+            "ok":      "TER del {valor:.2%} — coste muy competitivo para un ETF indexado.",
+            "warning": "TER del {valor:.2%} — coste aceptable, aunque existen alternativas más baratas para el mismo índice.",
+            "ko":      "TER del {valor:.2%} — demasiado caro para una estrategia indexada donde el coste es el factor más controlable."
+          }
+        },
+        {
+          "id":      "aum",
+          "nombre":  "Patrimonio bajo gestión (AUM)",
+          "fuente":  "yfinance_info",
+          "campo":   "totalAssets",
+          "operador": "gte",
+          "umbral_ok":      300000000,
+          "umbral_warning": 100000000,
+          "peso":    2,
+          "textos": {
+            "guia":    "Un fondo con más de 300 millones de euros en activos es suficientemente grande para que no haya riesgo de cierre ni problemas de liquidez al vender. Los fondos muy pequeños pueden cerrarse o fusionarse, lo que genera molestias fiscales.",
+            "ok":      "Patrimonio de {valor_fmt} — fondo con masa crítica suficiente y sin riesgo de cierre.",
+            "warning": "Patrimonio de {valor_fmt} — tamaño modesto. Posible riesgo de liquidez o cierre si el fondo no crece.",
+            "ko":      "Patrimonio de {valor_fmt} — fondo demasiado pequeño. Alto riesgo de cierre o fusión con otro fondo."
+          }
+        },
+        {
+          "id":      "volumen_medio",
+          "nombre":  "Liquidez en mercado secundario",
+          "fuente":  "calculado",
+          "campos":  ["averageVolume", "regularMarketPrice"],
+          "funcion": "calcular_volumen_euros",
+          "operador": "gte",
+          "umbral_ok":      1000000,
+          "umbral_warning": 300000,
+          "peso":    2,
+          "textos": {
+            "guia":    "El volumen diario negociado indica con qué facilidad puedes comprar o vender sin mover el precio. Un ETF con poco volumen puede tener spreads amplios entre precio de compra y venta, lo que añade coste oculto a cada operación.",
+            "ok":      "Volumen diario de {valor_fmt} — liquidez suficiente para operar sin impacto relevante en el precio.",
+            "warning": "Volumen diario de {valor_fmt} — liquidez moderada. Aceptable para aportaciones periódicas, pero evita operaciones grandes en momentos de estrés.",
+            "ko":      "Volumen diario de {valor_fmt} — liquidez muy baja. El spread puede ser un coste relevante en cada operación."
+          }
+        },
+        {
+          "id":      "replica_fisica",
+          "nombre":  "Método de réplica del índice",
+          "fuente":  "manual",
+          "nota":    "No disponible en yfinance. El motor de screening mostrará este criterio como 'verificar manualmente' con enlace a justETF.",
+          "enlace_referencia": "https://www.justetf.com",
+          "peso":    2,
+          "textos": {
+            "guia":    "Un ETF de réplica física compra directamente las acciones del índice — es lo más transparente. Uno de réplica sintética usa derivados para imitar el comportamiento del índice, lo que añade algo de riesgo de contraparte. Para un inversor particular, la réplica física es más fácil de entender y dormir tranquilo.",
+            "ok":      "Réplica física — el ETF posee directamente los activos del índice.",
+            "warning": "Verificar en el folleto del fondo o en justETF — no ha sido posible confirmar el método de réplica automáticamente.",
+            "ko":      "Réplica sintética — el ETF usa derivados (swaps) para replicar el índice. Añade riesgo de contraparte respecto a la réplica física."
+          }
+        },
+        {
+          "id":      "politica_dividendos_etf",
+          "nombre":  "Política de dividendos (acumulación vs distribución)",
+          "fuente":  "manual",
+          "nota":    "No disponible directamente en yfinance. Verificar en el nombre del ETF (Acc = acumulación, Dist = distribución) o en justETF.",
+          "enlace_referencia": "https://www.justetf.com",
+          "peso":    1,
+          "textos": {
+            "guia":    "En España, los ETFs de acumulación (Acc) son más eficientes fiscalmente: reinvierten los dividendos internamente y no tributan hasta que vendes. Los ETFs de distribución (Dist) pagan dividendos periódicos, pero cada cobro tributa ese año aunque no necesites el dinero. Para un inversor a largo plazo en España, la acumulación suele ser la mejor opción.",
+            "ok":      "ETF de acumulación (Acc) — los dividendos se reinvierten automáticamente y no tributan hasta la venta. Óptimo para el inversor a largo plazo en España.",
+            "warning": "Verificar en el folleto si es acumulación o distribución — no ha sido posible confirmarlo automáticamente.",
+            "ko":      "ETF de distribución (Dist) — los dividendos cobrados tributan cada año en el IRPF, lo que reduce el efecto del interés compuesto."
+          }
+        }
+      ]
+    },
+
+    "swing": {
+      "titulo":   "⚡ Cartera de Swing Trading",
+      "subtitulo": "Operas a corto plazo — compras cuando el precio da señales técnicas de subida y vendes cuando alcanza tu objetivo o salta tu stop de protección. El horizonte típico es de días a semanas. Requiere más atención y disciplina que el resto de carteras: aquí el mayor riesgo no es el mercado, sino la gestión de tus propias emociones.",
+      "composicion": [
+        {
+          "peso_pct": "60–80%",
+          "nombre":   "Posiciones abiertas (entre 2 y 6 simultáneas)",
+          "descripcion": "Más de 6 operaciones a la vez es difícil de gestionar bien. El swing trading premia la concentración y el foco: pocas posiciones, bien analizadas y con stop claro desde el primer momento."
+        },
+        {
+          "peso_pct": "20–40%",
+          "nombre":   "Liquidez permanente",
+          "descripcion": "No es dinero parado — es munición. Tener siempre reserva de efectivo te permite entrar en nuevas oportunidades sin tener que cerrar posiciones antes de tiempo, y absorber pérdidas sin que afecten al resto de la cartera."
+        }
+      ],
+      "criterios": [
+        {
+          "id":      "liquidez_volumen",
+          "nombre":  "Liquidez del valor",
+          "fuente":  "calculado",
+          "campos":  ["averageVolume", "regularMarketPrice"],
+          "funcion": "calcular_volumen_euros",
+          "operador": "gte",
+          "umbral_ok":      500000,
+          "umbral_warning": 200000,
+          "peso":    3,
+          "textos": {
+            "guia":    "Solo operes en valores que muevan suficiente volumen diario: más de 500.000 € en España, más de 5 millones de dólares en EE.UU. Si el volumen es bajo, cuando quieras salir puede no haber comprador al precio que necesitas.",
+            "ok":      "Volumen diario de {valor_fmt} — liquidez suficiente para entrar y salir sin impacto relevante.",
+            "warning": "Volumen diario de {valor_fmt} — liquidez justa. Operable en posiciones pequeñas, pero con atención al spread.",
+            "ko":      "Volumen diario de {valor_fmt} — liquidez insuficiente para swing trading. El riesgo de no poder salir al precio deseado es alto."
+          }
+        },
+        {
+          "id":      "tendencia_sma",
+          "nombre":  "Estructura tendencial (SMA50 > SMA200)",
+          "fuente":  "calculado",
+          "campos":  ["regularMarketPrice", "fiftyDayAverage", "twoHundredDayAverage"],
+          "funcion": "verificar_tendencia_sma",
+          "operador": "computed",
+          "peso":    3,
+          "textos": {
+            "guia":    "Antes de entrar, confirma que la tendencia de fondo te acompaña. En swing largo (compra), lo ideal es que el precio esté por encima de la SMA50, y la SMA50 por encima de la SMA200. Operar contra tendencia multiplica el riesgo.",
+            "ok":      "Estructura tendencial alcista confirmada: precio > SMA50 > SMA200. La tendencia de fondo acompaña la operación.",
+            "warning": "Estructura tendencial parcial — alguna de las medias no está alineada. El swing es posible pero con mayor cautela.",
+            "ko":      "Estructura tendencial bajista o sin dirección clara. Operar en largo en estas condiciones va contra la tendencia de fondo."
+          }
+        },
+        {
+          "id":      "rsi",
+          "nombre":  "RSI (momentum)",
+          "fuente":  "yfinance_historia",
+          "funcion": "calcular_rsi_14",
+          "operador": "between",
+          "min":     35,
+          "max":     65,
+          "umbral_warning_min": 30,
+          "umbral_warning_max": 70,
+          "peso":    2,
+          "textos": {
+            "guia":    "El RSI mide la velocidad del movimiento del precio. Para una entrada en largo, el rango ideal es entre 35 y 65: hay suficiente momentum alcista pero el valor no está sobrecomprado. Por encima de 70 el riesgo de corrección a corto plazo es alto.",
+            "ok":      "RSI en {valor:.0f} — zona ideal para entrada en largo. Momentum presente sin señales de sobrecompra.",
+            "warning": "RSI en {valor:.0f} — fuera del rango óptimo pero no extremo. La operación es posible con mayor atención al timing.",
+            "ko":      "RSI en {valor:.0f} — zona de sobrecompra o sobreventa extrema. No es el momento adecuado para una entrada estándar en swing."
+          }
+        },
+        {
+          "id":      "posicion_52w",
+          "nombre":  "Posición en rango de 52 semanas",
+          "fuente":  "calculado",
+          "campos":  ["regularMarketPrice", "fiftyTwoWeekHigh", "fiftyTwoWeekLow"],
+          "funcion": "calcular_posicion_52w",
+          "operador": "between",
+          "min":     20,
+          "max":     80,
+          "peso":    1,
+          "textos": {
+            "guia":    "Un valor en el 20–80% de su rango anual tiene recorrido en ambas direcciones, lo que facilita definir objetivos y stops con sentido. En máximos anuales (>80%), la resistencia histórica limita el recorrido al alza; en mínimos (<20%), puede seguir cayendo.",
+            "ok":      "El precio está en el {valor:.0f}% de su rango anual — con recorrido suficiente para desarrollar el swing.",
+            "warning": "El precio está en el {valor:.0f}% de su rango anual — cerca de un extremo. El recorrido puede ser más limitado.",
+            "ko":      "El precio está en el {valor:.0f}% de su rango anual — en un extremo histórico. La asimetría riesgo/beneficio del swing se reduce significativamente."
+          }
+        },
+        {
+          "id":      "distancia_sma200",
+          "nombre":  "Distancia a la SMA200",
+          "fuente":  "calculado",
+          "campos":  ["regularMarketPrice", "twoHundredDayAverage"],
+          "funcion": "calcular_distancia_sma200",
+          "operador": "between",
+          "min":     -15,
+          "max":     15,
+          "nota":    "Porcentaje de distancia. Positivo = precio por encima de SMA200.",
+          "peso":    2,
+          "textos": {
+            "guia":    "Cuando un valor se aleja demasiado de su media de 200 días — en cualquier dirección — las probabilidades de reversión a la media aumentan. Para swing trading, lo ideal es que el precio no esté más de un 15% alejado de su SMA200.",
+            "ok":      "El precio está a un {valor:+.1f}% de su SMA200 — dentro del rango de operación normal.",
+            "warning": "El precio está a un {valor:+.1f}% de su SMA200 — algo extendido. La reversión a la media puede limitar el recorrido del swing.",
+            "ko":      "El precio está a un {valor:+.1f}% de su SMA200 — muy extendido. Las probabilidades de reversión son altas y van en contra de la operación."
+          }
+        },
+        {
+          "id":      "beta",
+          "nombre":  "Volatilidad (Beta)",
+          "fuente":  "yfinance_info",
+          "campo":   "beta",
+          "operador": "between",
+          "min":     0.7,
+          "max":     2.5,
+          "peso":    1,
+          "textos": {
+            "guia":    "La beta mide cuánto se mueve el valor respecto al mercado. Para swing trading necesitas que el valor se mueva — una beta muy baja no da recorrido suficiente para que el swing compense. Pero una beta muy alta hace los movimientos impredecibles.",
+            "ok":      "Beta de {valor:.1f} — volatilidad adecuada para swing trading: suficiente movimiento para generar recorrido.",
+            "warning": "Beta de {valor:.1f} — en el límite del rango ideal. Funciona, pero con expectativas ajustadas sobre el recorrido del movimiento.",
+            "ko":      "Beta de {valor:.1f} — valor demasiado tranquilo o demasiado errático para swing trading estándar."
+          }
+        },
+        {
+          "id":      "free_float_swing",
+          "nombre":  "Porcentaje de acciones en circulación (Free Float)",
+          "fuente":  "calculado",
+          "campos":  ["floatShares", "sharesOutstanding"],
+          "funcion": "calcular_free_float_pct",
+          "operador": "gte",
+          "umbral_ok":      0.20,
+          "umbral_warning": 0.10,
+          "peso":    2,
+          "textos": {
+            "guia":    "El free float es el porcentaje de acciones disponibles para comprar y vender en el mercado. Un free float bajo significa que hay poco papel circulando: si quieres salir rápido de una posición, puede no haber comprador al precio que necesitas, y el precio puede caer más de lo normal.",
+            "ok":      "Free float del {valor:.0%} — volumen de acciones en circulación suficiente para entrar y salir con agilidad.",
+            "warning": "Free float del {valor:.0%} — concentración accionarial notable. Posibles problemas de liquidez para deshacer posiciones de tamaño medio.",
+            "ko":      "Free float del {valor:.0%} — muy pocas acciones en circulación. Alto riesgo de no poder salir al precio deseado, especialmente en correcciones."
+          }
+        },
+        {
+          "id":      "atr_relativo",
+          "nombre":  "ATR relativo (rango de movimiento diario)",
+          "fuente":  "yfinance_historia",
+          "funcion": "calcular_atr_relativo_14",
+          "operador": "between",
+          "min":     0.01,
+          "max":     0.06,
+          "nota":    "ATR 14 días dividido entre el precio actual. Indica el movimiento diario típico del valor como porcentaje.",
+          "peso":    2,
+          "textos": {
+            "guia":    "El ATR (Average True Range) mide cuánto se mueve el valor de media cada día. Es imprescindible para colocar el stop loss correctamente: si el ATR es el 2% y pones el stop al 1%, lo saltará el ruido normal del mercado sin que el precio haya cambiado de tendencia. El stop siempre debe estar a al menos 1,5 veces el ATR del precio de entrada.",
+            "ok":      "ATR relativo del {valor:.1%} — rango de movimiento diario adecuado para swing trading. Usa al menos {stop_min:.1%} de stop loss para evitar salidas prematuras.",
+            "warning": "ATR relativo del {valor:.1%} — movimiento diario en el límite. Ajusta el tamaño de posición para que el stop no implique un riesgo excesivo.",
+            "ko":      "ATR relativo del {valor:.1%} — el valor se mueve demasiado poco (sin recorrido) o demasiado (riesgo incontrolable). No es el perfil adecuado para swing estándar."
+          }
+        }
+      ]
+    }
+
+  }
+}

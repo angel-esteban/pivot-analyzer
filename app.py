@@ -806,6 +806,19 @@ _FALLBACK_FTSE  = {"AstraZeneca": "AZN.L", "Shell": "SHEL.L", "HSBC": "HSBA.L",
                    "Rolls-Royce": "RR.L", "Vodafone": "VOD.L", "Barclays": "BARC.L"}
 
 
+@st.cache_data(ttl=0)  # sin expiración — el JSON solo cambia con un nuevo despliegue
+def _cargar_criteria() -> dict:
+    """Carga criteria.json desde el directorio de la app. Fuente única de verdad
+    para las guías de cartera y el motor de screening."""
+    import json, os
+    ruta = os.path.join(os.path.dirname(__file__), "criteria.json")
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=86400)  # 24 horas — composición de índices cambia poco
 def _cargar_wikipedia_index(url: str, sufijo: str = "") -> dict:
     """Extrae {nombre: ticker} de la tabla más relevante de una página Wikipedia."""
@@ -10454,91 +10467,25 @@ def pestaña_cartera():
             unsafe_allow_html=True
         )
 
-    # ── Contenido didáctico por tipo de cartera ──────────────────────────
-    _INFO_CARTERA = {
-        "dividendos": {
-            "titulo": "💰 Cartera de Dividendos",
-            "subtitulo": "Objetivo: generar renta periódica y creciente",
-            "composicion": [
-                ("60–70%", "Acciones individuales de dividendo", "Empresas con historial largo y sólido de pagos"),
-                ("20–30%", "ETFs / fondos de dividendo UCITS", "Diversificación sectorial y geográfica de los ingresos"),
-                ("5–10%",  "Liquidez",                          "Reserva para aprovechar caídas y reinvertir dividendos"),
-            ],
-            "criterios": [
-                ("💶 Dividend yield",      "≥ 2,5% y ≤ 8% (rendimientos >8% suelen indicar riesgo de recorte)"),
-                ("📊 Payout ratio",        "< 75% en empresas industriales; < 90% en REITs (el resto asegura reinversión)"),
-                ("📅 Historial dividendo", "≥ 5 años consecutivos pagando sin recortar, idealmente con crecimiento anual"),
-                ("🏦 Deuda / Equity",      "< 1,5× en sectores cíclicos; se acepta más en utilities y REITs regulados"),
-                ("💵 Free Cash Flow",      "FCF positivo y que cubra holgadamente el dividendo (FCF yield > dividend yield)"),
-                ("🏭 Sectores preferentes","Utilities, consumo básico, telecomunicaciones, REITs, salud, infraestructuras"),
-                ("⚠️ Evitar",              "Empresas con pay-out > beneficio real, deuda en divisa extranjera sin cobertura, sectores en declive estructural"),
-            ],
-        },
-        "crecimiento": {
-            "titulo": "📈 Cartera de Crecimiento",
-            "subtitulo": "Objetivo: maximizar la apreciación del capital a largo plazo",
-            "composicion": [
-                ("70–80%", "Acciones growth individuales",       "Empresas con alto potencial de expansión de ingresos y márgenes"),
-                ("10–20%", "ETFs sectoriales temáticos UCITS",  "Tecnología, salud, energías limpias, inteligencia artificial"),
-                ("5–10%",  "Liquidez",                          "Reserva táctica para aprovechar correcciones"),
-            ],
-            "criterios": [
-                ("📈 Crecimiento ingresos",  "≥ 15% anual los últimos 3 años, con aceleración o mantenimiento del ritmo"),
-                ("💹 Margen bruto",          "≥ 40% (indica pricing power y escalabilidad del modelo de negocio)"),
-                ("🔄 ROIC",                  "≥ 15%: el retorno sobre capital invertido mide la calidad de la reinversión"),
-                ("🏗️ Reinversión",           "La empresa reinvierte la mayoría del FCF en crecimiento, no en dividendos"),
-                ("🛡️ Ventaja competitiva",  "Identificable y durable: red de usuarios, costes de cambio, activos intangibles, escala"),
-                ("📉 Deuda",                 "Manejable en relación al FCF futuro proyectado; aceptable deuda si el crecimiento lo justifica"),
-                ("⚠️ Evitar",               "Crecimiento de ingresos sin mejora de márgenes, dilución excesiva de accionistas, sectores sin barreras de entrada"),
-            ],
-        },
-        "indexada": {
-            "titulo": "🗂️ Cartera Indexada",
-            "subtitulo": "Objetivo: replicar el mercado al mínimo coste, con diversificación máxima",
-            "composicion": [
-                ("50–70%", "ETFs de renta variable global (MSCI World / ACWI)", "Core de la cartera, exposición a >1.500 empresas en países desarrollados"),
-                ("10–20%", "ETFs de mercados emergentes",                        "Mayor potencial de crecimiento a largo plazo, mayor volatilidad"),
-                ("0–20%",  "ETFs de renta fija (bonos soberanos / corporativos)","Amortiguador de volatilidad; proporción según perfil de riesgo y horizonte"),
-                ("0–10%",  "Liquidez",                                           "Rebalanceo periódico y aportaciones recurrentes"),
-            ],
-            "criterios": [
-                ("⚖️ Estructura legal",     "Solo ETFs UCITS: obligatorio para el inversor minorista español (normativa PRIIPs)"),
-                ("💰 TER (coste anual)",    "< 0,25% para índices amplios; < 0,40% para temáticos o emergentes"),
-                ("🏗️ Método de réplica",   "Réplica física (completa o por muestreo) preferible a sintética para reducir riesgo de contraparte"),
-                ("📊 Activos bajo gestión", "> 300 M€: garantiza liquidez en mercado secundario y continuidad del fondo"),
-                ("🏦 Emisor",              "Gestoras de primer nivel con balance sólido (iShares/BlackRock, Vanguard, Amundi, Xtrackers)"),
-                ("🔄 Rebalanceo",          "Mínimo anual, o al desviarse >5 puntos de la asignación objetivo por asset class"),
-                ("⚠️ Evitar",              "ETFs sintéticos de emisores pequeños, ETFs apalancados/inversos como posición core, exceso de solapamiento entre fondos"),
-            ],
-        },
-        "swing": {
-            "titulo": "⚡ Cartera de Swing Trading",
-            "subtitulo": "Objetivo: capturar movimientos de precio en horizonte de días a semanas",
-            "composicion": [
-                ("60–80%", "Posiciones abiertas (2–6 simultáneas)", "Diversificación mínima para mantener foco y gestión activa"),
-                ("20–40%", "Liquidez obligatoria",                  "Reserva para nuevas oportunidades y gestión de drawdowns"),
-            ],
-            "criterios": [
-                ("💧 Liquidez del valor",   "Volumen diario negociado > 500.000 € (en España) o > 5 M$ (en EE.UU.): imprescindible para entrar y salir sin impacto"),
-                ("📐 Setup técnico claro",  "Patrón de precio identificado (ruptura, pullback a soporte, consolidación), no entrada en tendencia agotada"),
-                ("⚡ Catalizador",          "Debe existir un motivo para el movimiento: resultado, noticia sectorial, ruptura de rango, flujo institucional"),
-                ("🛑 Stop-loss definido",   "Obligatorio ANTES de entrar. Nivel técnico claro (soporte, mínimo reciente). Distancia: 3–7% según volatilidad del valor"),
-                ("🎯 Ratio riesgo/beneficio","Mínimo 1:2 (si arriesgo 3%, el objetivo mínimo es +6%). Sin ratio favorable, no hay operación"),
-                ("📊 RSI y MACD",           "Confirman el momentum: RSI entre 40–65 en tendencia alcista, MACD con cruce o divergencia favorable"),
-                ("💼 Tamaño de posición",   "Máximo 1–2% del capital total arriesgado por operación (no el tamaño, sino la pérdida máxima si salta el stop)"),
-                ("⚠️ Evitar",              "Valores de muy baja liquidez, entradas contra tendencia sin catalizador claro, mantener posiciones perdedoras 'por fe'"),
-            ],
-        },
-    }
+    # ── Contenido didáctico por tipo de cartera — leído desde criteria.json ─
+    _criteria = _cargar_criteria().get("carteras", {})
 
     def _render_info_cartera(tipo_key):
-        info = _INFO_CARTERA[tipo_key]
-        st.markdown(f"### {info['titulo']}")
-        st.caption(info["subtitulo"])
+        info = _criteria.get(tipo_key, {})
+        if not info:
+            st.warning("No se encontró la guía para este tipo de cartera.")
+            return
+
+        st.markdown(f"### {info.get('titulo', '')}")
+        st.caption(info.get("subtitulo", ""))
         st.markdown("---")
 
+        # ── Composición ───────────────────────────────────────────────────
         st.markdown("#### 📊 Composición recomendada")
-        for pct, nombre, desc in info["composicion"]:
+        for item in info.get("composicion", []):
+            pct    = item.get("peso_pct", "")
+            nombre = item.get("nombre", "")
+            desc   = item.get("descripcion", "")
             st.markdown(
                 f'<div style="display:flex;align-items:flex-start;gap:12px;'
                 f'padding:8px 12px;margin-bottom:6px;background:#f8fafc;'
@@ -10551,15 +10498,19 @@ def pestaña_cartera():
                 unsafe_allow_html=True
             )
 
+        # ── Criterios ─────────────────────────────────────────────────────
         st.markdown("#### ✅ Criterios de selección")
-        for criterio, descripcion in info["criterios"]:
-            icono_color = "#dc2626" if "⚠️" in criterio else "#16a34a"
+        for criterio in info.get("criterios", []):
+            nombre_c    = criterio.get("nombre", "")
+            descripcion = criterio.get("textos", {}).get("guia", "")
+            es_alerta   = any(p in nombre_c.lower() for p in ("señal", "alerta", "evitar", "error"))
+            icono_color = "#dc2626" if es_alerta else "#16a34a"
             st.markdown(
                 f'<div style="display:flex;align-items:flex-start;gap:10px;'
                 f'padding:7px 12px;margin-bottom:5px;background:#f8fafc;'
                 f'border-radius:8px">'
                 f'<div style="min-width:150px;font-size:12px;font-weight:700;'
-                f'color:{icono_color}">{criterio}</div>'
+                f'color:{icono_color}">{nombre_c}</div>'
                 f'<div style="font-size:12px;color:#374151;line-height:1.5">{descripcion}</div>'
                 f'</div>',
                 unsafe_allow_html=True
