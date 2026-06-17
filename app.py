@@ -11190,13 +11190,16 @@ def pantalla_analisis():
     tab_cartera    = tab_objs[5]
     tab_principiante = tab_objs[6]
 
-    tab_perfil = tab_objs[7] if len(tab_objs) > 7 else None
+    # Cuando es_admin: tabs=[..7 base.., Usuarios(7), MiPerfil(8), Ayuda(9)]
+    # Cuando no admin: tabs=[..7 base.., MiPerfil(7), Ayuda(8)]
     if es_admin and len(tab_objs) >= 10:
-        tab_admin = tab_objs[8]
-        tab_ayuda = tab_objs[9]
+        tab_admin  = tab_objs[7]   # ⚙️ Usuarios
+        tab_perfil = tab_objs[8]   # 👤 Mi Perfil
+        tab_ayuda  = tab_objs[9]   # 📖 Ayuda
     else:
-        tab_admin = None
-        tab_ayuda = tab_objs[-1]
+        tab_admin  = None
+        tab_perfil = tab_objs[7] if len(tab_objs) > 7 else None
+        tab_ayuda  = tab_objs[-1]
 
     # ---- TAB ANÁLISIS ----
     def _on_mercado_at_change():
@@ -15807,7 +15810,7 @@ def main():
         _pantalla_cargando()
         st.rerun()
     else:
-        pantalla_analisis()
+        pantalla_principal()
 
 
 if __name__ == "__main__":
