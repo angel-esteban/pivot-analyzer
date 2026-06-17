@@ -10999,8 +10999,9 @@ def pantalla_analisis():
     st.markdown(
         f'''<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
             padding:14px 20px 12px;border-radius:0 0 12px 12px;
-            margin:0 -1.25rem 0.5rem;display:flex;align-items:center;
-            justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.18);">
+            margin:0 -1.25rem 0;display:flex;align-items:center;
+            justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.18);
+            min-height:60px;">
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="background:rgba(255,255,255,0.12);border-radius:8px;
                         padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
@@ -11011,32 +11012,42 @@ def pantalla_analisis():
                 Análisis financiero multi-método</div>
             </div>
           </div>
-          <div style="text-align:right;">
-            <div style="color:#e2e8f0;font-size:0.78rem;font-weight:600">{_uname}</div>
-            <div style="margin-top:3px">{_rol_badge}</div>
-          </div>
+          <div style="width:220px"></div>
         </div>''',
         unsafe_allow_html=True
     )
 
-    # Menú de usuario — popover estilo avatar (reemplaza los 3 botones)
+    # Menú de usuario — popover integrado en cabecera con margin-top negativo
     st.markdown("""
     <style>
-        /* Estilo del botón trigger del popover de usuario */
-        .stPopover > div > button {
-            background: rgba(30,58,95,0.9) !important;
-            border: 1px solid rgba(147,197,253,0.4) !important;
-            color: #e2e8f0 !important;
-            border-radius: 20px !important;
-            font-size: 0.78rem !important;
-            padding: 0.28rem 0.85rem !important;
-            font-weight: 600 !important;
-        }
-        .stPopover > div > button:hover {
-            background: rgba(29,78,216,0.85) !important;
-            border-color: rgba(147,197,253,0.7) !important;
-        }
+    /* ── Ancora: levanta las columnas del popover al interior del gradiente ── */
+    div:has(#__pivot_hdr_anch) + div {
+        margin-top: -52px !important;
+        position: relative;
+        z-index: 99;
+    }
+    /* ── Botón trigger del popover: texto blanco sobre fondo semitransparente ── */
+    [data-testid="stPopover"] button {
+        background: rgba(255,255,255,0.10) !important;
+        border: 1px solid rgba(255,255,255,0.28) !important;
+        border-radius: 20px !important;
+        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+        padding: 0.3rem 0.9rem !important;
+        color: #f1f5f9 !important;
+    }
+    [data-testid="stPopover"] button:hover {
+        background: rgba(255,255,255,0.20) !important;
+        border-color: rgba(255,255,255,0.5) !important;
+    }
+    /* Streamlit envuelve el texto del botón en <p> — forzar color blanco */
+    [data-testid="stPopover"] button p {
+        color: #f1f5f9 !important;
+        font-size: 0.78rem !important;
+        font-weight: 600 !important;
+    }
     </style>
+    <span id="__pivot_hdr_anch" style="display:none"></span>
     """, unsafe_allow_html=True)
     _hdr_sp, _hdr_pop_col = st.columns([5, 2])
     with _hdr_pop_col:
