@@ -10406,6 +10406,728 @@ def pestana_principiante():
 
     _pp_wizard_fragment()
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCREENING ENGINE — evaluación automática de índices contra criterios de cartera
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def inicializar_tabla_screening():
+    """Crea screening_jobs y notificaciones si no existen (idempotente)."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS screening_jobs (
+                        id             SERIAL PRIMARY KEY,
+                        usuario_id     INTEGER NOT NULL,
+                        indice         VARCHAR(60) NOT NULL,
+                        tipo_cartera   VARCHAR(20) NOT NULL,
+                        estado         VARCHAR(20) DEFAULT 'pendiente',
+                        progreso       INTEGER DEFAULT 0,
+                        total_tickers  INTEGER DEFAULT 0,
+                        resultado_json JSONB,
+                        error_msg      TEXT,
+                        created_at     TIMESTAMP DEFAULT NOW(),
+                        completed_at   TIMESTAMP
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS notificaciones (
+                        id          SERIAL PRIMARY KEY,
+                        usuario_id  INTEGER NOT NULL,
+                        tipo        VARCHAR(30) DEFAULT 'screening',
+                        titulo      VARCHAR(200),
+                        mensaje     TEXT,
+                        leida       BOOLEAN DEFAULT FALSE,
+                        job_id      INTEGER REFERENCES screening_jobs(id) ON DELETE CASCADE,
+                        created_at  TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _crear_screening_job(usuario_id: int, indice: str, tipo_cartera: str, total: int) -> int | None:
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO screening_jobs (usuario_id, indice, tipo_cartera, estado, total_tickers) "
+                    "VALUES (%s,%s,%s,'ejecutando',%s) RETURNING id",
+                    (usuario_id, indice, tipo_cartera, total)
+                )
+                job_id = cur.fetchone()[0]
+            conn.commit()
+            return job_id
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return None
+
+
+def _actualizar_progreso_job(job_id: int, progreso: int):
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE screening_jobs SET progreso=%s WHERE id=%s", (progreso, job_id))
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _completar_job(job_id: int, resultados: list):
+    try:
+        import json as _json
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE screening_jobs SET estado='completado', progreso=total_tickers, "
+                    "resultado_json=%s, completed_at=NOW() WHERE id=%s",
+                    (_json.dumps(resultados, ensure_ascii=False), job_id)
+                )
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _fallar_job(job_id: int, error: str):
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE screening_jobs SET estado='error', error_msg=%s, completed_at=NOW() WHERE id=%s",
+                    (error[:500], job_id)
+                )
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _crear_notificacion(usuario_id: int, job_id: int, indice: str, tipo_cartera: str, n_ok: int, n_total: int):
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                titulo  = f"Screening {indice} · {tipo_cartera.capitalize()} completado"
+                mensaje = f"{n_ok} de {n_total} valores cumplen los criterios."
+                cur.execute(
+                    "INSERT INTO notificaciones (usuario_id, tipo, titulo, mensaje, job_id) "
+                    "VALUES (%s,'screening',%s,%s,%s)",
+                    (usuario_id, titulo, mensaje, job_id)
+                )
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _obtener_notificaciones_no_leidas(usuario_id: int) -> list:
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT n.*, sj.indice, sj.tipo_cartera FROM notificaciones n "
+                    "LEFT JOIN screening_jobs sj ON n.job_id = sj.id "
+                    "WHERE n.usuario_id=%s AND n.leida=FALSE ORDER BY n.created_at DESC LIMIT 20",
+                    (usuario_id,)
+                )
+                return [dict(r) for r in cur.fetchall()]
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return []
+
+
+def _marcar_notificaciones_leidas(usuario_id: int):
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE notificaciones SET leida=TRUE WHERE usuario_id=%s", (usuario_id,))
+            conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def _obtener_job(job_id: int) -> dict | None:
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM screening_jobs WHERE id=%s", (job_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return None
+
+
+def _obtener_jobs_usuario(usuario_id: int) -> list:
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT id, indice, tipo_cartera, estado, progreso, total_tickers, created_at, completed_at "
+                    "FROM screening_jobs WHERE usuario_id=%s ORDER BY created_at DESC LIMIT 10",
+                    (usuario_id,)
+                )
+                return [dict(r) for r in cur.fetchall()]
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return []
+
+
+# ── Funciones de cálculo para criterios computed ────────────────────────────
+
+def _sc_free_float(info: dict) -> float | None:
+    fs = info.get("floatShares")
+    so = info.get("sharesOutstanding")
+    if fs and so and so > 0:
+        return fs / so
+    return None
+
+
+def _sc_volumen_euros(info: dict) -> float | None:
+    vol  = info.get("averageVolume") or info.get("averageDailyVolume10Day")
+    price = info.get("regularMarketPrice") or info.get("currentPrice")
+    if vol and price:
+        return vol * price
+    return None
+
+
+def _sc_posicion_52w(info: dict) -> float | None:
+    price = info.get("regularMarketPrice") or info.get("currentPrice")
+    hi    = info.get("fiftyTwoWeekHigh")
+    lo    = info.get("fiftyTwoWeekLow")
+    if price and hi and lo and (hi - lo) > 0:
+        return (price - lo) / (hi - lo) * 100
+    return None
+
+
+def _sc_distancia_sma200(info: dict) -> float | None:
+    price  = info.get("regularMarketPrice") or info.get("currentPrice")
+    sma200 = info.get("twoHundredDayAverage")
+    if price and sma200 and sma200 > 0:
+        return (price / sma200 - 1) * 100
+    return None
+
+
+def _sc_tendencia_sma(info: dict) -> str | None:
+    price  = info.get("regularMarketPrice") or info.get("currentPrice")
+    sma50  = info.get("fiftyDayAverage")
+    sma200 = info.get("twoHundredDayAverage")
+    if not all([price, sma50, sma200]):
+        return None
+    if price > sma50 > sma200:
+        return "alcista"
+    elif price > sma200:
+        return "parcial"
+    else:
+        return "bajista"
+
+
+def _sc_rsi_14(hist) -> float | None:
+    try:
+        closes = hist["Close"].squeeze()
+        if len(closes) < 15:
+            return None
+        delta  = closes.diff()
+        gain   = delta.clip(lower=0).rolling(14).mean()
+        loss   = (-delta.clip(upper=0)).rolling(14).mean()
+        rs     = gain / loss.replace(0, float("nan"))
+        rsi    = 100 - (100 / (1 + rs))
+        val    = float(rsi.iloc[-1])
+        return val if not (val != val) else None  # NaN check
+    except Exception:
+        return None
+
+
+def _sc_atr_relativo_14(hist) -> float | None:
+    try:
+        hi  = hist["High"].squeeze()
+        lo  = hist["Low"].squeeze()
+        cl  = hist["Close"].squeeze()
+        if len(cl) < 15:
+            return None
+        prev_cl = cl.shift(1)
+        tr = (hi - lo).combine(
+            (hi - prev_cl).abs(), max
+        ).combine((lo - prev_cl).abs(), max)
+        atr   = float(tr.rolling(14).mean().iloc[-1])
+        price = float(cl.iloc[-1])
+        return atr / price if price > 0 else None
+    except Exception:
+        return None
+
+
+def _sc_anos_dividendo(dividends) -> int:
+    try:
+        if dividends is None or len(dividends) == 0:
+            return 0
+        import pandas as pd
+        años_con_div = dividends.resample("YE").sum()
+        años_con_div = años_con_div[años_con_div > 0]
+        if len(años_con_div) == 0:
+            return 0
+        # Contar años consecutivos hasta hoy
+        años_ordenados = sorted(años_con_div.index.year, reverse=True)
+        from datetime import datetime
+        año_actual = datetime.now().year
+        consecutivos = 0
+        for año in range(año_actual, año_actual - 15, -1):
+            if año in años_ordenados:
+                consecutivos += 1
+            else:
+                break
+        return consecutivos
+    except Exception:
+        return 0
+
+
+def _sc_cagr_dividendo_5y(dividends) -> float | None:
+    try:
+        if dividends is None or len(dividends) == 0:
+            return None
+        annual = dividends.resample("YE").sum()
+        annual = annual[annual > 0]
+        if len(annual) < 2:
+            return None
+        últimos = annual.iloc[-min(6, len(annual)):]
+        if len(últimos) < 2:
+            return None
+        inicio = float(últimos.iloc[0])
+        fin    = float(últimos.iloc[-1])
+        n      = len(últimos) - 1
+        if inicio <= 0 or n <= 0:
+            return None
+        return (fin / inicio) ** (1 / n) - 1
+    except Exception:
+        return None
+
+
+def _sc_fcf_vs_div(info: dict) -> str | None:
+    """Compara FCF yield vs dividend yield."""
+    fcf   = info.get("freeCashflow")
+    mcap  = info.get("marketCap")
+    dy    = info.get("dividendYield") or 0
+    if not fcf or not mcap or mcap <= 0:
+        return None
+    fcf_yield = fcf / mcap
+    if fcf_yield <= 0:
+        return "ko"
+    elif fcf_yield >= dy * 1.2:
+        return "ok"
+    elif fcf_yield >= dy:
+        return "warning"
+    else:
+        return "ko"
+
+
+def _fmt_valor(valor, criterio_id: str) -> str:
+    """Formatea el valor raw para mostrarlo en la tabla de resultados."""
+    if valor is None:
+        return "—"
+    pct_ids = {"dividend_yield","payout_ratio","gross_margin","roe","operating_margin",
+               "reinversion","free_float","free_float_swing","cagr_dividendo","revenue_growth",
+               "earnings_growth"}
+    mult_ids = {"deuda_equity","deuda","debtToEquity"}
+    eur_ids  = {"liquidez_volumen","volumen_medio","market_cap","aum"}
+    if criterio_id in pct_ids:
+        return f"{valor:.1%}"
+    if criterio_id in mult_ids:
+        return f"{valor/100:.1f}×" if isinstance(valor, (int, float)) and valor > 5 else f"{valor:.1f}×"
+    if criterio_id in eur_ids:
+        if valor >= 1e9:   return f"{valor/1e9:.1f}B€"
+        if valor >= 1e6:   return f"{valor/1e6:.0f}M€"
+        return f"{valor:,.0f}€"
+    if isinstance(valor, float):
+        return f"{valor:.2f}"
+    return str(valor)
+
+
+# ── Evaluador de un criterio individual ────────────────────────────────────
+
+def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict:
+    """Evalúa un criterio contra los datos del ticker. Devuelve {estado, valor_raw, valor_fmt, mensaje}."""
+    cid      = crit.get("id", "")
+    fuente   = crit.get("fuente", "yfinance_info")
+    operador = crit.get("operador", "")
+    textos   = crit.get("textos", {})
+
+    # ── Obtener valor raw ───────────────────────────────────────────────
+    valor = None
+    if fuente == "manual":
+        return {"estado": "manual", "valor_raw": None, "valor_fmt": "verificar",
+                "mensaje": textos.get("warning", "Verificar manualmente.")}
+
+    if fuente == "yfinance_info":
+        campo = crit.get("campo", "")
+        valor = info.get(campo)
+
+    elif fuente == "calculado":
+        funcion = crit.get("funcion", "")
+        if funcion == "calcular_free_float_pct":        valor = _sc_free_float(info)
+        elif funcion == "calcular_volumen_euros":       valor = _sc_volumen_euros(info)
+        elif funcion == "calcular_posicion_52w":        valor = _sc_posicion_52w(info)
+        elif funcion == "calcular_distancia_sma200":    valor = _sc_distancia_sma200(info)
+        elif funcion == "verificar_tendencia_sma":      valor = _sc_tendencia_sma(info)
+        elif funcion == "calcular_fcf_yield_vs_div_yield": valor = _sc_fcf_vs_div(info)
+        elif funcion == "calcular_market_cap_fmt":      valor = info.get("marketCap")
+
+    elif fuente == "yfinance_historia":
+        funcion = crit.get("funcion", "")
+        if funcion == "calcular_rsi_14" and hist is not None:
+            valor = _sc_rsi_14(hist)
+        elif funcion == "calcular_atr_relativo_14" and hist is not None:
+            valor = _sc_atr_relativo_14(hist)
+        elif funcion == "calcular_anos_dividendo_consecutivo" and dividends is not None:
+            valor = _sc_anos_dividendo(dividends)
+        elif funcion == "calcular_cagr_dividendo_5y" and dividends is not None:
+            valor = _sc_cagr_dividendo_5y(dividends)
+
+    if valor is None:
+        return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
+                "mensaje": "Dato no disponible para este valor."}
+
+    # ── Evaluar estado ──────────────────────────────────────────────────
+    estado = "ko"
+
+    if operador == "computed":
+        # valor ya es el estado (ok/warning/ko) o una string descriptiva
+        if isinstance(valor, str) and valor in ("ok", "warning", "ko"):
+            estado = valor
+        elif isinstance(valor, str):
+            estado = "ok" if valor == "alcista" else "warning" if valor == "parcial" else "ko"
+
+    elif operador == "gte":
+        ok_thr  = crit.get("umbral_ok", 0)
+        wrn_thr = crit.get("umbral_warning", ok_thr * 0.6)
+        if valor >= ok_thr:            estado = "ok"
+        elif valor >= wrn_thr:         estado = "warning"
+        else:                          estado = "ko"
+
+    elif operador == "lte":
+        ok_thr  = crit.get("umbral_ok", float("inf"))
+        wrn_thr = crit.get("umbral_warning", ok_thr * 1.5)
+        if valor <= ok_thr:            estado = "ok"
+        elif valor <= wrn_thr:         estado = "warning"
+        else:                          estado = "ko"
+
+    elif operador == "between":
+        mn       = crit.get("min", float("-inf"))
+        mx       = crit.get("max", float("inf"))
+        wrn_mn   = crit.get("umbral_warning_min", mn * 0.8)
+        wrn_mx   = crit.get("umbral_warning_max", mx * 1.2)
+        if mn <= valor <= mx:          estado = "ok"
+        elif wrn_mn <= valor <= wrn_mx: estado = "warning"
+        else:                          estado = "ko"
+
+    elif operador == "in_list":
+        valores_ok = crit.get("valores_ok", [])
+        estado = "ok" if valor in valores_ok else "warning"
+
+    valor_fmt = _fmt_valor(valor, cid)
+    msg_tpl   = textos.get(estado, textos.get("warning", ""))
+    try:
+        mensaje = msg_tpl.format(valor=valor, valor_fmt=valor_fmt,
+                                 valor_ratio=valor/100 if isinstance(valor,(int,float)) else valor,
+                                 stop_min=valor*1.5 if isinstance(valor,(int,float)) else 0)
+    except Exception:
+        mensaje = msg_tpl
+
+    return {"estado": estado, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
+
+
+# ── Evaluador de un ticker completo ─────────────────────────────────────────
+
+def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
+    """Descarga datos y evalúa todos los criterios. Devuelve el resultado completo."""
+    import yfinance as yf
+    try:
+        t    = yf.Ticker(ticker)
+        info = t.info or {}
+        nombre = (info.get("longName") or info.get("shortName") or ticker)[:60]
+
+        # Historia solo si hay criterios que la necesitan
+        necesita_hist = any(c.get("fuente") == "yfinance_historia" and
+                            c.get("funcion") in ("calcular_rsi_14","calcular_atr_relativo_14")
+                            for c in criterios)
+        necesita_div  = any(c.get("fuente") == "yfinance_historia" and
+                            "dividendo" in c.get("funcion","")
+                            for c in criterios)
+        hist      = t.history(period="6mo")    if necesita_hist else None
+        dividends = t.dividends                if necesita_div  else None
+
+        resultados_criterios = []
+        puntos_total  = 0
+        puntos_max    = 0
+
+        for crit in criterios:
+            peso   = crit.get("peso", 1)
+            res    = _evaluar_criterio(crit, info, hist, dividends)
+            estado = res["estado"]
+
+            if estado == "ok":          pts = peso * 2
+            elif estado == "warning":   pts = peso * 1
+            else:                       pts = 0
+
+            if estado not in ("manual", "sin_datos"):
+                puntos_max += peso * 2
+            puntos_total += pts
+
+            resultados_criterios.append({
+                "id":        crit.get("id",""),
+                "nombre":    crit.get("nombre",""),
+                "estado":    estado,
+                "valor_fmt": res["valor_fmt"],
+                "mensaje":   res["mensaje"],
+                "peso":      peso,
+            })
+
+        puntuacion = round(puntos_total / puntos_max * 100) if puntos_max > 0 else 0
+        if puntuacion >= 70:       estado_global = "cumple"
+        elif puntuacion >= 45:     estado_global = "parcial"
+        else:                      estado_global = "no_cumple"
+
+        return {
+            "ticker":        ticker,
+            "nombre":        nombre,
+            "puntuacion":    puntuacion,
+            "estado_global": estado_global,
+            "criterios":     resultados_criterios,
+            "error":         False,
+        }
+    except Exception as e:
+        return {"ticker": ticker, "nombre": ticker, "puntuacion": 0,
+                "estado_global": "error", "criterios": [], "error": True, "error_msg": str(e)}
+
+
+# ── Hilo de background ───────────────────────────────────────────────────────
+
+def _ejecutar_job_background(job_id: int, tickers: dict, tipo_cartera: str, usuario_id: int):
+    """Se ejecuta en un hilo separado. Evalúa cada ticker y guarda progreso en BD."""
+    import time
+    criterios = _cargar_criteria().get("carteras", {}).get(tipo_cartera, {}).get("criterios", [])
+    if not criterios:
+        _fallar_job(job_id, f"No se encontraron criterios para '{tipo_cartera}'")
+        return
+
+    resultados = []
+    ticker_list = list(tickers.items())   # [(nombre, ticker), ...]
+    total       = len(ticker_list)
+
+    try:
+        for i, (nombre_idx, ticker) in enumerate(ticker_list):
+            res = _evaluar_ticker_screening(ticker, criterios)
+            resultados.append(res)
+            if (i + 1) % 3 == 0 or (i + 1) == total:
+                _actualizar_progreso_job(job_id, i + 1)
+            time.sleep(0.3)   # respetar límite de rate de yfinance
+
+        n_ok = sum(1 for r in resultados if r.get("estado_global") == "cumple")
+        _completar_job(job_id, resultados)
+        indice_label = ticker_list[0][0] if ticker_list else tipo_cartera
+        _crear_notificacion(usuario_id, job_id,
+                            _obtener_job(job_id).get("indice",""),
+                            tipo_cartera, n_ok, total)
+    except Exception as e:
+        _fallar_job(job_id, str(e)[:500])
+
+
+def _lanzar_screening(usuario_id: int, indice: str, tickers: dict, tipo_cartera: str) -> int | None:
+    """Crea el job en BD y lanza el hilo. Devuelve job_id."""
+    import threading
+    job_id = _crear_screening_job(usuario_id, indice, tipo_cartera, len(tickers))
+    if not job_id:
+        return None
+    hilo = threading.Thread(
+        target=_ejecutar_job_background,
+        args=(job_id, tickers, tipo_cartera, usuario_id),
+        daemon=True
+    )
+    hilo.start()
+    return job_id
+
+
+_INDICES_SCREENING = {
+    "IBEX 35":       ("ibex35",     "https://es.wikipedia.org/wiki/IBEX_35",       ".MC"),
+    "Euro Stoxx 50": ("stoxx50",    "https://es.wikipedia.org/wiki/Euro_Stoxx_50", ""),
+    "DAX 40":        ("dax40",      "https://es.wikipedia.org/wiki/DAX",            ".DE"),
+    "CAC 40":        ("cac40",      "https://es.wikipedia.org/wiki/CAC_40",         ".PA"),
+    "FTSE 100":      ("ftse100",    "https://en.wikipedia.org/wiki/FTSE_100",       ".L"),
+}
+
+
+def _render_screening_resultados(job: dict):
+    """Muestra la tabla de resultados de un job completado."""
+    import json as _json
+
+    resultado = job.get("resultado_json")
+    if isinstance(resultado, str):
+        try:
+            resultado = _json.loads(resultado)
+        except Exception:
+            resultado = []
+    if not resultado:
+        st.info("Sin resultados disponibles.")
+        return
+
+    EMOJI = {"ok": "✅", "warning": "⚠️", "ko": "❌", "sin_datos": "—", "manual": "🔍", "error": "💥"}
+    COLOR = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
+
+    # Ordenar por puntuación desc
+    resultado = sorted(resultado, key=lambda r: r.get("puntuacion", 0), reverse=True)
+
+    # Métricas resumen
+    n_cumple   = sum(1 for r in resultado if r.get("estado_global") == "cumple")
+    n_parcial  = sum(1 for r in resultado if r.get("estado_global") == "parcial")
+    n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("✅ Cumplen criterios",  n_cumple)
+    c2.metric("⚠️ Cumplen parcialmente", n_parcial)
+    c3.metric("❌ No cumplen",         n_no)
+
+    st.markdown("---")
+
+    # Tabla expandible por ticker
+    for r in resultado:
+        eg     = r.get("estado_global", "error")
+        color  = COLOR.get(eg, "#94a3b8")
+        score  = r.get("puntuacion", 0)
+        nombre = r.get("nombre", r.get("ticker", ""))
+        ticker = r.get("ticker", "")
+        label  = f"**{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
+
+        with st.expander(label, expanded=False):
+            if r.get("error"):
+                st.error(f"Error al obtener datos: {r.get('error_msg','')}")
+                continue
+
+            st.markdown(
+                f'<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
+                f'background:{color}22;color:{color};font-weight:700;font-size:0.8rem;'
+                f'margin-bottom:8px">'
+                f'{"✅ Cumple" if eg=="cumple" else "⚠️ Cumple parcialmente" if eg=="parcial" else "❌ No cumple"}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            for crit in r.get("criterios", []):
+                emoji = EMOJI.get(crit.get("estado","ko"), "—")
+                st.markdown(
+                    f'<div style="display:flex;align-items:flex-start;gap:10px;'
+                    f'padding:5px 10px;margin-bottom:4px;background:#f8fafc;border-radius:6px">'
+                    f'<div style="min-width:22px;font-size:14px">{emoji}</div>'
+                    f'<div style="min-width:160px;font-size:12px;font-weight:700;color:#0f172a">'
+                    f'{crit.get("nombre","")}</div>'
+                    f'<div style="min-width:60px;font-size:12px;font-weight:600;color:#2563eb">'
+                    f'{crit.get("valor_fmt","—")}</div>'
+                    f'<div style="font-size:11px;color:#64748b;line-height:1.4">'
+                    f'{crit.get("mensaje","")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+
+def _render_screening_panel(tipo_key: str, uid: int):
+    """Panel de lanzamiento de screening y visualización de resultados."""
+    st.markdown("---")
+    with st.expander("🔍 Screening de índice — analiza todos los valores contra los criterios", expanded=False):
+
+        # ── Job activo de este tipo ─────────────────────────────────────
+        jobs      = _obtener_jobs_usuario(uid)
+        job_activo = next((j for j in jobs if j["tipo_cartera"] == tipo_key
+                           and j["estado"] in ("ejecutando", "completado")), None)
+
+        # ── Mostrar progreso si hay job ejecutando ──────────────────────
+        if job_activo and job_activo["estado"] == "ejecutando":
+            total    = job_activo.get("total_tickers", 1) or 1
+            progreso = job_activo.get("progreso", 0)
+            pct      = min(progreso / total, 1.0)
+            st.info(f"⏳ Análisis en curso: **{progreso}/{total}** valores procesados "
+                    f"({pct*100:.0f}%). La página se actualiza automáticamente.")
+            st.progress(pct)
+            st.button("🔄 Actualizar estado", key=f"sc_refresh_{tipo_key}",
+                      on_click=lambda: None)
+            return
+
+        # ── Mostrar resultados si hay job completado ────────────────────
+        if job_activo and job_activo["estado"] == "completado":
+            indice_label = job_activo.get("indice", "")
+            ts = job_activo.get("completed_at")
+            ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else ""
+            st.success(f"✅ Último screening: **{indice_label}** completado el {ts_str}")
+
+            col_nuevo, col_ver = st.columns([1, 2])
+            with col_nuevo:
+                if st.button("🔁 Nuevo screening", key=f"sc_nuevo_{tipo_key}"):
+                    st.session_state[f"_sc_mostrar_form_{tipo_key}"] = True
+                    st.session_state[f"_sc_mostrar_resultado_{tipo_key}"] = False
+                    st.rerun()
+            with col_ver:
+                ver = st.toggle("Ver resultados", key=f"sc_ver_{tipo_key}",
+                                value=st.session_state.get(f"_sc_mostrar_resultado_{tipo_key}", True))
+                st.session_state[f"_sc_mostrar_resultado_{tipo_key}"] = ver
+
+            if st.session_state.get(f"_sc_mostrar_resultado_{tipo_key}", True):
+                _render_screening_resultados(job_activo)
+            return
+
+        # ── Formulario de lanzamiento ───────────────────────────────────
+        if not st.session_state.get(f"_sc_mostrar_form_{tipo_key}", True):
+            st.session_state[f"_sc_mostrar_form_{tipo_key}"] = True
+
+        st.markdown("Selecciona un índice bursátil y lanza el análisis. "
+                    "El proceso corre en segundo plano y te notificará cuando termine.")
+
+        col_idx, col_btn = st.columns([3, 1])
+        with col_idx:
+            indice_sel = st.selectbox(
+                "Índice a analizar",
+                options=list(_INDICES_SCREENING.keys()),
+                key=f"sc_idx_{tipo_key}"
+            )
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            lanzar = st.button("🚀 Lanzar", key=f"sc_lanzar_{tipo_key}", type="primary",
+                               help="Lanza el análisis en segundo plano")
+
+        if lanzar and indice_sel:
+            wiki_key, wiki_url, sufijo = _INDICES_SCREENING[indice_sel]
+            with st.spinner(f"Cargando composición del {indice_sel}..."):
+                tickers = _cargar_wikipedia_index(wiki_url, sufijo)
+
+            if not tickers:
+                st.error("No se pudo cargar la composición del índice. Inténtalo de nuevo.")
+            else:
+                job_id = _lanzar_screening(uid, indice_sel, tickers, tipo_cartera=tipo_key)
+                if job_id:
+                    st.success(f"✅ Análisis lanzado ({len(tickers)} valores). "
+                               f"Recibirás una notificación 🔔 cuando termine.")
+                    st.rerun()
+                else:
+                    st.error("No se pudo crear el job. Revisa la conexión con la base de datos.")
+
+
 def pestaña_cartera():
     """Pestaña de gestión de carteras personales del usuario."""
     usuario = st.session_state["usuario"]
@@ -10415,6 +11137,7 @@ def pestaña_cartera():
     # Carteras ya inicializadas en pantalla_analisis(); evitar query duplicada
     if not st.session_state.get("_app_init_done"):
         inicializar_tabla_carteras()
+    inicializar_tabla_screening()
 
     st.markdown("## 📁 Mis Carteras")
     st.caption(
@@ -10559,6 +11282,11 @@ def pestaña_cartera():
 
             if not carteras:
                 st.info(f"No tienes carteras de {etiqueta} todavía. Pulsa **➕ Nueva** para crear una.")
+
+            # ── Panel de Screening ─────────────────────────────────────────
+            _render_screening_panel(tipo_key, uid)
+
+            if not carteras:
                 return
 
             # ── Una pestaña por cartera ────────────────────────────────────
@@ -11127,7 +11855,7 @@ def pantalla_analisis():
     }
     </style>
     """, unsafe_allow_html=True)
-    _hdr_left, _hdr_right = st.columns([3, 1])
+    _hdr_left, _hdr_bell, _hdr_right = st.columns([3, 0.6, 1])
     with _hdr_left:
         st.markdown(
             f'''<span id="__pivot_hdr_logo" style="display:none"></span>
@@ -11143,6 +11871,40 @@ def pantalla_analisis():
             </div>''',
             unsafe_allow_html=True
         )
+    with _hdr_bell:
+        _notifs = _obtener_notificaciones_no_leidas(uid)
+        _n_notif = len(_notifs)
+        _bell_label = f"🔔 **{_n_notif}**" if _n_notif > 0 else "🔔"
+        with st.popover(_bell_label, use_container_width=True):
+            if not _notifs:
+                st.caption("Sin notificaciones nuevas.")
+            else:
+                st.markdown(f"**{_n_notif} notificación{'es' if _n_notif>1 else ''} nueva{'s' if _n_notif>1 else ''}**")
+                st.divider()
+                for _nf in _notifs:
+                    _ts = _nf.get("created_at")
+                    _ts_str = _ts.strftime("%d/%m %H:%M") if _ts else ""
+                    st.markdown(
+                        f'<div style="padding:6px 0;border-bottom:1px solid #e2e8f0">'
+                        f'<div style="font-size:12px;font-weight:700;color:#0f172a">{_nf.get("titulo","")}</div>'
+                        f'<div style="font-size:11px;color:#64748b;margin-top:2px">{_nf.get("mensaje","")}</div>'
+                        f'<div style="font-size:10px;color:#94a3b8;margin-top:2px">{_ts_str}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                    if _nf.get("job_id"):
+                        if st.button("Ver resultados →", key=f"notif_ver_{_nf['id']}",
+                                     use_container_width=True):
+                            st.session_state["_sc_job_ver"] = _nf["job_id"]
+                            st.session_state[f"_sc_mostrar_resultado_{_nf.get('tipo_cartera','')}"] = True
+                            _marcar_notificaciones_leidas(uid)
+                            st.rerun()
+                st.divider()
+                if st.button("Marcar todas como leídas", key="notif_leer_todas",
+                             use_container_width=True):
+                    _marcar_notificaciones_leidas(uid)
+                    st.rerun()
+
     with _hdr_right:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
         _usr_email_hdr = usuario.get("email", "") or ""
@@ -15215,7 +15977,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         puntos.append("⚠️ Volumen sin aceleración — verificar si el movimiento tiene continuidad.")
                     if _div_baj:
                         puntos.append("❌ Divergencia bajista detectada — señal de agotamiento. Momentum en riesgo.")
-                    _sma50_str = f"{_sma50:.4f}€" if _sma50 > 0 else "SMA50"
+                    _sma50_str  = f"{_sma50:.4f}€" if _sma50 > 0 else "SMA50"
                     _resist_str = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "resistencia siguiente"
                     if _sar == "alcista" and not _div_baj and 55 <= _rsi <= 70 and _vslope > 0:
                         _dist_sma50 = ((_precio / _sma50 - 1) * 100) if _sma50 > 0 else 0
@@ -15265,12 +16027,12 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                     if _rsi > 70:
                         puntos.append(f"✅ RSI en {_rsi:.0f} — sobrecompra técnica. Zona históricamente de menor retorno esperado.")
                     if _div_rsi_baj or _div_mcd_baj:
-                        tipos = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
-                        puntos.append(f"✅ Divergencia bajista en {', '.join(tipos)} — señal de agotamiento de alta fiabilidad.")
+                        _tipos_sal = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
+                        puntos.append(f"✅ Divergencia bajista en {', '.join(_tipos_sal)} — señal de agotamiento de alta fiabilidad.")
                     if _pos52 > 85:
                         puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual — precio cerca de máximos. Asimetría riesgo/recompensa desfavorable.")
                     if _obvs < -0.001:
-                        puntos.append("✅ OBV: el volumen neto está bajando mientras el precio sube — grandes inversores vendiendo bajo la subida.")
+                        puntos.append("✅ OBV distribuyendo — el dinero institucional está saliendo bajo la subida.")
                     if not puntos:
                         puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
                     if _div_rsi_baj or _div_mcd_baj or (_obvs < -0.001):
@@ -15284,480 +16046,108 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                f"Sin divergencia activa todavía, pero el riesgo/recompensa no justifica añadir posición. "
                                f"Ajustar stop al soporte más reciente y vigilar el histograma MACD para señal de deterioro.")
                     else:
-
-                        rec = ("Sin señales de salida claras. Mantener posición con stop en soporte más reciente. "
-                               "Vigilar divergencia bajista OBV/RSI como primer aviso de distribución.")
+                        rec = ("Posición sin señales de salida relevantes. Mantener con stop técnico activo "
+                               "y revisar si RSI supera 70 o aparece divergencia bajista.")
 
                 return puntos, rec
 
-            # ══════════════════════════════════════════════════════════════
-            # RENDER
-            # ══════════════════════════════════════════════════════════════
-            _estrategias = {
-                "💰 Dividendos":      ("#15803d", _build_dividendos),
-                "📈 Swing 12-16 sem": ("#1d4ed8", _build_swing),
-                "🏷️ Valor":           ("#7c3aed", _build_valor),
-                "🚀 Momentum":        ("#b45309", _build_momentum),
-                "🔄 Rebote Técnico":  ("#0f766e", _build_rebote),
-                "🛡️ Señal de Salida": ("#be123c", _build_salida),
+            # ── Mapa estrategias → función de criterios + color de cabecera ──
+            _est_map = {
+                "💰 Dividendos":       (_build_dividendos, "#15803d"),
+                "📈 Swing 12-16 sem":  (_build_swing,      "#1d4ed8"),
+                "🏷️ Valor":            (_build_valor,      "#92400e"),
+                "🚀 Momentum":         (_build_momentum,   "#7c3aed"),
+                "🔄 Rebote Técnico":   (_build_rebote,     "#0e7490"),
+                "🛡️ Señal de Salida":  (_build_salida,     "#dc2626"),
             }
 
-            if _est_sel == "Todas":
-                _keys = list(_estrategias.keys())
-                for _fila in [_keys[:3], _keys[3:]]:
-                    _cols = st.columns(len(_fila))
-                    for _col, _k in zip(_cols, _fila):
-                        _color, _fn = _estrategias[_k]
-                        with _col:
-                            _t_hdr, _t_body = _scorecard(
-                                _k.split(" ", 1)[-1], _k.split(" ")[0], _fn(), _color
-                            )
-                            _th1, _th2 = st.columns([9, 1])
-                            with _th1:
-                                st.markdown(_t_hdr, unsafe_allow_html=True)
-                            with _th2:
-                                with st.popover("ℹ️", use_container_width=True):
-                                    st.markdown(_est_popover.get(_k, ""))
-                            st.markdown(_t_body, unsafe_allow_html=True)
-                    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-            else:
-                _color, _fn  = _estrategias[_est_sel]
-                _nombre_limpio = _est_sel.split(" ", 1)[-1]
-                _emoji_est     = _est_sel.split(" ")[0]
-                _c1, _c2 = st.columns([3, 2])
-                with _c1:
-                    _s_hdr, _s_body = _scorecard(_nombre_limpio, _emoji_est, _fn(), _color)
-                    # Header row: colored bar + ℹ️ button, both inside the card column
-                    _ch1, _ch2 = st.columns([9, 1])
-                    with _ch1:
-                        st.markdown(_s_hdr, unsafe_allow_html=True)
-                    with _ch2:
+            _keys_show = (list(_est_map.keys()) if _est_sel == "Todas"
+                          else ([_est_sel] if _est_sel in _est_map else []))
+
+            for _k in _keys_show:
+                _bfn, _col   = _est_map[_k]
+                _criterios   = _bfn()
+                _emo, _tit   = _k.split(None, 1)
+                _hdr, _body  = _scorecard(_tit, _emo, _criterios, _col)
+                _ptos, _rec  = _interpretar(_k)
+                _pop_md      = _est_popover.get(_k, "")
+
+                # Cabecera con popover de guía a la derecha
+                _h_col, _p_col = st.columns([5, 1])
+                with _h_col:
+                    st.markdown(_hdr, unsafe_allow_html=True)
+                with _p_col:
+                    if _pop_md:
                         with st.popover("ℹ️", use_container_width=True):
-                            st.markdown(_est_popover.get(_est_sel, ""))
-                    st.markdown(_s_body, unsafe_allow_html=True)
-                with _c2:
-                    _puntos, _rec = _interpretar(_est_sel)
+                            st.markdown(_pop_md)
+
+                st.markdown(_body, unsafe_allow_html=True)
+
+                if _ptos:
                     st.markdown(
-                        '<div style="border:1px solid #e5e7eb;border-radius:10px;'
-                        'padding:14px 16px;height:100%">',
-                        unsafe_allow_html=True
+                        "<div style='margin-top:10px;margin-bottom:4px;"
+                        "font-size:0.84rem;font-weight:600;color:#374151'>"
+                        "📋 Análisis detallado</div>" +
+                        "".join(
+                            f"<div style='font-size:0.83rem;padding:2px 0'>{p}</div>"
+                            for p in _ptos
+                        ),
+                        unsafe_allow_html=True,
                     )
-                    st.markdown("**Análisis**")
-                    for _p in _puntos:
-                        st.markdown(
-                            f'<div style="font-size:0.83rem;padding:4px 0;'
-                            f'border-bottom:1px solid #f3f4f6;line-height:1.4">{_p}</div>',
-                            unsafe_allow_html=True
-                        )
-                    if _rec:
-                        st.markdown(
-                            f'<div style="margin-top:12px;background:#f8fafc;'
-                            f'border-radius:6px;padding:10px 12px">'
-                            f'<span style="font-size:0.75rem;font-weight:700;'
-                            f'color:#374151;text-transform:uppercase;letter-spacing:.05em">'
-                            f'Recomendación</span>'
-                            f'<div style="font-size:0.85rem;color:#111827;margin-top:4px;'
-                            f'line-height:1.45">{_rec}</div></div>',
-                            unsafe_allow_html=True
-                        )
-                    st.markdown('</div>', unsafe_allow_html=True)
 
-            # ── Datos adicionales Yahoo Finance — solo para Dividendos ────────────────
-            if _est_sel == "💰 Dividendos":
-                st.markdown("")
-                st.markdown("#### 📊 Datos de valoración y dividendo")
-                _da1, _da2, _da3, _da4 = st.columns(4)
-                with _da1:
-                    if _div_rate > 0:
-                        st.metric("Dividendo/acción (€/año)", f"{_div_rate:.2f} €",
-                                  help="Dividendo anual declarado por acción (yfinance: dividendRate)")
-                    if _last_div > 0:
-                        st.caption(f"Último pago: {_last_div:.3f} €/acción")
-                with _da2:
-                    if _eps_ttm != 0:
-                        _cov = (_div_rate / _eps_ttm * 100) if _eps_ttm > 0 else 0
-                        st.metric("BPA TTM (€)", f"{_eps_ttm:.2f} €",
-                                  help="Beneficio Por Acción últimos 12 meses (trailingEps)")
-                        if _cov > 0:
-                            st.caption(f"Cobertura dividendo: {_cov:.0f}% del BPA")
-                with _da3:
-                    if _eps_fwd != 0:
-                        st.metric("BPA Forward (€)", f"{_eps_fwd:.2f} €",
-                                  help="Beneficio Por Acción estimado próximo año (forwardEps)")
-                    if _pe_fwd > 0:
-                        st.metric("P/E Forward", f"{_pe_fwd:.1f}x",
-                                  help="Precio/Beneficio sobre estimaciones futuras (forwardPE)")
-                with _da4:
-                    if _tgt_mean > 0:
-                        _upside = (_tgt_mean / _precio - 1) * 100 if _precio > 0 else 0
-                        _delta_str = f"{_upside:+.1f}% potencial"
-                        st.metric("Precio objetivo analistas", f"{_tgt_mean:.2f} €",
-                                  delta=_delta_str,
-                                  help=f"Consenso analistas · Rango: {_tgt_low:.2f}€ – {_tgt_high:.2f}€")
+                if _rec:
+                    st.info(_rec, icon="💡")
 
-                _db1, _db2, _db3, _db4 = st.columns(4)
-                with _db1:
-                    st.markdown(
-                        f'<div style="background:#f0fdf4;border-radius:8px;padding:10px 12px;'
-                        f'border-left:3px solid #16a34a">'
-                        f'<div style="font-size:11px;color:#64748b;font-weight:600">📅 Fecha ex-dividendo</div>'
-                        f'<div style="font-size:15px;font-weight:700;color:#15803d">{_exdiv_str}</div>'
-                        f'</div>', unsafe_allow_html=True)
-                with _db2:
-                    st.markdown(
-                        f'<div style="background:#eff6ff;border-radius:8px;padding:10px 12px;'
-                        f'border-left:3px solid #3b82f6">'
-                        f'<div style="font-size:11px;color:#64748b;font-weight:600">📢 Próx. resultados</div>'
-                        f'<div style="font-size:15px;font-weight:700;color:#1d4ed8">{_earn_str}</div>'
-                        f'</div>', unsafe_allow_html=True)
-                with _db3:
-                    if _tgt_mean > 0 and _precio > 0:
-                        _yield_tgt = (_div_rate / _tgt_mean * 100) if _div_rate > 0 and _tgt_mean > 0 else 0
-                        st.markdown(
-                            f'<div style="background:#fef9c3;border-radius:8px;padding:10px 12px;'
-                            f'border-left:3px solid #eab308">'
-                            f'<div style="font-size:11px;color:#64748b;font-weight:600">🎯 Yield (rentabilidad) sobre precio objetivo</div>'
-                            f'<div style="font-size:15px;font-weight:700;color:#854d0e">'
-                            f'{"N/D" if _yield_tgt == 0 else f"{_yield_tgt:.2f}%"}</div>'
-                            f'<div style="font-size:10px;color:#92400e">Al precio objetivo de analistas</div>'
-                            f'</div>', unsafe_allow_html=True)
-                with _db4:
-                    if _tgt_high > 0 and _tgt_low > 0:
-                        st.markdown(
-                            f'<div style="background:#faf5ff;border-radius:8px;padding:10px 12px;'
-                            f'border-left:3px solid #8b5cf6">'
-                            f'<div style="font-size:11px;color:#64748b;font-weight:600">📐 Rango objetivos</div>'
-                            f'<div style="font-size:13px;font-weight:700;color:#6d28d9">'
-                            f'{_tgt_low:.2f}€ — {_tgt_high:.2f}€</div>'
-                            f'<div style="font-size:10px;color:#7c3aed">Mín · Máx analistas</div>'
-                            f'</div>', unsafe_allow_html=True)
-                st.caption("Fuente: Yahoo Finance (yfinance) · Datos orientativos, verificar en web de la compañía antes de operar")
+                st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
-            # ── Exportar informe de estrategia ────────────────────────────────────────
-            st.divider()
-            st.markdown("### 📥 Exportar informe de estrategia")
-
-            # Persistir informe entre re-renders con session_state
-            for _ss_key in ("est_inf_data", "est_inf_fmt", "est_inf_ts", "est_inf_file"):
-                if _ss_key not in st.session_state:
-                    st.session_state[_ss_key] = None
-
-            _col_fmt_est, _col_btn_est, _col_dl_est = st.columns([1, 2, 2])
-            with _col_fmt_est:
-                _fmt_est = st.radio("Formato", ["HTML", "PDF"],
-                                    horizontal=True, key="fmt_est_export")
-            with _col_btn_est:
-                if st.button("⬇️ Generar informe", type="primary",
-                             key="btn_est_export"):
-                    _ts_dl   = datetime.now().strftime("%Y%m%d_%H%M")
-                    _keys_dl = list(_estrategias.keys()) if _est_sel == "Todas" else [_est_sel]
-                    _est_dl_data = []
-                    for _k_dl in _keys_dl:
-                        _c_dl, _f_dl = _estrategias[_k_dl]
-                        _crit_dl     = _f_dl()
-                        _pts_dl, _rc_dl = _interpretar(_k_dl)
-                        _datos_extra_dl = {}
-                        if _k_dl == "💰 Dividendos":
-                            _datos_extra_dl = {
-                                "div_rate":  _div_rate,
-                                "eps_ttm":   _eps_ttm,
-                                "eps_fwd":   _eps_fwd,
-                                "pe_fwd":    _pe_fwd,
-                                "tgt_mean":  _tgt_mean,
-                                "tgt_high":  _tgt_high,
-                                "tgt_low":   _tgt_low,
-                                "last_div":  _last_div,
-                                "exdiv_str": _exdiv_str,
-                                "earn_str":  _earn_str,
-                                "yield_pct": _yield,
-                                "currency":  _info.get("currency", "EUR"),
-                            }
-                        _est_dl_data.append({
-                            "nombre":      _k_dl,
-                            "color":       _c_dl,
-                            "criterios":   _crit_dl,
-                            "puntos":      _pts_dl,
-                            "rec":         _rc_dl,
-                            "popover_md":  _est_popover.get(_k_dl, ""),
-                            "datos_extra": _datos_extra_dl,
-                        })
-                    with st.spinner("Generando..."):
-                        if _fmt_est == "HTML":
-                            _raw = generar_informe_estrategia_html(
+            # ── Exportar informe estratégico ──────────────────────────────────
+            if _keys_show:
+                st.divider()
+                st.markdown("#### 📥 Exportar análisis estratégico")
+                _c_fmt_e, _c_btn_e = st.columns([1, 3])
+                with _c_fmt_e:
+                    _fmt_e = st.radio("Formato", ["HTML", "PDF"],
+                                      horizontal=True, key="fmt_est_exp")
+                with _c_btn_e:
+                    if st.button("⬇️ Generar informe", key="btn_est_exp", type="primary"):
+                        _est_data = []
+                        for _k in _keys_show:
+                            _bfn_e, _col_e = _est_map[_k]
+                            _ptos_e, _rec_e = _interpretar(_k)
+                            _est_data.append({
+                                "nombre":     _k,
+                                "color":      _col_e,
+                                "criterios":  _bfn_e(),
+                                "puntos":     _ptos_e,
+                                "rec":        _rec_e,
+                                "popover_md": _est_popover.get(_k, ""),
+                            })
+                        with st.spinner("Generando informe..."):
+                            _html_e = generar_informe_estrategia_html(
                                 ticker      = ed["ticker"],
                                 nombre      = ed["nombre"],
                                 precio      = ed["precio"],
                                 ts          = ed["ts"],
-                                estrategias = _est_dl_data,
-                            ).encode("utf-8")
-                            st.session_state["est_inf_fmt"]  = "html"
-                            st.session_state["est_inf_file"] = (
-                                f"{ed['ticker']}_estrategia_{_ts_dl}.html"
+                                estrategias = _est_data,
+                            )
+                        if _fmt_e == "HTML":
+                            st.download_button(
+                                "⬇️ Descargar HTML",
+                                data      = _html_e.encode("utf-8"),
+                                file_name = f"estrategia_{ed['ticker']}_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                                mime      = "text/html",
+                                key       = "dl_est_html",
                             )
                         else:
-                            _raw = generar_pdf_estrategia(
-                                ticker      = ed["ticker"],
-                                nombre      = ed["nombre"],
-                                precio      = ed["precio"],
-                                ts          = ed["ts"],
-                                estrategias = _est_dl_data,
-                            )
-                            st.session_state["est_inf_fmt"]  = "pdf"
-                            st.session_state["est_inf_file"] = (
-                                f"{ed['ticker']}_estrategia_{_ts_dl}.pdf"
-                            )
-                    st.session_state["est_inf_data"]   = _raw
-                    st.session_state["est_inf_ts"]     = _ts_dl
-                    st.session_state["est_inf_ticker"] = ed["ticker"]
-                    st.session_state["est_inf_nombre"] = ed["nombre"]
-                    st.rerun()
-
-            with _col_dl_est:
-                if st.session_state.get("est_inf_data") is not None:
-                    _dl_fmt  = st.session_state["est_inf_fmt"]
-                    _dl_file = st.session_state["est_inf_file"]
-                    _dl_mime = "text/html" if _dl_fmt == "html" else "application/pdf"
-                    st.download_button(
-                        label     = f"📄 Descargar ({_dl_fmt.upper()})",
-                        data      = st.session_state["est_inf_data"],
-                        file_name = _dl_file,
-                        mime      = _dl_mime,
-                        key       = "dl_est_informe",
-                        use_container_width=True,
-                    )
-                    _ts_val = st.session_state.get("est_inf_ts", "")
-                    if _ts_val:
-                        st.caption(f"Generado: {_ts_val}")
-                    # ── Email (solo PDF) ──────────────────────────────
-                    if _dl_fmt == "pdf" and _smtp_cfg_ok():
-                        _est_usr_email = usuario.get("email", "") or ""
-                        if _est_usr_email:
-                            if st.button("✉️ Enviar PDF por email", key="email_est",
-                                         use_container_width=True):
-                                with st.spinner("Enviando..."):
-                                    _ok_e2, _err_e2 = enviar_informe_email(
-                                        _est_usr_email,
-                                        st.session_state.get("est_inf_ticker", ""),
-                                        st.session_state.get("est_inf_nombre", ""),
-                                        st.session_state["est_inf_data"])
-                                if _ok_e2:
-                                    st.success(f"✅ Enviado a {_est_usr_email}")
-                                else:
-                                    st.error(f"Error: {_err_e2}")
-                        else:
-                            st.button("✉️ Enviar PDF por email", key="email_est_dis",
-                                      disabled=True, use_container_width=True,
-                                      help="Añade tu email en 👤 Mi Perfil")
-
-    # ---- TAB IA ----
-    with tab_ia:
-        st.info("🤖 Análisis IA — próximamente disponible.")
-
-    # ---- TAB MACRO ----
-    with tab_macro:
-        pestaña_macro()
-
-    # ---- TAB RENTA FIJA ----
-    with tab_rf:
-        pestaña_renta_fija()
-
-    with tab_cartera:
-        pestaña_cartera()
-
-    # ---- TAB ¿POR DÓNDE EMPIEZO? ----
-    with tab_principiante:
-        pestana_principiante()
-
-
-    # ---- TAB ADMIN ----
-    if es_admin and tab_admin:
-        with tab_admin:
-            panel_admin()
-
-    # ---- TAB AYUDA ----
-    with tab_ayuda:
-        # ── GLOSARIO ────────────────────────────────────────────────────
-        _gl_terms  = GLOSARIO_KB.get("terminos", {})
-        _gl_abbrev = GLOSARIO_KB.get("abreviaturas", {})
-        if _gl_terms or _gl_abbrev:
-            st.markdown("### 📖 Glosario Financiero")
-            st.markdown(
-                '<p style="font-size:.88rem;color:#64748b;margin-bottom:1rem">'
-                'Definiciones de los términos y abreviaturas usados en la aplicación. '
-                'Escribe cualquier término para buscarlo.</p>',
-                unsafe_allow_html=True
-            )
-            _gl_buscar = st.text_input(
-                "🔎 Buscar término", placeholder="NIM, PER, doom loop, carry trade...",
-                key="_gl_search"
-            ).lower().strip()
-
-            # Filtrar términos
-            if _gl_buscar:
-                _gl_t_fil = {
-                    k: v for k, v in _gl_terms.items()
-                    if _gl_buscar in k.lower()
-                    or _gl_buscar in v.get("nombre_completo","").lower()
-                    or _gl_buscar in v.get("definicion","").lower()
-                }
-                _gl_a_fil = {k: v for k, v in _gl_abbrev.items() if _gl_buscar in k.lower() or _gl_buscar in v.lower()}
-            else:
-                _gl_t_fil = _gl_terms
-                _gl_a_fil = _gl_abbrev
-
-            # Mostrar términos
-            if _gl_t_fil:
-                st.markdown(
-                    '<div style="font-size:.9rem;font-weight:700;color:#1e3a5f;'
-                    'margin:1rem 0 .4rem;border-bottom:2px solid #e2e8f0;padding-bottom:4px">'
-                    f'📘 Términos ({len(_gl_t_fil)})</div>',
-                    unsafe_allow_html=True
-                )
-                for _tk, _tv in sorted(_gl_t_fil.items()):
-                    with st.expander(f'**{_tk}** — {_tv.get("nombre_completo","")}', expanded=bool(_gl_buscar)):
-                        st.markdown(
-                            f'<p style="font-size:.86rem;color:#334155;margin:.2rem 0">'
-                            f'{_tv.get("definicion","")}</p>',
-                            unsafe_allow_html=True
-                        )
-                        if _tv.get("ejemplo"):
-                            st.markdown(
-                                f'<div style="background:#eff6ff;border-left:3px solid #2563eb;'
-                                f'padding:.4rem .7rem;border-radius:0 6px 6px 0;font-size:.82rem;'
-                                f'color:#1e40af;margin:.4rem 0">'
-                                f'📌 <b>Ejemplo:</b> {_tv.get("ejemplo","")}</div>',
-                                unsafe_allow_html=True
-                            )
-
-            # Mostrar abreviaturas
-            if _gl_a_fil:
-                st.markdown(
-                    '<div style="font-size:.9rem;font-weight:700;color:#1e3a5f;'
-                    'margin:1.2rem 0 .4rem;border-bottom:2px solid #e2e8f0;padding-bottom:4px">'
-                    f'🔤 Abreviaturas ({len(_gl_a_fil)})</div>',
-                    unsafe_allow_html=True
-                )
-                # Grid de 2 columnas
-                _gl_a_list = sorted(_gl_a_fil.items())
-                _gl_mid = (len(_gl_a_list) + 1) // 2
-                _gl_c1, _gl_c2 = st.columns(2)
-                for _ai, (_ak, _av) in enumerate(_gl_a_list):
-                    _col = _gl_c1 if _ai < _gl_mid else _gl_c2
-                    with _col:
-                        st.markdown(
-                            f'<div style="padding:3px 0;font-size:.83rem;color:#334155">'
-                            f'<b style="color:#1e3a5f;min-width:80px;display:inline-block">{_ak}</b> {_av}</div>',
-                            unsafe_allow_html=True
-                        )
-
-            if _gl_buscar and not _gl_t_fil and not _gl_a_fil:
-                st.info(f"Sin resultados para \"{_gl_buscar}\". Prueba con otro término.")
-
-            st.divider()
-
-        st.markdown("### Guía rápida de Pivot Points")
-        st.markdown("""
-**Pivot Point (PP)** — Nivel de equilibrio calculado con datos de la sesión anterior (máx, mín, cierre).
-
-**Resistencias (R1-R4)** — Por encima del PP. El precio tiende a frenarse o rebotar.
-
-**Soportes (S1-S4)** — Por debajo del PP. Zonas de posible rebote al alza.
-
-**Confluencia** — Cuando niveles de distintos timeframes coinciden. Mayor fiabilidad.
-
----
-**Sistemas disponibles:**
-- **Clásico** — El más universal. Base para todos los demás.
-- **Woodie** — Doble peso al cierre. Mejor en días con gap.
-- **Camarilla** — 8 niveles muy cerca del precio. Operativa intradía.
-- **DeMark** — Condicional según dirección del día anterior.
-- **Fibonacci** — Usa ratios 0.382, 0.618, 1.000. Correcciones en tendencia.
-- **Mid-Points** — Niveles intermedios entre los Clásicos. Lateralizaciones.
-
----
-**Semáforo global:**
-- 🟢 Verde (≥65%) — Sesgo técnico positivo
-- 🟡 Amarillo (40-65%) — Sin sesgo claro
-- 🔴 Rojo (<40%) — Sesgo técnico negativo
-
-Factores: Precio vs PP Diario · RSI · MACD · Bollinger %B · Volumen · Parabolic SAR
-
----
-*Análisis educativo. No constituye asesoramiento de inversión regulado bajo MiFID II (Directiva 2014/65/UE).*
-        """)
-
-
-# =============================================================================
-# PUNTO DE ENTRADA
-# =============================================================================
-
-def _pantalla_cargando():
-    """Pantalla de transición post-login — evita el flash del layout de login."""
-    import time
-    st.markdown(
-        """
-        <style>
-        #MainMenu,footer,[data-testid="stToolbar"],[data-testid="stDecoration"],
-        [data-testid="stStatusWidget"],.stDeployButton { display:none !important; }
-        [data-testid="stAppViewContainer"] {
-            background: #f1f5f9 !important;
-        }
-        .block-container { padding: 0 !important; }
-        </style>
-        <div style="position:fixed;top:0;left:0;width:100vw;height:100vh;
-             background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
-             display:flex;flex-direction:column;align-items:center;
-             justify-content:center;gap:20px;z-index:99999">
-          <div style="background:rgba(255,255,255,0.12);border-radius:14px;
-               padding:18px;box-shadow:0 4px 24px rgba(0,0,0,0.3)">
-            <span style="font-size:2.4rem">📊</span>
-          </div>
-          <div style="color:#fff;font-size:1.4rem;font-weight:800;
-               letter-spacing:-0.02em">PivotAnalyzer</div>
-          <div style="color:#93c5fd;font-size:0.85rem;font-weight:400">
-               Cargando análisis financiero...</div>
-          <div style="display:flex;gap:8px;margin-top:4px">
-            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
-                 animation:bounce 1.2s ease-in-out infinite"></div>
-            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
-                 animation:bounce 1.2s ease-in-out 0.2s infinite"></div>
-            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;
-                 animation:bounce 1.2s ease-in-out 0.4s infinite"></div>
-          </div>
-        </div>
-        <style>
-        @keyframes bounce {
-            0%,80%,100% { transform:translateY(0); opacity:0.5; }
-            40%          { transform:translateY(-8px); opacity:1; }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    time.sleep(0.6)
-
-
-def main():
-    # Restaurar sesión desde token en URL (sobrevive F5 / refresco de página)
-    if "usuario" not in st.session_state:
-        _tok_url = st.query_params.get("s", "")
-        if _tok_url:
-            _user_restored = _sess_get_user(_tok_url)
-            if _user_restored:
-                st.session_state["usuario"] = _user_restored
-                st.rerun()
-            else:
-                # Token inválido o expirado — limpiar URL
-                st.query_params.clear()
-
-    if "usuario" not in st.session_state:
-        pantalla_login()
-    elif st.session_state.pop("_post_login_loading", False):
-        _pantalla_cargando()
-        st.rerun()
-    else:
-        pantalla_analisis()
-
-
-if __name__ == "__main__":
-    main()
+                            try:
+                                import pdfkit as _pk
+                                _pdf_e = _pk.from_string(_html_e, False)
+                                st.download_button(
+                                    "⬇️ Descargar PDF",
+                                    data      = _pdf_e,
+                                    file_name = f"estrategia_{ed['ticker']}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                    mime      = "application/pdf",
+                                    key       = "dl_est_pdf",
+                                )
+                            except Exception as _ex_pdf:
+                                st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
