@@ -16145,3 +16145,21 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                             except Exception as _ex_pdf:
                                 st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
 
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
+# Restaurar sesión desde token URL en recarga de página o nueva pestaña
+if "usuario" not in st.session_state:
+    _tok_url = st.query_params.get("s", "")
+    if _tok_url:
+        _user_restored = _sess_get_user(_tok_url)
+        if _user_restored:
+            st.session_state["usuario"] = _user_restored
+
+# Rutar a pantalla de login o app principal
+if "usuario" not in st.session_state:
+    pantalla_login()
+else:
+    pantalla_analisis()
