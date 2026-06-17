@@ -9082,9 +9082,9 @@ def panel_admin():
             st.session_state["_adm_show_new"] = not st.session_state.get("_adm_show_new", False)
             st.rerun()
 
-    # Cabecera tabla
-    _hc = st.columns([2.5, 2.5, 1.2, 1.2, 0.8])
-    for _txt, _col in zip(["Usuario / Nombre", "Email", "Rol", "Estado", ""], _hc):
+    # Cabecera tabla — Usuario | Nombre | Email | Rol | Estado | Acciones
+    _hc = st.columns([1.3, 1.8, 2.2, 1.1, 1.1, 1.1])
+    for _txt, _col in zip(["Usuario", "Nombre", "Email", "Rol", "Estado", ""], _hc):
         _col.markdown(
             f"<span style='font-size:.74rem;font-weight:700;color:#94a3b8;text-transform:uppercase'>{_txt}</span>",
             unsafe_allow_html=True
@@ -9092,30 +9092,60 @@ def panel_admin():
     st.markdown("<hr style='margin:4px 0 6px;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
     for u in usuarios:
-        _uid = u["id"]
-        c1, c2, c3, c4, c5 = st.columns([2.5, 2.5, 1.2, 1.2, 0.8])
+        _uid  = u["id"]
+        _urol = u.get("rol", "usuario")
+        c1, c2, c3, c4, c5, c6 = st.columns([1.3, 1.8, 2.2, 1.1, 1.1, 1.1])
         with c1:
             st.markdown(
-                f'<b style="font-size:.85rem">{u["username"]}</b>'
-                f'<span style="font-size:.78rem;color:#64748b;display:block">{u.get("nombre","")}</span>',
+                f'<b style="font-size:.85rem">{u["username"]}</b>',
                 unsafe_allow_html=True)
         with c2:
+            st.markdown(
+                f'<span style="font-size:.82rem;color:#475569">{u.get("nombre","")}</span>',
+                unsafe_allow_html=True)
+        with c3:
             _em = u.get("email", "") or "—"
             st.markdown(f'<span style="font-size:.82rem;color:#475569">{_em}</span>', unsafe_allow_html=True)
-        with c3:
-            _rc = {"superadmin": "#7c3aed", "admin": "#0369a1"}.get(u.get("rol", ""), "#64748b")
-            st.markdown(
-                f'<span style="color:{_rc};font-size:.8rem;font-weight:700">{u.get("rol","usuario")}</span>',
-                unsafe_allow_html=True)
         with c4:
+            _rc = {"superadmin": "#7c3aed", "admin": "#0369a1"}.get(_urol, "#64748b")
+            st.markdown(
+                f'<span style="color:{_rc};font-size:.8rem;font-weight:700">{_urol}</span>',
+                unsafe_allow_html=True)
+        with c5:
             _ac = u.get("activo", True)
             st.markdown(
                 f'<span style="font-size:.8rem;font-weight:600;color:{"#16a34a" if _ac else "#dc2626"}">● {"Activo" if _ac else "Inactivo"}</span>',
                 unsafe_allow_html=True)
-        with c5:
-            if st.button("Ver →", key=f"ver_{_uid}", use_container_width=True):
-                st.session_state["_adm_sel_uid"] = _uid
-                st.rerun()
+        with c6:
+            if _urol == "usuario":
+                # Iconos ✏️ modificar y 🗑️ borrar en línea
+                _ia, _ib = st.columns(2)
+                with _ia:
+                    if st.button("✏️", key=f"edit_{_uid}", help="Editar perfil", use_container_width=True):
+                        st.session_state["_adm_sel_uid"] = _uid
+                        st.rerun()
+                with _ib:
+                    if st.button("🗑️", key=f"del_quick_{_uid}", help="Eliminar usuario", use_container_width=True):
+                        st.session_state[f"_adm_confirm_del_{_uid}"] = True
+                        st.rerun()
+                # Confirmación de borrado
+                if st.session_state.get(f"_adm_confirm_del_{_uid}"):
+                    st.warning(f"¿Eliminar **{u['username']}**?")
+                    _ya, _no = st.columns(2)
+                    with _ya:
+                        if st.button("Sí", key=f"del_ok_{_uid}", type="primary", use_container_width=True):
+                            db_delete("usuarios", "id", _uid)
+                            st.session_state.pop(f"_adm_confirm_del_{_uid}", None)
+                            st.rerun()
+                    with _no:
+                        if st.button("No", key=f"del_no_{_uid}", use_container_width=True):
+                            st.session_state.pop(f"_adm_confirm_del_{_uid}", None)
+                            st.rerun()
+            else:
+                # Admin / superadmin: solo editar
+                if st.button("✏️", key=f"ver_{_uid}", help="Ver / editar perfil", use_container_width=True):
+                    st.session_state["_adm_sel_uid"] = _uid
+                    st.rerun()
 
     # Formulario de nuevo usuario (desplegable)
     st.markdown("<br>", unsafe_allow_html=True)
