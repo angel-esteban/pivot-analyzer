@@ -3886,7 +3886,7 @@ una rentabilidad fija durante décadas.
                      descripcion="Mdo. secundario*")
 
     st.caption(
-        "\* Fuente: mercado secundario — curva AAA Euro Área (BCE) + spread España-Alemania en tiempo real. "
+        "\\* Fuente: mercado secundario — curva AAA Euro Área (BCE) + spread España-Alemania en tiempo real. "
         "Diferencia típica con el tipo marginal de subasta primaria: **1–5 pb** en condiciones normales, "
         "hasta **10–20 pb** en episodios de volatilidad. "
         "Para el tipo exacto de la última subasta: "
