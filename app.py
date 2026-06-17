@@ -15810,7 +15810,7 @@ def main():
         _pantalla_cargando()
         st.rerun()
     else:
-        pantalla_principal()
+        pantalla_analisis()
 
 
 if __name__ == "__main__":
