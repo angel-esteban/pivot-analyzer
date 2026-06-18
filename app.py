@@ -1507,28 +1507,84 @@ def inicializar_tabla_carteras():
         pass
 
 
-def crear_cartera(usuario_id: int, tipo: str, nombre: str, descripcion: str = "") -> dict | None:
-    """Crea una cartera. Devuelve el registro creado o None si ya hay 3 del mismo tipo."""
+def _drop_tipo_constraint() -> None:
+    """Elimina el CHECK constraint de tipo en carteras y lo recrea incluyendo todos los tipos válidos.
+    Se llama automáticamente cuando crear_cartera detecta una violación de constraint."""
     try:
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT COUNT(*) FROM carteras WHERE usuario_id=%s AND tipo=%s",
-                    [usuario_id, tipo]
-                )
-                count = cur.fetchone()[0]
-                if count >= 3:
-                    return None  # límite alcanzado
-                cur.execute(
-                    """INSERT INTO carteras (usuario_id, tipo, nombre, descripcion)
-                       VALUES (%s,%s,%s,%s) RETURNING id, usuario_id, tipo, nombre, descripcion, created_at""",
-                    [usuario_id, tipo, nombre, descripcion]
-                )
-                row = cur.fetchone()
+                # Buscar todos los CHECK constraints de la tabla carteras
+                cur.execute("""
+                    SELECT conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'carteras' AND c.contype = 'c'
+                """)
+                for (cname,) in cur.fetchall():
+                    try:
+                        cur.execute(
+                            'ALTER TABLE carteras DROP CONSTRAINT IF EXISTS "' + cname + '"'
+                        )
+                    except Exception:
+                        conn.rollback()
+                # Recrear con todos los tipos válidos
+                cur.execute("""
+                    ALTER TABLE carteras ADD CONSTRAINT carteras_tipo_check
+                    CHECK (tipo IN ('dividendos','crecimiento','indexada','swing','multiactivo'))
+                """)
             conn.commit()
-            return {"id": row[0], "usuario_id": row[1], "tipo": row[2],
-                    "nombre": row[3], "descripcion": row[4], "created_at": row[5]}
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+def crear_cartera(usuario_id: int, tipo: str, nombre: str, descripcion: str = "") -> dict | None:
+    """Crea una cartera. Devuelve el registro creado o None si ya hay 3 del mismo tipo."""
+    _INSERT_SQL = """INSERT INTO carteras (usuario_id, tipo, nombre, descripcion)
+                     VALUES (%s,%s,%s,%s)
+                     RETURNING id, usuario_id, tipo, nombre, descripcion, created_at"""
+
+    def _intentar(conn) -> dict | None:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM carteras WHERE usuario_id=%s AND tipo=%s",
+                [usuario_id, tipo]
+            )
+            if cur.fetchone()[0] >= 3:
+                return None
+            cur.execute(_INSERT_SQL, [usuario_id, tipo, nombre, descripcion])
+            row = cur.fetchone()
+        conn.commit()
+        return {"id": row[0], "usuario_id": row[1], "tipo": row[2],
+                "nombre": row[3], "descripcion": row[4], "created_at": row[5]}
+
+    # Primer intento
+    try:
+        conn = get_db_connection()
+        try:
+            return _intentar(conn)
+        except psycopg2.errors.CheckViolation:
+            # El constraint no incluye el nuevo tipo — corregir y reintentar
+            try: conn.rollback()
+            except Exception: pass
+        except Exception:
+            return None
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return None
+
+    # Corregir constraint y segundo intento
+    _drop_tipo_constraint()
+    try:
+        conn = get_db_connection()
+        try:
+            return _intentar(conn)
         finally:
             release_db_connection(conn)
     except Exception:
@@ -16690,10 +16746,8 @@ PivotAnalyzer es una herramienta de análisis financiero multi-método orientada
 - **\U0001f30d Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
 - **\U0001f4b0 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
 - **\U0001f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
-- **\U0001f9ed ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro → técnico → semáforo → niveles.
+- **\U0001f9ed Por dónde empiezo** — Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.
 - **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
-
-**Atajos de teclado:** ninguno requerido — navegación completa por sidebar.
 
 **Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera.
         """)
@@ -16703,7 +16757,6 @@ PivotAnalyzer es una herramienta de análisis financiero multi-método orientada
 # =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
-
 
 # Restaurar sesión desde token URL en recarga de página o nueva pestaña
 if "usuario" not in st.session_state:
