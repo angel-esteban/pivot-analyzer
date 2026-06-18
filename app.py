@@ -11722,19 +11722,28 @@ def pestaña_cartera():
                         _ticker_key  = f"ticker_pos_{cid}"
                         _nom_key     = f"nomv_pos_{cid}"
 
+                        # Opciones de mercado — la opción de Deuda Pública sólo aparece en Multi-Activo
+                        _opciones_mercado = [
+                            "✏️ Escribir manualmente",
+                            "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
+                            "🌍 Eurostoxx 50",
+                            "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
+                            "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
+                            "📊 ETFs UCITS",
+                        ]
+                        if tipo_key == "multiactivo":
+                            _opciones_mercado.insert(1, "🏦 Deuda Pública Española (ISIN)")
+
                         _mercado_pos = st.selectbox(
                             "🗂️ Índice / Mercado",
-                            ["✏️ Escribir manualmente",
-                             "🇪🇸 IBEX 35", "🇪🇸 IBEX Medium Cap", "🇪🇸 IBEX Small Cap",
-                             "🌍 Eurostoxx 50",
-                             "🇺🇸 S&P 500", "🇺🇸 Nasdaq 100", "🇺🇸 Dow Jones 30",
-                             "🇩🇪 DAX 40", "🇫🇷 CAC 40", "🇬🇧 FTSE 100",
-                             "📊 ETFs UCITS"],
+                            _opciones_mercado,
                             key=_mercado_key,
                             help="Elige un índice para seleccionar de la lista, o 'Escribir manualmente' para cualquier ticker de Yahoo Finance."
                         )
 
                         _nombre_auto = ""
+                        _es_deuda    = (_mercado_pos == "🏦 Deuda Pública Española (ISIN)")
+
                         if _mercado_pos == "✏️ Escribir manualmente":
                             _tkr_sel = st.text_input(
                                 "🔎 Ticker",
@@ -11743,6 +11752,43 @@ def pestaña_cartera():
                                 key=f"tkr_manual_{cid}",
                                 help="Símbolo Yahoo Finance. Sufijos: .MC=Madrid · .DE=Xetra · .PA=París · .L=Londres · .AS=Ámsterdam"
                             ).upper().strip()
+                            st.session_state[_ticker_key] = _tkr_sel
+
+                        elif _es_deuda:
+                            # ── Deuda Pública Española por ISIN ───────────────
+                            st.info(
+                                "Introduce el ISIN del instrumento. Puedes buscarlo en "
+                                "[tesoro.es](https://www.tesoro.es/deuda-del-estado/instrumentos-de-financiacion).",
+                                icon="ℹ️"
+                            )
+                            _isin_key       = f"isin_pos_{cid}"
+                            _tipo_deuda_key = f"tipo_deuda_{cid}"
+                            _col_isin, _col_tdeu = st.columns([2, 1])
+                            with _col_isin:
+                                _isin_raw = st.text_input(
+                                    "🔑 ISIN",
+                                    value=st.session_state.get(_isin_key, ""),
+                                    placeholder="Ej. ES0000012694",
+                                    key=f"isin_input_{cid}",
+                                    help="12 caracteres, empieza por 'ES'. Letras, Bonos y Obligaciones del Tesoro.",
+                                    max_chars=12,
+                                ).upper().strip()
+                            with _col_tdeu:
+                                _tipo_deuda = st.selectbox(
+                                    "📋 Tipo de instrumento",
+                                    ["Letra del Tesoro", "Bono del Estado", "Obligación del Estado"],
+                                    key=_tipo_deuda_key,
+                                )
+                            _isin_valido = len(_isin_raw) == 12 and _isin_raw.startswith("ES")
+                            if _isin_raw and not _isin_valido:
+                                st.warning("El ISIN debe tener 12 caracteres y empezar por 'ES'.", icon="⚠️")
+                            if _isin_valido:
+                                _tkr_sel     = _isin_raw
+                                _nombre_auto = f"{_tipo_deuda} {_isin_raw}"
+                                st.caption(f"Se registrará con identificador: `{_tkr_sel}`")
+                            else:
+                                _tkr_sel = ""
+                            st.session_state[_isin_key]   = _isin_raw
                             st.session_state[_ticker_key] = _tkr_sel
 
                         elif _mercado_pos == "📊 ETFs UCITS":
@@ -11782,27 +11828,48 @@ def pestaña_cartera():
 
                         # ── Form: datos de la posición ──────────────────────
                         with st.form(key=f"form_pos_{cid}"):
-                            _tkr_form  = st.session_state.get(_ticker_key, "")
+                            _tkr_form = st.session_state.get(_ticker_key, "")
                             if _tkr_form:
-                                st.markdown(f"**Ticker seleccionado:** `{_tkr_form}`")
+                                if _es_deuda:
+                                    _tipo_deu_label = st.session_state.get(f"tipo_deuda_{cid}", "Deuda Pública")
+                                    st.markdown(f"**{_tipo_deu_label}** · ISIN: `{_tkr_form}`")
+                                else:
+                                    st.markdown(f"**Ticker seleccionado:** `{_tkr_form}`")
                             fp1, fp2 = st.columns(2)
                             with fp1:
-                                _nom_v = st.text_input("Nombre (opcional)",
-                                                        value=_nombre_auto,
-                                                        placeholder="Ej. Naturgy Energy",
-                                                        key=f"nomv_{cid}")
+                                _nom_v = st.text_input(
+                                    "Nombre (opcional)",
+                                    value=_nombre_auto,
+                                    placeholder="Ej. Naturgy Energy" if not _es_deuda else "Ej. Bono 10Y 3,45% 2034",
+                                    key=f"nomv_{cid}",
+                                )
                             fp3, fp4, fp5 = st.columns(3)
                             with fp3:
-                                _nac = st.number_input("Nº acciones / participaciones",
-                                                        min_value=0.0001, value=1.0, step=1.0,
-                                                        format="%.4f", key=f"nac_{cid}")
+                                _nac_label = "Nº de títulos" if _es_deuda else "Nº acciones / participaciones"
+                                _nac = st.number_input(
+                                    _nac_label,
+                                    min_value=0.0001,
+                                    value=1.0,
+                                    step=1.0,
+                                    format="%.4f",
+                                    key=f"nac_{cid}",
+                                )
                             with fp4:
-                                _pc = st.number_input("Precio medio de compra",
-                                                       min_value=0.0001, value=10.0, step=0.01,
-                                                       format="%.4f", key=f"pc_{cid}")
+                                _pc_label   = "Precio efectivo (€/título)" if _es_deuda else "Precio medio de compra"
+                                _pc_default = 1000.0 if _es_deuda else 10.0
+                                _pc = st.number_input(
+                                    _pc_label,
+                                    min_value=0.0001,
+                                    value=_pc_default,
+                                    step=0.01,
+                                    format="%.4f",
+                                    key=f"pc_{cid}",
+                                )
                             with fp5:
                                 _mon = st.selectbox("Moneda", ["EUR","USD","GBP","CHF"],
                                                      key=f"mon_{cid}")
+                            if _es_deuda:
+                                st.caption("💡 Precio efectivo: importe real pagado por título (1.000 € nominal para Bonos/Obligaciones, 100.000 € para Letras a 12M).")
                             _notas = st.text_input("Notas (opcional)", key=f"notas_{cid}")
                             ok = st.form_submit_button("Guardar posición", type="primary")
                             if ok:
@@ -16685,42 +16752,12 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                             if _cd.get("magnitud_mercado"):
                                 mag = _cd["magnitud_mercado"]
                                 if isinstance(mag, dict):
-                                    for _mk, _mv in mag.items():
-                                        st.metric(_mk, _mv)
+                                       for _mk, _mv in mag.items():
+                                        st.markdown(f"- **{_mk}:** {_mv}")
                                 else:
-                                    st.info(str(mag))
-                            st.markdown(
-                                f"<span style='background:{_grav_col};color:white;padding:2px 8px;"
-                                f"border-radius:4px;font-size:0.75rem'>Gravedad: {_grav}</span>",
-                                unsafe_allow_html=True
-                            )
-                        if _cd.get("señales_previas"):
-                            _sp = _cd["señales_previas"]
-                            with st.container():
-                                st.markdown("**\U0001f4e1 Señales previas detectables:**")
-                                if isinstance(_sp, list):
-                                    for _s in _sp:
-                                        st.markdown(f"- {_s}")
-                                else:
-                                    st.markdown(_sp)
-                        if _cd.get("leccion_operativa"):
-                            st.info(f"\U0001f4a1 **Lección operativa:** {_cd['leccion_operativa']}", icon="\U0001f4a1")
-
-    # ---- TAB MACRO ----
-    if _on_macro:
-        pestaña_macro()
-
-    # ---- TAB RENTA FIJA ----
-    if _on_renta:
-        pestaña_renta_fija()
-
-    # ---- TAB CARTERA ----
-    if _on_cartera:
-        pestaña_cartera()
-
-    # ---- TAB POR DONDE EMPIEZO ----
-    if _on_pp:
-        pestana_principiante()
+                                    st.markdown(str(mag))
+                            if _cd.get("leccion"):
+                                st.info(_cd["leccion"], icon="\U0001f4a1")
 
     # ---- TAB ANALISIS IA ----
     if _on_ia:
@@ -16746,6 +16783,32 @@ PivotAnalyzer es una herramienta de análisis financiero multi-método orientada
 - **\U0001f30d Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
 - **\U0001f4b0 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
 - **\U0001f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
+- **\U0001f9ed ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.
+- **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
+
+**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera.
+        """)
+        st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
+
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
+# Restaurar sesión desde token URL en recarga de página o nueva pestaña
+if "usuario" not in st.session_state:
+    _tok_url = st.query_params.get("s", "")
+    if _tok_url:
+        _user_restored = _sess_get_user(_tok_url)
+        if _user_restored:
+            st.session_state["usuario"] = _user_restored
+
+# Rutar a pantalla de login o app principal
+if "usuario" not in st.session_state:
+    pantalla_login()
+else:
+    pantalla_analisis()
+f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
 - **\U0001f9ed Por dónde empiezo** — Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.
 - **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
 
