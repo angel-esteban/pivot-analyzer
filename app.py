@@ -1710,6 +1710,25 @@ def pantalla_login():
             box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
             background: #fff !important;
         }
+        /* ── RESPONSIVE MOVIL ─────────────────────────────────────── */
+        @media (max-width: 640px) {
+            /* Ocultar columnas vacias (spacers izq/dcha) */
+            [data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child,
+            [data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
+                display: none !important;
+            }
+            /* Card ocupa todo el ancho disponible */
+            [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+                width: 100% !important;
+                flex: 0 0 100% !important;
+                min-width: 100% !important;
+                padding: 0 12px !important;
+            }
+            /* Reducir padding interior de la card en movil */
+            .login-card {
+                padding: 24px 20px 8px !important;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1719,7 +1738,7 @@ def pantalla_login():
         st.markdown('<div class="login-col">', unsafe_allow_html=True)
         # ── Tarjeta unificada (logo + form) ──────────────────────
         st.markdown(
-            '''<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;
+            '''<div class="login-card" style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;
                 padding:36px 32px 8px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
               <div style="text-align:center;margin-bottom:28px;">
                 <div style="background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 100%);
@@ -1727,9 +1746,10 @@ def pantalla_login():
                     width:56px;height:56px;border-radius:14px;font-size:1.7rem;
                     margin-bottom:14px;box-shadow:0 4px 12px rgba(29,78,216,0.35)">📊</div>
                 <div style="font-size:1.5rem;font-weight:800;color:#0f172a;
-                    letter-spacing:-0.02em;line-height:1.1;margin-bottom:4px">PivotAnalyzer</div>
+                    letter-spacing:-0.02em;line-height:1.1;margin-bottom:4px;
+                    white-space:nowrap">PivotAnalyzer</div>
                 <div style="font-size:0.78rem;color:#64748b;font-weight:400">
-                    Análisis financiero multi-método</div>
+                    Analisis financiero multi-metodo</div>
               </div>
             </div>''',
             unsafe_allow_html=True
