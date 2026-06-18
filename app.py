@@ -16261,10 +16261,11 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             else:
                 _tipo_filtro = st.multiselect(
                     "Filtrar por tipo",
-                    options=sorted({v.get("tipo","") for v in _crisis_data.values() if v.get("tipo")}),
+                    options=sorted({v.get("tipo","") for v in _crisis_data.values() if isinstance(v, dict) and v.get("tipo")}),
                     default=[], key="edu_crisis_tipo"
                 )
                 for _cid, _cd in _crisis_data.items():
+                    if not isinstance(_cd, dict): continue
                     if _tipo_filtro and _cd.get("tipo", "") not in _tipo_filtro:
                         continue
                     _emoji  = _cd.get("emoji", "📉")
