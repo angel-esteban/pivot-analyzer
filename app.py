@@ -1445,13 +1445,13 @@ def inicializar_tabla_carteras():
                         id          SERIAL PRIMARY KEY,
                         usuario_id  INTEGER NOT NULL,
                         tipo        VARCHAR(20) NOT NULL
-                                    CHECK (tipo IN ('dividendos','crecimiento','indexada','swing')),
+                                    CHECK (tipo IN ('dividendos','crecimiento','indexada','swing','multiactivo')),
                         nombre      VARCHAR(100) NOT NULL,
                         descripcion TEXT DEFAULT '',
                         created_at  TIMESTAMP DEFAULT NOW()
                     )
                 """)
-                # Migración: ampliar CHECK si 'swing' aún no está permitido
+                # Migración: ampliar CHECK si 'multiactivo' aún no está permitido
                 cur.execute("""
                     DO $$
                     DECLARE r RECORD;
@@ -1460,12 +1460,12 @@ def inicializar_tabla_carteras():
                             SELECT conname FROM pg_constraint c
                             JOIN pg_class t ON c.conrelid = t.oid
                             WHERE t.relname = 'carteras' AND c.contype = 'c'
-                              AND pg_get_constraintdef(c.oid) NOT LIKE '%%swing%%'
+                              AND pg_get_constraintdef(c.oid) NOT LIKE '%%multiactivo%%'
                               AND pg_get_constraintdef(c.oid) LIKE '%%tipo%%'
                         LOOP
                             EXECUTE 'ALTER TABLE carteras DROP CONSTRAINT ' || quote_ident(r.conname);
                             ALTER TABLE carteras ADD CONSTRAINT carteras_tipo_check
-                              CHECK (tipo IN (''dividendos'',''crecimiento'',''indexada'',''swing''));
+                              CHECK (tipo IN (''dividendos'',''crecimiento'',''indexada'',''swing'',''multiactivo''));
                         END LOOP;
                     END $$
                 """)
@@ -16625,14 +16625,14 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                         if _cd.get("señales_previas"):
                             _sp = _cd["señales_previas"]
                             with st.container():
-                                st.markdown("**📡 Señales previas detectables:**")
+                                st.markdown("**\U0001f4e1 Señales previas detectables:**")
                                 if isinstance(_sp, list):
                                     for _s in _sp:
                                         st.markdown(f"- {_s}")
                                 else:
                                     st.markdown(_sp)
                         if _cd.get("leccion_operativa"):
-                            st.info(f"💡 **Lección operativa:** {_cd['leccion_operativa']}", icon="💡")
+                            st.info(f"\U0001f4a1 **Lección operativa:** {_cd['leccion_operativa']}", icon="\U0001f4a1")
 
     # ---- TAB MACRO ----
     if _on_macro:
@@ -16646,40 +16646,40 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
     if _on_cartera:
         pestaña_cartera()
 
-    # ---- TAB ¿POR DÓNDE EMPIEZO? ----
+    # ---- TAB POR DONDE EMPIEZO ----
     if _on_pp:
         pestana_principiante()
 
-    # ---- TAB ANÁLISIS IA ----
+    # ---- TAB ANALISIS IA ----
     if _on_ia:
-        st.markdown("## 🤖 Análisis IA")
-        st.info("Esta sección estará disponible próximamente. Incluirá resúmenes generados por IA sobre el valor analizado, lecturas contextualizadas y comparativas automáticas con episodios históricos similares.", icon="🚧")
+        st.markdown("## \U0001f916 Análisis IA")
+        st.info("Esta sección estará disponible próximamente. Incluirá resúmenes generados por IA sobre el valor analizado, lecturas contextualizadas y comparativas automáticas con episodios históricos similares.", icon="\U0001f6a7")
 
     # ---- TAB USUARIOS ----
     if _on_usuarios:
         if es_admin:
             panel_admin()
         else:
-            st.warning("No tienes permisos para acceder a esta sección.", icon="🔒")
+            st.warning("No tienes permisos para acceder a esta sección.", icon="\U0001f512")
 
     # ---- TAB AYUDA ----
     if _on_ayuda:
-        st.markdown("## 📖 Ayuda y documentación")
+        st.markdown("## \U0001f4d6 Ayuda y documentación")
         st.markdown("""
 PivotAnalyzer es una herramienta de análisis financiero multi-método orientada al inversor particular.
 
 **Secciones disponibles:**
-- **📈 Análisis Técnico** — Pivots, RSI, MACD, medias móviles, Fibonacci, huecos, diagnóstico integrado.
-- **🎯 Estrategia** — Selecciona un criterio de cartera y evalúa si el valor cumple los requisitos.
-- **🌍 Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
-- **💰 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
-- **📁 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
-- **🧭 ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro → técnico → semáforo → niveles.
-- **📚 Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
+- **\U0001f4c8 Análisis Técnico** — Pivots, RSI, MACD, medias móviles, Fibonacci, huecos, diagnóstico integrado.
+- **\U0001f3af Estrategia** — Selecciona un criterio de cartera y evalúa si el valor cumple los requisitos.
+- **\U0001f30d Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
+- **\U0001f4b0 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
+- **\U0001f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
+- **\U0001f9ed ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro → técnico → semáforo → niveles.
+- **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
 
 **Atajos de teclado:** ninguno requerido — navegación completa por sidebar.
 
-**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono 🔔 en la cabecera.
+**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera.
         """)
         st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
 
