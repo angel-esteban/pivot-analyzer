@@ -438,11 +438,33 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
-    /* ── SIDEBAR NAV ────────────────────────────────────────────── */
-    [data-testid="stSidebar"] {
+    /* ── SIDEBAR NAV — siempre visible, ignora estado del navegador ── */
+    /* Forzar sidebar fijo en el lado izquierdo sin importar el estado colapsado */
+    section[data-testid="stSidebar"] {
+        transform: translateX(0) !important;
+        width: 220px !important;
+        min-width: 220px !important;
+        max-width: 220px !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        height: 100vh !important;
+        z-index: 999 !important;
         background: #0f172a !important;
-        min-width: 210px !important; max-width: 210px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
     }
+    /* Empujar el contenido principal para que no quede debajo del sidebar fijo */
+    .appview-container > section.main,
+    .appview-container > section:not([data-testid="stSidebar"]),
+    section.main,
+    .main {
+        margin-left: 220px !important;
+    }
+    /* Ocultar controles de colapso — la navegación siempre está fija */
+    [data-testid="stSidebarCollapseButton"],
+    button[data-testid="baseButton-headerNoPadding"],
+    [data-testid="collapsedControl"] { display: none !important; }
     [data-testid="stSidebarContent"] { padding: 0 !important; }
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
@@ -468,29 +490,6 @@ st.markdown("""
         margin: 0 !important; font-size: 0.88rem !important;
     }
     .block-container { padding-left: 1.5rem !important; }
-
-    /* Botón de expandir sidebar cuando está colapsado — visible arriba-izquierda */
-    [data-testid="collapsedControl"] {
-        position: fixed !important;
-        top: 12px !important;
-        left: 8px !important;
-        z-index: 999999 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    [data-testid="collapsedControl"] button,
-    [data-testid="collapsedControl"] svg {
-        width: 32px !important; height: 32px !important;
-        background: #1e3a5f !important;
-        border-radius: 6px !important;
-        color: #e2e8f0 !important;
-        border: 1px solid rgba(255,255,255,0.15) !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
-    }
-    [data-testid="collapsedControl"] button:hover {
-        background: #6366f1 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
