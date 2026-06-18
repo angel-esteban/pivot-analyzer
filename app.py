@@ -15706,17 +15706,21 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 c.append(_criterio(2 if _div_alc and not _div_baj else 1 if not _div_baj else 0,
                     "Divergencias técnicas",
                     _div_txt()))
+                _sop0 = _niv_soporte[0]["precio"] if _niv_soporte else None
                 c.append(_criterio(2 if _niv_soporte else 1,
-                    "Soporte técnico identificado",
-                    "Nivel pivot+media como colchón de entrada"))
+                    f"Soporte técnico: {_sop0:.2f}€" if _sop0 else "Soporte técnico no identificado",
+                    "Nivel pivot+media como colchón de entrada" if _sop0 else "Sin nivel pivot+media identificado"))
                 return c
 
             def _build_swing():
                 tend_ok  = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
                 tend_par = _sma50 > 0 and _precio > _sma50 and not tend_ok
                 c = []
+                _tend_lbl = (f"Tendencia alcista (SMA50:{_sma50:.2f} > SMA200:{_sma200:.2f})" if tend_ok
+                              else f"Tendencia parcial (SMA50:{_sma50:.2f})" if tend_par
+                              else f"Sin tendencia (SMA50:{_sma50:.2f})" if _sma50 else "Tendencia: datos insuficientes")
                 c.append(_criterio(2 if tend_ok else 1 if tend_par else 0,
-                    "Tendencia alcista alineada",
+                    _tend_lbl,
                     f"{'Precio>SMA50>SMA200 ✅' if tend_ok else 'Precio>SMA50 pero SMA50<SMA200 ⚠️' if tend_par else f'Precio bajo SMA50 ({_sma50:.2f}) ❌'}"))
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
                     f"MACD histograma {_mhist:+.4f}",
@@ -15724,11 +15728,17 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
                     f"RSI {_rsi:.0f}",
                     f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido — esperar ❌'}"))
+                _vol_conf = "creciente" if _vslope > 0.001 else "estable" if _vslope > -0.001 else "cayendo"
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
-                    "Volumen de confirmación",
+                    f"Volumen ({_vol_conf})",
                     f"{'Creciente — confirma el movimiento ✅' if _vslope > 0.001 else 'Estable ⚠️' if _vslope > -0.001 else 'Cayendo — movimiento sin convicción ❌'}"))
+                _sop1 = _niv_soporte[0]["precio"] if _niv_soporte else None
+                _res1 = _niv_resist[0]["precio"] if _niv_resist else None
+                _mapa_lbl = (f"S:{_sop1:.2f}€ / R:{_res1:.2f}€" if _sop1 and _res1
+                             else f"Soporte:{_sop1:.2f}€ — sin resistencia" if _sop1
+                             else "Sin niveles definidos")
                 c.append(_criterio(2 if _niv_soporte and _niv_resist else 1 if _niv_soporte else 0,
-                    "Mapa soporte/resistencia",
+                    _mapa_lbl,
                     f"{'Soporte y resistencia definidos ✅' if _niv_soporte and _niv_resist else 'Solo soporte — sin objetivo claro ⚠️' if _niv_soporte else 'Sin niveles definidos ❌'}"))
                 c.append(_criterio(0 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 2,
                     "Estado de divergencias",
@@ -15778,8 +15788,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
                     f"MACD {_mhist:+.4f}",
                     f"{'Acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo ⚠️' if _mhist > 0 else 'Negativo ❌'}"))
+                _vol_trend = "acelerando" if _vslope > 0.002 else "creciente" if _vslope > 0 else "cayendo"
                 c.append(_criterio(2 if _vslope > 0.002 else 1 if _vslope > 0 else 0,
-                    "Volumen",
+                    f"Volumen ({_vol_trend})",
                     f"{'Acelerado ✅' if _vslope > 0.002 else 'Creciente ⚠️' if _vslope > 0 else 'Cayendo ❌'}"))
                 c.append(_criterio(2 if _sar == "alcista" else 0,
                     f"SAR Parabólico: {_sar}",
@@ -15797,9 +15808,10 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 c.append(_criterio(2 if _rsi < 30 else 1 if _rsi < 38 else 0,
                     f"RSI {_rsi:.0f}",
                     f"{'Sobreventa extrema ✅' if _rsi < 30 else 'Zona de interés ⚠️' if _rsi < 38 else 'Sin sobreventa — rebote sin base ❌'}"))
+                _sop2 = _niv_soporte[0]["precio"] if _niv_soporte else None
                 c.append(_criterio(2 if _niv_soporte else 0,
-                    "Soporte técnico",
-                    f"{'Nivel pivot+media activo ✅' if _niv_soporte else 'Sin soporte — rebote sin ancla ❌'}"))
+                    f"Soporte técnico: {_sop2:.2f}€" if _sop2 else "Soporte técnico no identificado",
+                    f"{'Nivel pivot+media activo ✅' if _sop2 else 'Sin soporte — rebote sin ancla ❌'}"))
                 c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
                     "Divergencia alcista",
                     _div_txt_alc()))
@@ -15807,8 +15819,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                    1 if _pctb is not None and _pctb < 0.25 else 0,
                     f"Bollinger %B: {_pctb:.2f}" if _pctb is not None else "Bollinger %B n/d",
                     f"{'Banda inferior extrema ✅' if _pctb and _pctb < 0.1 else 'Zona baja ⚠️' if _pctb and _pctb < 0.25 else 'Fuera de zona ❌'}"))
+                _vol_sop = "acumulando" if _vslope > 0.001 else "estable" if _vslope > -0.001 else "cayendo"
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
-                    "Volumen en soporte",
+                    f"Volumen en soporte ({_vol_sop})",
                     f"{'Creciendo — acumulación ✅' if _vslope > 0.001 else 'Estable ⚠️' if _vslope > -0.001 else 'Cayendo ❌'}"))
                 c.append(_criterio(2 if _pos52 < 25 else 1 if _pos52 < 40 else 0,
                     f"Posición 52W: {_pos52:.0f}%",
@@ -15832,8 +15845,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 c.append(_criterio(2 if _pos52 > 85 else 1 if _pos52 > 70 else 0,
                     f"Posición 52W: {_pos52:.0f}%",
                     f"{'Cerca de máximos anuales ✅' if _pos52 > 85 else 'Zona alta ⚠️' if _pos52 > 70 else 'No en zona de salida ❌'}"))
+                _obv_tend = "bajando" if _obvs < -0.001 else "neutro" if _obvs < 0.001 else "subiendo"
                 c.append(_criterio(2 if _obvs < -0.001 else 1 if _obvs < 0.001 else 0,
-                    "OBV",
+                    f"OBV ({_obv_tend})",
                     f"{'Volumen neto bajando — posibles ventas encubiertas ✅' if _obvs < -0.001 else 'Volumen neutro ⚠️' if _obvs < 0.001 else 'Volumen neto subiendo — posibles compras encubiertas ❌'}"))
                 c.append(_criterio(2 if _cons[0] == "bajista" else 1 if _cons[0] == "neutro" else 0,
                     f"Consenso: {_cons[2]}",
