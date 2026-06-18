@@ -16773,21 +16773,19 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 
     # ---- TAB AYUDA ----
     if _on_ayuda:
-        st.markdown("## \U0001f4d6 Ayuda y documentación")
-        st.markdown("""
-PivotAnalyzer es una herramienta de análisis financiero multi-método orientada al inversor particular.
-
-**Secciones disponibles:**
-- **\U0001f4c8 Análisis Técnico** — Pivots, RSI, MACD, medias móviles, Fibonacci, huecos, diagnóstico integrado.
-- **\U0001f3af Estrategia** — Selecciona un criterio de cartera y evalúa si el valor cumple los requisitos.
-- **\U0001f30d Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
-- **\U0001f4b0 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
-- **\U0001f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
-- **\U0001f9ed ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.
-- **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
-
-**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera.
-        """)
+        st.markdown("## 📖 Ayuda y documentación")
+        st.markdown(
+            "PivotAnalyzer es una herramienta de análisis financiero multi-método orientada al inversor particular.\n\n"
+            "**Secciones disponibles:**\n"
+            "- **📈 Análisis Técnico** - Pivots, RSI, MACD, medias móviles, Fibonacci, huecos, diagnóstico integrado.\n"
+            "- **🎯 Estrategia** - Selecciona un criterio de cartera y evalúa si el valor cumple los requisitos.\n"
+            "- **🌍 Macro** - Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.\n"
+            "- **💰 Renta Fija** - Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.\n"
+            "- **📁 Cartera** - Registra tus posiciones, sigue su evolución y lanza screeners automáticos.\n"
+            "- **🧭 Por dónde empiezo** - Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.\n"
+            "- **📚 Formación** - Glosario, ratios por sector, guías de estrategia y crisis históricas.\n\n"
+            "**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera."
+        )
         st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
 
 
