@@ -11549,6 +11549,8 @@ def pestaña_cartera():
                             key=_mercado_key,
                             help="Elige un índice para seleccionar de la lista, o 'Escribir manualmente' para cualquier ticker de Yahoo Finance."
                         )
+                        if tipo_key == "multiactivo":
+                            st.caption("💡 Para añadir Letras, Bonos u Obligaciones del Tesoro, selecciona **🏦 Deuda Pública Española (ISIN)** en el desplegable.")
 
                         _nombre_auto = ""
                         _es_deuda    = (_mercado_pos == "🏦 Deuda Pública Española (ISIN)")
