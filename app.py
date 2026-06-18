@@ -11851,13 +11851,12 @@ def pantalla_analisis():
 })();
 </script>
 """, height=0, scrolling=False)
-    # JS: estilizar el botón de expandir sidebar (collapsedControl) arriba-izquierda
+    # JS: expandir sidebar en carga/refresco de página; mostrar botón arriba-izquierda al colapsar
     _st_components.html("""<script>
-(function styleSidebarToggle() {
-    function _style() {
+(function pivotSidebarInit() {
+    function _styleCollapsed() {
         try {
             var doc = window.parent.document;
-            // Posicionar el collapsedControl arriba-izquierda con estilo propio
             var cc = doc.querySelector('[data-testid="collapsedControl"]');
             if (cc) {
                 cc.style.setProperty('position','fixed','important');
@@ -11867,9 +11866,33 @@ def pantalla_analisis():
             }
         } catch(e) {}
     }
-    _style(); setTimeout(_style, 300); setTimeout(_style, 800);
+    function _expandOnce() {
+        // window.parent._pivotExpanded se resetea con cada recarga de página (F5)
+        // pero persiste en reruns de widgets → sólo expandimos una vez por sesión
+        if (window.parent._pivotExpanded) { _styleCollapsed(); return; }
+        try {
+            var doc = window.parent.document;
+            var sb  = doc.querySelector('[data-testid="stSidebar"]');
+            if (!sb) return;
+            if (sb.getAttribute('aria-expanded') === 'false') {
+                // Sidebar está colapsado → expandir
+                var btn = doc.querySelector('[data-testid="collapsedControl"] button');
+                if (!btn) btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
+                if (btn) { btn.click(); window.parent._pivotExpanded = true; }
+            } else {
+                // Sidebar ya está abierto
+                window.parent._pivotExpanded = true;
+            }
+        } catch(e) {}
+        _styleCollapsed();
+    }
+    _expandOnce();
+    setTimeout(_expandOnce, 200);
+    setTimeout(_expandOnce, 600);
+    setTimeout(function(){ _styleCollapsed(); }, 1500);
     try {
-        new MutationObserver(_style).observe(window.parent.document.body, {childList:true, subtree:true});
+        new MutationObserver(_styleCollapsed).observe(
+            window.parent.document.body, {childList:true, subtree:true});
     } catch(e) {}
 })();
 </script>""", height=0)
