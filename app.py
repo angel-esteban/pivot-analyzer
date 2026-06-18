@@ -16757,19 +16757,19 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                 else:
                                     st.markdown(str(mag))
                             if _cd.get("leccion"):
-                                st.info(_cd["leccion"], icon="\U0001f4a1")
+                                st.info(_cd["leccion"], icon="💡")
 
     # ---- TAB ANALISIS IA ----
     if _on_ia:
-        st.markdown("## \U0001f916 Análisis IA")
-        st.info("Esta sección estará disponible próximamente. Incluirá resúmenes generados por IA sobre el valor analizado, lecturas contextualizadas y comparativas automáticas con episodios históricos similares.", icon="\U0001f6a7")
+        st.markdown("## 🤖 Análisis IA")
+        st.info("Esta sección estará disponible próximamente. Incluirá resúmenes generados por IA sobre el valor analizado, lecturas contextualizadas y comparativas automáticas con episodios históricos similares.", icon="🚧")
 
     # ---- TAB USUARIOS ----
     if _on_usuarios:
         if es_admin:
             panel_admin()
         else:
-            st.warning("No tienes permisos para acceder a esta sección.", icon="\U0001f512")
+            st.warning("No tienes permisos para acceder a esta sección.", icon="🔒")
 
     # ---- TAB AYUDA ----
     if _on_ayuda:
@@ -16786,32 +16786,6 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             "- **📚 Formación** - Glosario, ratios por sector, guías de estrategia y crisis históricas.\n\n"
             "**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera."
         )
-        st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
-
-
-# =============================================================================
-# MAIN ENTRY POINT
-# =============================================================================
-
-# Restaurar sesión desde token URL en recarga de página o nueva pestaña
-if "usuario" not in st.session_state:
-    _tok_url = st.query_params.get("s", "")
-    if _tok_url:
-        _user_restored = _sess_get_user(_tok_url)
-        if _user_restored:
-            st.session_state["usuario"] = _user_restored
-
-# Rutar a pantalla de login o app principal
-if "usuario" not in st.session_state:
-    pantalla_login()
-else:
-    pantalla_analisis()
-f4c1 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
-- **\U0001f9ed Por dónde empiezo** — Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.
-- **\U0001f4da Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
-
-**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera.
-        """)
         st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
 
 
