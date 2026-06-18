@@ -12066,7 +12066,7 @@ def pantalla_analisis():
         "💰 Renta Fija",
         "📁 Cartera",
         "🧭 ¿Por dónde empiezo?",
-        "📚 Educación",
+        "📚 Formación",
     ]
     if es_admin:
         _nav_items.append("⚙️ Usuarios")
@@ -12107,7 +12107,7 @@ def pantalla_analisis():
     _on_renta       = _nav_sel == "💰 Renta Fija"
     _on_cartera     = _nav_sel == "📁 Cartera"
     _on_pp          = _nav_sel == "🧭 ¿Por dónde empiezo?"
-    _on_edu         = _nav_sel == "📚 Educación"
+    _on_edu         = _nav_sel == "📚 Formación"
     _on_usuarios    = _nav_sel == "⚙️ Usuarios"
     _on_ayuda       = _nav_sel == "📖 Ayuda"
     tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
@@ -16447,9 +16447,9 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                 st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
 
 
-    # ---- TAB EDUCACIÓN ----
+    # ---- TAB FORMACIÓN ----
     if _on_edu:
-        st.markdown("## 📚 Guía educativa")
+        st.markdown("## 📚 Formación")
         st.caption("Aprende qué significa cada indicador, cómo interpretar ratios por sector y qué lecciones dejan los grandes eventos de mercado.")
 
         _edu_tabs = st.tabs(["📖 Glosario", "📊 Ratios por sector", "🎯 Guías por estrategia", "📉 Patrones históricos"])
@@ -16675,7 +16675,7 @@ PivotAnalyzer es una herramienta de análisis financiero multi-método orientada
 - **💰 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
 - **📁 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
 - **🧭 ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro → técnico → semáforo → niveles.
-- **📚 Educación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
+- **📚 Formación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
 
 **Atajos de teclado:** ninguno requerido — navegación completa por sidebar.
 
