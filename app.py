@@ -645,234 +645,43 @@ IBEX_SMALL_CAP = {
     "Grupo Empresarial San José":        "GSJ.MC",
 }
 
-# Eurostoxx 50 — Principales componentes (sufijos por país de cotización)
-EUROSTOXX_50 = {
-    "ASML Holding":         "ASML.AS",
-    "SAP":                  "SAP.DE",
-    "LVMH":                 "MC.PA",
-    "Siemens":              "SIE.DE",
-    "Allianz":              "ALV.DE",
-    "TotalEnergies":        "TTE.PA",
-    "Sanofi":               "SAN.PA",
-    "L'Oréal":              "OR.PA",
-    "Schneider Electric":   "SU.PA",
-    "Airbus":               "AIR.PA",
-    "Iberdrola":            "IBE.MC",
-    "Deutsche Telekom":     "DTE.DE",
-    "Inditex":              "ITX.MC",
-    "Enel":                 "ENEL.MI",
-    "AXA":                  "CS.PA",
-    "BNP Paribas":          "BNP.PA",
-    "Intesa Sanpaolo":      "ISP.MI",
-    "Munich Re":            "MUV2.DE",
-    "BBVA":                 "BBVA.MC",
-    "Volkswagen (pref.)":   "VOW3.DE",
-    "Infineon":             "IFX.DE",
-    "Ferrari":              "RACE.MI",
-    "Air Liquide":          "AI.PA",
-    "Siemens Energy":       "ENR.DE",
-    "Adyen":                "ADYEN.AS",
-    "ING Group":            "INGA.AS",
-    "Hermès":               "RMS.PA",
-    "EssilorLuxottica":     "EL.PA",
-    "Vinci":                "DG.PA",
-    "UniCredit":            "UCG.MI",
-    "Deutsche Börse":       "DB1.DE",
-    "Safran":               "SAF.PA",
-    "Engie":                "ENGI.PA",
-    "Banco Santander":      "SAN.MC",
-    "Kering":               "KER.PA",
-    "Pernod Ricard":        "RI.PA",
-    "Bayer":                "BAYN.DE",
-    "Vonovia":              "VNA.DE",
-    "Dassault Systèmes":    "DSY.PA",
-    "Nokia":                "NOKIA.HE",
-    "ENI":                  "ENI.MI",
-    "BASF":                 "BAS.DE",
-    "Stellantis":           "STLAM.MI",
-    "Mercedes-Benz":        "MBG.DE",
-    "Münchener Rück":       "MUV2.DE",
-    "Amadeus IT":           "AMS.MC",
-    "STMicroelectronics":   "STMPA.PA",
-    "CRH":                  "CRH.L",
-    "Koninklijke Philips":  "PHIA.AS",
-}
+# ── Índices y ETFs cargados desde JSON ──────────────────────────────────────
+@st.cache_data(ttl=0)
+def _cargar_indices() -> dict:
+    import os, json
+    path = os.path.join(os.path.dirname(__file__), "indices.json")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
-# ETFs UCITS — Selección curada accesible desde España (via DeGiro, IB, Trade Republic)
-# Nota: tickers en Euronext Amsterdam (.AS), Xetra (.DE) o Londres (.L)
-ETFS_UCITS = {
-    "🌐 Renta Variable Global": {
-        "iShares Core MSCI World (Acc) — IWDA":    "IWDA.AS",
-        "Vanguard FTSE All-World (Dist) — VWRL":   "VWRL.AS",
-        "Vanguard FTSE All-World (Acc) — VWCE":    "VWCE.DE",
-        "Xtrackers MSCI World (Acc) — XDWD":       "XDWD.DE",
-        "Amundi Prime All Country World — PRNA":   "PRNA.PA",
-        "iShares MSCI ACWI (Acc) — IUSQ":          "IUSQ.DE",
-    },
-    "🇺🇸 Renta Variable EEUU": {
-        "iShares Core S&P 500 (Acc) — SXR8":       "SXR8.DE",
-        "Vanguard S&P 500 (Dist) — VUSA":          "VUSA.AS",
-        "iShares S&P 500 (Dist) — IUSA":           "IUSA.AS",
-        "Invesco S&P 500 (Acc) — SPYL":            "SPYL.DE",
-        "iShares Nasdaq 100 (Acc) — CNDX":         "CNDX.L",
-        "Xtrackers Nasdaq 100 (Acc) — XNAS":       "XNAS.DE",
-    },
-    "🇪🇺 Renta Variable Europa": {
-        "iShares Core Eurostoxx 50 (Acc) — CS51":  "CS51.DE",
-        "iShares STOXX Europe 600 (Acc) — EXSA":   "EXSA.DE",
-        "Vanguard FTSE Dev. Europe (Acc) — VEUR":  "VEUR.AS",
-        "SPDR MSCI Europe (Acc) — SPEU":           "SPEU.DE",
-        "Amundi MSCI Europe (Acc) — CE9":          "CE9.PA",
-    },
-    "🌏 Renta Variable Emergentes": {
-        "iShares Core MSCI EM IMI (Acc) — IS3N":   "IS3N.DE",
-        "Vanguard FTSE Emerging Mkts (Acc) — VFEM":"VFEM.AS",
-        "Amundi MSCI EM (Acc) — PAEM":             "PAEM.PA",
-        "iShares MSCI China (Acc) — CNYA":         "CNYA.L",
-    },
-    "📉 Renta Fija": {
-        "iShares Core Euro Govt Bond (Acc) — IEGA":"IEGA.AS",
-        "iShares € Corp Bond (Acc) — IEAC":        "IEAC.AS",
-        "Vanguard EUR Eurozone Govt Bond — VETY":  "VETY.AS",
-        "Amundi € Aggregate Bond (Acc) — EAGA":    "EAGA.PA",
-        "iShares $ Treasury 7-10y EUR Hdg — IBTM": "IBTM.L",
-        "iShares Global HY Bond EUR Hdg — GHYS":   "GHYS.L",
-    },
-    "🔬 Sectoriales / Temáticos": {
-        "iShares Global Clean Energy — IQQH":      "IQQH.DE",
-        "iShares Automation & Robotics — 2B76":    "2B76.DE",
-        "Global X Semiconductor — SEMI":           "SEMI.L",
-        "iShares Healthcare Innovation — HEAL":    "HEAL.L",
-        "iShares MSCI World ESG Enhanced — IESW":  "IESW.DE",
-        "Invesco EQQQ Nasdaq-100 (Dist) — EQQQ":  "EQQQ.L",
-        "WisdomTree Battery Solutions — WBAT":     "WBAT.L",
-        "iShares Physical Gold ETC — IGLN":        "IGLN.L",
-    },
-    "🇯🇵 Renta Variable Japón": {
-        "iShares Core MSCI Japan IMI (Acc) — IJPA":  "IJPA.AS",
-        "Vanguard FTSE Japan (Acc) — VJPN":          "VJPN.AS",
-        "Xtrackers MSCI Japan (Acc) — XMJP":         "XMJP.DE",
-    },
-    "🏠 REITs / Inmobiliario": {
-        "iShares European Property Yield (Dist) — IPRP": "IPRP.AS",
-        "iShares Developed Mkts Property Yield — IWDP":  "IWDP.AS",
-        "Xtrackers FTSE EPRA NAREIT Dev. Eur — XREA":    "XREA.DE",
-    },
-    "📦 Materias Primas / Commodities": {
-        "iShares Diversified Commodity Swap (Acc) — CMOD": "CMOD.L",
-        "Invesco Physical Gold ETC — SGLD":                "SGLD.L",
-        "WisdomTree Physical Gold — PHAU":                 "PHAU.L",
-        "iShares Physical Silver ETC — SSLN":              "SSLN.L",
-    },
-    "💵 Mercado Monetario": {
-        "Xtrackers EUR Overnight Rate Swap — XEON":       "XEON.DE",
-        "Amundi Euro Liquidity Short Term — CSH2":         "CSH2.PA",
-    },
-    "📊 Small & Mid Caps": {
-        "iShares MSCI World Small Cap (Acc) — IUSN":      "IUSN.DE",
-        "SPDR MSCI Europe Small Cap (Acc) — ZPRX":        "ZPRX.DE",
-        "iShares MSCI USA Small Cap (Acc) — RUSS":        "RUSS.L",
-    },
-}
+@st.cache_data(ttl=0)
+def _cargar_etf_universe() -> dict:
+    import os, json
+    path = os.path.join(os.path.dirname(__file__), "etf_universe.json")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
+_INDICES_KB    = _cargar_indices()
+_ETF_UNIVERSE  = _cargar_etf_universe()
 
+EUROSTOXX_50   = _INDICES_KB["EUROSTOXX_50"]
+ETFS_UCITS     = _ETF_UNIVERSE["ucits"]
+ETFS_META      = _ETF_UNIVERSE["meta"]
 
-# Metadatos estáticos por ticker — TER, política de distribución, índice replicado
-# [VERIFICAR] TER puede actualizarse cuando la gestora lo modifica (infrecuente)
-ETFS_META = {
-    # Renta Variable Global
-    "IWDA.AS": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI World"},
-    "VWRL.AS": {"ter": 0.22, "dist": "Distribución", "indice": "FTSE All-World"},
-    "VWCE.DE": {"ter": 0.22, "dist": "Acumulación", "indice": "FTSE All-World"},
-    "XDWD.DE": {"ter": 0.19, "dist": "Acumulación", "indice": "MSCI World"},
-    "PRNA.PA": {"ter": 0.05, "dist": "Acumulación", "indice": "Solactive GBS Global Markets Large & Mid Cap"},
-    "IUSQ.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI ACWI"},
-    # Renta Variable EEUU
-    "SXR8.DE": {"ter": 0.07, "dist": "Acumulación", "indice": "S&P 500"},
-    "VUSA.AS": {"ter": 0.07, "dist": "Distribución", "indice": "S&P 500"},
-    "IUSA.AS": {"ter": 0.07, "dist": "Distribución", "indice": "S&P 500"},
-    "SPYL.DE": {"ter": 0.03, "dist": "Acumulación", "indice": "S&P 500"},
-    "CNDX.L":  {"ter": 0.33, "dist": "Acumulación", "indice": "Nasdaq 100"},
-    "XNAS.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "Nasdaq 100"},
-    # Renta Variable Europa
-    "CS51.DE": {"ter": 0.10, "dist": "Acumulación", "indice": "Euro Stoxx 50"},
-    "EXSA.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "STOXX Europe 600"},
-    "VEUR.AS": {"ter": 0.12, "dist": "Acumulación", "indice": "FTSE Developed Europe"},
-    "SPEU.DE": {"ter": 0.12, "dist": "Acumulación", "indice": "MSCI Europe"},
-    "CE9.PA":  {"ter": 0.15, "dist": "Acumulación", "indice": "MSCI Europe"},
-    # Renta Variable Emergentes
-    "IS3N.DE": {"ter": 0.18, "dist": "Acumulación", "indice": "MSCI EM IMI"},
-    "VFEM.AS": {"ter": 0.22, "dist": "Acumulación", "indice": "FTSE Emerging Markets"},
-    "PAEM.PA": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI Emerging Markets"},
-    "CNYA.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "MSCI China"},
-    # Renta Fija
-    "IEGA.AS": {"ter": 0.09, "dist": "Acumulación", "indice": "Bloomberg Euro Govt Bond"},
-    "IEAC.AS": {"ter": 0.20, "dist": "Acumulación", "indice": "Bloomberg Euro Corporate Bond"},
-    "VETY.AS": {"ter": 0.07, "dist": "Distribución", "indice": "Bloomberg Euro Govt Float Adj"},
-    "EAGA.PA": {"ter": 0.14, "dist": "Acumulación", "indice": "Bloomberg Euro Aggregate"},
-    "IBTM.L":  {"ter": 0.10, "dist": "Acumulación", "indice": "ICE US Treasury 7-10Y EUR Hdg"},
-    "GHYS.L":  {"ter": 0.50, "dist": "Distribución", "indice": "Markit iBoxx Global HY EUR Hdg"},
-    # Sectoriales / Temáticos
-    "IQQH.DE": {"ter": 0.65, "dist": "Acumulación", "indice": "S&P Global Clean Energy"},
-    "2B76.DE": {"ter": 0.40, "dist": "Acumulación", "indice": "STOXX® Global Automation & Robotics"},
-    "SEMI.L":  {"ter": 0.50, "dist": "Acumulación", "indice": "Solactive Global Semiconductor"},
-    "HEAL.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "STOXX® Global Digital Security"},
-    "IESW.DE": {"ter": 0.20, "dist": "Acumulación", "indice": "MSCI World ESG Enhanced Focus"},
-    "EQQQ.L":  {"ter": 0.30, "dist": "Distribución", "indice": "Nasdaq 100"},
-    "WBAT.L":  {"ter": 0.40, "dist": "Acumulación", "indice": "WisdomTree Battery Solutions"},
-    "IGLN.L":  {"ter": 0.12, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
-    # Renta Variable Japón
-    "IJPA.AS": {"ter": 0.12, "dist": "Acumulación", "indice": "MSCI Japan IMI"},
-    "VJPN.AS": {"ter": 0.15, "dist": "Acumulación", "indice": "FTSE Japan"},
-    "XMJP.DE": {"ter": 0.09, "dist": "Acumulación", "indice": "MSCI Japan"},
-    # REITs / Inmobiliario
-    "IPRP.AS": {"ter": 0.40, "dist": "Distribución", "indice": "FTSE EPRA/NAREIT Europe Dividend+"},
-    "IWDP.AS": {"ter": 0.59, "dist": "Distribución", "indice": "FTSE EPRA/NAREIT Developed"},
-    "XREA.DE": {"ter": 0.33, "dist": "Acumulación", "indice": "FTSE EPRA/NAREIT Developed Europe"},
-    # Materias Primas / Commodities
-    "CMOD.L":  {"ter": 0.19, "dist": "Acumulación", "indice": "Bloomberg Commodity ex Agri & Livestock Capped"},
-    "SGLD.L":  {"ter": 0.12, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
-    "PHAU.L":  {"ter": 0.39, "dist": "Acumulación", "indice": "LBMA Gold Price PM"},
-    "SSLN.L":  {"ter": 0.20, "dist": "Acumulación", "indice": "LBMA Silver Price"},
-    # Mercado Monetario
-    "XEON.DE": {"ter": 0.10, "dist": "Acumulación", "indice": "Solactive EUR Daily Overnight Rate"},
-    "CSH2.PA": {"ter": 0.07, "dist": "Acumulación", "indice": "ICE BofA Euro Government Bill"},
-    # Small & Mid Caps
-    "IUSN.DE": {"ter": 0.35, "dist": "Acumulación", "indice": "MSCI World Small Cap"},
-    "ZPRX.DE": {"ter": 0.30, "dist": "Acumulación", "indice": "MSCI Europe Small Cap"},
-    "RUSS.L":  {"ter": 0.43, "dist": "Acumulación", "indice": "MSCI USA Small Cap"},
-}
+_FALLBACK_SP500 = _INDICES_KB["fallbacks"]["SP500"]
+_FALLBACK_NDX   = _INDICES_KB["fallbacks"]["NDX"]
+_FALLBACK_DOW   = _INDICES_KB["fallbacks"]["DOW"]
+_FALLBACK_DAX   = _INDICES_KB["fallbacks"]["DAX"]
+_FALLBACK_CAC   = _INDICES_KB["fallbacks"]["CAC"]
+_FALLBACK_FTSE  = _INDICES_KB["fallbacks"]["FTSE"]
 
-# Lookup inverso: ticker → categoría
+# Lookup inverso: ticker -> categoria ETF
 _ETFS_CATEGORIA = {
     ticker: cat
     for cat, etfs in ETFS_UCITS.items()
     for ticker in etfs.values()
 }
 
-# Fallbacks estáticos para índices vía Wikipedia (por si falla la carga dinámica)
-_FALLBACK_SP500 = {"Apple": "AAPL", "Microsoft": "MSFT", "NVIDIA": "NVDA",
-                   "Amazon": "AMZN", "Alphabet A": "GOOGL", "Meta": "META",
-                   "Tesla": "TSLA", "JPMorgan Chase": "JPM", "Berkshire B": "BRK-B"}
-_FALLBACK_NDX   = {"Apple": "AAPL", "Microsoft": "MSFT", "NVIDIA": "NVDA",
-                   "Amazon": "AMZN", "Meta": "META", "Tesla": "TSLA",
-                   "Alphabet A": "GOOGL", "Broadcom": "AVGO", "Netflix": "NFLX"}
-_FALLBACK_DOW   = {"Apple": "AAPL", "Microsoft": "MSFT", "UnitedHealth": "UNH",
-                   "Goldman Sachs": "GS", "Home Depot": "HD", "Boeing": "BA",
-                   "American Express": "AXP", "McDonald's": "MCD", "JPMorgan": "JPM"}
-_FALLBACK_DAX   = {"SAP": "SAP.DE", "Siemens": "SIE.DE", "Allianz": "ALV.DE",
-                   "Deutsche Telekom": "DTE.DE", "BMW": "BMW.DE", "BASF": "BAS.DE",
-                   "Bayer": "BAYN.DE", "Mercedes-Benz": "MBG.DE", "Infineon": "IFX.DE",
-                   "Adidas": "ADS.DE", "Münchener Rück": "MUV2.DE", "Volkswagen": "VOW3.DE"}
-_FALLBACK_CAC   = {"LVMH": "MC.PA", "L'Oréal": "OR.PA", "TotalEnergies": "TTE.PA",
-                   "Hermès": "RMS.PA", "Airbus": "AIR.PA", "Sanofi": "SAN.PA",
-                   "Schneider Electric": "SU.PA", "Air Liquide": "AI.PA", "Vinci": "DG.PA"}
-_FALLBACK_FTSE  = {"AstraZeneca": "AZN.L", "Shell": "SHEL.L", "HSBC": "HSBA.L",
-                   "Unilever": "ULVR.L", "BP": "BP.L", "Rio Tinto": "RIO.L",
-                   "GSK": "GSK.L", "Diageo": "DGE.L", "BAE Systems": "BA.L",
-                   "Rolls-Royce": "RR.L", "Vodafone": "VOD.L", "Barclays": "BARC.L"}
-
-
+# Fallbacks estaticos para indices via Wikipedia
 @st.cache_data(ttl=0)  # sin expiración — el JSON solo cambia con un nuevo despliegue
 def _cargar_criteria() -> dict:
     """Carga criteria.json desde el directorio de la app. Fuente única de verdad
@@ -15508,313 +15317,14 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 )
 
             # Popovers detallados por estrategia (Streamlit markdown)
-            _est_popover = {
-                "💰 Dividendos": """
-**💰 Estrategia de Dividendos — Rentas a largo plazo**
-
-Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto de menor precio relativo. El dividendo remunera la espera; el precio de entrada determina el yield (rentabilidad) real que percibirás.
-
----
-
-**Orden de análisis (de mayor a menor peso):**
-
-**1. Dividend yield (rent. por dividendo)** *(criterio de selección)*
-- ≥ 3.5%: atractivo para estrategia de rentas
-- 2–3.5%: aceptable si el crecimiento del dividendo es sólido
-- < 2%: insuficiente como estrategia de rentas pura
-- *Punto clave: el yield (rentabilidad) mejora automáticamente cuando el precio cae. Comprar en correcciones aumenta la rentabilidad sin que la empresa cambie nada.*
-
-**2. Payout Ratio** *(sostenibilidad del pago)*
-- < 60%: dividendo muy sostenible; hay margen para crecer
-- 60–75%: sostenible pero sin holgura; vigilar tendencia de beneficios
-- > 75%: frágil; un trimestre malo puede recortar el dividendo
-- *Un dividendo alto pero insostenible es una trampa. El recorte de dividendo destruye el yield (rentabilidad) y el precio simultáneamente.*
-
-**3. Posición en rango 52 semanas** *(precio de entrada)*
-- < 35% del rango: zona de valor; precio deprimido históricamente
-- 35–65%: zona neutra; yield (rentabilidad) razonable pero no óptimo
-- > 65%: cerca de máximos; el yield (rentabilidad) es el más bajo del año
-- *Comprar cerca de mínimos anuales puede mejorar el yield (rentabilidad) efectivo un 20–40% respecto a comprar en máximos.*
-
-**4. SMA200** *(confirmación de valor)*
-- Precio bajo SMA200: zona de compra histórica para largo plazo
-- Precio sobre SMA200: mercado ya ha revalorizado; el yield (rentabilidad) es más bajo
-- *La SMA200 actúa como referencia del "precio justo a largo plazo". Por debajo es donde los gestores de fondos de renta encuentran valor.*
-
-**5. RSI** *(timing de entrada)*
-- RSI 30–45: sobreventa → zona óptima de entrada escalonada
-- RSI 45–60: neutral; válido pero sin urgencia
-- RSI > 65: sobrecomprado; esperar retroceso para mejorar precio medio
-
-**6. Divergencias técnicas** *(señal de acumulación oculta)*
-- Cuando existe (divergencia alcista OBV activa): el precio marca mínimos más bajos pero el volumen neto acumulado sube. Indica que los grandes inversores están comprando en silencio mientras el precio cae — es decir, hay demanda real oculta bajo la caída. Históricamente precede a giros al alza o a suelos de mercado. Para dividendos, es la señal de que el precio bajo que estás viendo puede no durar mucho más
-- Cuando no existe: no hay señal de acumulación detectable en este momento. El criterio puntúa neutro, no negativo — la estrategia sigue siendo válida, pero sin esta confirmación adicional
-
-**7. Soporte reforzado** *(colchón estructural y referencia de stop)*
-- Cuando existe: un nivel pivot y una media móvil activa coinciden en el mismo precio (diferencia ≤ tolerancia activa, por defecto 0.20€). Indica que dos métodos de análisis independientes señalan la misma zona como relevante → los inversores institucionales tienden a acumular órdenes en esos precios, lo que hace que el nivel actúe como suelo real con mayor probabilidad. Es además la referencia natural para situar el stop-loss: si el precio cae por debajo de ese nivel, la tesis de entrada queda invalidada
-- Cuando no aparece: pivot y medias no convergen en ±0.20€ en este momento. Indica que no hay un suelo estructural doble claro cerca del precio actual. No descalifica la estrategia — pero el stop debe situarse en otro nivel técnico (SMA200, mínimo reciente, soporte de largo plazo)
-- *Técnicamente: el sistema compara cada pivot de soporte con cada media activa (SMA50, SMA200, EMA20...). Si la diferencia de precio es ≤ la tolerancia activa, los considera un único nivel reforzado. Para una acción de 20€, 0.20€ es un margen del ~1%.*
-
----
-
-**Momento óptimo de entrada**
-Todos los criterios alineados: yield (rentabilidad) ≥ 3.5% + precio bajo SMA200 + RSI < 45 + soporte reforzado activo + divergencia alcista OBV. Ese setup aparece pocas veces al año por valor — cuando aparece, es el punto de máxima asimetría riesgo/recompensa para rentas.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-                "📈 Swing 12-16 sem": """
-**📈 Swing Trading 12–16 semanas — Posición tendencial**
-
-Captura movimientos tendenciales de 3–4 meses subiendo a una tendencia ya establecida, no apostando por un giro. El objetivo es comprar el retroceso dentro de una tendencia alcista con recorrido claro hasta la siguiente resistencia.
-
----
-
-**Orden de análisis:**
-
-**1. Estructura de tendencia** *(condición necesaria — si falla, para aquí)*
-- Precio > SMA50 > SMA200: tendencia alcista completa; el mercado confirma la dirección
-- Precio > SMA50 pero SMA50 < SMA200: tendencia emergente; mayor riesgo
-- Precio < SMA50: sin tendencia establecida; el swing no tiene base
-- *Un swing en contra de la tendencia principal tiene una tasa de éxito estadísticamente inferior. No escalar un problema.*
-
-**2. RSI** *(ventana de entrada)*
-- RSI 42–62: zona ideal de entrada en retroceso dentro de tendencia
-- RSI < 42: retroceso profundo; posible debilidad real, no solo corrección
-- RSI > 65: sobreextendido; entrar ahora asume demasiado riesgo de corrección
-- *El objetivo no es comprar el suelo exacto, sino comprar en una zona donde la relación riesgo/recompensa es favorable.*
-
-**3. MACD histograma** *(momentum del movimiento)*
-- Histograma positivo y creciente: impulso activo; señal de continuación
-- Histograma positivo pero decreciente: impulso frena; esperar confirmación
-- Histograma negativo: momentum bajista; el setup está en entredicho
-- *El MACD histograma anticipa los cruces de líneas. Una divergencia bajista en histograma invalida el setup incluso si el precio sigue subiendo.*
-
-**4. Divergencias técnicas** *(validación o invalidación)*
-- Divergencia bajista RSI/MACD: señal de agotamiento → INVALIDA el setup hasta resolución
-- Divergencia alcista activa: confirmación adicional del rebote dentro de tendencia
-- *Una divergencia bajista activa en swing tendencial es el mayor riesgo del setup. Nunca ignorarla.*
-
-**5. Niveles de soporte y resistencia** *(geometría del trade)*
-- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, dos métodos independientes señalan el mismo precio → zona con alta probabilidad de actuar como suelo porque hay órdenes institucionales acumuladas; referencia lógica para el stop-loss
-- Resistencia reforzada (pivot+media a ≤0.20€): objetivo de precio del trade; con soporte Y resistencia identificados, el ratio riesgo/beneficio queda completamente definido antes de entrar
-- Sin ambos identificados: el trade no tiene estructura geométrica clara; esperar o reducir tamaño de posición
-- *El sistema busca pivot de soporte/resistencia a menos de 0.20€ de cualquier media activa. Sin esta confluencia, los niveles son menos fiables como referencia.*
-
-**6. Volumen** *(confirmación del movimiento)*
-- Volumen creciente en el impulso: convicción compradora real
-- Volumen decreciente en el retroceso: corrección sana dentro de tendencia (ideal)
-- Volumen alto en caída: posible distribución; reevaluar
-
----
-
-**Momento óptimo de entrada**
-Tendencia completa (precio>SMA50>SMA200) + RSI en 45–58 en retroceso + histograma MACD positivo aunque decreciendo + soporte reforzado identificado + sin divergencias bajistas activas + volumen bajo en el retroceso. Stop bajo el soporte identificado. Objetivo: resistencia siguiente (ratio mínimo 1:2).
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-                "🏷️ Valor": """
-**🏷️ Inversión en Valor — Filosofía Graham/Buffett**
-
-Comprar participaciones en negocios de calidad a precios que ofrezcan un margen de seguridad respecto a su valor intrínseco. El tiempo y los beneficios compuestos hacen el trabajo. El timing es secundario al precio de entrada.
-
----
-
-**Orden de análisis:**
-
-**1. PER (Price/Earnings)** *(valoración fundamental)*
-- < 12x: precio muy bajo respecto a beneficios; posible infravaloración
-- 12–18x: rango de valor razonable para empresas maduras
-- 18–25x: valoración justa; poco margen de seguridad
-- > 25x: precio exigente; requiere crecimiento excepcional para justificarse
-- *El PER solo tiene sentido en contexto: comparar con el sector, con el histórico del valor y con el crecimiento esperado de beneficios (PEG = PER / crecimiento BPA).*
-
-**2. Descuento respecto a SMA200** *(precio vs valor histórico)*
-- Precio ≥ 15% bajo SMA200: zona de valor histórico profunda
-- Precio 5–15% bajo SMA200: descuento moderado; razonable
-- Precio sobre SMA200: el mercado ya ha revalorizado; margen de seguridad reducido
-- *La SMA200 aproxima el precio medio de largo plazo. Comprar bajo ella implica pagar menos que la media histórica.*
-
-**3. Posición en rango 52W** *(temperatura del precio)*
-- < 30% del rango: precio históricamente deprimido; el mercado descuenta problemas reales o exagera
-- 30–55%: zona neutra; valoración equilibrada
-- > 65%: cerca de máximos anuales; escaso margen de seguridad
-- *El inversor en valor no busca comprar barato en términos absolutos, sino barato respecto al valor intrínseco. Un valor en máximos puede ser barato si el negocio crece rápido.*
-
-**4. Beta defensiva** *(perfil de riesgo)*
-- Beta < 0.7: activo defensivo; protege el capital en caídas de mercado
-- Beta 0.7–1.1: comportamiento de mercado; aceptable
-- Beta > 1.3: volátil; el margen de seguridad debe ser mayor para compensar
-- *El valor no implica necesariamente baja volatilidad, pero los activos defensivos permiten mantener la posición psicológicamente durante el periodo de reconocimiento del valor.*
-
-**5. Dividend yield (rent. por dividendo)** *(colchón de retorno)*
-- Dividendo > 0: la espera tiene retribución mientras el mercado reconoce el valor
-- Payout sostenible: el dividendo no compromete la inversión en el negocio
-- *El dividendo no es un criterio de selección en valor, pero actúa como seguro: si el mercado tarda en reconocer el valor, el dividendo compensa la espera.*
-
-**6. Divergencias técnicas** *(confirmación de acumulación)*
-- Divergencia alcista OBV: el dinero inteligente acumula mientras el precio cae; señal de que el descuento es real pero temporal
-- Soporte reforzado: colchón estructural que limita el riesgo de caída adicional
-
----
-
-**Momento óptimo de entrada**
-PER < 15x + precio ≥ 10% bajo SMA200 + posición < 40% en rango 52W + divergencia alcista OBV activa (acumulación) + soporte reforzado identificado. Entrada escalonada: no concentrar todo en un punto dado que el timing es secundario — el margen de seguridad es la protección.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-                "🚀 Momentum": """
-**🚀 Momentum — Subirse al tren en marcha**
-
-No es anticipar un giro sino confirmar y seguir una tendencia ya establecida con fuerza. El momentum se basa en la inercia del precio: lo que sube tiende a seguir subiendo mientras la convicción y el flujo de capital se mantengan.
-
----
-
-**Orden de análisis:**
-
-**1. Tendencia estructural** *(condición de base)*
-- Precio > SMA50 > SMA200: tendencia alcista establecida en todos los plazos
-- SAR alcista (precio sobre el SAR): la tendencia tiene dirección definida
-- Consenso de indicadores ≥ 70% alcista: el conjunto de señales confirma la dirección
-- *El momentum solo funciona en tendencias claras. En laterales, las señales son falsas y el coste por rotación es alto.*
-
-**2. RSI** *(zona de momentum activo)*
-- RSI 55–72: zona de momentum sin sobrecompra extrema; el tren sigue pero no está a punto de frenar
-- RSI > 72: sobrecomprado; el momentum puede continuar pero el riesgo de corrección es elevado
-- RSI < 50: momentum perdido; la tendencia se ha enfriado; no es el momento
-- *En momentum puro, el RSI puede mantenerse en zona 60–75 semanas seguidas en tendencias fuertes. No salir solo porque el RSI está "alto".*
-
-**3. MACD histograma** *(aceleración del impulso)*
-- Histograma positivo y creciente: el impulso se acelera; señal más fuerte del setup
-- Histograma positivo estable: impulso mantenido; válido pero sin aceleración
-- Histograma positivo decreciente: el impulso frena; posible entrada tardía
-- Histograma negativo: momentum perdido aunque el precio siga cerca de máximos
-- *La trampa del momentum tardío: el precio puede estar alto pero el histograma ya declinando indica que el movimiento está maduro.*
-
-**4. Volumen** *(convicción institucional)*
-- Volumen creciente en la tendencia alcista: flujo de capital real respaldando el movimiento
-- Volumen neutral: tendencia válida pero sin aceleración
-- Volumen decreciente mientras el precio sube: movimiento sin convicción; riesgo de reversión
-- *El momentum sin volumen creciente es frágil. Los grandes movimientos necesitan flujo institucional.*
-
-**5. Divergencias bajistas** *(señal de alerta máxima)*
-- Sin divergencias bajistas: setup limpio
-- Divergencia bajista en RSI o MACD: el momentum se agota aunque el precio no lo refleje todavía; NO entrar
-- *Una divergencia bajista en momentum es la señal de salida, no de entrada. Si aparece, el setup se invalida completamente.*
-
-**6. Distancia a SMA50** *(extensión del movimiento)*
-- < 8% sobre SMA50: movimiento con recorrido; la tendencia no está sobreextendida
-- 8–15% sobre SMA50: vigilar; posible corrección a la media antes del siguiente impulso
-- > 15% sobre SMA50: muy sobreextendido; la corrección a la media puede ser el siguiente movimiento
-
----
-
-**Momento óptimo de entrada**
-SAR alcista + consenso ≥ 70% alcista + RSI entre 55–68 + histograma MACD positivo y estable o creciente + volumen creciente en el impulso + SIN divergencias bajistas. Stop bajo SMA50. Objetivo: resistencia identificada o trailing stop al 8% desde máximos.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-                "🔄 Rebote Técnico": """
-**🔄 Rebote Técnico — Capturar el giro desde sobreventa**
-
-Operativa de alta probabilidad estadística a corto plazo: aprovechar el retorno a la media desde condiciones de sobreventa extrema. No es inversión de tendencia — es una corrección técnica dentro de una caída. Horizonte 2–4 semanas. Disciplina de stop es crítica.
-
----
-
-**Orden de análisis:**
-
-**1. RSI** *(condición necesaria — primero esto)*
-- RSI < 30: sobreventa extrema; zona estadísticamente favorable a rebote
-- RSI 30–38: sobreventa moderada; señal de interés pero sin urgencia
-- RSI > 40: sin sobreventa; no hay base técnica para rebote a corto plazo; NO operar
-- *El RSI < 30 no significa "comprar ahora" — significa que las condiciones para un rebote están presentes. Necesitas los otros factores para confirmar.*
-
-**2. Bollinger %B** *(extensión de la caída)*
-- %B < 0.10: precio en el extremo inferior de las bandas; zona de sobreventa estadística
-- %B 0.10–0.20: sobreventa moderada; consistente con RSI
-- %B > 0.25: la caída no es extrema en términos de volatilidad histórica; rebote técnico menos probable
-- *Las Bandas de Bollinger miden la volatilidad histórica. Un precio en la banda inferior extrema tiene alta probabilidad estadística de revertir hacia la media (SMA20).*
-
-**3. Divergencia alcista** *(confirmación clave)*
-- Divergencia alcista RSI o OBV activa: el indicador forma mínimos más altos mientras el precio forma mínimos más bajos → la presión vendedora se agota
-- Sin divergencia: el rebote es posible pero sin señal de confirmación → reducir tamaño o esperar
-- *La divergencia alcista transforma una zona de sobreventa en un setup de alta convicción. Sin ella, el rebote puede ocurrir pero la probabilidad es menor.*
-
-**4. Soporte técnico reforzado** *(zona de inflexión)*
-- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, un nivel pivot histórico y una media móvil activa coinciden en el mismo precio → dos métodos independientes apuntan a la misma zona, lo que históricamente indica que hay órdenes institucionales acumuladas ahí. Es la referencia para el stop-loss
-- Cuando no aparece: pivot y medias no coinciden en ±0.20€ en este momento. El precio puede seguir cayendo sin freno técnico; evitar el setup o usar posición mínima
-- *El sistema compara cada pivot de soporte con SMA50, SMA200, EMA20 y otras medias activas. Si la diferencia es ≤0.20€, ese precio es un "nivel reforzado". Para una acción de 20€ esto representa un margen del ~1%.*
-- *El soporte no garantiza el rebote, pero define el precio de invalidación del setup. Si el soporte cede, la tesis es incorrecta.*
-
-**5. Volumen** *(patrón de agotamiento vendedor)*
-- Volumen decreciente en los últimos días de caída: los vendedores se agotan; el movimiento bajista pierde fuerza
-- Volumen alto en vela de giro (martillo, envolvente alcista): señal de capitulación + entrada compradora
-- Volumen creciente en la caída: distribución activa; el suelo puede estar más abajo
-
-**6. Posición relativa en rango 52W**
-- < 20% del rango: zona de mínimos históricos; más probable que el mercado reconozca el precio como barato
-- > 40% del rango: la caída no es estadísticamente extrema en contexto anual
-
----
-
-**Momento óptimo de entrada**
-RSI < 32 + %B < 0.15 + divergencia alcista OBV o RSI activa + soporte reforzado identificado + volumen decreciendo en la caída. Entrada en la zona del soporte con stop ajustado un 2–3% por debajo. Objetivo: SMA20 o SMA50 (retorno a la media). Si el soporte cede, salir sin excusas.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-                "🛡️ Señal de Salida": """
-**🛡️ Señal de Salida — Saber cuándo termina el trade**
-
-Detecta cuándo reducir o cerrar una posición larga existente. Los criterios son el espejo de los de entrada: sobrecompra donde antes había sobreventa, distribución donde antes había acumulación, divergencias bajistas donde antes eran alcistas. La mayoría de inversores tienen criterios de entrada pero no de salida — aquí está el análisis.
-
----
-
-**Orden de análisis:**
-
-**1. RSI** *(temperatura del precio)*
-- RSI > 70: sobrecompra técnica; zona de menor retorno esperado histórico
-- RSI > 75: sobrecompra extrema; el rebote bajista tiene alta probabilidad estadística
-- RSI entre 60–70: zona de precaución; vigilar pero no actuar todavía
-- *El RSI alto no obliga a vender, pero sí obliga a revisar el stop y no añadir posición. En tendencias fuertes, el RSI puede mantenerse sobre 70 semanas — la divergencia bajista es la señal de acción.*
-
-**2. Divergencias bajistas** *(señal de agotamiento — la más importante)*
-- Divergencia bajista RSI: precio hace máximos más altos, RSI hace máximos más bajos → compradores pierden fuerza
-- Divergencia bajista MACD histograma: el impulso alcista se agota aunque el precio siga subiendo
-- Divergencia bajista OBV: el dinero institucional distribuye mientras el precio sube → los grandes venden a los pequeños
-- *La divergencia bajista de OBV es la más grave: indica que los inversores con información o con tamaño suficiente para mover el mercado están reduciendo posición. El precio puede aguantar días o semanas, pero el suelo se ha debilitado.*
-
-**3. Posición en rango 52W** *(contexto de precio)*
-- > 85% del rango: precio cerca de máximos históricos anuales; la asimetría riesgo/recompensa es desfavorable
-- > 70%: zona de precaución; la resistencia natural de máximos anteriores es relevante
-- < 60%: precio no está en zona extrema de sobrecompra; otras señales deben dominar
-
-**4. MACD histograma** *(velocidad de deterioro)*
-- Histograma positivo pero decreciendo durante 3+ sesiones: el impulso alcista frena
-- Cruce a negativo con precio todavía en máximos: señal de distribución
-- Histograma positivo y estable: la tendencia mantiene fuerza; no actuar solo por RSI alto
-
-**5. SAR** *(cambio de tendencia estructural)*
-- SAR pasa de alcista a bajista (precio cruza debajo del SAR): señal técnica directa de cambio de tendencia; señal de reducción o cierre
-- SAR aún alcista con RSI alto: la tendencia sigue; solo vigilar
-
-**6. OBV** *(flujo de dinero: ¿quién compra y quién vende realmente?)*
-- OBV decreciente mientras el precio sube o se mantiene: el volumen neto está bajando aunque el precio no lo muestre. Los grandes inversores están vendiendo poco a poco mientras el precio sube. Es la señal de salida más relevante de todo el análisis técnico.
-- OBV paralelo al precio: el volumen acompaña al precio con normalidad. No hay señales de venta encubierta.
-- *Clave para no iniciados: si el OBV baja mientras el precio sube, significa que hay más ventas de las que parece. Los grandes inversores venden a quienes compran confiados por la subida. El precio puede aguantar días o semanas, pero el soporte real se está erosionando.*
-
----
-
-**Momento óptimo de reducción/salida**
-RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + posición > 75% en rango 52W. Acción: reducir 30–50% de la posición, ajustar stop al nivel de soporte más reciente y dejar correr el resto con trailing stop. Si RSI > 75 + divergencia bajista fuerte: cerrar posición completa o cubrir con opciones.
-
----
-*Análisis educativo · No constituye asesoramiento de inversión bajo MiFID II*
-""",
-            }
+            # Textos de estrategia cargados desde strategy_texts.json
+            import os as _os, json as _json
+            _st_path = _os.path.join(_os.path.dirname(__file__), "strategy_texts.json")
+            try:
+                with open(_st_path, encoding="utf-8") as _stf:
+                    _est_popover = _json.load(_stf)
+            except Exception:
+                _est_popover = {}
 
             def _scorecard(titulo, emoji_tit, criterios, color_hdr):
                 """Returns (header_html, body_html) — header has the colored bar, body has score+criteria."""
