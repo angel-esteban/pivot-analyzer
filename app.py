@@ -1434,6 +1434,9 @@ def verificar_y_disparar_alertas(usuario_id: int, ticker: str, precio: float) ->
 # CARTERA — TABLAS, CRUD Y HELPERS
 # =============================================================================
 
+_TIPOS_VALIDOS = ('dividendos', 'crecimiento', 'indexada', 'swing', 'multiactivo')
+
+
 def inicializar_tabla_carteras():
     """Crea las tablas carteras y cartera_posiciones si no existen (idempotente)."""
     try:
@@ -1450,24 +1453,6 @@ def inicializar_tabla_carteras():
                         descripcion TEXT DEFAULT '',
                         created_at  TIMESTAMP DEFAULT NOW()
                     )
-                """)
-                # Migración: ampliar CHECK si 'multiactivo' aún no está permitido
-                cur.execute("""
-                    DO $$
-                    DECLARE r RECORD;
-                    BEGIN
-                        FOR r IN
-                            SELECT conname FROM pg_constraint c
-                            JOIN pg_class t ON c.conrelid = t.oid
-                            WHERE t.relname = 'carteras' AND c.contype = 'c'
-                              AND pg_get_constraintdef(c.oid) NOT LIKE '%%multiactivo%%'
-                              AND pg_get_constraintdef(c.oid) LIKE '%%tipo%%'
-                        LOOP
-                            EXECUTE 'ALTER TABLE carteras DROP CONSTRAINT ' || quote_ident(r.conname);
-                            ALTER TABLE carteras ADD CONSTRAINT carteras_tipo_check
-                              CHECK (tipo IN (''dividendos'',''crecimiento'',''indexada'',''swing'',''multiactivo''));
-                        END LOOP;
-                    END $$
                 """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS cartera_posiciones (
@@ -1487,6 +1472,37 @@ def inicializar_tabla_carteras():
             conn.commit()
         finally:
             release_db_connection(conn)
+    except Exception:
+        pass
+
+    # ── Migración: ampliar CHECK constraint para incluir nuevos tipos ──────────
+    # Transacción separada para que un fallo no revierta la creación de tablas.
+    try:
+        conn2 = get_db_connection()
+        try:
+            with conn2.cursor() as cur2:
+                # Buscar constraints de CHECK sobre la columna tipo que no incluyan multiactivo
+                cur2.execute("""
+                    SELECT conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'carteras'
+                      AND c.contype = 'c'
+                      AND pg_get_constraintdef(c.oid) LIKE %s
+                      AND pg_get_constraintdef(c.oid) NOT LIKE %s
+                """, ('%tipo%', '%multiactivo%'))
+                filas = cur2.fetchall()
+                for (conname,) in filas:
+                    cur2.execute(
+                        f"ALTER TABLE carteras DROP CONSTRAINT {conname}"
+                    )
+                    cur2.execute("""
+                        ALTER TABLE carteras ADD CONSTRAINT carteras_tipo_check
+                        CHECK (tipo IN ('dividendos','crecimiento','indexada','swing','multiactivo'))
+                    """)
+            conn2.commit()
+        finally:
+            release_db_connection(conn2)
     except Exception:
         pass
 
