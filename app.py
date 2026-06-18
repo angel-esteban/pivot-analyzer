@@ -15272,11 +15272,14 @@ Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto
 - RSI 45–60: neutral; válido pero sin urgencia
 - RSI > 65: sobrecomprado; esperar retroceso para mejorar precio medio
 
-**6. Divergencias y soportes** *(confirmación técnica)*
-- Divergencia alcista OBV activa: el precio baja pero el volumen neto sube → grandes inversores comprando en silencio, señal de posible suelo
-- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, dos métodos independientes señalan el mismo precio → los inversores institucionales suelen acumular órdenes en estas zonas, por eso tiende a actuar como suelo real; es la referencia natural para el stop-loss
-- Cuando no aparece: el nivel pivot y las medias no convergen en ±0.20€ en este momento. No descalifica la estrategia, pero el stop debe situarse en otro nivel técnico (SMA200, mínimo reciente, etc.)
-- *Técnicamente: el sistema compara cada pivot de soporte con cada media activa (SMA/EMA). Si la diferencia es ≤0.20€, los considera un único nivel reforzado. Para una acción de 20€, 0.20€ equivale a un margen del ~1%.*
+**6. Divergencias técnicas** *(señal de acumulación oculta)*
+- Cuando existe (divergencia alcista OBV activa): el precio marca mínimos más bajos pero el volumen neto acumulado sube. Indica que los grandes inversores están comprando en silencio mientras el precio cae — es decir, hay demanda real oculta bajo la caída. Históricamente precede a giros al alza o a suelos de mercado. Para dividendos, es la señal de que el precio bajo que estás viendo puede no durar mucho más
+- Cuando no existe: no hay señal de acumulación detectable en este momento. El criterio puntúa neutro, no negativo — la estrategia sigue siendo válida, pero sin esta confirmación adicional
+
+**7. Soporte reforzado** *(colchón estructural y referencia de stop)*
+- Cuando existe: un nivel pivot y una media móvil activa coinciden en el mismo precio (diferencia ≤ tolerancia activa, por defecto 0.20€). Indica que dos métodos de análisis independientes señalan la misma zona como relevante → los inversores institucionales tienden a acumular órdenes en esos precios, lo que hace que el nivel actúe como suelo real con mayor probabilidad. Es además la referencia natural para situar el stop-loss: si el precio cae por debajo de ese nivel, la tesis de entrada queda invalidada
+- Cuando no aparece: pivot y medias no convergen en ±0.20€ en este momento. Indica que no hay un suelo estructural doble claro cerca del precio actual. No descalifica la estrategia — pero el stop debe situarse en otro nivel técnico (SMA200, mínimo reciente, soporte de largo plazo)
+- *Técnicamente: el sistema compara cada pivot de soporte con cada media activa (SMA50, SMA200, EMA20...). Si la diferencia de precio es ≤ la tolerancia activa, los considera un único nivel reforzado. Para una acción de 20€, 0.20€ es un margen del ~1%.*
 
 ---
 
@@ -16159,7 +16162,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                     "⬇️ Descargar PDF",
                                     data      = _pdf_e,
                                     file_name = f"estrategia_{_ticker_e}_{_ts_e}.pdf",
-                                    mime      = "application/pdf",
+                                                                  mime      = "application/pdf",
                                     key       = "dl_est_pdf",
                                 )
                             except Exception as _ex_pdf:
