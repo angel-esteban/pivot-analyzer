@@ -223,7 +223,7 @@ st.markdown("""
     .main > div { padding: 0 !important; }
     .block-container {
         padding: 0 1.25rem 2rem !important;
-        max-width: 1100px !important;
+        max-width: 100% !important;
     }
 
     /* ── TIPOGRAFÍA ─────────────────────────────────────────────── */
@@ -436,8 +436,38 @@ st.markdown("""
     /* ── MOBILE ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
         .block-container { padding: 0 0.4rem 2rem !important; }
-        button[data-baseweb="tab"] { font-size: 0.7rem !important; padding: 0.55rem 0.5rem !important; }
     }
+
+    /* ── SIDEBAR NAV ────────────────────────────────────────────── */
+    [data-testid="stSidebar"] {
+        background: #0f172a !important;
+        min-width: 210px !important; max-width: 210px !important;
+    }
+    [data-testid="stSidebarContent"] { padding: 0 !important; }
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] label { color: #cbd5e1 !important; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] > div { gap: 0 !important; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        display: flex !important; align-items: center !important;
+        padding: 0.55rem 1.1rem !important; border-radius: 0 !important;
+        margin: 0 !important; font-size: 0.88rem !important; font-weight: 500 !important;
+        color: #94a3b8 !important; cursor: pointer !important;
+        border-left: 3px solid transparent !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+        background: rgba(255,255,255,0.06) !important; color: #e2e8f0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+        background: rgba(99,102,241,0.18) !important; color: #e0e7ff !important;
+        border-left: 3px solid #6366f1 !important; font-weight: 700 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] { display: none !important; }
+    [data-testid="stSidebar"] input[type="radio"] { display: none !important; }
+    [data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+        margin: 0 !important; font-size: 0.88rem !important;
+    }
+    .block-container { padding-left: 1.5rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -11942,11 +11972,21 @@ def pantalla_analisis():
                 del st.session_state["usuario"]
                 st.rerun()
 
-    # Navegación
-    tabs_list = ["📈 Análisis Técnico", "🎯 Estrategia", "🤖 Análisis IA", "🌍 Macro", "💰 Renta Fija", "📁 Cartera", "🧭 ¿Por dónde empiezo?", "📚 Educación"]
+    # Navegación — sidebar lateral
+    _nav_items = [
+        "📈 Análisis Técnico",
+        "🎯 Estrategia",
+        "🤖 Análisis IA",
+        "🌍 Macro",
+        "💰 Renta Fija",
+        "📁 Cartera",
+        "🧭 ¿Por dónde empiezo?",
+        "📚 Educación",
+    ]
     if es_admin:
-        tabs_list.append("⚙️ Usuarios")
-    tabs_list.append("📖 Ayuda")
+        _nav_items.append("⚙️ Usuarios")
+    _nav_items.append("📖 Ayuda")
+    tabs_list = _nav_items  # compatibilidad con código existente
 
     # Diálogo Mi Perfil — abierto desde pill de cabecera
     if st.session_state.get("_open_perfil_dialog"):
@@ -11974,23 +12014,26 @@ def pantalla_analisis():
 })();
 </script>""", height=0)
 
-    tab_objs = st.tabs(tabs_list)
-    tab_analisis   = tab_objs[0]
-    tab_estrategia = tab_objs[1]
-    tab_ia         = tab_objs[2]
-    tab_macro      = tab_objs[3]
-    tab_rf         = tab_objs[4]
-    tab_cartera    = tab_objs[5]
-    tab_principiante = tab_objs[6]
-    tab_edu          = tab_objs[7]
+    # ── Sidebar: logo + navegación ──────────────────────────────────────
+    with st.sidebar:
+        st.markdown(
+            "<div style='padding:1.2rem 1.1rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.08)'>"
+            "<div style='font-size:1.05rem;font-weight:800;color:#e2e8f0;letter-spacing:-0.01em'>"
+            "📊 PivotAnalyzer</div>"
+            "<div style='font-size:0.72rem;color:#64748b;margin-top:2px'>Análisis financiero multi-método</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _nav_sel = st.radio(
+            "nav", _nav_items, index=0,
+            label_visibility="collapsed", key="nav_sidebar"
+        )
 
-    # tabs=[..8 base.., Usuarios(8) si admin, Ayuda(8 o 9)]
-    if es_admin and len(tab_objs) >= 10:
-        tab_admin = tab_objs[8]   # ⚙️ Usuarios
-        tab_ayuda = tab_objs[9]   # 📖 Ayuda
-    else:
-        tab_admin = None
-        tab_ayuda = tab_objs[8] if len(tab_objs) > 8 else tab_objs[-1]
+    # Aliases para compatibilidad (ya no son objetos de tab, son condiciones)
+    _on_analisis    = _nav_sel == "📈 Análisis Técnico"
+    _on_estrategia  = _nav_sel == "🎯 Estrategia"
+    _on_edu         = _nav_sel == "📚 Educación"
     tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
 
     # ---- TAB ANÁLISIS ----
@@ -15080,11 +15123,11 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
 
     # ---- RENDER TAB ANÁLISIS (función anidada para que los return no salgan de pantalla_analisis) ----
-    with tab_analisis:
+    if _on_analisis:
         _render_analisis()
 
     # ---- ALERTAS DE PRECIO ----
-    with tab_analisis:
+    if _on_analisis:
         _u_id = usuario.get("id")
         analizado = "estrategia_data" in st.session_state
         # Recuperar precio y ticker desde session_state cuando analizado es True
@@ -15199,7 +15242,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             st.rerun()
 
     # ---- TAB ESTRATEGIA ----
-    with tab_estrategia:
+    if _on_estrategia:
         ed = st.session_state.get("estrategia_data")
 
         if not ed:
@@ -16322,7 +16365,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 
 
     # ---- TAB EDUCACIÓN ----
-    with tab_edu:
+    if _on_edu:
         st.markdown("## 📚 Guía educativa")
         st.caption("Aprende qué significa cada indicador, cómo interpretar ratios por sector y qué lecciones dejan los grandes eventos de mercado.")
 
