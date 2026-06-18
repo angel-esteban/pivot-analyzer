@@ -469,11 +469,28 @@ st.markdown("""
     }
     .block-container { padding-left: 1.5rem !important; }
 
-    /* Ocultar el botón de colapso del sidebar — es la navegación principal, debe permanecer visible */
-    [data-testid="stSidebarCollapseButton"] { display: none !important; }
-    button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
-    /* Ocultar también el control de expansión (evitar estado colapsado inconsistente) */
-    [data-testid="collapsedControl"] { display: none !important; }
+    /* Botón de expandir sidebar cuando está colapsado — visible arriba-izquierda */
+    [data-testid="collapsedControl"] {
+        position: fixed !important;
+        top: 12px !important;
+        left: 8px !important;
+        z-index: 999999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    [data-testid="collapsedControl"] button,
+    [data-testid="collapsedControl"] svg {
+        width: 32px !important; height: 32px !important;
+        background: #1e3a5f !important;
+        border-radius: 6px !important;
+        color: #e2e8f0 !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+    }
+    [data-testid="collapsedControl"] button:hover {
+        background: #6366f1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -11834,29 +11851,25 @@ def pantalla_analisis():
 })();
 </script>
 """, height=0, scrolling=False)
-    # JS: ocultar botón de colapso del sidebar y auto-abrir si se cierra accidentalmente
+    # JS: estilizar el botón de expandir sidebar (collapsedControl) arriba-izquierda
     _st_components.html("""<script>
-(function keepSidebarOpen() {
-    function _fix() {
+(function styleSidebarToggle() {
+    function _style() {
         try {
             var doc = window.parent.document;
-            // Ocultar botones de colapso/expansión del sidebar
-            ['stSidebarCollapseButton','collapsedControl','baseButton-headerNoPadding'].forEach(function(id) {
-                doc.querySelectorAll('[data-testid="' + id + '"]').forEach(function(el) {
-                    el.style.setProperty('display','none','important');
-                });
-            });
-            // Si el sidebar está colapsado, reabrirlo
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb && sb.getAttribute('aria-expanded') === 'false') {
-                var btn = doc.querySelector('[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapseButton"]');
-                if (btn) btn.click();
+            // Posicionar el collapsedControl arriba-izquierda con estilo propio
+            var cc = doc.querySelector('[data-testid="collapsedControl"]');
+            if (cc) {
+                cc.style.setProperty('position','fixed','important');
+                cc.style.setProperty('top','12px','important');
+                cc.style.setProperty('left','8px','important');
+                cc.style.setProperty('z-index','999999','important');
             }
         } catch(e) {}
     }
-    _fix(); setTimeout(_fix, 300); setTimeout(_fix, 800); setTimeout(_fix, 2000);
+    _style(); setTimeout(_style, 300); setTimeout(_style, 800);
     try {
-        new MutationObserver(_fix).observe(window.parent.document.body, {childList:true, subtree:true});
+        new MutationObserver(_style).observe(window.parent.document.body, {childList:true, subtree:true});
     } catch(e) {}
 })();
 </script>""", height=0)
@@ -16579,6 +16592,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
 # =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
+
 
 # Restaurar sesión desde token URL en recarga de página o nueva pestaña
 if "usuario" not in st.session_state:
