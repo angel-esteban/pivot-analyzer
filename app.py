@@ -16085,17 +16085,22 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             )
                         else:
                             try:
-                                import pdfkit as _pk
-                                _pdf_e = _pk.from_string(_html_e, False)
+                                _pdf_e = generar_pdf_estrategia(
+                                    ticker      = ed["ticker"],
+                                    nombre      = ed["nombre"],
+                                    precio      = ed["precio"],
+                                    ts          = ed["ts"],
+                                    estrategias = _est_data,
+                                )
                                 st.download_button(
                                     "⬇️ Descargar PDF",
                                     data      = _pdf_e,
                                     file_name = f"estrategia_{_ticker_e}_{_ts_e}.pdf",
-                                                                  mime      = "application/pdf",
+                                    mime      = "application/pdf",
                                     key       = "dl_est_pdf",
                                 )
                             except Exception as _ex_pdf:
-                                st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
+                                st.error(f"No se pudo generar el PDF: {_ex_pdf}. Usa HTML.")
 
 
     # ---- TAB MACRO ----
