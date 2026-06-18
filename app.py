@@ -468,6 +468,12 @@ st.markdown("""
         margin: 0 !important; font-size: 0.88rem !important;
     }
     .block-container { padding-left: 1.5rem !important; }
+
+    /* Ocultar el botón de colapso del sidebar — es la navegación principal, debe permanecer visible */
+    [data-testid="stSidebarCollapseButton"] { display: none !important; }
+    button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
+    /* Ocultar también el control de expansión (evitar estado colapsado inconsistente) */
+    [data-testid="collapsedControl"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -11828,6 +11834,33 @@ def pantalla_analisis():
 })();
 </script>
 """, height=0, scrolling=False)
+    # JS: ocultar botón de colapso del sidebar y auto-abrir si se cierra accidentalmente
+    _st_components.html("""<script>
+(function keepSidebarOpen() {
+    function _fix() {
+        try {
+            var doc = window.parent.document;
+            // Ocultar botones de colapso/expansión del sidebar
+            ['stSidebarCollapseButton','collapsedControl','baseButton-headerNoPadding'].forEach(function(id) {
+                doc.querySelectorAll('[data-testid="' + id + '"]').forEach(function(el) {
+                    el.style.setProperty('display','none','important');
+                });
+            });
+            // Si el sidebar está colapsado, reabrirlo
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb && sb.getAttribute('aria-expanded') === 'false') {
+                var btn = doc.querySelector('[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapseButton"]');
+                if (btn) btn.click();
+            }
+        } catch(e) {}
+    }
+    _fix(); setTimeout(_fix, 300); setTimeout(_fix, 800); setTimeout(_fix, 2000);
+    try {
+        new MutationObserver(_fix).observe(window.parent.document.body, {childList:true, subtree:true});
+    } catch(e) {}
+})();
+</script>""", height=0)
+
     # Inicialización única por sesión: evita queries innecesarias en cada rerun
     if not st.session_state.get("_app_init_done"):
         inicializar_tabla_alertas()
@@ -12176,6 +12209,13 @@ def pantalla_analisis():
         with col_p2:
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
+            # Fallback: calcular desde histórico cuando yfinance no devuelve el dato (frecuente en acciones españolas)
+            if not h52 or not l52:
+                try:
+                    h52 = float(hist["High"].max())
+                    l52 = float(hist["Low"].min())
+                except Exception:
+                    pass
             st.metric("52W Máx / Mín", f"{h52:.2f} / {l52:.2f}" if h52 and l52 else "—", help=TOOLTIPS["52W Máx / Mín"])
         with col_p3:
             vol_hoy = float(hist["Volume"].iloc[-1])
