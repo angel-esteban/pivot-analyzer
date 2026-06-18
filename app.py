@@ -9912,10 +9912,11 @@ def _pp_wizard_fragment():
                 # Pivots + convergencia (necesaria para niveles_reforzados)
                 _rpivots = calcular_todos_pivots(hist, list(SISTEMAS_PIVOT.keys())[0])
                 _pd_d    = _rpivots.get("Diario")
+                _tol_conv = st.session_state.get("tolerancia_key", 0.20)
                 _niv_ref, _señales_dir, _consenso = calcular_convergencia_tecnica(
                     _rpivots, _medias, _precio,
                     _rsi, _macd, _macd_s, _macd_h, _sar_tend, _pct_b,
-                    tolerancia=0.20
+                    tolerancia=_tol_conv
                 )
                 # Análisis técnico estructural (orden correcto)
                 _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=True)
@@ -15273,7 +15274,9 @@ Busca maximizar la **rentabilidad por dividendo efectiva** comprando en el punto
 
 **6. Divergencias y soportes** *(confirmación técnica)*
 - Divergencia alcista OBV activa: el precio baja pero el volumen neto sube → grandes inversores comprando en silencio, señal de posible suelo
-- Soporte pivot+media próximo: colchón estructural; referencia natural para stop
+- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, dos métodos independientes señalan el mismo precio → los inversores institucionales suelen acumular órdenes en estas zonas, por eso tiende a actuar como suelo real; es la referencia natural para el stop-loss
+- Cuando no aparece: el nivel pivot y las medias no convergen en ±0.20€ en este momento. No descalifica la estrategia, pero el stop debe situarse en otro nivel técnico (SMA200, mínimo reciente, etc.)
+- *Técnicamente: el sistema compara cada pivot de soporte con cada media activa (SMA/EMA). Si la diferencia es ≤0.20€, los considera un único nivel reforzado. Para una acción de 20€, 0.20€ equivale a un margen del ~1%.*
 
 ---
 
@@ -15316,9 +15319,10 @@ Captura movimientos tendenciales de 3–4 meses subiendo a una tendencia ya esta
 - *Una divergencia bajista activa en swing tendencial es el mayor riesgo del setup. Nunca ignorarla.*
 
 **5. Niveles de soporte y resistencia** *(geometría del trade)*
-- Soporte reforzado próximo: referencia lógica para stop-loss
-- Resistencia identificada: objetivo de precio; define el ratio riesgo/beneficio
-- Sin ambos identificados: el trade no tiene estructura; esperar
+- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, dos métodos independientes señalan el mismo precio → zona con alta probabilidad de actuar como suelo porque hay órdenes institucionales acumuladas; referencia lógica para el stop-loss
+- Resistencia reforzada (pivot+media a ≤0.20€): objetivo de precio del trade; con soporte Y resistencia identificados, el ratio riesgo/beneficio queda completamente definido antes de entrar
+- Sin ambos identificados: el trade no tiene estructura geométrica clara; esperar o reducir tamaño de posición
+- *El sistema busca pivot de soporte/resistencia a menos de 0.20€ de cualquier media activa. Sin esta confluencia, los niveles son menos fiables como referencia.*
 
 **6. Volumen** *(confirmación del movimiento)*
 - Volumen creciente en el impulso: convicción compradora real
@@ -15463,9 +15467,9 @@ Operativa de alta probabilidad estadística a corto plazo: aprovechar el retorno
 - *La divergencia alcista transforma una zona de sobreventa en un setup de alta convicción. Sin ella, el rebote puede ocurrir pero la probabilidad es menor.*
 
 **4. Soporte técnico reforzado** *(zona de inflexión)*
-- Nivel pivot + media móvil convergiendo en la zona de caída: suelo estructural; los compradores tienen una referencia clara
-- Confluencia multi-timeframe en la misma zona: mayor probabilidad de rebote
-- Sin soporte identificado: el precio puede seguir cayendo sin freno; evitar
+- Soporte reforzado (pivot+media a ≤0.20€): cuando existe, un nivel pivot histórico y una media móvil activa coinciden en el mismo precio → dos métodos independientes apuntan a la misma zona, lo que históricamente indica que hay órdenes institucionales acumuladas ahí. Es la referencia para el stop-loss
+- Cuando no aparece: pivot y medias no coinciden en ±0.20€ en este momento. El precio puede seguir cayendo sin freno técnico; evitar el setup o usar posición mínima
+- *El sistema compara cada pivot de soporte con SMA50, SMA200, EMA20 y otras medias activas. Si la diferencia es ≤0.20€, ese precio es un "nivel reforzado". Para una acción de 20€ esto representa un margen del ~1%.*
 - *El soporte no garantiza el rebote, pero define el precio de invalidación del setup. Si el soporte cede, la tesis es incorrecta.*
 
 **5. Volumen** *(patrón de agotamiento vendedor)*
@@ -15571,6 +15575,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
             _mseñal  = ed["macd_señal"]
             _divs    = ed["divergencias"]
             _niv     = ed["niveles_ref"]
+            _tol_est = st.session_state.get("tolerancia_key", 0.20)  # tolerancia activa del tab Análisis Técnico
             _sar     = ed["sar_tend"]
             _pctb    = ed["pct_b"]
             _cons    = ed["consenso_dir"]
@@ -15709,7 +15714,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _sop0 = _niv_soporte[0]["precio"] if _niv_soporte else None
                 c.append(_criterio(2 if _niv_soporte else 1,
                     f"Soporte técnico: {_sop0:.2f}€" if _sop0 else "Soporte técnico no identificado",
-                    "Nivel pivot+media como colchón de entrada" if _sop0 else "Sin nivel pivot+media identificado"))
+                    f"Confluencia pivot+media a ±{_tol_est:.2f}€ — referencia estructural de stop ✅" if _sop0 else f"Sin pivot+media a ±{_tol_est:.2f}€ — stop sin referencia técnica ⚠️"))
                 return c
 
             def _build_swing():
@@ -15739,7 +15744,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                              else "Sin niveles definidos")
                 c.append(_criterio(2 if _niv_soporte and _niv_resist else 1 if _niv_soporte else 0,
                     _mapa_lbl,
-                    f"{'Soporte y resistencia definidos ✅' if _niv_soporte and _niv_resist else 'Solo soporte — sin objetivo claro ⚠️' if _niv_soporte else 'Sin niveles definidos ❌'}"))
+                    f"Confluencia pivot+media a ±{_tol_est:.2f}€: S+R definidos ✅" if (_niv_soporte and _niv_resist) else f"Solo soporte a ±{_tol_est:.2f}€ — sin objetivo ⚠️" if _niv_soporte else f"Sin pivot+media a ±{_tol_est:.2f}€ ❌"))
                 c.append(_criterio(0 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 2,
                     "Estado de divergencias",
                     _div_txt_baj()))
@@ -15811,7 +15816,7 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                 _sop2 = _niv_soporte[0]["precio"] if _niv_soporte else None
                 c.append(_criterio(2 if _niv_soporte else 0,
                     f"Soporte técnico: {_sop2:.2f}€" if _sop2 else "Soporte técnico no identificado",
-                    f"{'Nivel pivot+media activo ✅' if _sop2 else 'Sin soporte — rebote sin ancla ❌'}"))
+                    f"Confluencia pivot+media a ±{_tol_est:.2f}€ — ancla de rebote ✅" if _sop2 else f"Sin pivot+media a ±{_tol_est:.2f}€ — rebote sin ancla estructural ❌"))
                 c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
                     "Divergencia alcista",
                     _div_txt_alc()))
