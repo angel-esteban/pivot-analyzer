@@ -11215,14 +11215,15 @@ def pestaña_cartera():
     )
 
     TIPOS = {
-        "dividendos":  ("💰 Dividendos",      "#16a34a", "#f0fdf4"),
-        "crecimiento": ("📈 Crecimiento",      "#1d4ed8", "#eff6ff"),
-        "indexada":    ("🗂️ Indexada",          "#7e22ce", "#faf5ff"),
-        "swing":       ("⚡ Swing Trading",    "#ea580c", "#fff7ed"),
+        "dividendos":   ("💰 Dividendos",      "#16a34a", "#f0fdf4"),
+        "crecimiento":  ("📈 Crecimiento",      "#1d4ed8", "#eff6ff"),
+        "indexada":     ("🗂️ Indexada",          "#7e22ce", "#faf5ff"),
+        "swing":        ("⚡ Swing Trading",    "#ea580c", "#fff7ed"),
+        "multiactivo":  ("🌐 Multi-Activo",     "#0891b2", "#ecfeff"),
     }
 
-    tab_div, tab_cre, tab_idx, tab_swg = st.tabs([
-        "💰 Dividendos", "📈 Crecimiento", "🗂️ Indexada", "⚡ Swing Trading"
+    tab_div, tab_cre, tab_idx, tab_swg, tab_mul = st.tabs([
+        "💰 Dividendos", "📈 Crecimiento", "🗂️ Indexada", "⚡ Swing Trading", "🌐 Multi-Activo"
     ])
 
     def _color_pl(val):
@@ -11750,6 +11751,7 @@ def pestaña_cartera():
     _render_tipo("crecimiento", tab_cre)
     _render_tipo("indexada",    tab_idx)
     _render_tipo("swing",       tab_swg)
+    _render_tipo("multiactivo", tab_mul)
 
 
 @st.dialog("👤 Mi Perfil", width="large")
