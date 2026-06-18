@@ -455,11 +455,26 @@ st.markdown("""
         overflow-x: hidden !important;
     }
     /* Empujar el contenido principal para que no quede debajo del sidebar fijo */
-    .appview-container > section.main,
-    .appview-container > section:not([data-testid="stSidebar"]),
+    /* section.main es flex-item; necesitamos fijar ancho además del margin */
+    [data-testid="stMain"],
     section.main,
     .main {
         margin-left: 220px !important;
+        width: calc(100vw - 220px) !important;
+        max-width: calc(100vw - 220px) !important;
+        min-width: 0 !important;
+        flex-shrink: 0 !important;
+    }
+    /* Header de Streamlit (puede ser position:fixed con su propia coordenada left) */
+    header[data-testid="stHeader"],
+    .stAppHeader {
+        left: 220px !important;
+        width: calc(100vw - 220px) !important;
+    }
+    /* block-container: no sobreescribir margin-left heredado */
+    .block-container {
+        padding-left: 1.5rem !important;
+        max-width: 100% !important;
     }
     /* Ocultar controles de colapso — la navegación siempre está fija */
     [data-testid="stSidebarCollapseButton"],
