@@ -12100,7 +12100,14 @@ def pantalla_analisis():
     # Aliases para compatibilidad (ya no son objetos de tab, son condiciones)
     _on_analisis    = _nav_sel == "📈 Análisis Técnico"
     _on_estrategia  = _nav_sel == "🎯 Estrategia"
+    _on_ia          = _nav_sel == "🤖 Análisis IA"
+    _on_macro       = _nav_sel == "🌍 Macro"
+    _on_renta       = _nav_sel == "💰 Renta Fija"
+    _on_cartera     = _nav_sel == "📁 Cartera"
+    _on_pp          = _nav_sel == "🧭 ¿Por dónde empiezo?"
     _on_edu         = _nav_sel == "📚 Educación"
+    _on_usuarios    = _nav_sel == "⚙️ Usuarios"
+    _on_ayuda       = _nav_sel == "📖 Ayuda"
     tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
 
     # ---- TAB ANÁLISIS ----
@@ -16624,6 +16631,55 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                     st.markdown(_sp)
                         if _cd.get("leccion_operativa"):
                             st.info(f"💡 **Lección operativa:** {_cd['leccion_operativa']}", icon="💡")
+
+    # ---- TAB MACRO ----
+    if _on_macro:
+        pestaña_macro()
+
+    # ---- TAB RENTA FIJA ----
+    if _on_renta:
+        pestaña_renta_fija()
+
+    # ---- TAB CARTERA ----
+    if _on_cartera:
+        pestaña_cartera()
+
+    # ---- TAB ¿POR DÓNDE EMPIEZO? ----
+    if _on_pp:
+        pestana_principiante()
+
+    # ---- TAB ANÁLISIS IA ----
+    if _on_ia:
+        st.markdown("## 🤖 Análisis IA")
+        st.info("Esta sección estará disponible próximamente. Incluirá resúmenes generados por IA sobre el valor analizado, lecturas contextualizadas y comparativas automáticas con episodios históricos similares.", icon="🚧")
+
+    # ---- TAB USUARIOS ----
+    if _on_usuarios:
+        if es_admin:
+            panel_admin()
+        else:
+            st.warning("No tienes permisos para acceder a esta sección.", icon="🔒")
+
+    # ---- TAB AYUDA ----
+    if _on_ayuda:
+        st.markdown("## 📖 Ayuda y documentación")
+        st.markdown("""
+PivotAnalyzer es una herramienta de análisis financiero multi-método orientada al inversor particular.
+
+**Secciones disponibles:**
+- **📈 Análisis Técnico** — Pivots, RSI, MACD, medias móviles, Fibonacci, huecos, diagnóstico integrado.
+- **🎯 Estrategia** — Selecciona un criterio de cartera y evalúa si el valor cumple los requisitos.
+- **🌍 Macro** — Contexto macroeconómico: BCE, Fed, IPC, mercado laboral, curva de tipos.
+- **💰 Renta Fija** — Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.
+- **📁 Cartera** — Registra tus posiciones, sigue su evolución y lanza screeners automáticos.
+- **🧭 ¿Por dónde empiezo?** — Guía paso a paso para analizar un valor: macro → técnico → semáforo → niveles.
+- **📚 Educación** — Glosario, ratios por sector, guías de estrategia y crisis históricas.
+
+**Atajos de teclado:** ninguno requerido — navegación completa por sidebar.
+
+**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono 🔔 en la cabecera.
+        """)
+        st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
 
 
 # =============================================================================
