@@ -16586,6 +16586,22 @@ RSI > 70 + divergencia bajista OBV o RSI activa + histograma MACD decreciendo + 
                                 st.error(f"PDF no disponible en este entorno: {_ex_pdf}. Usa HTML.")
 
 
+    # ---- TAB MACRO ----
+    if _on_macro:
+        pestaña_macro()
+
+    # ---- TAB RENTA FIJA ----
+    if _on_renta:
+        pestaña_renta_fija()
+
+    # ---- TAB CARTERA ----
+    if _on_cartera:
+        pestaña_cartera()
+
+    # ---- TAB ¿POR DÓNDE EMPIEZO? ----
+    if _on_pp:
+        pestana_principiante()
+
     # ---- TAB FORMACIÓN ----
     if _on_edu:
         st.markdown("## 📚 Formación")
@@ -16801,7 +16817,6 @@ if "usuario" not in st.session_state:
         if _user_restored:
             st.session_state["usuario"] = _user_restored
 
-# Rutar a pantalla de login o app principal
 if "usuario" not in st.session_state:
     pantalla_login()
 else:
