@@ -152,7 +152,7 @@ st.set_page_config(
     page_title="PivotAnalyzer",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # CSS profesional — Inter font + design system coherente
@@ -11996,23 +11996,7 @@ def pantalla_analisis():
     # Auto-jump a Análisis Técnico si viene desde ¿Por dónde empiezo?
     if st.session_state.get("_pp_jump_to_analisis"):
         del st.session_state["_pp_jump_to_analisis"]
-        _st_components.html("""<script>
-(function() {
-    function _clickAnalisisTab() {
-        var tabs = window.parent.document.querySelectorAll('[role="tab"]');
-        for (var i = 0; i < tabs.length; i++) {
-            if (tabs[i].innerText.indexOf('\u00c1n') !== -1 || tabs[i].innerText.indexOf('lisis T') !== -1 || tabs[i].innerText.indexOf('An\u00e1lisis') !== -1) {
-                tabs[i].click(); return true;
-            }
-        }
-        return false;
-    }
-    // Intentar varios timings para asegurar que las tabs están renderizadas
-    if (!_clickAnalisisTab()) {
-        setTimeout(function(){ if(!_clickAnalisisTab()){ setTimeout(_clickAnalisisTab, 400); } }, 200);
-    }
-})();
-</script>""", height=0)
+        st.session_state["nav_sidebar"] = "📈 Análisis Técnico"
 
     # ── Sidebar: logo + navegación ──────────────────────────────────────
     with st.sidebar:
