@@ -438,36 +438,37 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
-    /* ── SIDEBAR MOVIL — control via body class ─────────────────── */
-    /* Streamlit con layout=wide no renderiza collapsedControl en movil,
-       por eso usamos pa-hamburger custom + body class pa-sb-open.    */
+    /* ── SIDEBAR MOVIL — oculto, reemplazado por selectbox nativo ── */
     @media (max-width: 768px) {
-        /* Sidebar CERRADO — override completo de todas las propiedades
-           que Streamlit usa para ocultar (transform, opacity, visibility) */
-        body:not(.pa-sb-open) section[data-testid="stSidebar"] {
-            transform: translateX(-110%) !important;
-            opacity:     0             !important;
-            visibility:  hidden        !important;
-            pointer-events: none       !important;
+        section[data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stMain"], section.main, .main {
+            margin-left: 0 !important; width: 100vw !important; max-width: 100vw !important;
         }
-        /* Sidebar ABIERTO */
-        body.pa-sb-open section[data-testid="stSidebar"] {
-            display:     block         !important;
-            transform:   translateX(0) !important;
-            opacity:     1             !important;
-            visibility:  visible       !important;
-            pointer-events: auto       !important;
-            box-shadow:  4px 0 20px rgba(0,0,0,0.4) !important;
+    }
+    /* ── MOBILE NAV SELECTBOX — visible solo en movil ─────────────── */
+    /* Ocultar en desktop */
+    [data-testid="stElementContainer"]:has(#__pa_mobile_nav__),
+    [data-testid="stElementContainer"]:has(#__pa_mobile_nav__) + [data-testid="stElementContainer"] {
+        display: none !important;
+    }
+    /* Mostrar solo en movil */
+    @media (max-width: 768px) {
+        [data-testid="stElementContainer"]:has(#__pa_mobile_nav__) + [data-testid="stElementContainer"] {
+            display: block !important;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 500 !important;
+            background: #0f172a !important;
+            padding: 6px 8px !important;
+            border-bottom: 1px solid rgba(255,255,255,0.08) !important;
         }
-        /* Overlay — gestionado por el body class en JS */
-        #pa-sb-overlay {
-            display:    none;
-            position:   fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.45);
-            z-index:    998;
-            cursor:     pointer;
+        /* Estilo del selectbox en movil */
+        [data-testid="stElementContainer"]:has(#__pa_mobile_nav__) + [data-testid="stElementContainer"] select,
+        [data-testid="stElementContainer"]:has(#__pa_mobile_nav__) + [data-testid="stElementContainer"] [data-baseweb="select"] {
+            background: #1e293b !important;
+            color: #e2e8f0 !important;
+            border-color: #334155 !important;
+            font-size: 0.95rem !important;
         }
     }
 
@@ -559,7 +560,7 @@ st.markdown("""
             padding: 2.5rem 0.75rem 2rem !important;
             max-width: 100% !important;
         }
-        /* Ocultar controles nativos de Streamlit — usamos nuestro pa-hamburger */
+        /* Ocultar controles nativos de Streamlit en movil */
         [data-testid="collapsedControl"],
         [data-testid="stSidebarCollapseButton"],
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
@@ -11942,106 +11943,13 @@ def pantalla_analisis():
         _styleCollapsed();
     }
 
-    /* ── MOVIL v6: handler en contexto padre via parent.eval + setAttribute ── */
-    /* Los addEventListener del iframe mueren si Streamlit recrea el iframe.    */
-    /* setAttribute('ontouchend','...') corre SIEMPRE en el contexto del padre. */
-    /* _paToggle definido con parent.eval() => su 'window/document' es el padre.*/
-    function _injectParentToggle() {
-        try {
-            /* Función toggle definida y ejecutada en el window del padre */
-            window.parent.eval([
-                'window._paToggle=function(hb){',
-                '  var b=document.body,',
-                '      sb=document.querySelector('[data-testid="stSidebar"]'),',
-                '      ov=document.getElementById('pa-sb-overlay');',
-                '  if(b.classList.contains('pa-sb-open')){',
-                '    b.classList.remove('pa-sb-open');',
-                '    if(sb){sb.style.setProperty('transform','translateX(-110%)','important');',
-                '           sb.style.setProperty('opacity','0','important');}',
-                '    if(ov)ov.style.display='none';',
-                '    if(hb)hb.innerHTML='\u2630';',
-                '  }else{',
-                '    b.classList.add('pa-sb-open');',
-                '    if(sb){',
-                '      sb.style.setProperty('display','block','important');',
-                '      sb.style.setProperty('transform','translateX(0)','important');',
-                '      sb.style.setProperty('opacity','1','important');',
-                '      sb.style.setProperty('visibility','visible','important');',
-                '      sb.style.setProperty('position','fixed','important');',
-                '      sb.style.setProperty('left','0','important');',
-                '      sb.style.setProperty('top','0','important');',
-                '      sb.style.setProperty('height','100vh','important');',
-                '      sb.style.setProperty('z-index','1000','important');',
-                '      sb.style.setProperty('width','240px','important');',
-                '    }',
-                '    if(ov)ov.style.display='block';',
-                '    if(hb)hb.innerHTML='\u2715';',
-                '  }',
-                '};'
-            ].join(''));
-        } catch(e) {}
-    }
-    function _initMobileHamburger() {
-        if (window.parent.innerWidth >= 769) return;
-        try {
-            _injectParentToggle();  /* actualizar _paToggle en cada render */
-            var doc  = window.parent.document;
-            var body = doc.body;
-            /* Overlay */
-            if (!doc.getElementById('pa-sb-overlay')) {
-                var ov = doc.createElement('div');
-                ov.id  = 'pa-sb-overlay';
-                ov.setAttribute('onclick', 'window._paToggle(document.getElementById('pa-hamburger'))');
-                body.appendChild(ov);
-            }
-            /* Botón hamburger — siempre reemplazar para refrescar atributos */
-            var existing = doc.getElementById('pa-hamburger');
-            var btn = doc.createElement('div');
-            btn.id  = 'pa-hamburger';
-            btn.innerHTML = existing ? existing.innerHTML : '&#9776;';
-            btn.setAttribute('role','button');
-            btn.setAttribute('aria-label','Abrir menu');
-            btn.style.cssText = [
-                'position:fixed','top:10px','left:10px',
-                'z-index:10000','background:#0f172a',
-                'border-radius:8px','padding:7px 11px',
-                'font-size:1.3rem','line-height:1',
-                'color:#e2e8f0','cursor:pointer',
-                'box-shadow:0 2px 10px rgba(0,0,0,0.5)',
-                'user-select:none','-webkit-user-select:none',
-                'touch-action:manipulation',
-                '-webkit-tap-highlight-color:transparent'
-            ].join(';');
-            /* setAttribute: handler corre en contexto del documento padre, no del iframe */
-            btn.setAttribute('ontouchend',
-                'event.preventDefault();event.stopPropagation();window._paToggle(this)');
-            btn.setAttribute('onclick', 'window._paToggle(this)');
-            if (existing) existing.parentNode.replaceChild(btn, existing);
-            else body.appendChild(btn);
-            /* Cerrar al pulsar nav item */
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb) {
-                sb.setAttribute('onclick',
-                    'if(event.target.closest('label')){' +
-                    '  setTimeout(function(){window._paToggle(document.getElementById('pa-hamburger'));},180);' +
-                    '}');
-            }
-        } catch(e) {}
-    }
-
     _expandOnce();
-    _initMobileHamburger();
     setTimeout(_expandOnce,         200);
     setTimeout(_expandOnce,         600);
-    setTimeout(_initMobileHamburger, 400);
     setTimeout(function(){ _styleCollapsed(); }, 1500);
     try {
         new MutationObserver(function() {
             _styleCollapsed();
-            /* Re-init solo si el botón fue eliminado del DOM */
-            if (!window.parent.document.getElementById('pa-hamburger')) {
-                _initMobileHamburger();
-            }
         }).observe(window.parent.document.body, {childList:true, subtree:false});
     } catch(e) {}
 })();
@@ -12104,13 +12012,35 @@ def pantalla_analisis():
         font-size: 0.78rem !important;
         font-weight: 600 !important;
     }
-    /* Cabecera movil: sin margenes negativos (el padding movil es pequeño
-       y el margen -1.25rem la sacaba de pantalla por la izquierda) */
+    /* Cabecera movil */
     @media (max-width: 768px) {
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
             margin: 0 0 0.5rem 0 !important;
             border-radius: 0 0 8px 8px !important;
-            padding: 6px 12px 6px !important;
+            padding: 6px 8px 6px !important;
+        }
+        /* Rebalancear columnas: logo más estrecho, botones más anchos */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(1) {
+            flex: 0 0 40% !important; max-width: 40% !important; min-width: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(2) {
+            flex: 0 0 16% !important; max-width: 16% !important; min-width: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(3) {
+            flex: 0 0 44% !important; max-width: 44% !important; min-width: 0 !important;
+        }
+        /* Botones más compactos */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
+            padding: 0.25rem 0.45rem !important;
+            font-size: 0.72rem !important;
+        }
+        /* Nombre de usuario: truncar si no cabe */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:last-child
+            [data-testid="stPopover"] button p {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            max-width: 120px !important;
         }
     }
     </style>
@@ -12225,6 +12155,22 @@ def pantalla_analisis():
     if st.session_state.get("_pp_jump_to_analisis"):
         del st.session_state["_pp_jump_to_analisis"]
         st.session_state["nav_sidebar"] = "📈 Análisis Técnico"
+
+    # ── Móvil: selectbox de navegación (visible solo en móvil via CSS) ──
+    st.markdown('<span id="__pa_mobile_nav__"></span>', unsafe_allow_html=True)
+    def _sync_mobile_nav():
+        st.session_state["nav_sidebar"] = st.session_state.get("_m_nav", _nav_items[0])
+    _m_nav_idx = 0
+    _cur_nav = st.session_state.get("nav_sidebar", _nav_items[0])
+    if _cur_nav in _nav_items:
+        _m_nav_idx = _nav_items.index(_cur_nav)
+    st.selectbox(
+        "☰ Sección", _nav_items,
+        index=_m_nav_idx,
+        key="_m_nav",
+        on_change=_sync_mobile_nav,
+        label_visibility="collapsed",
+    )
 
     # ── Sidebar: logo + navegación ──────────────────────────────────────
     with st.sidebar:
