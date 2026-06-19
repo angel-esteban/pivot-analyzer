@@ -452,6 +452,7 @@ st.markdown("""
         }
         /* Sidebar ABIERTO */
         body.pa-sb-open section[data-testid="stSidebar"] {
+            display:     block         !important;
             transform:   translateX(0) !important;
             opacity:     1             !important;
             visibility:  visible       !important;
@@ -11943,20 +11944,45 @@ def pantalla_analisis():
 
     function _openSidebar() {
         try {
-            window.parent.document.body.classList.add('pa-sb-open');
-            var hb = window.parent.document.getElementById('pa-hamburger');
+            var doc  = window.parent.document;
+            var body = doc.body;
+            body.classList.add('pa-sb-open');
+            /* Forzar estilos inline (inline !important gana sobre cualquier stylesheet) */
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb) {
+                sb.style.setProperty('display',   'block',           'important');
+                sb.style.setProperty('transform',  'translateX(0)',   'important');
+                sb.style.setProperty('opacity',    '1',               'important');
+                sb.style.setProperty('visibility', 'visible',         'important');
+                sb.style.setProperty('position',   'fixed',           'important');
+                sb.style.setProperty('left',       '0',               'important');
+                sb.style.setProperty('top',        '0',               'important');
+                sb.style.setProperty('height',     '100vh',           'important');
+                sb.style.setProperty('z-index',    '1000',            'important');
+                sb.style.setProperty('width',      '240px',           'important');
+            }
+            var hb = doc.getElementById('pa-hamburger');
             if (hb) hb.innerHTML = '&#10005;';
-            var ov = window.parent.document.getElementById('pa-sb-overlay');
+            var ov = doc.getElementById('pa-sb-overlay');
             if (ov) ov.style.display = 'block';
             window.parent._paSbOpen = true;
         } catch(e) {}
     }
     function _closeSidebar() {
         try {
-            window.parent.document.body.classList.remove('pa-sb-open');
-            var hb = window.parent.document.getElementById('pa-hamburger');
+            var doc  = window.parent.document;
+            var body = doc.body;
+            body.classList.remove('pa-sb-open');
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb) {
+                sb.style.setProperty('transform',  'translateX(-110%)', 'important');
+                sb.style.setProperty('opacity',    '0',                 'important');
+                sb.style.setProperty('visibility', 'hidden',            'important');
+                /* No removemos display para evitar flash — la visibilidad queda controlada por opacity+transform */
+            }
+            var hb = doc.getElementById('pa-hamburger');
             if (hb) hb.innerHTML = '&#9776;';
-            var ov = window.parent.document.getElementById('pa-sb-overlay');
+            var ov = doc.getElementById('pa-sb-overlay');
             if (ov) ov.style.display = 'none';
             window.parent._paSbOpen = false;
         } catch(e) {}
