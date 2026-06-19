@@ -12419,10 +12419,7 @@ def pantalla_analisis():
     }
     </style>
     """, unsafe_allow_html=True)
-    # ── Indicador de job activo en cabecera ──────────────────────────────────
-    _jobs_en_curso = [j for j in _obtener_jobs_usuario(uid)
-                      if j.get("estado") == "ejecutando"]
-
+    # ── Cabecera: logo | spinner (fragment auto-refresh) | bell | user ─────────
     _hdr_left, _hdr_spin, _hdr_bell, _hdr_user = st.columns([10, 0.8, 1, 1.3])
     with _hdr_left:
         st.markdown(
@@ -12436,25 +12433,32 @@ def pantalla_analisis():
             unsafe_allow_html=True
         )
     with _hdr_spin:
-        if _jobs_en_curso:
-            _j0   = _jobs_en_curso[0]
-            _jp   = _j0.get("progreso", 0)
-            _jt   = _j0.get("total_tickers", 1) or 1
-            _jidx = _j0.get("indice", "screening")
-            st.markdown(
-                f'''<div style="display:flex;align-items:center;justify-content:flex-end;
-                              gap:4px;height:100%;padding:4px 0"
-                     title="Analizando {_jidx}: {_jp} de {_jt} valores">
-                  <div style="width:14px;height:14px;
-                              border:2.5px solid rgba(255,255,255,0.18);
-                              border-top-color:#60a5fa;border-radius:50%;
-                              animation:pivot-spin 0.85s linear infinite;
-                              flex-shrink:0"></div>
-                  <span style="color:#93c5fd;font-size:0.72rem;font-weight:600;
-                               white-space:nowrap">{_jp}/{_jt}</span>
-                </div>''',
-                unsafe_allow_html=True
-            )
+        @st.fragment(run_every=4)
+        def _spinner_fragment():
+            _jlist = [j for j in _obtener_jobs_usuario(uid)
+                      if j.get("estado") == "ejecutando"]
+            if _jlist:
+                _j0   = _jlist[0]
+                _jp   = _j0.get("progreso", 0)
+                _jt   = _j0.get("total_tickers", 1) or 1
+                _jidx = _j0.get("indice", "screening")
+                st.markdown(
+                    f'''<div style="display:flex;align-items:center;
+                                  justify-content:flex-end;gap:4px;
+                                  height:100%;padding:4px 0"
+                         title="Analizando {_jidx}: {_jp} de {_jt} valores">
+                      <div style="width:14px;height:14px;
+                                  border:2.5px solid rgba(255,255,255,0.18);
+                                  border-top-color:#60a5fa;border-radius:50%;
+                                  animation:pivot-spin 0.85s linear infinite;
+                                  flex-shrink:0"></div>
+                      <span style="color:#93c5fd;font-size:0.72rem;
+                                   font-weight:600;white-space:nowrap">
+                        {_jp}/{_jt}</span>
+                    </div>''',
+                    unsafe_allow_html=True
+                )
+        _spinner_fragment()
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
@@ -12488,12 +12492,6 @@ def pantalla_analisis():
                              use_container_width=True):
                     _marcar_notificaciones_leidas(uid)
                     st.rerun()
-
-    # Auto-rerun mientras haya job activo — time.sleep evita loop infinito
-    if _jobs_en_curso:
-        import time as _time_ar
-        _time_ar.sleep(3)
-        st.rerun()
 
     with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
