@@ -12012,26 +12012,41 @@ def pantalla_analisis():
         font-size: 0.78rem !important;
         font-weight: 600 !important;
     }
-    /* Cabecera movil */
+    /* Cabecera móvil — Streamlit colapsa st.columns a vertical en móvil,
+       hay que forzar flex-direction:row para mantener todo en una línea */
     @media (max-width: 768px) {
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 4px !important;
             margin: 0 0 0.5rem 0 !important;
             border-radius: 0 0 8px 8px !important;
-            padding: 6px 8px 6px !important;
+            padding: 4px 8px !important;
         }
-        /* Botones móvil: mínimo padding, solo icono visible */
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
-            padding: 0.2rem 0.3rem !important;
-            font-size: 0.7rem !important;
+        /* Logo: ocupa el espacio restante */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) {
+            flex: 1 1 auto !important;
             min-width: 0 !important;
         }
-        /* En móvil: ocultar el texto del botón, mostrar solo el icono (primer carácter) */
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button p {
-            overflow: hidden !important;
-            white-space: nowrap !important;
-            /* Ocultar texto tras el emoji — max-width ajustado al icono */
-            max-width: 1.6em !important;
-            text-overflow: clip !important;
+        /* Campana: tamaño fijo */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(2) {
+            flex: 0 0 52px !important;
+            max-width: 52px !important;
+            min-width: 52px !important;
+        }
+        /* Usuario: tamaño fijo */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(3) {
+            flex: 0 0 68px !important;
+            max-width: 68px !important;
+            min-width: 68px !important;
+        }
+        /* Botones compactos */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
+            padding: 0.2rem 0.3rem !important;
+            font-size: 0.72rem !important;
+            width: 100% !important;
         }
     }
     </style>
