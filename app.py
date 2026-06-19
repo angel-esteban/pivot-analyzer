@@ -12067,7 +12067,7 @@ def pantalla_analisis():
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
         _bell_label = f"🔔 **{_n_notif}**" if _n_notif > 0 else "🔔"
-        with st.popover(_bell_label, use_container_width=True):
+        with st.popover(_bell_label, use_container_width=False):
             if not _notifs:
                 st.caption("Sin notificaciones nuevas.")
             else:
@@ -12100,7 +12100,7 @@ def pantalla_analisis():
     with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
         _usr_email_hdr = usuario.get("email", "") or ""
-        with st.popover(f"👤 {_uinitials.lower()}", use_container_width=True):
+        with st.popover(f"👤 {_uinitials.lower()}", use_container_width=False):
             _avatar_html = (
                 f'<div style="padding:4px 0 6px">'
                 f'<div style="font-size:1.1rem;font-weight:800;color:#1d4ed8;'
