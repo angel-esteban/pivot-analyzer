@@ -12064,6 +12064,26 @@ def pantalla_analisis():
     }
     </style>
     """, unsafe_allow_html=True)
+    # ── Indicador de job activo en cabecera ──────────────────────────────────
+    _jobs_en_curso = [j for j in _obtener_jobs_usuario(uid)
+                      if j.get("estado") == "ejecutando"]
+    _spinner_hdr = ""
+    if _jobs_en_curso:
+        _j0   = _jobs_en_curso[0]
+        _jp   = _j0.get("progreso", 0)
+        _jt   = _j0.get("total_tickers", 1) or 1
+        _jidx = _j0.get("indice", "screening")
+        _spinner_hdr = (
+            f'<div style="display:flex;align-items:center;gap:5px;margin-left:10px"' 
+            f' title="Analizando {_jidx}: {_jp} de {_jt} valores">' 
+            f'<div style="width:14px;height:14px;border:2.5px solid rgba(255,255,255,0.18);' 
+            f'border-top-color:#60a5fa;border-radius:50%;' 
+            f'animation:pivot-spin 0.85s linear infinite;flex-shrink:0"></div>' 
+            f'<span style="color:#93c5fd;font-size:0.72rem;font-weight:600;' 
+            f'white-space:nowrap">{_jp}/{_jt}</span>' 
+            f'</div>'
+        )
+
     _hdr_left, _hdr_bell, _hdr_user = st.columns([10, 1, 1.3])
     with _hdr_left:
         st.markdown(
@@ -12073,9 +12093,18 @@ def pantalla_analisis():
                           padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
               <div style="color:#fff;font-size:0.95rem;font-weight:800;
                           letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>
+              {_spinner_hdr}
             </div>''',
             unsafe_allow_html=True
         )
+    # Auto-rerun cada 4 s mientras haya job activo (JS one-shot por rerun)
+    if _jobs_en_curso:
+        import streamlit.components.v1 as _cmpv1
+        _cmpv1.html(
+            "<script>setTimeout(function(){window.parent.location.reload();},4000);</script>",
+            height=0
+        )
+
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
