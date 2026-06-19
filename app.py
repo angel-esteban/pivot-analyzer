@@ -11301,10 +11301,11 @@ def pestaña_cartera():
         with tab_obj:
             carteras = obtener_carteras_usuario(uid, tipo=tipo_key, superadmin=es_superadmin)
 
-            # ── Crear nueva cartera ────────────────────────────────────────
+            # ── Línea 1: tipo de cartera | Guía + Nueva ───────────────────
             n_actuales = len(carteras)
-            st.markdown(f"#### {etiqueta}")
-            col_hdr, col_info, col_btn = st.columns([4, 1, 1])
+            col_tit, col_info, col_btn = st.columns([4, 1, 1])
+            with col_tit:
+                st.markdown(f"#### {etiqueta}")
             with col_info:
                 with st.popover("ℹ️ Guía", use_container_width=True):
                     _render_info_cartera(tipo_key)
@@ -11345,17 +11346,23 @@ def pestaña_cartera():
                 _render_screening_panel(tipo_key, uid)
                 return
 
-            # ── Una pestaña por cartera ────────────────────────────────────
-            tab_labels = [c["nombre"] for c in carteras]
-            cartera_tabs = st.tabs(tab_labels) if len(carteras) > 1 else [st.container()]
-            for c_idx, (cartera, c_tab) in enumerate(zip(carteras, cartera_tabs)):
+            # ── Línea 2 por cartera: "Cartera N: nombre" + icono eliminar ─
+            for c_idx, cartera in enumerate(carteras):
                 cid = cartera["id"]
+                c_tab = st.container()
                 with c_tab:
-                    # Encabezado + botón eliminar cartera
+                    # Línea 2: Cartera N: nombre  |  🗑️
                     hdr_col, del_col = st.columns([6, 1])
                     with hdr_col:
-                        st.markdown(f"**{cartera['nombre']}**"
-                                    + (f" — *{cartera['descripcion']}*" if cartera.get("descripcion") else ""))
+                        _desc_sfx = f" — *{cartera['descripcion']}*" if cartera.get("descripcion") else ""
+                        st.markdown(
+                            f"<div style='padding:6px 0 2px;font-size:0.95rem;font-weight:700;"
+                            f"color:#1d4ed8'>Cartera {c_idx+1}: "
+                            f"<span style='color:#0f172a'>{cartera['nombre']}</span>"
+                            f"<span style='font-weight:400;color:#64748b;font-size:0.85rem'>"
+                            f"{_desc_sfx}</span></div>",
+                            unsafe_allow_html=True
+                        )
                     with del_col:
                         if st.button("🗑️", key=f"del_c_{cid}",
                                      help="Eliminar esta cartera y todas sus posiciones"):
