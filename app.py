@@ -11992,6 +11992,14 @@ def pantalla_analisis():
         align-items: center !important;
         justify-content: flex-end !important;
     }
+    /* Evitar que stElementContainer (width:100% por defecto) estire el botón */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) > div,
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) [data-testid="stElementContainer"],
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) [data-testid="stPopover"] {
+        width: auto !important;
+        max-width: fit-content !important;
+        flex: 0 0 auto !important;
+    }
     /* Botón trigger — pill blanco translúcido */
     [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
         background: rgba(255,255,255,0.12) !important;
@@ -12051,7 +12059,7 @@ def pantalla_analisis():
     }
     </style>
     """, unsafe_allow_html=True)
-    _hdr_left, _hdr_bell, _hdr_user = st.columns([3, 0.7, 1.5])
+    _hdr_left, _hdr_bell, _hdr_user = st.columns([10, 1, 1.3])
     with _hdr_left:
         st.markdown(
             f'''<span id="__pivot_hdr_logo" style="display:none"></span>
