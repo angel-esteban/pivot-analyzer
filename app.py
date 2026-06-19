@@ -11061,18 +11061,22 @@ def _render_screening_resultados(job: dict):
 
     EMOJI = {"ok": "✅", "warning": "⚠️", "ko": "❌", "sin_datos": "—", "manual": "🔍", "error": "💥"}
     COLOR = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
+    ICONO_GLOBAL = {"cumple": "✅", "parcial": "⚠️", "no_cumple": "❌", "error": "💥"}
 
-    # Ordenar por puntuación desc
-    resultado = sorted(resultado, key=lambda r: r.get("puntuacion", 0), reverse=True)
+    # Ordenar alfabéticamente por ticker
+    resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
 
     # Métricas resumen
     n_cumple   = sum(1 for r in resultado if r.get("estado_global") == "cumple")
     n_parcial  = sum(1 for r in resultado if r.get("estado_global") == "parcial")
     n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("✅ Cumplen criterios",  n_cumple)
-    c2.metric("⚠️ Cumplen parcialmente", n_parcial)
-    c3.metric("❌ No cumplen",         n_no)
+    n_error    = sum(1 for r in resultado if r.get("error"))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("✅ Cumplen criterios",      n_cumple)
+    c2.metric("⚠️ Cumplen parcialmente",   n_parcial)
+    c3.metric("❌ No cumplen",             n_no)
+    if n_error:
+        c4.metric("💥 Sin datos",          n_error)
 
     st.markdown("---")
 
@@ -11083,19 +11087,19 @@ def _render_screening_resultados(job: dict):
         score  = r.get("puntuacion", 0)
         nombre = r.get("nombre", r.get("ticker", ""))
         ticker = r.get("ticker", "")
-        label  = f"**{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
+        icono  = ICONO_GLOBAL.get(eg, "💥")
+        label  = f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
 
         with st.expander(label, expanded=False):
             if r.get("error"):
                 st.error(f"Error al obtener datos: {r.get('error_msg','')}")
-                continue
-
-            st.markdown(
-                f'<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
-                f'background:{color}22;color:{color};font-weight:700;font-size:0.8rem;'
-                f'margin-bottom:8px">'
-                f'{"✅ Cumple" if eg=="cumple" else "⚠️ Cumple parcialmente" if eg=="parcial" else "❌ No cumple"}'
-                f'</div>',
+            else:
+                st.markdown(
+                    f'<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
+                    f'background:{color}22;color:{color};font-weight:700;font-size:0.8rem;'
+                    f'margin-bottom:8px">'
+                    f'{"✅ Cumple" if eg=="cumple" else "⚠️ Cumple parcialmente" if eg=="parcial" else "❌ No cumple"}'
+                    f'</div>',
                 unsafe_allow_html=True
             )
             for crit in r.get("criterios", []):
@@ -11192,16 +11196,20 @@ def _render_screening_panel(tipo_key: str, uid: int):
 
         if lanzar and indice_sel:
             wiki_key, wiki_url, sufijo = _INDICES_SCREENING[indice_sel]
-            with st.spinner(f"Cargando composición del {indice_sel}..."):
-                tickers = _cargar_wikipedia_index(wiki_url, sufijo)
-            # Fallback a dict hardcoded si Wikipedia no es accesible
-            if not tickers:
-                _fallbacks = {
-                    "IBEX 35":         IBEX_35,
-                    "IBEX Medium Cap": IBEX_MEDIUM_CAP,
-                    "IBEX Small Cap":  IBEX_SMALL_CAP,
-                }
-                tickers = _fallbacks.get(indice_sel, {})
+            # Para índices ibéricos usamos el dict hardcoded (completo y sin depender de Wikipedia)
+            _ibex_hardcoded = {
+                "IBEX 35":         IBEX_35,
+                "IBEX Medium Cap": IBEX_MEDIUM_CAP,
+                "IBEX Small Cap":  IBEX_SMALL_CAP,
+            }
+            if indice_sel in _ibex_hardcoded:
+                tickers = _ibex_hardcoded[indice_sel]
+            else:
+                with st.spinner(f"Cargando composición del {indice_sel}..."):
+                    tickers = _cargar_wikipedia_index(wiki_url, sufijo)
+                # Fallback si Wikipedia devolvió muy pocos tickers
+                if not tickers:
+                    tickers = _ibex_hardcoded.get(indice_sel, {})
 
             if not tickers:
                 st.error("No se pudo cargar la composición del índice. Inténtalo de nuevo.")
