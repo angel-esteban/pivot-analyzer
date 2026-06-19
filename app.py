@@ -11354,14 +11354,9 @@ def pestaña_cartera():
                     # Línea 2: Cartera N: nombre  |  🗑️
                     hdr_col, del_col = st.columns([6, 1])
                     with hdr_col:
-                        _desc_sfx = f" — *{cartera['descripcion']}*" if cartera.get("descripcion") else ""
+                        _desc_sfx = f"  —  *{cartera['descripcion']}*" if cartera.get("descripcion") else ""
                         st.markdown(
-                            f"<div style='padding:6px 0 2px;font-size:0.95rem;font-weight:700;"
-                            f"color:#1d4ed8'>Cartera {c_idx+1}: "
-                            f"<span style='color:#0f172a'>{cartera['nombre']}</span>"
-                            f"<span style='font-weight:400;color:#64748b;font-size:0.85rem'>"
-                            f"{_desc_sfx}</span></div>",
-                            unsafe_allow_html=True
+                            f"##### Cartera {c_idx+1}: {cartera['nombre']}{_desc_sfx}"
                         )
                     with del_col:
                         if st.button("🗑️", key=f"del_c_{cid}",
