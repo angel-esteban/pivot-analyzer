@@ -10683,7 +10683,8 @@ def _sc_free_float(info: dict) -> float | None:
     fs = info.get("floatShares")
     so = info.get("sharesOutstanding")
     if fs and so and so > 0:
-        return fs / so
+        # yfinance a veces devuelve floatShares > sharesOutstanding (error de datos)
+        return min(fs / so, 1.0)
     return None
 
 
@@ -10809,7 +10810,8 @@ def _sc_fcf_vs_div(info: dict) -> str | None:
     """Compara FCF yield vs dividend yield."""
     fcf   = info.get("freeCashflow")
     mcap  = info.get("marketCap")
-    dy    = info.get("dividendYield") or 0
+    _dy_r = info.get("dividendYield") or 0
+    dy    = _dy_r / 100 if _dy_r > 1 else _dy_r  # yfinance .MC devuelve pct (4.36), no decimal
     if not fcf or not mcap or mcap <= 0:
         return None
     fcf_yield = fcf / mcap
@@ -10863,6 +10865,11 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
         valor = info.get(campo)
+        # yfinance devuelve dividendYield en forma de porcentaje (ej: 4.36)
+        # para tickers de algunas bolsas, no como decimal (0.0436)
+        # Normalizamos si el valor es > 1 y el criterio es de tipo ratio/pct
+        if campo == "dividendYield" and isinstance(valor, (int, float)) and valor > 1:
+            valor = valor / 100
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -10887,7 +10894,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
 
     if valor is None:
         return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
-                "mensaje": "Dato no disponible para este valor."}
+                "mensaje": "No evaluable — dato no disponible. Excluido del score."}
 
     # ── Evaluar estado ──────────────────────────────────────────────────
     estado = "ko"
@@ -11072,7 +11079,7 @@ def _render_screening_resultados(job: dict):
         st.info("Sin resultados disponibles.")
         return
 
-    EMOJI = {"ok": "✅", "warning": "⚠️", "ko": "❌", "sin_datos": "—", "manual": "🔍", "error": "💥"}
+    EMOJI = {"ok": "✅", "warning": "⚠️", "ko": "❌", "sin_datos": "❓", "manual": "🔍", "error": "💥"}
     COLOR = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
     ICONO_GLOBAL = {"cumple": "✅", "parcial": "⚠️", "no_cumple": "❌", "error": "💥"}
 
@@ -11128,10 +11135,13 @@ def _render_screening_resultados(job: dict):
                 unsafe_allow_html=True
             )
             for crit in r.get("criterios", []):
-                emoji = EMOJI.get(crit.get("estado","ko"), "—")
+                _c_est = crit.get("estado","ko")
+                emoji  = EMOJI.get(_c_est, "—")
+                _rbg   = "#f1f5f9" if _c_est == "sin_datos" else "#f8fafc"
+                _rop   = "opacity:0.6;" if _c_est == "sin_datos" else ""
                 st.markdown(
                     f'<div style="display:flex;align-items:flex-start;gap:10px;'
-                    f'padding:5px 10px;margin-bottom:4px;background:#f8fafc;border-radius:6px">'
+                    f'padding:5px 10px;margin-bottom:4px;background:{_rbg};border-radius:6px;{_rop}">'
                     f'<div style="min-width:22px;font-size:14px">{emoji}</div>'
                     f'<div style="min-width:160px;font-size:12px;font-weight:700;color:#0f172a">'
                     f'{crit.get("nombre","")}</div>'
