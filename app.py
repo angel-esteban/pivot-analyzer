@@ -11079,18 +11079,30 @@ def _render_screening_resultados(job: dict):
     # Ordenar alfabéticamente por ticker
     resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
 
-    # Métricas resumen
+    # Métricas resumen — una sola línea
     n_cumple   = sum(1 for r in resultado if r.get("estado_global") == "cumple")
     n_parcial  = sum(1 for r in resultado if r.get("estado_global") == "parcial")
     n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
     n_error    = sum(1 for r in resultado if r.get("error"))
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("✅ Cumplen criterios",      n_cumple)
-    c2.metric("⚠️ Cumplen parcialmente",   n_parcial)
-    c3.metric("❌ No cumplen",             n_no)
-    if n_error:
-        c4.metric("💥 Sin datos",          n_error)
-
+    _err_html  = (f'<span style="background:#f1f5f9;border:1px solid #e2e8f0;'
+                  f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
+                  f'color:#64748b">💥 Sin datos: <b>{n_error}</b></span>&nbsp;'
+                  if n_error else "")
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;'
+        f'flex-wrap:wrap;margin:6px 0 10px">'
+        f'<span style="background:#dcfce7;border:1px solid #86efac;'
+        f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#15803d">'
+        f'✅ Cumplen: <b>{n_cumple}</b></span>'
+        f'<span style="background:#fef9c3;border:1px solid #fde047;'
+        f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#854d0e">'
+        f'⚠️ Parcial: <b>{n_parcial}</b></span>'
+        f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
+        f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#b91c1c">'
+        f'❌ No cumplen: <b>{n_no}</b></span>'
+        f'{_err_html}</div>',
+        unsafe_allow_html=True
+    )
     st.markdown("---")
 
     # Tabla expandible por ticker
@@ -11444,28 +11456,41 @@ def _render_screening_panel(tipo_key: str, uid: int):
                       on_click=lambda: None)
             return
 
-        # ── Mostrar resultados si hay job completado Y no se ha pedido nuevo form ─
+        # ── Historial + resultados ──────────────────────────────────────────────
         _pedir_nuevo = st.session_state.get(f"_sc_mostrar_form_{tipo_key}", False)
-        if job_activo and job_activo["estado"] == "completado" and not _pedir_nuevo:
-            indice_label = job_activo.get("indice", "")
-            ts = job_activo.get("completed_at")
-            ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else ""
-            st.success(f"✅ Último screening: **{indice_label}** completado el {ts_str}")
+        # Jobs completados/fallidos de este tipo (histórico)
+        _hist_jobs = [j for j in jobs
+                      if j["tipo_cartera"] == tipo_key
+                      and j["estado"] in ("completado", "fallido")]
 
-            col_nuevo, col_ver = st.columns([1, 2])
-            with col_nuevo:
-                if st.button("🔁 Nuevo screening", key=f"sc_nuevo_{tipo_key}"):
+        if _hist_jobs and not _pedir_nuevo:
+            # ── Barra superior: selector historial | Nuevo screening ────────────
+            _col_sel, _col_btn = st.columns([4, 1])
+            with _col_sel:
+                _hist_labels = []
+                for _hj in _hist_jobs:
+                    _ts = _hj.get("completed_at")
+                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
+                    _ico  = "✅" if _hj["estado"] == "completado" else "💥"
+                    _hist_labels.append(f"{_ico} {_hj.get('indice','')} — {_ts_s}")
+                _sel_idx = st.selectbox(
+                    "Historial de screenings (últimos 10)",
+                    options=range(len(_hist_labels)),
+                    format_func=lambda i: _hist_labels[i],
+                    key=f"sc_hist_sel_{tipo_key}",
+                    label_visibility="collapsed"
+                )
+            with _col_btn:
+                if st.button("🔁 Nuevo", key=f"sc_nuevo_{tipo_key}",
+                             use_container_width=True):
                     st.session_state[f"_sc_mostrar_form_{tipo_key}"] = True
-                    st.session_state[f"_sc_mostrar_resultado_{tipo_key}"] = False
                     st.rerun()
-            with col_ver:
-                ver = st.toggle("Ver resultados", key=f"sc_ver_{tipo_key}",
-                                value=st.session_state.get(f"_sc_mostrar_resultado_{tipo_key}", True))
-                st.session_state[f"_sc_mostrar_resultado_{tipo_key}"] = ver
 
-            if st.session_state.get(f"_sc_mostrar_resultado_{tipo_key}", True):
-                # Cargamos el job completo (con resultado_json) sólo cuando hace falta
-                _job_full = _obtener_job_resultado(job_activo["id"])
+            _job_sel = _hist_jobs[_sel_idx]
+            if _job_sel["estado"] == "fallido":
+                st.error("❌ Este análisis falló. Lanza uno nuevo.")
+            else:
+                _job_full = _obtener_job_resultado(_job_sel["id"])
                 if _job_full:
                     _render_screening_resultados(_job_full)
                 else:
@@ -11475,10 +11500,9 @@ def _render_screening_panel(tipo_key: str, uid: int):
         # ── Formulario de lanzamiento ───────────────────────────────────
         # No reseteamos el flag aquí (se haría en cada render y rompería el flujo)
 
-        # Si hay resultados previos, ofrecer volver a verlos
-        if job_activo and job_activo["estado"] == "completado":
-            if st.button("← Volver a resultados", key=f"sc_back_{tipo_key}",
-                         help="Ver los resultados del último screening"):
+        # Botón para cancelar y volver al historial
+        if _hist_jobs:
+            if st.button("← Volver al historial", key=f"sc_back_{tipo_key}"):
                 st.session_state[f"_sc_mostrar_form_{tipo_key}"] = False
                 st.rerun()
 
