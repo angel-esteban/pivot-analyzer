@@ -11117,8 +11117,9 @@ def _render_screening_panel(tipo_key: str, uid: int):
                       on_click=lambda: None)
             return
 
-        # ── Mostrar resultados si hay job completado ────────────────────
-        if job_activo and job_activo["estado"] == "completado":
+        # ── Mostrar resultados si hay job completado Y no se ha pedido nuevo form ─
+        _pedir_nuevo = st.session_state.get(f"_sc_mostrar_form_{tipo_key}", False)
+        if job_activo and job_activo["estado"] == "completado" and not _pedir_nuevo:
             indice_label = job_activo.get("indice", "")
             ts = job_activo.get("completed_at")
             ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else ""
@@ -11140,8 +11141,8 @@ def _render_screening_panel(tipo_key: str, uid: int):
             return
 
         # ── Formulario de lanzamiento ───────────────────────────────────
-        if not st.session_state.get(f"_sc_mostrar_form_{tipo_key}", True):
-            st.session_state[f"_sc_mostrar_form_{tipo_key}"] = True
+        # (reset flag para la próxima vez)
+        st.session_state[f"_sc_mostrar_form_{tipo_key}"] = False
 
         st.markdown("Selecciona un índice bursátil y lanza el análisis. "
                     "El proceso corre en segundo plano y te notificará cuando termine.")
@@ -11339,10 +11340,9 @@ def pestaña_cartera():
             if not carteras:
                 st.info(f"No tienes carteras de {etiqueta} todavía. Pulsa **➕ Nueva** para crear una.")
 
-            # ── Panel de Screening ─────────────────────────────────────────
-            _render_screening_panel(tipo_key, uid)
-
             if not carteras:
+                # Sin carteras: mostrar screening igualmente para descubrir valores
+                _render_screening_panel(tipo_key, uid)
                 return
 
             # ── Una pestaña por cartera ────────────────────────────────────
@@ -11802,6 +11802,9 @@ def pestaña_cartera():
                                         st.rerun()
                                     else:
                                         st.error("No se pudo guardar la posición.")
+
+            # ── Panel de Screening — al final, después de los valores ─────
+            _render_screening_panel(tipo_key, uid)
 
     _render_tipo("dividendos",  tab_div)
     _render_tipo("crecimiento", tab_cre)
