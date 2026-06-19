@@ -759,14 +759,19 @@ def _cargar_criteria() -> dict:
 def _cargar_wikipedia_index(url: str, sufijo: str = "") -> dict:
     """Extrae {nombre: ticker} de la tabla más relevante de una página Wikipedia."""
     try:
-        tablas = pd.read_html(url)
+        # User-Agent necesario para Wikipedia ES (devuelve 403 sin él)
+        _ua = {"User-Agent": "Mozilla/5.0 (compatible; PivotAnalyzer/1.0)"}
+        tablas = pd.read_html(url, storage_options=_ua)
         for t in tablas:
             cols = [c for c in t.columns if isinstance(c, str)]
-            # Detectar columna de ticker y de nombre
+            # Detectar columna de ticker y de nombre (EN + ES)
             t_col = next((c for c in cols if any(k in c.lower()
-                          for k in ["ticker", "symbol", "code", "abbreviation"])), None)
+                          for k in ["ticker", "symbol", "code", "abbreviation",
+                                    "símbolo", "simbolo"])), None)
             n_col = next((c for c in cols if any(k in c.lower()
-                          for k in ["company", "security", "name", "stock"])), None)
+                          for k in ["company", "security", "name", "stock",
+                                    "empresa", "nombre", "compañía", "compania",
+                                    "sociedad"])), None)
             if t_col and n_col:
                 df = t[[n_col, t_col]].dropna()
                 result = {}
