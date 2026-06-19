@@ -438,6 +438,30 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
+    /* Control sidebar movil via clase en body (Streamlit no toca el body) */
+    @media (max-width: 768px) {
+        /* Sidebar oculto por defecto en movil */
+        body:not(.pa-sb-open) section[data-testid="stSidebar"] {
+            transform: translateX(-110%) !important;
+            box-shadow: none !important;
+        }
+        /* Sidebar abierto cuando se añade la clase */
+        body.pa-sb-open section[data-testid="stSidebar"] {
+            transform: translateX(0) !important;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.4) !important;
+        }
+        /* Overlay semitransparente detrás del sidebar */
+        #pa-sb-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.45);
+            z-index: 998;
+        }
+        body.pa-sb-open #pa-sb-overlay { display: block !important; }
+    }
+
     /* ── SIDEBAR — DESKTOP fijo / MOVIL overlay hamburger ─────────── */
 
     /* Estilos comunes (ambos viewports) */
@@ -11929,85 +11953,76 @@ def pantalla_analisis():
         _styleCollapsed();
     }
 
-    // ── MOVIL: hamburger personalizado ────────────────────────────────
+    // ── MOVIL: hamburger personalizado (control via body class) ──────
     function _openSidebar() {
         try {
-            var doc = window.parent.document;
-            var sb  = doc.querySelector('[data-testid="stSidebar"]');
-            var ov  = doc.getElementById('pa-sb-overlay');
-            var hb  = doc.getElementById('pa-hamburger');
-            if (sb) { sb.style.setProperty('transform','translateX(0)','important'); }
-            if (ov) { ov.style.display = 'block'; }
-            if (hb) { hb.innerHTML = '&#10005;'; }   /* X */
+            var body = window.parent.document.body;
+            var hb   = window.parent.document.getElementById('pa-hamburger');
+            body.classList.add('pa-sb-open');
+            if (hb) { hb.innerHTML = '&#10005;'; hb.title='Cerrar menu'; }
             window.parent._paSbOpen = true;
         } catch(e) {}
     }
     function _closeSidebar() {
         try {
-            var doc = window.parent.document;
-            var sb  = doc.querySelector('[data-testid="stSidebar"]');
-            var ov  = doc.getElementById('pa-sb-overlay');
-            var hb  = doc.getElementById('pa-hamburger');
-            if (sb) { sb.style.setProperty('transform','translateX(-110%)','important'); }
-            if (ov) { ov.style.display = 'none'; }
-            if (hb) { hb.innerHTML = '&#9776;'; }    /* ☰ */
+            var body = window.parent.document.body;
+            var hb   = window.parent.document.getElementById('pa-hamburger');
+            body.classList.remove('pa-sb-open');
+            if (hb) { hb.innerHTML = '&#9776;'; hb.title='Abrir menu'; }
             window.parent._paSbOpen = false;
         } catch(e) {}
     }
     function _initMobileHamburger() {
         if (window.parent.innerWidth >= 769) return;
         try {
-            var doc = window.parent.document;
-            /* Overlay para cerrar al pulsar fuera */
+            var doc  = window.parent.document;
+            var body = doc.body;
+            /* Overlay DOM (lo gestiona el CSS via body.pa-sb-open) */
             if (!doc.getElementById('pa-sb-overlay')) {
                 var ov = doc.createElement('div');
-                ov.id = 'pa-sb-overlay';
-                ov.style.cssText = [
-                    'display:none','position:fixed','top:0','left:0',
-                    'width:100vw','height:100vh',
-                    'background:rgba(0,0,0,0.45)',
-                    'z-index:999','cursor:pointer'
-                ].join(';');
+                ov.id  = 'pa-sb-overlay';
                 ov.addEventListener('click', _closeSidebar);
-                doc.body.appendChild(ov);
+                body.appendChild(ov);
             }
             /* Botón hamburger */
             if (!doc.getElementById('pa-hamburger')) {
                 var btn = doc.createElement('div');
-                btn.id  = 'pa-hamburger';
+                btn.id    = 'pa-hamburger';
+                btn.title = 'Abrir menu';
                 btn.innerHTML = '&#9776;';
+                btn.setAttribute('role','button');
+                btn.setAttribute('aria-label','Abrir navegacion');
                 btn.style.cssText = [
                     'position:fixed','top:10px','left:10px',
                     'z-index:1001',
                     'background:#0f172a',
                     'border-radius:8px',
                     'padding:7px 11px',
-                    'font-size:1.25rem','line-height:1',
+                    'font-size:1.3rem','line-height:1',
                     'color:#e2e8f0',
                     'cursor:pointer',
                     'box-shadow:0 2px 10px rgba(0,0,0,0.45)',
                     'user-select:none',
-                    '-webkit-user-select:none'
+                    '-webkit-user-select:none',
+                    'touch-action:manipulation'
                 ].join(';');
-                btn.addEventListener('click', function() {
-                    if (window.parent._paSbOpen) { _closeSidebar(); }
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (body.classList.contains('pa-sb-open')) { _closeSidebar(); }
                     else { _openSidebar(); }
                 });
-                doc.body.appendChild(btn);
+                body.appendChild(btn);
             }
-            /* Cerrar sidebar al hacer clic en un item de navegacion */
+            /* Cerrar sidebar al pulsar un nav item */
             var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb && !sb._paListenerSet) {
-                sb._paListenerSet = true;
+            if (sb && !sb._paNavListener) {
+                sb._paNavListener = true;
                 sb.addEventListener('click', function(e) {
-                    /* Cerrar si el clic fue en un label de radio (nav item) */
-                    if (e.target.closest('label')) {
-                        setTimeout(_closeSidebar, 150);
-                    }
+                    if (e.target.closest('label')) { setTimeout(_closeSidebar, 180); }
                 });
             }
-            /* Estado inicial: sidebar cerrado */
-            if (!window.parent._paSbOpen) { _closeSidebar(); }
+            /* Estado inicial: siempre cerrado al cargar */
+            if (!window.parent._paSbOpen) { body.classList.remove('pa-sb-open'); }
         } catch(e) {}
     }
 
@@ -12083,11 +12098,12 @@ def pantalla_analisis():
         font-size: 0.78rem !important;
         font-weight: 600 !important;
     }
-    /* Cabecera en movil: ajustar margenes al padding movil (0.75rem) */
+    /* Cabecera movil: sin margenes negativos (el padding movil es pequeño
+       y el margen -1.25rem la sacaba de pantalla por la izquierda) */
     @media (max-width: 768px) {
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
-            margin: 0 -0.75rem 0.5rem !important;
-            border-radius: 0 !important;
+            margin: 0 0 0.5rem 0 !important;
+            border-radius: 0 0 8px 8px !important;
             padding: 6px 12px 6px !important;
         }
     }
