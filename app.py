@@ -438,10 +438,35 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
-    /* Movil: sombra cuando el sidebar está abierto (gestionado por Streamlit) */
+    /* ── SIDEBAR MOVIL — control via body class ─────────────────── */
+    /* Streamlit con layout=wide no renderiza collapsedControl en movil,
+       por eso usamos pa-hamburger custom + body class pa-sb-open.    */
     @media (max-width: 768px) {
-        section[data-testid="stSidebar"][aria-expanded="true"] {
-            box-shadow: 4px 0 20px rgba(0,0,0,0.4) !important;
+        /* Sidebar CERRADO — override completo de todas las propiedades
+           que Streamlit usa para ocultar (transform, opacity, visibility) */
+        body:not(.pa-sb-open) section[data-testid="stSidebar"] {
+            transform: translateX(-110%) !important;
+            opacity:     0             !important;
+            visibility:  hidden        !important;
+            pointer-events: none       !important;
+        }
+        /* Sidebar ABIERTO */
+        body.pa-sb-open section[data-testid="stSidebar"] {
+            transform:   translateX(0) !important;
+            opacity:     1             !important;
+            visibility:  visible       !important;
+            pointer-events: auto       !important;
+            box-shadow:  4px 0 20px rgba(0,0,0,0.4) !important;
+        }
+        /* Overlay — gestionado por el body class en JS */
+        #pa-sb-overlay {
+            display:    none;
+            position:   fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.45);
+            z-index:    998;
+            cursor:     pointer;
         }
     }
 
@@ -533,35 +558,9 @@ st.markdown("""
             padding: 2.5rem 0.75rem 2rem !important;
             max-width: 100% !important;
         }
-        /* Hamburger nativo de Streamlit — estilo visual personalizado */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            position: fixed !important;
-            top: 0.6rem !important;
-            left: 0.6rem !important;
-            z-index: 1001 !important;
-            background: #0f172a !important;
-            border-radius: 8px !important;
-            padding: 5px 7px !important;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.4) !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        [data-testid="collapsedControl"] svg,
-        [data-testid="collapsedControl"] button {
-            color: #e2e8f0 !important;
-            fill: #e2e8f0 !important;
-            background: transparent !important;
-            border: none !important;
-        }
-        /* Botón cerrar dentro del sidebar */
-        [data-testid="stSidebarCollapseButton"] {
-            display: flex !important;
-            background: rgba(255,255,255,0.1) !important;
-            border-radius: 6px !important;
-            margin: 8px !important;
-        }
-        [data-testid="stSidebarCollapseButton"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+        /* Ocultar controles nativos de Streamlit — usamos nuestro pa-hamburger */
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapseButton"],
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
     }
 </style>
@@ -11912,6 +11911,7 @@ def pantalla_analisis():
 (function pivotSidebarInit() {
     // ── DESKTOP: expandir sidebar una vez ─────────────────────────────
     function _styleCollapsed() {
+        if (window.parent.innerWidth < 769) return;  /* movil: CSS lo gestiona */
         try {
             var doc = window.parent.document;
             var cc = doc.querySelector('[data-testid="collapsedControl"]');
@@ -11941,13 +11941,91 @@ def pantalla_analisis():
         _styleCollapsed();
     }
 
+    function _openSidebar() {
+        try {
+            window.parent.document.body.classList.add('pa-sb-open');
+            var hb = window.parent.document.getElementById('pa-hamburger');
+            if (hb) hb.innerHTML = '&#10005;';
+            var ov = window.parent.document.getElementById('pa-sb-overlay');
+            if (ov) ov.style.display = 'block';
+            window.parent._paSbOpen = true;
+        } catch(e) {}
+    }
+    function _closeSidebar() {
+        try {
+            window.parent.document.body.classList.remove('pa-sb-open');
+            var hb = window.parent.document.getElementById('pa-hamburger');
+            if (hb) hb.innerHTML = '&#9776;';
+            var ov = window.parent.document.getElementById('pa-sb-overlay');
+            if (ov) ov.style.display = 'none';
+            window.parent._paSbOpen = false;
+        } catch(e) {}
+    }
+    function _initMobileHamburger() {
+        if (window.parent.innerWidth >= 769) return;
+        try {
+            var doc  = window.parent.document;
+            var body = doc.body;
+            if (!doc.getElementById('pa-sb-overlay')) {
+                var ov = doc.createElement('div');
+                ov.id  = 'pa-sb-overlay';
+                ov.addEventListener('click', _closeSidebar);
+                body.appendChild(ov);
+            }
+            if (!doc.getElementById('pa-hamburger')) {
+                var btn = doc.createElement('div');
+                btn.id  = 'pa-hamburger';
+                btn.innerHTML = '&#9776;';
+                btn.setAttribute('role','button');
+                btn.setAttribute('aria-label','Abrir menu');
+                btn.style.cssText = [
+                    'position:fixed','top:10px','left:10px',
+                    'z-index:10000','background:#0f172a',
+                    'border-radius:8px','padding:7px 11px',
+                    'font-size:1.3rem','line-height:1',
+                    'color:#e2e8f0','cursor:pointer',
+                    'box-shadow:0 2px 10px rgba(0,0,0,0.5)',
+                    'user-select:none','-webkit-user-select:none',
+                    'touch-action:manipulation','-webkit-tap-highlight-color:transparent'
+                ].join(';');
+                btn.addEventListener('touchend', function(e) {
+                    e.preventDefault(); e.stopPropagation();
+                    if (body.classList.contains('pa-sb-open')) _closeSidebar();
+                    else _openSidebar();
+                });
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (body.classList.contains('pa-sb-open')) _closeSidebar();
+                    else _openSidebar();
+                });
+                body.appendChild(btn);
+            }
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb && !sb._paNavListener) {
+                sb._paNavListener = true;
+                sb.addEventListener('click', function(e) {
+                    if (e.target.closest('label')) setTimeout(_closeSidebar, 180);
+                });
+            }
+            if (!window.parent._paSbOpen) {
+                body.classList.remove('pa-sb-open');
+            }
+        } catch(e) {}
+    }
+
     _expandOnce();
-    setTimeout(_expandOnce, 200);
-    setTimeout(_expandOnce, 600);
+    _initMobileHamburger();
+    setTimeout(_expandOnce,         200);
+    setTimeout(_expandOnce,         600);
+    setTimeout(_initMobileHamburger, 400);
     setTimeout(function(){ _styleCollapsed(); }, 1500);
     try {
         new MutationObserver(function() {
             _styleCollapsed();
+            /* Re-init solo si el botón fue eliminado del DOM */
+            if (!window.parent.document.getElementById('pa-hamburger')) {
+                _initMobileHamburger();
+            }
         }).observe(window.parent.document.body, {childList:true, subtree:false});
     } catch(e) {}
 })();
