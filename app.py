@@ -11942,99 +11942,89 @@ def pantalla_analisis():
         _styleCollapsed();
     }
 
-    function _openSidebar() {
+    /* ── MOVIL v6: handler en contexto padre via parent.eval + setAttribute ── */
+    /* Los addEventListener del iframe mueren si Streamlit recrea el iframe.    */
+    /* setAttribute('ontouchend','...') corre SIEMPRE en el contexto del padre. */
+    /* _paToggle definido con parent.eval() => su 'window/document' es el padre.*/
+    function _injectParentToggle() {
         try {
-            var doc  = window.parent.document;
-            var body = doc.body;
-            body.classList.add('pa-sb-open');
-            /* Forzar estilos inline (inline !important gana sobre cualquier stylesheet) */
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb) {
-                sb.style.setProperty('display',   'block',           'important');
-                sb.style.setProperty('transform',  'translateX(0)',   'important');
-                sb.style.setProperty('opacity',    '1',               'important');
-                sb.style.setProperty('visibility', 'visible',         'important');
-                sb.style.setProperty('position',   'fixed',           'important');
-                sb.style.setProperty('left',       '0',               'important');
-                sb.style.setProperty('top',        '0',               'important');
-                sb.style.setProperty('height',     '100vh',           'important');
-                sb.style.setProperty('z-index',    '1000',            'important');
-                sb.style.setProperty('width',      '240px',           'important');
-            }
-            var hb = doc.getElementById('pa-hamburger');
-            if (hb) hb.innerHTML = '&#10005;';
-            var ov = doc.getElementById('pa-sb-overlay');
-            if (ov) ov.style.display = 'block';
-            window.parent._paSbOpen = true;
-        } catch(e) {}
-    }
-    function _closeSidebar() {
-        try {
-            var doc  = window.parent.document;
-            var body = doc.body;
-            body.classList.remove('pa-sb-open');
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb) {
-                sb.style.setProperty('transform',  'translateX(-110%)', 'important');
-                sb.style.setProperty('opacity',    '0',                 'important');
-                sb.style.setProperty('visibility', 'hidden',            'important');
-                /* No removemos display para evitar flash — la visibilidad queda controlada por opacity+transform */
-            }
-            var hb = doc.getElementById('pa-hamburger');
-            if (hb) hb.innerHTML = '&#9776;';
-            var ov = doc.getElementById('pa-sb-overlay');
-            if (ov) ov.style.display = 'none';
-            window.parent._paSbOpen = false;
+            /* Función toggle definida y ejecutada en el window del padre */
+            window.parent.eval([
+                'window._paToggle=function(hb){',
+                '  var b=document.body,',
+                '      sb=document.querySelector('[data-testid="stSidebar"]'),',
+                '      ov=document.getElementById('pa-sb-overlay');',
+                '  if(b.classList.contains('pa-sb-open')){',
+                '    b.classList.remove('pa-sb-open');',
+                '    if(sb){sb.style.setProperty('transform','translateX(-110%)','important');',
+                '           sb.style.setProperty('opacity','0','important');}',
+                '    if(ov)ov.style.display='none';',
+                '    if(hb)hb.innerHTML='\u2630';',
+                '  }else{',
+                '    b.classList.add('pa-sb-open');',
+                '    if(sb){',
+                '      sb.style.setProperty('display','block','important');',
+                '      sb.style.setProperty('transform','translateX(0)','important');',
+                '      sb.style.setProperty('opacity','1','important');',
+                '      sb.style.setProperty('visibility','visible','important');',
+                '      sb.style.setProperty('position','fixed','important');',
+                '      sb.style.setProperty('left','0','important');',
+                '      sb.style.setProperty('top','0','important');',
+                '      sb.style.setProperty('height','100vh','important');',
+                '      sb.style.setProperty('z-index','1000','important');',
+                '      sb.style.setProperty('width','240px','important');',
+                '    }',
+                '    if(ov)ov.style.display='block';',
+                '    if(hb)hb.innerHTML='\u2715';',
+                '  }',
+                '};'
+            ].join(''));
         } catch(e) {}
     }
     function _initMobileHamburger() {
         if (window.parent.innerWidth >= 769) return;
         try {
+            _injectParentToggle();  /* actualizar _paToggle en cada render */
             var doc  = window.parent.document;
             var body = doc.body;
+            /* Overlay */
             if (!doc.getElementById('pa-sb-overlay')) {
                 var ov = doc.createElement('div');
                 ov.id  = 'pa-sb-overlay';
-                ov.addEventListener('click', _closeSidebar);
+                ov.setAttribute('onclick', 'window._paToggle(document.getElementById('pa-hamburger'))');
                 body.appendChild(ov);
             }
-            if (!doc.getElementById('pa-hamburger')) {
-                var btn = doc.createElement('div');
-                btn.id  = 'pa-hamburger';
-                btn.innerHTML = '&#9776;';
-                btn.setAttribute('role','button');
-                btn.setAttribute('aria-label','Abrir menu');
-                btn.style.cssText = [
-                    'position:fixed','top:10px','left:10px',
-                    'z-index:10000','background:#0f172a',
-                    'border-radius:8px','padding:7px 11px',
-                    'font-size:1.3rem','line-height:1',
-                    'color:#e2e8f0','cursor:pointer',
-                    'box-shadow:0 2px 10px rgba(0,0,0,0.5)',
-                    'user-select:none','-webkit-user-select:none',
-                    'touch-action:manipulation','-webkit-tap-highlight-color:transparent'
-                ].join(';');
-                btn.addEventListener('touchend', function(e) {
-                    e.preventDefault(); e.stopPropagation();
-                    if (body.classList.contains('pa-sb-open')) _closeSidebar();
-                    else _openSidebar();
-                });
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    if (body.classList.contains('pa-sb-open')) _closeSidebar();
-                    else _openSidebar();
-                });
-                body.appendChild(btn);
-            }
+            /* Botón hamburger — siempre reemplazar para refrescar atributos */
+            var existing = doc.getElementById('pa-hamburger');
+            var btn = doc.createElement('div');
+            btn.id  = 'pa-hamburger';
+            btn.innerHTML = existing ? existing.innerHTML : '&#9776;';
+            btn.setAttribute('role','button');
+            btn.setAttribute('aria-label','Abrir menu');
+            btn.style.cssText = [
+                'position:fixed','top:10px','left:10px',
+                'z-index:10000','background:#0f172a',
+                'border-radius:8px','padding:7px 11px',
+                'font-size:1.3rem','line-height:1',
+                'color:#e2e8f0','cursor:pointer',
+                'box-shadow:0 2px 10px rgba(0,0,0,0.5)',
+                'user-select:none','-webkit-user-select:none',
+                'touch-action:manipulation',
+                '-webkit-tap-highlight-color:transparent'
+            ].join(';');
+            /* setAttribute: handler corre en contexto del documento padre, no del iframe */
+            btn.setAttribute('ontouchend',
+                'event.preventDefault();event.stopPropagation();window._paToggle(this)');
+            btn.setAttribute('onclick', 'window._paToggle(this)');
+            if (existing) existing.parentNode.replaceChild(btn, existing);
+            else body.appendChild(btn);
+            /* Cerrar al pulsar nav item */
             var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb && !sb._paNavListener) {
-                sb._paNavListener = true;
-                sb.addEventListener('click', function(e) {
-                    if (e.target.closest('label')) setTimeout(_closeSidebar, 180);
-                });
-            }
-            if (!window.parent._paSbOpen) {
-                body.classList.remove('pa-sb-open');
+            if (sb) {
+                sb.setAttribute('onclick',
+                    'if(event.target.closest('label')){' +
+                    '  setTimeout(function(){window._paToggle(document.getElementById('pa-hamburger'));},180);' +
+                    '}');
             }
         } catch(e) {}
     }
