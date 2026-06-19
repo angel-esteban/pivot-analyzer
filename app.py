@@ -11986,8 +11986,8 @@ def pantalla_analisis():
         box-shadow: 0 2px 12px rgba(0,0,0,0.18) !important;
         align-items: center !important;
     }
-    /* Centrar verticalmente la columna del popover */
-    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:last-child {
+    /* Alinear a la derecha las columnas de botones (campana + usuario) */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) {
         display: flex !important;
         align-items: center !important;
         justify-content: flex-end !important;
