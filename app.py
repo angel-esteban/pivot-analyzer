@@ -11141,8 +11141,14 @@ def _render_screening_panel(tipo_key: str, uid: int):
             return
 
         # ── Formulario de lanzamiento ───────────────────────────────────
-        # (reset flag para la próxima vez)
-        st.session_state[f"_sc_mostrar_form_{tipo_key}"] = False
+        # No reseteamos el flag aquí (se haría en cada render y rompería el flujo)
+
+        # Si hay resultados previos, ofrecer volver a verlos
+        if job_activo and job_activo["estado"] == "completado":
+            if st.button("← Volver a resultados", key=f"sc_back_{tipo_key}",
+                         help="Ver los resultados del último screening"):
+                st.session_state[f"_sc_mostrar_form_{tipo_key}"] = False
+                st.rerun()
 
         st.markdown("Selecciona un índice bursátil y lanza el análisis. "
                     "El proceso corre en segundo plano y te notificará cuando termine.")
@@ -11179,6 +11185,8 @@ def _render_screening_panel(tipo_key: str, uid: int):
                 if job_id:
                     st.success(f"✅ Análisis lanzado ({len(tickers)} valores). "
                                f"Recibirás una notificación 🔔 cuando termine.")
+                    # Resetear flag: al volver mostraremos resultados, no el form
+                    st.session_state[f"_sc_mostrar_form_{tipo_key}"] = False
                     st.rerun()
                 else:
                     st.error("No se pudo crear el job. Revisa la conexión con la base de datos.")
@@ -12155,13 +12163,11 @@ def pantalla_analisis():
                     _marcar_notificaciones_leidas(uid)
                     st.rerun()
 
-    # Auto-rerun cada 4 s mientras haya job activo — FUERA de los with col: blocks
+    # Auto-rerun mientras haya job activo — time.sleep evita loop infinito
     if _jobs_en_curso:
-        import streamlit.components.v1 as _cmpv1_ar
-        _cmpv1_ar.html(
-            "<script>setTimeout(function(){window.parent.location.reload();},4000);</script>",
-            height=0
-        )
+        import time as _time_ar
+        _time_ar.sleep(3)
+        st.rerun()
 
     with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
