@@ -152,7 +152,7 @@ st.set_page_config(
     page_title="PivotAnalyzer",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # CSS profesional — Inter font + design system coherente
@@ -438,48 +438,14 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
-    /* ── SIDEBAR NAV — siempre visible, ignora estado del navegador ── */
-    /* Forzar sidebar fijo en el lado izquierdo sin importar el estado colapsado */
+    /* ── SIDEBAR — DESKTOP fijo / MOVIL overlay hamburger ─────────── */
+
+    /* Estilos comunes (ambos viewports) */
     section[data-testid="stSidebar"] {
-        transform: translateX(0) !important;
-        width: 220px !important;
-        min-width: 220px !important;
-        max-width: 220px !important;
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        height: 100vh !important;
-        z-index: 999 !important;
         background: #0f172a !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
     }
-    /* Empujar el contenido principal para que no quede debajo del sidebar fijo */
-    /* section.main es flex-item; necesitamos fijar ancho además del margin */
-    [data-testid="stMain"],
-    section.main,
-    .main {
-        margin-left: 220px !important;
-        width: calc(100vw - 220px) !important;
-        max-width: calc(100vw - 220px) !important;
-        min-width: 0 !important;
-        flex-shrink: 0 !important;
-    }
-    /* Header de Streamlit (puede ser position:fixed con su propia coordenada left) */
-    header[data-testid="stHeader"],
-    .stAppHeader {
-        left: 220px !important;
-        width: calc(100vw - 220px) !important;
-    }
-    /* block-container: no sobreescribir margin-left heredado */
-    .block-container {
-        padding-left: 1.5rem !important;
-        max-width: 100% !important;
-    }
-    /* Ocultar controles de colapso — la navegación siempre está fija */
-    [data-testid="stSidebarCollapseButton"],
-    button[data-testid="baseButton-headerNoPadding"],
-    [data-testid="collapsedControl"] { display: none !important; }
     [data-testid="stSidebarContent"] { padding: 0 !important; }
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
@@ -504,7 +470,78 @@ st.markdown("""
     [data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
         margin: 0 !important; font-size: 0.88rem !important;
     }
-    .block-container { padding-left: 1.5rem !important; }
+
+    /* DESKTOP (>=769px): sidebar fijo siempre visible, sin hamburger */
+    @media (min-width: 769px) {
+        section[data-testid="stSidebar"] {
+            transform: translateX(0) !important;
+            width: 220px !important;
+            min-width: 220px !important;
+            max-width: 220px !important;
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            height: 100vh !important;
+            z-index: 999 !important;
+        }
+        [data-testid="stMain"], section.main, .main {
+            margin-left: 220px !important;
+            width: calc(100vw - 220px) !important;
+            max-width: calc(100vw - 220px) !important;
+            min-width: 0 !important;
+        }
+        header[data-testid="stHeader"], .stAppHeader {
+            left: 220px !important;
+            width: calc(100vw - 220px) !important;
+        }
+        .block-container { padding-left: 1.5rem !important; max-width: 100% !important; }
+        /* Ocultar controles de colapso en desktop */
+        [data-testid="stSidebarCollapseButton"],
+        button[data-testid="baseButton-headerNoPadding"],
+        [data-testid="collapsedControl"] { display: none !important; }
+    }
+
+    /* MOVIL (<768px): sidebar overlay, Streamlit gestiona show/hide */
+    @media (max-width: 768px) {
+        section[data-testid="stSidebar"] {
+            width: 260px !important;
+            min-width: 260px !important;
+            max-width: 260px !important;
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            height: 100vh !important;
+            z-index: 1000 !important;
+            /* NO forzar transform — Streamlit gestiona visible/colapsado */
+        }
+        /* Main a ancho completo, sin margen de sidebar */
+        [data-testid="stMain"], section.main, .main {
+            margin-left: 0 !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
+        }
+        header[data-testid="stHeader"], .stAppHeader {
+            left: 0 !important;
+            width: 100vw !important;
+        }
+        .block-container {
+            padding: 2.5rem 0.75rem 2rem !important;
+            max-width: 100% !important;
+        }
+        /* Hamburger visible y fijo arriba-izquierda */
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            position: fixed !important;
+            top: 0.5rem !important;
+            left: 0.5rem !important;
+            z-index: 1001 !important;
+            background: #0f172a !important;
+            border-radius: 8px !important;
+            padding: 6px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
+        }
+        [data-testid="collapsedControl"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+        [data-testid="stSidebarCollapseButton"],
+        button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1693,6 +1730,17 @@ def pantalla_login():
     # CSS específico del login — card unificada, sin "Press Enter to apply"
     st.markdown("""
     <style>
+        /* Ocultar sidebar y hamburger completamente en login */
+        section[data-testid="stSidebar"],
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapseButton"],
+        button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
+        /* Main ocupa ancho completo sin margen de sidebar */
+        [data-testid="stMain"], section.main, .main {
+            margin-left: 0 !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
+        }
         /* Ocultar el hint "Press Enter to apply" en los inputs del login */
         [data-testid="InputInstructions"] { display: none !important; }
         /* Label de los inputs más compacto */
