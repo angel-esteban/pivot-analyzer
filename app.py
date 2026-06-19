@@ -12053,14 +12053,20 @@ def pantalla_analisis():
             flex: 1 1 auto !important;
             min-width: 0 !important;
         }
-        /* Campana: tamaño fijo */
+        /* Spinner job: tamaño auto, colapsa a 0 si está vacío */
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(2) {
+            flex: 0 0 auto !important;
+            min-width: 0 !important;
+            max-width: 64px !important;
+        }
+        /* Campana: tamaño fijo (ahora nth-child 3) */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(3) {
             flex: 0 0 52px !important;
             max-width: 52px !important;
             min-width: 52px !important;
         }
-        /* Usuario: tamaño fijo */
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(3) {
+        /* Usuario: tamaño fijo (ahora nth-child 4) */
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(4) {
             flex: 0 0 68px !important;
             max-width: 68px !important;
             min-width: 68px !important;
@@ -12077,36 +12083,39 @@ def pantalla_analisis():
     # ── Indicador de job activo en cabecera ──────────────────────────────────
     _jobs_en_curso = [j for j in _obtener_jobs_usuario(uid)
                       if j.get("estado") == "ejecutando"]
-    _spinner_hdr = ""
-    if _jobs_en_curso:
-        _j0   = _jobs_en_curso[0]
-        _jp   = _j0.get("progreso", 0)
-        _jt   = _j0.get("total_tickers", 1) or 1
-        _jidx = _j0.get("indice", "screening")
-        _spinner_hdr = (
-            f'<div style="display:flex;align-items:center;gap:5px;margin-left:10px"' 
-            f' title="Analizando {_jidx}: {_jp} de {_jt} valores">' 
-            f'<div style="width:14px;height:14px;border:2.5px solid rgba(255,255,255,0.18);' 
-            f'border-top-color:#60a5fa;border-radius:50%;' 
-            f'animation:pivot-spin 0.85s linear infinite;flex-shrink:0"></div>' 
-            f'<span style="color:#93c5fd;font-size:0.72rem;font-weight:600;' 
-            f'white-space:nowrap">{_jp}/{_jt}</span>' 
-            f'</div>'
-        )
 
-    _hdr_left, _hdr_bell, _hdr_user = st.columns([10, 1, 1.3])
+    _hdr_left, _hdr_spin, _hdr_bell, _hdr_user = st.columns([10, 0.8, 1, 1.3])
     with _hdr_left:
         st.markdown(
-            f'''<span id="__pivot_hdr_logo" style="display:none"></span>
+            '''<span id="__pivot_hdr_logo" style="display:none"></span>
             <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
               <div style="background:rgba(255,255,255,0.12);border-radius:6px;
                           padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
               <div style="color:#fff;font-size:0.95rem;font-weight:800;
                           letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>
-              {_spinner_hdr}
             </div>''',
             unsafe_allow_html=True
         )
+    with _hdr_spin:
+        if _jobs_en_curso:
+            _j0   = _jobs_en_curso[0]
+            _jp   = _j0.get("progreso", 0)
+            _jt   = _j0.get("total_tickers", 1) or 1
+            _jidx = _j0.get("indice", "screening")
+            st.markdown(
+                f'''<div style="display:flex;align-items:center;justify-content:flex-end;
+                              gap:4px;height:100%;padding:4px 0"
+                     title="Analizando {_jidx}: {_jp} de {_jt} valores">
+                  <div style="width:14px;height:14px;
+                              border:2.5px solid rgba(255,255,255,0.18);
+                              border-top-color:#60a5fa;border-radius:50%;
+                              animation:pivot-spin 0.85s linear infinite;
+                              flex-shrink:0"></div>
+                  <span style="color:#93c5fd;font-size:0.72rem;font-weight:600;
+                               white-space:nowrap">{_jp}/{_jt}</span>
+                </div>''',
+                unsafe_allow_html=True
+            )
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
