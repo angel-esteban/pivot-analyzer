@@ -9126,11 +9126,19 @@ def panel_admin():
         return
 
     # ══════════════════════════════════════════════════════════════════════════
-    # VISTA B: LISTA DE USUARIOS
+    # VISTA B: LISTA DE USUARIOS + pestaña ÍNDICES (solo superadmin)
     # ══════════════════════════════════════════════════════════════════════════
-    _lh1, _lh2 = st.columns([5, 1])
-    with _lh1:
-        st.markdown("## ⚙️ Gestión de Usuarios")
+    _es_sa_cur = st.session_state.get("usuario", {}).get("rol") == "superadmin"
+    if _es_sa_cur:
+        _tab_usr, _tab_idx = st.tabs(["👥 Usuarios", "📋 Índices bursátiles"])
+    else:
+        _tab_usr = st.container()
+        _tab_idx = None
+
+    with _tab_usr:
+        _lh1, _lh2 = st.columns([5, 1])
+        with _lh1:
+            st.markdown("## ⚙️ Gestión de Usuarios")
         st.caption(
             f"{len(usuarios)} usuario{'s' if len(usuarios)!=1 else ''} registrado{'s' if len(usuarios)!=1 else ''}. "
             "Haz clic en **Ver →** para editar el perfil de un usuario."
@@ -9242,6 +9250,11 @@ def panel_admin():
                         st.error(f"Error al crear usuario: {e}")
                 else:
                     st.warning("Completa todos los campos obligatorios.")
+
+    # ── Tab de índices (solo superadmin) ─────────────────────────────────────
+    if _tab_idx is not None:
+        with _tab_idx:
+            _panel_indices_config()
 
 
 # =============================================================================
@@ -11119,6 +11132,296 @@ def _render_screening_resultados(job: dict):
                 )
 
 
+
+# ─── Gestión de índices bursátiles en BD ───────────────────────────────────
+
+def inicializar_tabla_indices_config():
+    """Crea la tabla indices_config y la puebla con los dicts hardcoded si está vacía."""
+    import json as _json
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS indices_config (
+                        clave       TEXT PRIMARY KEY,
+                        nombre      TEXT NOT NULL,
+                        sufijo      TEXT DEFAULT '',
+                        tickers     JSONB NOT NULL DEFAULT '{}',
+                        updated_at  TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+                cur.execute("SELECT COUNT(*) FROM indices_config")
+                if cur.fetchone()[0] == 0:
+                    _defaults = [
+                        ("ibex35",          "IBEX 35",         ".MC",  IBEX_35),
+                        ("ibex_medium_cap", "IBEX Medium Cap", ".MC",  IBEX_MEDIUM_CAP),
+                        ("ibex_small_cap",  "IBEX Small Cap",  ".MC",  IBEX_SMALL_CAP),
+                        ("eurostoxx50",     "Euro Stoxx 50",   "",     EUROSTOXX_50),
+                        ("dax40",           "DAX 40",          ".DE",  {}),
+                        ("cac40",           "CAC 40",          ".PA",  {}),
+                        ("ftse100",         "FTSE 100",        ".L",   {}),
+                    ]
+                    for clave, nombre, sufijo, tickers in _defaults:
+                        cur.execute(
+                            "INSERT INTO indices_config (clave, nombre, sufijo, tickers) "
+                            "VALUES (%s, %s, %s, %s) ON CONFLICT (clave) DO NOTHING",
+                            (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
+                        )
+                    conn.commit()
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        pass
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cargar_todos_indices() -> dict:
+    """Devuelve {clave: {nombre, sufijo, tickers}} desde BD. Cache de 1 hora."""
+    import json as _json
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT clave, nombre, sufijo, tickers "
+                    "FROM indices_config ORDER BY nombre"
+                )
+                rows = cur.fetchall()
+        finally:
+            release_db_connection(conn)
+        result = {}
+        for r in rows:
+            t = r["tickers"]
+            if isinstance(t, str):
+                try:
+                    t = _json.loads(t)
+                except Exception:
+                    t = {}
+            result[r["clave"]] = {
+                "nombre":  r["nombre"],
+                "sufijo":  r["sufijo"],
+                "tickers": t or {},
+            }
+        return result
+    except Exception:
+        return {}
+
+
+def _obtener_tickers_indice(nombre_indice: str) -> dict:
+    """Devuelve {nombre: ticker} para el índice. Fallback a hardcoded si BD falla."""
+    _FALLBACK = {
+        "IBEX 35":         IBEX_35,
+        "IBEX Medium Cap": IBEX_MEDIUM_CAP,
+        "IBEX Small Cap":  IBEX_SMALL_CAP,
+        "Euro Stoxx 50":   EUROSTOXX_50,
+    }
+    try:
+        todos = _cargar_todos_indices()
+        for datos in todos.values():
+            if datos["nombre"] == nombre_indice and datos["tickers"]:
+                return datos["tickers"]
+    except Exception:
+        pass
+    return _FALLBACK.get(nombre_indice, {})
+
+
+def _guardar_indice_config(clave: str, nombre: str, sufijo: str, tickers: dict):
+    """Actualiza o inserta un índice en BD e invalida el cache."""
+    import json as _json
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO indices_config (clave, nombre, sufijo, tickers, updated_at)
+                   VALUES (%s, %s, %s, %s, NOW())
+                   ON CONFLICT (clave) DO UPDATE SET
+                     nombre=EXCLUDED.nombre, sufijo=EXCLUDED.sufijo,
+                     tickers=EXCLUDED.tickers, updated_at=NOW()""",
+                (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
+            )
+        conn.commit()
+    finally:
+        release_db_connection(conn)
+    _cargar_todos_indices.clear()
+
+
+
+
+def _panel_indices_config():
+    """Panel de configuración de índices bursátiles (solo superadmin)."""
+    import json as _json
+
+    st.markdown("## 📋 Composición de índices bursátiles")
+    st.caption(
+        "Gestiona la lista de valores de cada índice. Los cambios se aplican inmediatamente "
+        "sin necesidad de redeploy. El cache se invalida al guardar."
+    )
+
+    todos = _cargar_todos_indices()
+    if not todos:
+        st.warning("No hay índices cargados. Revisa la conexión con la base de datos.")
+        return
+
+    _idx_opciones = {d["nombre"]: (clave, d) for clave, d in todos.items()}
+    _idx_sel_nombre = st.selectbox(
+        "Índice a gestionar",
+        options=list(_idx_opciones.keys()),
+        key="_adm_idx_sel"
+    )
+    clave_sel, datos_sel = _idx_opciones[_idx_sel_nombre]
+    tickers_sel = datos_sel.get("tickers", {})
+    sufijo_sel  = datos_sel.get("sufijo", "")
+
+    st.markdown(
+        f"**{len(tickers_sel)} valores** · sufijo Yahoo Finance: "
+        f"`{sufijo_sel if sufijo_sel else '(ninguno)'}`"
+    )
+
+    _t_ver, _t_edit, _t_json, _t_nuevo = st.tabs(
+        ["📄 Ver lista", "✏️ Editar ticker", "📥 Importar JSON", "➕ Nuevo índice"]
+    )
+
+    # ── TAB VER ──────────────────────────────────────────────────────────────
+    with _t_ver:
+        if not tickers_sel:
+            st.info("Este índice no tiene tickers cargados.")
+        else:
+            _rows = [{"Empresa": n, "Ticker (Yahoo)": t}
+                     for n, t in sorted(tickers_sel.items())]
+            st.dataframe(_rows, use_container_width=True, height=420)
+
+    # ── TAB EDITAR TICKER ─────────────────────────────────────────────────────
+    with _t_edit:
+        _col_a, _col_b = st.columns(2)
+        with _col_a:
+            st.markdown("#### ✏️ Añadir / modificar")
+            with st.form("adm_idx_add_" + clave_sel, clear_on_submit=True):
+                _nombre_new = st.text_input("Nombre empresa", placeholder="Ej: Acciona")
+                _ticker_new = st.text_input("Ticker Yahoo Finance", placeholder="Ej: ANA.MC")
+                if st.form_submit_button("💾 Guardar", type="primary"):
+                    _n = _nombre_new.strip()
+                    _t = _ticker_new.strip().upper()
+                    if not _n or not _t:
+                        st.warning("Rellena nombre y ticker.")
+                    else:
+                        _nuevo = dict(tickers_sel)
+                        _nuevo[_n] = _t
+                        try:
+                            _guardar_indice_config(
+                                clave_sel, _idx_sel_nombre, sufijo_sel, _nuevo
+                            )
+                            st.success(f"✅ {_n} → {_t} guardado.")
+                            st.rerun()
+                        except Exception as _ex:
+                            st.error(str(_ex))
+
+        with _col_b:
+            st.markdown("#### 🗑️ Eliminar valor")
+            if tickers_sel:
+                _ticker_del = st.selectbox(
+                    "Empresa a eliminar",
+                    options=sorted(tickers_sel.keys()),
+                    key="adm_idx_del_" + clave_sel
+                )
+                if st.button(
+                    "🗑️ Eliminar " + _ticker_del,
+                    key="adm_del_btn_" + clave_sel,
+                    type="primary"
+                ):
+                    _nuevo = {k: v for k, v in tickers_sel.items() if k != _ticker_del}
+                    try:
+                        _guardar_indice_config(
+                            clave_sel, _idx_sel_nombre, sufijo_sel, _nuevo
+                        )
+                        st.success(f"✅ {_ticker_del} eliminado.")
+                        st.rerun()
+                    except Exception as _ex:
+                        st.error(str(_ex))
+            else:
+                st.info("No hay valores para eliminar.")
+
+    # ── TAB IMPORTAR JSON ─────────────────────────────────────────────────────
+    with _t_json:
+        st.markdown(
+            "Pega un objeto JSON con formato "
+            '`{"Nombre empresa": "TICKER.MC", ...}`. '
+            "**Reemplazará** la composición completa del índice seleccionado."
+        )
+        _json_input = st.text_area(
+            "JSON de tickers",
+            height=280,
+            key="adm_idx_json_" + clave_sel,
+            placeholder='{"Acciona": "ANA.MC", "Acciona Energías Renovables": "ANE.MC"}'
+        )
+        _sufijo_input = st.text_input(
+            "Sufijo Yahoo Finance",
+            value=sufijo_sel,
+            key="adm_idx_sfx_" + clave_sel,
+            placeholder=".MC"
+        )
+        if st.button(
+            "📥 Importar y guardar",
+            key="adm_idx_import_" + clave_sel,
+            type="primary"
+        ):
+            try:
+                _parsed = _json.loads(_json_input.strip())
+                if not isinstance(_parsed, dict):
+                    raise ValueError("El JSON debe ser un objeto {clave: valor}.")
+                if len(_parsed) < 2:
+                    raise ValueError("El JSON debe tener al menos 2 entradas.")
+                _guardar_indice_config(
+                    clave_sel, _idx_sel_nombre,
+                    _sufijo_input.strip(), _parsed
+                )
+                st.success(
+                    f"✅ {len(_parsed)} tickers importados para **{_idx_sel_nombre}**."
+                )
+                st.rerun()
+            except _json.JSONDecodeError as _je:
+                st.error(f"JSON inválido: {_je}")
+            except Exception as _ex:
+                st.error(str(_ex))
+
+    # ── TAB NUEVO ÍNDICE ──────────────────────────────────────────────────────
+    with _t_nuevo:
+        st.markdown("Añade un índice nuevo que aparecerá en el menú de screening.")
+        with st.form("adm_idx_nuevo_form", clear_on_submit=True):
+            _nc_nombre = st.text_input("Nombre del índice", placeholder="Ej: IBEX Small Cap")
+            _nc_clave  = st.text_input(
+                "Clave interna (sin espacios)", placeholder="Ej: ibex_small_cap"
+            )
+            _nc_sufijo = st.text_input(
+                "Sufijo Yahoo Finance", placeholder="Ej: .MC"
+            )
+            _nc_json   = st.text_area(
+                "JSON de tickers (opcional)",
+                height=150,
+                placeholder='{"Empresa": "TICKER.MC"}'
+            )
+            if st.form_submit_button("➕ Crear índice", type="primary"):
+                _cn = _nc_nombre.strip()
+                _ck = _nc_clave.strip().lower().replace(" ", "_")
+                if not _cn or not _ck:
+                    st.warning("Nombre y clave son obligatorios.")
+                else:
+                    _ct = {}
+                    if _nc_json.strip():
+                        try:
+                            _ct = _json.loads(_nc_json.strip())
+                        except Exception:
+                            st.error("JSON inválido.")
+                            st.stop()
+                    try:
+                        _guardar_indice_config(_ck, _cn, _nc_sufijo.strip(), _ct)
+                        st.success(f"✅ Índice **{_cn}** creado.")
+                        st.rerun()
+                    except Exception as _ex:
+                        st.error(str(_ex))
+
+
 def _render_screening_panel(tipo_key: str, uid: int):
     """Panel de lanzamiento de screening y visualización de resultados."""
     st.markdown("---")
@@ -11195,21 +11498,9 @@ def _render_screening_panel(tipo_key: str, uid: int):
                                help="Lanza el análisis en segundo plano")
 
         if lanzar and indice_sel:
-            wiki_key, wiki_url, sufijo = _INDICES_SCREENING[indice_sel]
-            # Para índices ibéricos usamos el dict hardcoded (completo y sin depender de Wikipedia)
-            _ibex_hardcoded = {
-                "IBEX 35":         IBEX_35,
-                "IBEX Medium Cap": IBEX_MEDIUM_CAP,
-                "IBEX Small Cap":  IBEX_SMALL_CAP,
-            }
-            if indice_sel in _ibex_hardcoded:
-                tickers = _ibex_hardcoded[indice_sel]
-            else:
-                with st.spinner(f"Cargando composición del {indice_sel}..."):
-                    tickers = _cargar_wikipedia_index(wiki_url, sufijo)
-                # Fallback si Wikipedia devolvió muy pocos tickers
-                if not tickers:
-                    tickers = _ibex_hardcoded.get(indice_sel, {})
+            # Cargamos tickers desde BD (fallback a hardcoded si BD falla)
+            with st.spinner(f"Cargando composición del {indice_sel}..."):
+                tickers = _obtener_tickers_indice(indice_sel)
 
             if not tickers:
                 st.error("No se pudo cargar la composición del índice. Inténtalo de nuevo.")
@@ -12021,6 +12312,8 @@ def pantalla_analisis():
         inicializar_tabla_alertas()
         inicializar_tabla_data_jobs()
         inicializar_tabla_carteras()
+        inicializar_tabla_screening()
+        inicializar_tabla_indices_config()
         inicializar_email_usuario()
         st.session_state["_app_init_done"] = True
     verificar_y_lanzar_jobs(usuario["id"])  # Lanza jobs diarios si procede (guarded internamente)
