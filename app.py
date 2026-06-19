@@ -152,7 +152,7 @@ st.set_page_config(
     page_title="PivotAnalyzer",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
 )
 
 # CSS profesional — Inter font + design system coherente
@@ -503,9 +503,9 @@ st.markdown("""
     /* MOVIL (<768px): sidebar overlay, Streamlit gestiona show/hide */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] {
-            width: 260px !important;
-            min-width: 260px !important;
-            max-width: 260px !important;
+            width: 240px !important;
+            min-width: 240px !important;
+            max-width: 240px !important;
             position: fixed !important;
             top: 0 !important; left: 0 !important;
             height: 100vh !important;
@@ -526,7 +526,7 @@ st.markdown("""
             padding: 2.5rem 0.75rem 2rem !important;
             max-width: 100% !important;
         }
-        /* Hamburger visible y fijo arriba-izquierda */
+        /* Hamburger (abrir sidebar) — visible y fijo arriba-izquierda */
         [data-testid="collapsedControl"] {
             display: flex !important;
             position: fixed !important;
@@ -539,7 +539,17 @@ st.markdown("""
             box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
         }
         [data-testid="collapsedControl"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
-        [data-testid="stSidebarCollapseButton"],
+        /* Boton cerrar sidebar (dentro del sidebar) — VISIBLE en movil */
+        [data-testid="stSidebarCollapseButton"] {
+            display: flex !important;
+            position: absolute !important;
+            top: 0.5rem !important;
+            right: 0.5rem !important;
+            z-index: 1002 !important;
+            background: rgba(255,255,255,0.12) !important;
+            border-radius: 6px !important;
+        }
+        [data-testid="stSidebarCollapseButton"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
     }
 </style>
