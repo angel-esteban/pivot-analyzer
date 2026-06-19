@@ -759,9 +759,11 @@ def _cargar_criteria() -> dict:
 def _cargar_wikipedia_index(url: str, sufijo: str = "") -> dict:
     """Extrae {nombre: ticker} de la tabla más relevante de una página Wikipedia."""
     try:
-        # User-Agent necesario para Wikipedia ES (devuelve 403 sin él)
+        import requests as _req, io as _io_wiki
         _ua = {"User-Agent": "Mozilla/5.0 (compatible; PivotAnalyzer/1.0)"}
-        tablas = pd.read_html(url, storage_options=_ua)
+        _resp = _req.get(url, headers=_ua, timeout=12)
+        _resp.raise_for_status()
+        tablas = pd.read_html(_io_wiki.StringIO(_resp.text))
         for t in tablas:
             cols = [c for c in t.columns if isinstance(c, str)]
             # Detectar columna de ticker y de nombre (EN + ES)
@@ -11160,6 +11162,14 @@ def _render_screening_panel(tipo_key: str, uid: int):
             wiki_key, wiki_url, sufijo = _INDICES_SCREENING[indice_sel]
             with st.spinner(f"Cargando composición del {indice_sel}..."):
                 tickers = _cargar_wikipedia_index(wiki_url, sufijo)
+            # Fallback a dict hardcoded si Wikipedia no es accesible
+            if not tickers:
+                _fallbacks = {
+                    "IBEX 35":         IBEX_35,
+                    "IBEX Medium Cap": IBEX_MEDIUM_CAP,
+                    "IBEX Small Cap":  IBEX_SMALL_CAP,
+                }
+                tickers = _fallbacks.get(indice_sel, {})
 
             if not tickers:
                 st.error("No se pudo cargar la composición del índice. Inténtalo de nuevo.")
@@ -12097,14 +12107,6 @@ def pantalla_analisis():
             </div>''',
             unsafe_allow_html=True
         )
-    # Auto-rerun cada 4 s mientras haya job activo (JS one-shot por rerun)
-    if _jobs_en_curso:
-        import streamlit.components.v1 as _cmpv1
-        _cmpv1.html(
-            "<script>setTimeout(function(){window.parent.location.reload();},4000);</script>",
-            height=0
-        )
-
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
@@ -12138,6 +12140,14 @@ def pantalla_analisis():
                              use_container_width=True):
                     _marcar_notificaciones_leidas(uid)
                     st.rerun()
+
+    # Auto-rerun cada 4 s mientras haya job activo — FUERA de los with col: blocks
+    if _jobs_en_curso:
+        import streamlit.components.v1 as _cmpv1_ar
+        _cmpv1_ar.html(
+            "<script>setTimeout(function(){window.parent.location.reload();},4000);</script>",
+            height=0
+        )
 
     with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
