@@ -550,30 +550,9 @@ st.markdown("""
             padding: 2.5rem 0.75rem 2rem !important;
             max-width: 100% !important;
         }
-        /* Hamburger (abrir sidebar) — visible y fijo arriba-izquierda */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            position: fixed !important;
-            top: 0.5rem !important;
-            left: 0.5rem !important;
-            z-index: 1001 !important;
-            background: #0f172a !important;
-            border-radius: 8px !important;
-            padding: 6px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
-        }
-        [data-testid="collapsedControl"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
-        /* Boton cerrar sidebar (dentro del sidebar) — VISIBLE en movil */
-        [data-testid="stSidebarCollapseButton"] {
-            display: flex !important;
-            position: absolute !important;
-            top: 0.5rem !important;
-            right: 0.5rem !important;
-            z-index: 1002 !important;
-            background: rgba(255,255,255,0.12) !important;
-            border-radius: 6px !important;
-        }
-        [data-testid="stSidebarCollapseButton"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+        /* Ocultar controles nativos de Streamlit — usamos nuestro pa-hamburger */
+        [data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapseButton"],
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
     }
 </style>
