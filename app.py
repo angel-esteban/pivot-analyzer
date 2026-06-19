@@ -11999,7 +11999,7 @@ def pantalla_analisis():
         border-radius: 20px !important;
         font-weight: 600 !important;
         font-size: 0.78rem !important;
-        padding: 0.35rem 1rem !important;
+        padding: 0.3rem 0.55rem !important;
         color: #f1f5f9 !important;
         white-space: nowrap !important;
     }
