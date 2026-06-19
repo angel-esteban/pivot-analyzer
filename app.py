@@ -11911,6 +11911,8 @@ def pantalla_analisis():
         } catch(e) {}
     }
     function _expandOnce() {
+        // En movil (<769px): NO expandir — el sidebar empieza colapsado con hamburger nativo
+        if (window.parent.innerWidth < 769) { return; }
         // window.parent._pivotExpanded se resetea con cada recarga de página (F5)
         // pero persiste en reruns de widgets → sólo expandimos una vez por sesión
         if (window.parent._pivotExpanded) { _styleCollapsed(); return; }
@@ -11919,7 +11921,7 @@ def pantalla_analisis():
             var sb  = doc.querySelector('[data-testid="stSidebar"]');
             if (!sb) return;
             if (sb.getAttribute('aria-expanded') === 'false') {
-                // Sidebar está colapsado → expandir
+                // Sidebar está colapsado → expandir (solo en desktop)
                 var btn = doc.querySelector('[data-testid="collapsedControl"] button');
                 if (!btn) btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
                 if (btn) { btn.click(); window.parent._pivotExpanded = true; }
