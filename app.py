@@ -12019,21 +12019,24 @@ def pantalla_analisis():
             border-radius: 0 0 8px 8px !important;
             padding: 6px 8px 6px !important;
         }
-        /* Botones compactos en móvil */
+        /* Botones móvil: mínimo padding, solo icono visible */
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
-            padding: 0.2rem 0.4rem !important;
-            font-size: 0.72rem !important;
+            padding: 0.2rem 0.3rem !important;
+            font-size: 0.7rem !important;
+            min-width: 0 !important;
         }
-        /* Nombre de usuario: truncar si no cabe */
+        /* En móvil: ocultar el texto del botón, mostrar solo el icono (primer carácter) */
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button p {
             overflow: hidden !important;
-            text-overflow: ellipsis !important;
             white-space: nowrap !important;
+            /* Ocultar texto tras el emoji — max-width ajustado al icono */
+            max-width: 1.6em !important;
+            text-overflow: clip !important;
         }
     }
     </style>
     """, unsafe_allow_html=True)
-    _hdr_left, _hdr_right = st.columns([2, 3])
+    _hdr_left, _hdr_bell, _hdr_user = st.columns([3, 0.7, 1.5])
     with _hdr_left:
         st.markdown(
             f'''<span id="__pivot_hdr_logo" style="display:none"></span>
@@ -12045,8 +12048,6 @@ def pantalla_analisis():
             </div>''',
             unsafe_allow_html=True
         )
-    with _hdr_right:
-        _hdr_bell, _hdr_user = st.columns([1, 2])
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
@@ -12084,7 +12085,7 @@ def pantalla_analisis():
     with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
         _usr_email_hdr = usuario.get("email", "") or ""
-        with st.popover(f"👤 {_uname}", use_container_width=True):
+        with st.popover(f"👤 {_uinitials.lower()}", use_container_width=True):
             _avatar_html = (
                 f'<div style="padding:4px 0 6px">'
                 f'<div style="font-size:1.1rem;font-weight:800;color:#1d4ed8;'
