@@ -438,28 +438,11 @@ st.markdown("""
         .block-container { padding: 0 0.4rem 2rem !important; }
     }
 
-    /* Control sidebar movil via clase en body (Streamlit no toca el body) */
+    /* Movil: sombra cuando el sidebar está abierto (gestionado por Streamlit) */
     @media (max-width: 768px) {
-        /* Sidebar oculto por defecto en movil */
-        body:not(.pa-sb-open) section[data-testid="stSidebar"] {
-            transform: translateX(-110%) !important;
-            box-shadow: none !important;
-        }
-        /* Sidebar abierto cuando se añade la clase */
-        body.pa-sb-open section[data-testid="stSidebar"] {
-            transform: translateX(0) !important;
+        section[data-testid="stSidebar"][aria-expanded="true"] {
             box-shadow: 4px 0 20px rgba(0,0,0,0.4) !important;
         }
-        /* Overlay semitransparente detrás del sidebar */
-        #pa-sb-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.45);
-            z-index: 998;
-        }
-        body.pa-sb-open #pa-sb-overlay { display: block !important; }
     }
 
     /* ── SIDEBAR — DESKTOP fijo / MOVIL overlay hamburger ─────────── */
@@ -550,9 +533,35 @@ st.markdown("""
             padding: 2.5rem 0.75rem 2rem !important;
             max-width: 100% !important;
         }
-        /* Ocultar controles nativos de Streamlit — usamos nuestro pa-hamburger */
-        [data-testid="collapsedControl"],
-        [data-testid="stSidebarCollapseButton"],
+        /* Hamburger nativo de Streamlit — estilo visual personalizado */
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            position: fixed !important;
+            top: 0.6rem !important;
+            left: 0.6rem !important;
+            z-index: 1001 !important;
+            background: #0f172a !important;
+            border-radius: 8px !important;
+            padding: 5px 7px !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4) !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        [data-testid="collapsedControl"] svg,
+        [data-testid="collapsedControl"] button {
+            color: #e2e8f0 !important;
+            fill: #e2e8f0 !important;
+            background: transparent !important;
+            border: none !important;
+        }
+        /* Botón cerrar dentro del sidebar */
+        [data-testid="stSidebarCollapseButton"] {
+            display: flex !important;
+            background: rgba(255,255,255,0.1) !important;
+            border-radius: 6px !important;
+            margin: 8px !important;
+        }
+        [data-testid="stSidebarCollapseButton"] svg { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
     }
 </style>
@@ -11932,89 +11941,13 @@ def pantalla_analisis():
         _styleCollapsed();
     }
 
-    // ── MOVIL: hamburger personalizado (control via body class) ──────
-    function _openSidebar() {
-        try {
-            var body = window.parent.document.body;
-            var hb   = window.parent.document.getElementById('pa-hamburger');
-            body.classList.add('pa-sb-open');
-            if (hb) { hb.innerHTML = '&#10005;'; hb.title='Cerrar menu'; }
-            window.parent._paSbOpen = true;
-        } catch(e) {}
-    }
-    function _closeSidebar() {
-        try {
-            var body = window.parent.document.body;
-            var hb   = window.parent.document.getElementById('pa-hamburger');
-            body.classList.remove('pa-sb-open');
-            if (hb) { hb.innerHTML = '&#9776;'; hb.title='Abrir menu'; }
-            window.parent._paSbOpen = false;
-        } catch(e) {}
-    }
-    function _initMobileHamburger() {
-        if (window.parent.innerWidth >= 769) return;
-        try {
-            var doc  = window.parent.document;
-            var body = doc.body;
-            /* Overlay DOM (lo gestiona el CSS via body.pa-sb-open) */
-            if (!doc.getElementById('pa-sb-overlay')) {
-                var ov = doc.createElement('div');
-                ov.id  = 'pa-sb-overlay';
-                ov.addEventListener('click', _closeSidebar);
-                body.appendChild(ov);
-            }
-            /* Botón hamburger */
-            if (!doc.getElementById('pa-hamburger')) {
-                var btn = doc.createElement('div');
-                btn.id    = 'pa-hamburger';
-                btn.title = 'Abrir menu';
-                btn.innerHTML = '&#9776;';
-                btn.setAttribute('role','button');
-                btn.setAttribute('aria-label','Abrir navegacion');
-                btn.style.cssText = [
-                    'position:fixed','top:10px','left:10px',
-                    'z-index:1001',
-                    'background:#0f172a',
-                    'border-radius:8px',
-                    'padding:7px 11px',
-                    'font-size:1.3rem','line-height:1',
-                    'color:#e2e8f0',
-                    'cursor:pointer',
-                    'box-shadow:0 2px 10px rgba(0,0,0,0.45)',
-                    'user-select:none',
-                    '-webkit-user-select:none',
-                    'touch-action:manipulation'
-                ].join(';');
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    if (body.classList.contains('pa-sb-open')) { _closeSidebar(); }
-                    else { _openSidebar(); }
-                });
-                body.appendChild(btn);
-            }
-            /* Cerrar sidebar al pulsar un nav item */
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb && !sb._paNavListener) {
-                sb._paNavListener = true;
-                sb.addEventListener('click', function(e) {
-                    if (e.target.closest('label')) { setTimeout(_closeSidebar, 180); }
-                });
-            }
-            /* Estado inicial: siempre cerrado al cargar */
-            if (!window.parent._paSbOpen) { body.classList.remove('pa-sb-open'); }
-        } catch(e) {}
-    }
-
     _expandOnce();
-    _initMobileHamburger();
-    setTimeout(_expandOnce,   200);
-    setTimeout(_expandOnce,   600);
-    setTimeout(_initMobileHamburger, 300);
+    setTimeout(_expandOnce, 200);
+    setTimeout(_expandOnce, 600);
     setTimeout(function(){ _styleCollapsed(); }, 1500);
     try {
         new MutationObserver(function() {
             _styleCollapsed();
-            _initMobileHamburger();
         }).observe(window.parent.document.body, {childList:true, subtree:false});
     } catch(e) {}
 })();
