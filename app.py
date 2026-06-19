@@ -12019,48 +12019,34 @@ def pantalla_analisis():
             border-radius: 0 0 8px 8px !important;
             padding: 6px 8px 6px !important;
         }
-        /* Rebalancear columnas: logo más estrecho, botones más anchos */
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(1) {
-            flex: 0 0 40% !important; max-width: 40% !important; min-width: 0 !important;
-        }
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(2) {
-            flex: 0 0 16% !important; max-width: 16% !important; min-width: 0 !important;
-        }
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(3) {
-            flex: 0 0 44% !important; max-width: 44% !important; min-width: 0 !important;
-        }
-        /* Botones más compactos */
+        /* Botones compactos en móvil */
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button {
-            padding: 0.25rem 0.45rem !important;
+            padding: 0.2rem 0.4rem !important;
             font-size: 0.72rem !important;
         }
         /* Nombre de usuario: truncar si no cabe */
-        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:last-child
-            [data-testid="stPopover"] button p {
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stPopover"] button p {
             overflow: hidden !important;
             text-overflow: ellipsis !important;
             white-space: nowrap !important;
-            max-width: 120px !important;
         }
     }
     </style>
     """, unsafe_allow_html=True)
-    _hdr_left, _hdr_bell, _hdr_right = st.columns([3, 0.6, 1])
+    _hdr_left, _hdr_right = st.columns([2, 3])
     with _hdr_left:
         st.markdown(
             f'''<span id="__pivot_hdr_logo" style="display:none"></span>
-            <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
-              <div style="background:rgba(255,255,255,0.12);border-radius:8px;
-                          padding:6px 10px;font-size:1.4rem;line-height:1">📊</div>
-              <div>
-                <div style="color:#fff;font-size:1.05rem;font-weight:800;
-                            letter-spacing:-0.02em;line-height:1.1">PivotAnalyzer</div>
-                <div style="color:#93c5fd;font-size:0.7rem;font-weight:500;margin-top:1px">
-                  Análisis financiero multi-método</div>
-              </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <div style="background:rgba(255,255,255,0.12);border-radius:6px;
+                          padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
+              <div style="color:#fff;font-size:0.95rem;font-weight:800;
+                          letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>
             </div>''',
             unsafe_allow_html=True
         )
+    with _hdr_right:
+        _hdr_bell, _hdr_user = st.columns([1, 2])
     with _hdr_bell:
         _notifs = _obtener_notificaciones_no_leidas(usuario["id"])
         _n_notif = len(_notifs)
@@ -12095,7 +12081,7 @@ def pantalla_analisis():
                     _marcar_notificaciones_leidas(uid)
                     st.rerun()
 
-    with _hdr_right:
+    with _hdr_user:
         _uinitials = "".join(w[0].upper() for w in _uname.split() if w)[:2] or "U"
         _usr_email_hdr = usuario.get("email", "") or ""
         with st.popover(f"👤 {_uname}", use_container_width=True):
