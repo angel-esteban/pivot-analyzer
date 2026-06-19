@@ -11065,6 +11065,228 @@ _INDICES_SCREENING = {
 }
 
 
+
+def _generar_pdf_screening(job: dict) -> bytes:
+    """Genera un PDF con los resultados del screening. Devuelve bytes listos para st.download_button."""
+    import io, json as _json
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
+                                    TableStyle, PageBreak, HRFlowable, KeepTogether)
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    # ── Datos ─────────────────────────────────────────────────────────
+    resultado = job.get("resultado_json") or []
+    if isinstance(resultado, str):
+        try:    resultado = _json.loads(resultado)
+        except: resultado = []
+    resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
+
+    indice    = job.get("indice", "—")
+    tipo      = job.get("tipo_cartera", "—")
+    completed = str(job.get("completed_at") or job.get("created_at") or "")[:16]
+    job_id    = job.get("id", "")
+
+    n_cumple  = sum(1 for r in resultado if r.get("estado_global") == "cumple")
+    n_parcial = sum(1 for r in resultado if r.get("estado_global") == "parcial")
+    n_no      = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
+    n_error   = sum(1 for r in resultado if r.get("error"))
+    total     = len(resultado)
+
+    # ── Colores ───────────────────────────────────────────────────────
+    C_DARK   = colors.HexColor("#1e3a5f")
+    C_GRAY   = colors.HexColor("#64748b")
+    C_GREEN  = colors.HexColor("#16a34a")
+    C_AMBER  = colors.HexColor("#d97706")
+    C_RED    = colors.HexColor("#dc2626")
+    C_SLATE  = colors.HexColor("#94a3b8")
+    C_BG1    = colors.HexColor("#f8fafc")
+    C_BG2    = colors.HexColor("#f1f5f9")
+    C_BORDER = colors.HexColor("#e2e8f0")
+
+    ESTADO_HEX   = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
+    ESTADO_COLOR = {"cumple": C_GREEN, "parcial": C_AMBER, "no_cumple": C_RED, "error": C_SLATE}
+    ESTADO_LABEL = {"cumple": "Cumple", "parcial": "Parcial", "no_cumple": "No cumple", "error": "Error"}
+    CRIT_HEX     = {"ok": "#16a34a", "warning": "#d97706", "ko": "#dc2626",
+                    "sin_datos": "#94a3b8", "manual": "#64748b"}
+    CRIT_LABEL   = {"ok": "OK", "warning": "~OK", "ko": "KO", "sin_datos": "N/A", "manual": "Manual"}
+
+    # ── Estilos ───────────────────────────────────────────────────────
+    styles = getSampleStyleSheet()
+    _id = [0]
+    def ps(base_name, **kw):
+        _id[0] += 1
+        name = f"{base_name}_{_id[0]}"
+        return ParagraphStyle(name, parent=styles["Normal"], **kw)
+
+    S_TITLE   = ps("title",   fontName="Helvetica-Bold", fontSize=16, textColor=C_DARK, spaceAfter=2)
+    S_SUB     = ps("sub",     fontName="Helvetica",      fontSize=9,  textColor=C_GRAY, spaceAfter=8)
+    S_SECTION = ps("section", fontName="Helvetica-Bold", fontSize=11, textColor=C_DARK,
+                   spaceBefore=10, spaceAfter=4)
+    S_TICKER  = ps("ticker",  fontName="Helvetica-Bold", fontSize=9,  textColor=C_DARK,
+                   spaceBefore=6, spaceAfter=2)
+    S_FOOT    = ps("foot",    fontName="Helvetica",      fontSize=7,  textColor=C_SLATE,
+                   alignment=TA_CENTER)
+
+    def p(txt, **kw):
+        return Paragraph(txt, ps("p", **kw))
+
+    # ── Documento ─────────────────────────────────────────────────────
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            rightMargin=1.5*cm, leftMargin=1.5*cm,
+                            topMargin=2*cm, bottomMargin=2*cm,
+                            title=f"Screening {indice} — PivotAnalyzer",
+                            author="PivotAnalyzer")
+    story = []
+
+    # ── Cabecera ──────────────────────────────────────────────────────
+    story.append(Paragraph("PivotAnalyzer — Informe de Screening", S_TITLE))
+    story.append(Paragraph(
+        f"Indice: <b>{indice}</b>  |  Cartera: <b>{tipo}</b>  |  Fecha: <b>{completed}</b>  |  Job <b>#{job_id}</b>",
+        S_SUB
+    ))
+    story.append(HRFlowable(width="100%", thickness=1, color=C_BORDER, spaceAfter=8))
+
+    # ── Métricas ──────────────────────────────────────────────────────
+    def metric_cell(label, value, hex_color):
+        return [
+            p(f"<b>{label}</b>", fontSize=8, textColor=C_GRAY, alignment=TA_CENTER),
+            p(f"<font size='18' color='{hex_color}'><b>{value}</b></font>",
+              alignment=TA_CENTER),
+        ]
+
+    met_data = list(zip(
+        metric_cell("Cumplen",    n_cumple,  "#16a34a"),
+        metric_cell("Parcial",    n_parcial, "#d97706"),
+        metric_cell("No cumplen", n_no,      "#dc2626"),
+        metric_cell("Sin datos",  n_error,   "#94a3b8"),
+        metric_cell("Total",      total,     "#1e3a5f"),
+    ))
+    met_tbl = Table(met_data, colWidths=[3*cm]*5)
+    met_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0), C_BG2),
+        ("BACKGROUND",    (0,1), (-1,1), colors.white),
+        ("GRID",          (0,0), (-1,-1), 0.5, C_BORDER),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+    ]))
+    story.append(met_tbl)
+    story.append(Spacer(1, 0.5*cm))
+
+    # ── Tabla resumen tickers ──────────────────────────────────────────
+    story.append(Paragraph("Resumen de valores", S_SECTION))
+    hdr_style = {"fontName": "Helvetica-Bold", "fontSize": 8, "textColor": colors.white}
+    tbl_data = [[
+        p("<b>Ticker</b>",  **hdr_style),
+        p("<b>Empresa</b>", **hdr_style),
+        p("<b>Score</b>",   **hdr_style, alignment=TA_CENTER),
+        p("<b>Estado</b>",  **hdr_style, alignment=TA_CENTER),
+    ]]
+    for r in resultado:
+        eg    = r.get("estado_global", "error")
+        ehex  = ESTADO_HEX.get(eg, "#94a3b8")
+        elbl  = ESTADO_LABEL.get(eg, eg)
+        score = r.get("puntuacion", 0)
+        nombre = (r.get("nombre") or r.get("ticker", ""))[:45]
+        tbl_data.append([
+            p(f"<b>{r.get('ticker','')}</b>", fontSize=8),
+            p(nombre, fontSize=8),
+            p(f"<b>{score}</b>", fontSize=8, alignment=TA_CENTER),
+            p(f"<font color='{ehex}'><b>{elbl}</b></font>", fontSize=8, alignment=TA_CENTER),
+        ])
+    row_styles = []
+    for i in range(1, len(tbl_data)):
+        bg = colors.white if i % 2 == 1 else C_BG1
+        row_styles.append(("BACKGROUND", (0, i), (-1, i), bg))
+    tbl = Table(tbl_data, colWidths=[2.5*cm, 8.5*cm, 2*cm, 2.5*cm], repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0), C_DARK),
+        ("GRID",          (0,0), (-1,-1), 0.25, C_BORDER),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        *row_styles,
+    ]))
+    story.append(tbl)
+
+    # ── Detalle por ticker ─────────────────────────────────────────────
+    story.append(PageBreak())
+    story.append(Paragraph("Detalle por valor", S_SECTION))
+
+    for r in resultado:
+        ticker = r.get("ticker", "")
+        nombre = (r.get("nombre") or ticker)[:55]
+        eg     = r.get("estado_global", "error")
+        ehex   = ESTADO_HEX.get(eg, "#94a3b8")
+        elbl   = ESTADO_LABEL.get(eg, eg)
+        score  = r.get("puntuacion", 0)
+
+        if r.get("error"):
+            story.append(KeepTogether([
+                p(f"<b>{ticker}</b> — <font color='#dc2626'>Error al obtener datos</font>",
+                  fontSize=8, spaceBefore=4),
+                Spacer(1, 0.1*cm),
+            ]))
+            continue
+
+        criterios = r.get("criterios", [])
+        crit_rows = [[
+            p("<b>Criterio</b>", fontSize=7, textColor=C_GRAY),
+            p("<b>Valor</b>",    fontSize=7, textColor=C_GRAY, alignment=TA_CENTER),
+            p("<b>Estado</b>",   fontSize=7, textColor=C_GRAY, alignment=TA_CENTER),
+            p("<b>Detalle</b>",  fontSize=7, textColor=C_GRAY),
+        ]]
+        for c in criterios:
+            c_est = c.get("estado", "ko")
+            c_hex = CRIT_HEX.get(c_est, "#64748b")
+            c_lbl = CRIT_LABEL.get(c_est, c_est)
+            crit_rows.append([
+                p(c.get("nombre", ""), fontSize=7),
+                p(c.get("valor_fmt", "—"), fontSize=7, alignment=TA_CENTER),
+                p(f"<font color='{c_hex}'><b>{c_lbl}</b></font>",
+                  fontSize=7, alignment=TA_CENTER),
+                p((c.get("mensaje") or "")[:90], fontSize=6.5, textColor=C_GRAY),
+            ])
+        ct = Table(crit_rows, colWidths=[4.5*cm, 1.5*cm, 1.5*cm, 8*cm])
+        ct_row_styles = []
+        for i in range(1, len(crit_rows)):
+            bg = colors.white if i % 2 == 1 else C_BG1
+            ct_row_styles.append(("BACKGROUND", (0, i), (-1, i), bg))
+        ct.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,0), C_BG2),
+            ("GRID",          (0,0), (-1,-1), 0.25, C_BORDER),
+            ("TOPPADDING",    (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ("VALIGN",        (0,0), (-1,-1), "TOP"),
+            *ct_row_styles,
+        ]))
+
+        story.append(KeepTogether([
+            p(f"<b>{ticker}</b>  <font color='#64748b'>{nombre}</font>  "
+              f"| Score: <b>{score}/100</b>  "
+              f"| <font color='{ehex}'><b>{elbl}</b></font>",
+              fontName="Helvetica-Bold", fontSize=9, textColor=C_DARK,
+              spaceBefore=6, spaceAfter=2),
+            ct,
+            Spacer(1, 0.2*cm),
+        ]))
+
+    # ── Pie ───────────────────────────────────────────────────────────
+    story.append(Spacer(1, 0.8*cm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER))
+    story.append(Paragraph(
+        "Generado por PivotAnalyzer. Solo uso formativo — no constituye asesoramiento de inversión.",
+        S_FOOT
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
+
 def _render_screening_resultados(job: dict):
     """Muestra la tabla de resultados de un job completado."""
     import json as _json
@@ -11110,6 +11332,23 @@ def _render_screening_resultados(job: dict):
         f'{_err_html}</div>',
         unsafe_allow_html=True
     )
+
+    # Botón descarga PDF
+    _indice_slug = (job.get('indice') or 'screening').replace(' ', '_')
+    _fecha_slug  = str(job.get('completed_at') or job.get('created_at') or '')[:10]
+    _pdf_filename = f"screening_{_indice_slug}_{_fecha_slug}.pdf"
+    try:
+        _pdf_bytes = _generar_pdf_screening(job)
+        st.download_button(
+            label="📥 Descargar informe PDF",
+            data=_pdf_bytes,
+            file_name=_pdf_filename,
+            mime="application/pdf",
+            use_container_width=False,
+        )
+    except Exception as _pdf_err:
+        st.warning(f"No se pudo generar el PDF: {_pdf_err}")
+
     st.markdown("---")
 
     # Tabla expandible por ticker
