@@ -11895,9 +11895,10 @@ def pantalla_analisis():
 })();
 </script>
 """, height=0, scrolling=False)
-    # JS: expandir sidebar en carga/refresco de página; mostrar botón arriba-izquierda al colapsar
+    # JS: sidebar desktop auto-expand + hamburger personalizado en movil
     _st_components.html("""<script>
 (function pivotSidebarInit() {
+    // ── DESKTOP: expandir sidebar una vez ─────────────────────────────
     function _styleCollapsed() {
         try {
             var doc = window.parent.document;
@@ -11911,34 +11912,116 @@ def pantalla_analisis():
         } catch(e) {}
     }
     function _expandOnce() {
-        // En movil (<769px): NO expandir — el sidebar empieza colapsado con hamburger nativo
         if (window.parent.innerWidth < 769) { return; }
-        // window.parent._pivotExpanded se resetea con cada recarga de página (F5)
-        // pero persiste en reruns de widgets → sólo expandimos una vez por sesión
         if (window.parent._pivotExpanded) { _styleCollapsed(); return; }
         try {
             var doc = window.parent.document;
             var sb  = doc.querySelector('[data-testid="stSidebar"]');
             if (!sb) return;
             if (sb.getAttribute('aria-expanded') === 'false') {
-                // Sidebar está colapsado → expandir (solo en desktop)
                 var btn = doc.querySelector('[data-testid="collapsedControl"] button');
                 if (!btn) btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
                 if (btn) { btn.click(); window.parent._pivotExpanded = true; }
             } else {
-                // Sidebar ya está abierto
                 window.parent._pivotExpanded = true;
             }
         } catch(e) {}
         _styleCollapsed();
     }
+
+    // ── MOVIL: hamburger personalizado ────────────────────────────────
+    function _openSidebar() {
+        try {
+            var doc = window.parent.document;
+            var sb  = doc.querySelector('[data-testid="stSidebar"]');
+            var ov  = doc.getElementById('pa-sb-overlay');
+            var hb  = doc.getElementById('pa-hamburger');
+            if (sb) { sb.style.setProperty('transform','translateX(0)','important'); }
+            if (ov) { ov.style.display = 'block'; }
+            if (hb) { hb.innerHTML = '&#10005;'; }   /* X */
+            window.parent._paSbOpen = true;
+        } catch(e) {}
+    }
+    function _closeSidebar() {
+        try {
+            var doc = window.parent.document;
+            var sb  = doc.querySelector('[data-testid="stSidebar"]');
+            var ov  = doc.getElementById('pa-sb-overlay');
+            var hb  = doc.getElementById('pa-hamburger');
+            if (sb) { sb.style.setProperty('transform','translateX(-110%)','important'); }
+            if (ov) { ov.style.display = 'none'; }
+            if (hb) { hb.innerHTML = '&#9776;'; }    /* ☰ */
+            window.parent._paSbOpen = false;
+        } catch(e) {}
+    }
+    function _initMobileHamburger() {
+        if (window.parent.innerWidth >= 769) return;
+        try {
+            var doc = window.parent.document;
+            /* Overlay para cerrar al pulsar fuera */
+            if (!doc.getElementById('pa-sb-overlay')) {
+                var ov = doc.createElement('div');
+                ov.id = 'pa-sb-overlay';
+                ov.style.cssText = [
+                    'display:none','position:fixed','top:0','left:0',
+                    'width:100vw','height:100vh',
+                    'background:rgba(0,0,0,0.45)',
+                    'z-index:999','cursor:pointer'
+                ].join(';');
+                ov.addEventListener('click', _closeSidebar);
+                doc.body.appendChild(ov);
+            }
+            /* Botón hamburger */
+            if (!doc.getElementById('pa-hamburger')) {
+                var btn = doc.createElement('div');
+                btn.id  = 'pa-hamburger';
+                btn.innerHTML = '&#9776;';
+                btn.style.cssText = [
+                    'position:fixed','top:10px','left:10px',
+                    'z-index:1001',
+                    'background:#0f172a',
+                    'border-radius:8px',
+                    'padding:7px 11px',
+                    'font-size:1.25rem','line-height:1',
+                    'color:#e2e8f0',
+                    'cursor:pointer',
+                    'box-shadow:0 2px 10px rgba(0,0,0,0.45)',
+                    'user-select:none',
+                    '-webkit-user-select:none'
+                ].join(';');
+                btn.addEventListener('click', function() {
+                    if (window.parent._paSbOpen) { _closeSidebar(); }
+                    else { _openSidebar(); }
+                });
+                doc.body.appendChild(btn);
+            }
+            /* Cerrar sidebar al hacer clic en un item de navegacion */
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb && !sb._paListenerSet) {
+                sb._paListenerSet = true;
+                sb.addEventListener('click', function(e) {
+                    /* Cerrar si el clic fue en un label de radio (nav item) */
+                    if (e.target.closest('label')) {
+                        setTimeout(_closeSidebar, 150);
+                    }
+                });
+            }
+            /* Estado inicial: sidebar cerrado */
+            if (!window.parent._paSbOpen) { _closeSidebar(); }
+        } catch(e) {}
+    }
+
     _expandOnce();
-    setTimeout(_expandOnce, 200);
-    setTimeout(_expandOnce, 600);
+    _initMobileHamburger();
+    setTimeout(_expandOnce,   200);
+    setTimeout(_expandOnce,   600);
+    setTimeout(_initMobileHamburger, 300);
     setTimeout(function(){ _styleCollapsed(); }, 1500);
     try {
-        new MutationObserver(_styleCollapsed).observe(
-            window.parent.document.body, {childList:true, subtree:true});
+        new MutationObserver(function() {
+            _styleCollapsed();
+            _initMobileHamburger();
+        }).observe(window.parent.document.body, {childList:true, subtree:false});
     } catch(e) {}
 })();
 </script>""", height=0)
@@ -11999,6 +12082,14 @@ def pantalla_analisis():
         color: #f1f5f9 !important;
         font-size: 0.78rem !important;
         font-weight: 600 !important;
+    }
+    /* Cabecera en movil: ajustar margenes al padding movil (0.75rem) */
+    @media (max-width: 768px) {
+        [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
+            margin: 0 -0.75rem 0.5rem !important;
+            border-radius: 0 !important;
+            padding: 6px 12px 6px !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
