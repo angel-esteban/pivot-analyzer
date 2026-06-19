@@ -10644,6 +10644,26 @@ def _obtener_jobs_usuario(usuario_id: int) -> list:
         return []
 
 
+def _obtener_job_resultado(job_id: int) -> dict | None:
+    """Trae un job completo incluyendo resultado_json (sólo cuando se necesita mostrar)."""
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT id, indice, tipo_cartera, estado, progreso, total_tickers, "
+                    "created_at, completed_at, resultado_json "
+                    "FROM screening_jobs WHERE id=%s",
+                    (job_id,)
+                )
+                row = cur.fetchone()
+                return dict(row) if row else None
+        finally:
+            release_db_connection(conn)
+    except Exception:
+        return None
+
+
 # ── Funciones de cálculo para criterios computed ────────────────────────────
 
 def _sc_free_float(info: dict) -> float | None:
@@ -11137,7 +11157,12 @@ def _render_screening_panel(tipo_key: str, uid: int):
                 st.session_state[f"_sc_mostrar_resultado_{tipo_key}"] = ver
 
             if st.session_state.get(f"_sc_mostrar_resultado_{tipo_key}", True):
-                _render_screening_resultados(job_activo)
+                # Cargamos el job completo (con resultado_json) sólo cuando hace falta
+                _job_full = _obtener_job_resultado(job_activo["id"])
+                if _job_full:
+                    _render_screening_resultados(_job_full)
+                else:
+                    st.warning("No se pudieron cargar los resultados.")
             return
 
         # ── Formulario de lanzamiento ───────────────────────────────────
