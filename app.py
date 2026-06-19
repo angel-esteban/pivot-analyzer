@@ -12149,7 +12149,7 @@ def pantalla_analisis():
         "💰 Renta Fija",
         "📁 Cartera",
         "🧭 ¿Por dónde empiezo?",
-        "📚 Formación",
+        "📚 Tutoriales",
     ]
     if es_admin:
         _nav_items.append("⚙️ Usuarios")
@@ -12206,7 +12206,7 @@ def pantalla_analisis():
     _on_renta       = _nav_sel == "💰 Renta Fija"
     _on_cartera     = _nav_sel == "📁 Cartera"
     _on_pp          = _nav_sel == "🧭 ¿Por dónde empiezo?"
-    _on_edu         = _nav_sel == "📚 Formación"
+    _on_edu         = _nav_sel == "📚 Tutoriales"
     _on_usuarios    = _nav_sel == "⚙️ Usuarios"
     _on_ayuda       = _nav_sel == "📖 Ayuda"
     tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
@@ -16270,7 +16270,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
     # ---- TAB FORMACIÓN ----
     if _on_edu:
-        st.markdown("## 📚 Formación")
+        st.markdown("## 📚 Tutoriales")
         st.caption("Aprende qué significa cada indicador, cómo interpretar ratios por sector y qué lecciones dejan los grandes eventos de mercado.")
 
         _edu_tabs = st.tabs(["📖 Glosario", "📊 Ratios por sector", "🎯 Guías por estrategia", "📉 Patrones históricos"])
@@ -16408,14 +16408,27 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             if not _crisis_data:
                 st.info("crisis_patterns.json no disponible.")
             else:
+                # tipo puede ser str o list — aplanar para construir opciones
+                _tipos_set = set()
+                for _v in _crisis_data.values():
+                    if isinstance(_v, dict):
+                        _t = _v.get("tipo", "")
+                        if isinstance(_t, list):
+                            _tipos_set.update(_t)
+                        elif _t:
+                            _tipos_set.add(_t)
                 _tipo_filtro = st.multiselect(
                     "Filtrar por tipo",
-                    options=sorted({v.get("tipo","") for v in _crisis_data.values() if isinstance(v, dict) and v.get("tipo")}),
+                    options=sorted(_tipos_set),
                     default=[], key="edu_crisis_tipo"
                 )
                 for _cid, _cd in _crisis_data.items():
                     if not isinstance(_cd, dict): continue
-                    if _tipo_filtro and _cd.get("tipo", "") not in _tipo_filtro:
+                    # tipo puede ser str o list
+                    _cd_tipos = _cd.get("tipo", [])
+                    if isinstance(_cd_tipos, str):
+                        _cd_tipos = [_cd_tipos]
+                    if _tipo_filtro and not any(_t in _tipo_filtro for _t in _cd_tipos):
                         continue
                     _emoji  = _cd.get("emoji", "📉")
                     _nombre = _cd.get("nombre", _cid)
@@ -16466,7 +16479,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             "- **💰 Renta Fija** - Tipos del Tesoro español, Euribor, primas de riesgo, ETFs de renta fija UCITS.\n"
             "- **📁 Cartera** - Registra tus posiciones, sigue su evolución y lanza screeners automáticos.\n"
             "- **🧭 Por dónde empiezo** - Guía paso a paso para analizar un valor: macro, técnico, semáforo y niveles.\n"
-            "- **📚 Formación** - Glosario, ratios por sector, guías de estrategia y crisis históricas.\n\n"
+            "- **📚 Tutoriales** - Glosario, ratios por sector, guías de estrategia y crisis históricas.\n\n"
             "**Contacto y soporte:** si encuentras un error o tienes una sugerencia, usa el icono en la cabecera."
         )
         st.caption("PivotAnalyzer v1.0 · Análisis financiero multi-método · Solo para uso educativo e informativo.")
