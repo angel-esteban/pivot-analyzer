@@ -6454,7 +6454,10 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           analisis_fibo=None,
                           analisis_rsi=None,
                           analisis_vol=None,
-                          puntuacion_tec=None) -> str:
+                          puntuacion_tec=None,
+                          hist=None,
+                          info: dict = None,
+                          div_ttm: float = None) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -7250,6 +7253,113 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>\n'
         )
 
+    # ── Pre-compute shared values for HTML report ──────────────────────────────
+    _n_pos_h = sum(1 for _, _, s in (factores_semaforo or []) if s >= 0.75)
+    _n_tot_h = len(factores_semaforo or [])
+
+    # ATR(14)
+    _atr_eur_h = None
+    _atr_pct_h = None
+    _stop_h    = None
+    if hist is not None:
+        try:
+            import pandas as _pd_h
+            _hi_h   = hist["High"].squeeze()
+            _lo_h   = hist["Low"].squeeze()
+            _cl_h   = hist["Close"].squeeze()
+            _prev_h = _cl_h.shift(1)
+            _tr_h   = (_hi_h - _lo_h).combine((_hi_h - _prev_h).abs(), max).combine((_lo_h - _prev_h).abs(), max)
+            _atr_eur_h = float(_tr_h.rolling(14).mean().iloc[-1])
+            _atr_pct_h = _atr_eur_h / precio * 100 if precio > 0 else None
+            _stop_h    = precio - 2 * _atr_eur_h
+        except Exception:
+            pass
+
+    # Invalidation/confirmation from confluencias
+    _inv_bajo_h = None
+    _inv_alto_h = None
+    _min_d_b, _min_d_a = float("inf"), float("inf")
+    for _cc in (confluencias or []):
+        _cp = _cc["precio"]
+        if len(_cc.get("estrellas","")) < 2:
+            continue
+        if _cp < precio and (precio - _cp) < _min_d_b:
+            _min_d_b = precio - _cp; _inv_bajo_h = _cc
+        elif _cp > precio and (_cp - precio) < _min_d_a:
+            _min_d_a = _cp - precio; _inv_alto_h = _cc
+
+    # Fund overlay
+    _fund_html_h = ""
+    if info:
+        _fa_h = _alertas_fundamentales(info, div_ttm)
+        _nr_h2 = sum(1 for a in _fa_h if a.get("nivel") == "rojo")
+        _na_h2 = sum(1 for a in _fa_h if a.get("nivel") == "amarillo")
+        if _fa_h:
+            _fbg_h = "#fef2f2" if _nr_h2 >= 3 else "#fefce8"
+            _fbc_h = "#dc2626" if _nr_h2 >= 3 else "#d97706"
+            _ftc_h = "#991b1b" if _nr_h2 >= 3 else "#713f12"
+            _fico_h = "🔴" if _nr_h2 >= 3 else "⚠️"
+            _fsev_h = (f"{_nr_h2} alertas rojas" + (f" · {_na_h2} amarillas" if _na_h2 else "")) if _nr_h2 else f"{_na_h2} amarillas"
+            _fitems_h = "".join(f"<li>{a.get('titulo','')}</li>" for a in _fa_h)
+            if _nr_h2 >= 3:
+                _fsesgo_h = ("La lateralidad técnica puede estar enmascarando un deterioro fundamental. "
+                             "<b>Riesgo asimétrico:</b> si rompe a la baja, los fundamentales lo respaldan; "
+                             "si rompe al alza, los fundamentales no lo respaldan. "
+                             "<b>Sesgo operativo neto: cautela bajista.</b>")
+            elif _nr_h2 >= 1:
+                _fsesgo_h = "Señales de alerta fundamentales presentes. Contrastar la tesis técnica con la solidez del negocio."
+            else:
+                _fsesgo_h = "Alertas menores. Monitorizar evolución de márgenes y cobertura de dividendo."
+            _fund_html_h = (
+                f'<div class="card" style="border-left:4px solid {_fbc_h};background:{_fbg_h}">'
+                f'<h2 style="color:{_fbc_h}">{_fico_h} Lente Fundamental &middot; {_fsev_h}</h2>'
+                f'<ul style="margin:4px 0 8px 0;padding-left:18px;font-size:12px;color:{_ftc_h};line-height:1.7">{_fitems_h}</ul>'
+                f'<div style="font-size:12px;color:{_ftc_h};border-left:3px solid {_fbc_h};padding-left:9px;line-height:1.6">{_fsesgo_h}</div>'
+                f'</div>\n'
+            )
+
+    # Capa Operativa HTML block
+    _cop_metrics = []
+    if _atr_eur_h is not None:
+        _cop_metrics.append(f'<div class="metric-box"><div class="metric-label">ATR(14)</div>'
+                            f'<div class="metric-val">{_atr_eur_h:.3f} &euro;</div>'
+                            f'<div class="metric-sub">{_atr_pct_h:.2f}% del precio</div></div>' if _atr_pct_h else
+                            f'<div class="metric-box"><div class="metric-label">ATR(14)</div>'
+                            f'<div class="metric-val">{_atr_eur_h:.3f} &euro;</div></div>')
+        if _stop_h is not None:
+            _cop_metrics.append(f'<div class="metric-box"><div class="metric-label">Stop largo (2&times;ATR)</div>'
+                                f'<div class="metric-val" style="color:#dc2626">{_stop_h:.4f} &euro;</div>'
+                                f'<div class="metric-sub" style="color:#dc2626">&minus;{_atr_pct_h*2:.2f}% vs precio</div>')
+    if _inv_bajo_h:
+        _d = precio - _inv_bajo_h["precio"]
+        _cop_metrics.append(f'<div class="metric-box"><div class="metric-label">Invalidaci&oacute;n bajista {_inv_bajo_h.get("estrellas","")}</div>'
+                            f'<div class="metric-val">{_inv_bajo_h["precio"]:.4f} &euro;</div>'
+                            f'<div class="metric-sub" style="color:#dc2626">&minus;{(_d/precio*100):.2f}% ({_d:.3f} &euro;)</div></div>')
+    if _inv_alto_h:
+        _d = _inv_alto_h["precio"] - precio
+        _cop_metrics.append(f'<div class="metric-box"><div class="metric-label">Confirmaci&oacute;n alcista {_inv_alto_h.get("estrellas","")}</div>'
+                            f'<div class="metric-val">{_inv_alto_h["precio"]:.4f} &euro;</div>'
+                            f'<div class="metric-sub" style="color:#16a34a">+{(_d/precio*100):.2f}% ({_d:.3f} &euro;)</div></div>')
+    _cop_narr_lines = []
+    if _inv_bajo_h:
+        _cop_narr_lines.append(f'Si pierde <b>{_inv_bajo_h["precio"]:.4f} &euro;</b> {_inv_bajo_h.get("estrellas","")} en cierre, la estructura intermedia queda comprometida. Buscar confirmaci&oacute;n con volumen superior a la media.')
+    if _inv_alto_h:
+        _cop_narr_lines.append(f'Si supera <b>{_inv_alto_h["precio"]:.4f} &euro;</b> {_inv_alto_h.get("estrellas","")} en cierre, la estructura intermedia recupera tendencia alcista. Buscar confirmaci&oacute;n con volumen superior a la media.')
+    _cop_narr_html = ""
+    if _cop_narr_lines:
+        _cop_narr_html = (f'<div style="margin-top:10px;padding:10px 13px;background:#f1f5f9;'
+                          f'border-left:4px solid #64748b;border-radius:0 8px 8px 0;'
+                          f'font-size:12px;color:#1e293b;line-height:1.7">'
+                          + "<br>".join(_cop_narr_lines) + "</div>")
+    _capa_op_html = ""
+    if _cop_metrics or _cop_narr_html:
+        _capa_op_html = (
+            f'<div class="card"><h2>&#9881;&#65039; Capa Operativa</h2>'
+            f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:10px">'
+            + "".join(_cop_metrics)
+            + f'</div>{_cop_narr_html}</div>\n'
+        )
+
     # ── Lectura Integrada HTML ─────────────────────────────────────────────
     _li_score_h = (puntuacion_tec or {}).get("score_total", 5.0)
     _li_nivel_h = "alto" if _li_score_h >= 7 else ("medio" if _li_score_h >= 4 else "bajo")
@@ -7323,7 +7433,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'border-left:3px solid {_li_brd_h};padding-left:10px">{_li_imp_h}</div>\n'
         f'{_li_nk_h}\n'
         f'<div style="font-size:10px;color:#94a3b8;margin-top:10px">'
-        f'Diagnóstico {_li_score_h:.1f}/10 &middot; Semáforo {semaforo.upper()} {pct_semaforo:.0f}%</div>\n'
+        f'Diagnóstico {round(_li_score_h*2)/2:.1f}/10 (semanas–meses) &middot; Semáforo {semaforo.upper()} {_n_pos_h}/{_n_tot_h} (1–5 sesiones)</div>\n'
         f'</div>\n</div>\n'
     )
 
@@ -7336,7 +7446,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div class="sem-badge" style="border-color:{sem_color}">\n'
         f'<div class="sem-emoji">{emoji_sem}</div>\n'
         f'<div class="sem-label" style="color:{sem_color}">{semaforo.upper()}</div>\n'
-        f'<div class="sem-pct">{pct_semaforo:.0f}%</div>\n'
+        f'<div class="sem-pct">{_n_pos_h}/{_n_tot_h}</div>\n'
+        f'<div style="font-size:9px;font-weight:600">factores</div>\n'
+        f'<div style="font-size:9px;color:#94a3b8">1–5 sesiones</div>\n'
         f'</div>\n'
         f'<div class="fac-grid">{fac_cards}</div>\n'
         f'</div>\n'
@@ -7360,6 +7472,8 @@ tr:nth-child(even) td { background:#f8fafc; }
     )
     _body_html = (
         (_li_section or "")
+        + _fund_html_h
+        + _capa_op_html
         + _sem_card_html
         + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color)
         + f"</div>\n"
@@ -8110,7 +8224,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 analisis_fibo=None,
                 analisis_rsi=None,
                 analisis_vol=None,
-                puntuacion_tec=None):
+                puntuacion_tec=None,
+                hist=None,
+                info: dict = None,
+                div_ttm: float = None):
     """PDF con precio prominente + pivots multi-columna en paralelo."""
 
     buf = io.BytesIO()
@@ -8313,18 +8430,111 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             f"Nivel clave más cercano: {_lip_nr['precio']:.4f} ({_lip_nrd:+.1f}% — {_lip_nrt} reforzado)",
             _p(fontSize=7.5, fontName="Helvetica-Bold", textColor=_lip_col)
         ))
+    _n_pos_p = sum(1 for _, _, s in (factores_semaforo or []) if s >= 0.75)
+    _n_tot_p = len(factores_semaforo or [])
     historia.append(Paragraph(
-        f"Diagnóstico {_lip_score:.1f}/10 · Semáforo {semaforo.upper()} {pct_semaforo:.0f}%",
+        f"Diagnóstico {round(_lip_score*2)/2:.1f}/10 (semanas–meses) · Semáforo {semaforo.upper()} {_n_pos_p}/{_n_tot_p} (1–5 sesiones)",
         _p(fontSize=7, textColor=colors.HexColor("#94a3b8"))
     ))
 
+
+    # ── LENTE FUNDAMENTAL (PDF) ──────────────────────────────────────────────
+    if info:
+        _fa_p = _alertas_fundamentales(info, div_ttm)
+        _nr_p = sum(1 for a in _fa_p if a.get("nivel") == "rojo")
+        _na_p = sum(1 for a in _fa_p if a.get("nivel") == "amarillo")
+        if _fa_p:
+            _fbc_p = colors.HexColor("#dc2626") if _nr_p >= 3 else colors.HexColor("#d97706")
+            _fbg_p = colors.HexColor("#fef2f2") if _nr_p >= 3 else colors.HexColor("#fefce8")
+            _fsev_p = (f"{_nr_p} alertas rojas" + (f" · {_na_p} amarillas" if _na_p else "")) if _nr_p else f"{_na_p} amarillas"
+            historia.append(Spacer(1, 0.3*cm))
+            _pdf_sh("Lente Fundamental", historia)
+            _fa_hdr = Paragraph(f"{'🔴' if _nr_p >= 3 else '⚠️'} {_fsev_p}", _p(fontSize=8.5, fontName="Helvetica-Bold", textColor=_fbc_p))
+            historia.append(_fa_hdr)
+            for _fa_a in _fa_p:
+                historia.append(Paragraph(f"• {_strip(_fa_a.get('titulo',''))}", _p(fontSize=8, textColor=colors.HexColor("#374151"))))
+            if _nr_p >= 3:
+                _fsesgo_p = ("La lateralidad técnica puede enmascarar deterioro fundamental. "
+                             "Riesgo asimetrico: si rompe a la baja, fundamentales lo respaldan; "
+                             "si rompe al alza, no. Sesgo operativo neto: cautela bajista.")
+            elif _nr_p >= 1:
+                _fsesgo_p = "Señales de alerta fundamentales presentes. Contrastar tesis tecnica con solidez del negocio."
+            else:
+                _fsesgo_p = "Alertas menores. Monitorizar margenes y cobertura de dividendo."
+            historia.append(Paragraph(_strip(_fsesgo_p), _p(fontSize=8, textColor=colors.HexColor("#374151"))))
+
+    # ── CAPA OPERATIVA (PDF) ──────────────────────────────────────────────────
+    _atr_eur_p = None
+    if hist is not None:
+        try:
+            _hi_p   = hist["High"].squeeze()
+            _lo_p   = hist["Low"].squeeze()
+            _cl_p   = hist["Close"].squeeze()
+            _prev_p = _cl_p.shift(1)
+            _tr_p   = (_hi_p - _lo_p).combine((_hi_p - _prev_p).abs(), max).combine((_lo_p - _prev_p).abs(), max)
+            _atr_eur_p = float(_tr_p.rolling(14).mean().iloc[-1])
+        except Exception:
+            pass
+    _inv_bajo_p = None
+    _inv_alto_p = None
+    _min_db_p, _min_da_p = float("inf"), float("inf")
+    for _cc_p in (confluencias or []):
+        _cp_p = _cc_p["precio"]
+        if len(_cc_p.get("estrellas","")) < 2:
+            continue
+        if _cp_p < precio and (precio - _cp_p) < _min_db_p:
+            _min_db_p = precio - _cp_p; _inv_bajo_p = _cc_p
+        elif _cp_p > precio and (_cp_p - precio) < _min_da_p:
+            _min_da_p = _cp_p - precio; _inv_alto_p = _cc_p
+
+    if _atr_eur_p is not None or _inv_bajo_p or _inv_alto_p:
+        historia.append(Spacer(1, 0.3*cm))
+        _pdf_sh("Capa Operativa", historia)
+        _cop_rows_p = []
+        if _atr_eur_p is not None:
+            _atr_pct_p = _atr_eur_p / precio * 100 if precio > 0 else 0
+            _stop_p    = precio - 2 * _atr_eur_p
+            _cop_rows_p.append([
+                Paragraph("ATR(14)", _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
+                Paragraph(f"{_atr_eur_p:.3f} € ({_atr_pct_p:.2f}%)", _p(fontSize=8.5, fontName="Helvetica-Bold")),
+                Paragraph("Stop largo (2×ATR)", _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
+                Paragraph(f"{_stop_p:.4f} €", _p(fontSize=8.5, fontName="Helvetica-Bold", textColor=RO)),
+            ])
+        if _inv_bajo_p:
+            _d_b = precio - _inv_bajo_p["precio"]
+            _cop_rows_p.append([
+                Paragraph(f'Invalidación bajista {_inv_bajo_p.get("estrellas","")}', _p(fontSize=7, textColor=colors.HexColor("#64748b"))),
+                Paragraph(f'{_inv_bajo_p["precio"]:.4f} € (−{(_d_b/precio*100):.2f}%)', _p(fontSize=8.5, fontName="Helvetica-Bold", textColor=RO)),
+                Paragraph(f'Confirmación alcista {(_inv_alto_p or {}).get("estrellas","")}', _p(fontSize=7, textColor=colors.HexColor("#64748b"))) if _inv_alto_p else Paragraph("", S_NRM),
+                Paragraph(f'{_inv_alto_p["precio"]:.4f} € (+{((_inv_alto_p["precio"]-precio)/precio*100):.2f}%)', _p(fontSize=8.5, fontName="Helvetica-Bold", textColor=VE)) if _inv_alto_p else Paragraph("", S_NRM),
+            ])
+        if _cop_rows_p:
+            _cop_t_p = Table(_cop_rows_p, colWidths=[3.5*cm, 4*cm, 3.5*cm, 4*cm])
+            _cop_t_p.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0),(-1,-1), GF),
+                ("GRID",          (0,0),(-1,-1), 0.3, GB),
+                ("TOPPADDING",    (0,0),(-1,-1), 4),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+                ("LEFTPADDING",   (0,0),(-1,-1), 6),
+            ]))
+            historia.append(_cop_t_p)
+        # Narrative
+        _cop_narr_p = []
+        if _inv_bajo_p:
+            _cop_narr_p.append(f'Si pierde {_inv_bajo_p["precio"]:.4f} €  {_inv_bajo_p.get("estrellas","")} en cierre, la estructura intermedia queda comprometida.')
+        if _inv_alto_p:
+            _cop_narr_p.append(f'Si supera {_inv_alto_p["precio"]:.4f} € {_inv_alto_p.get("estrellas","")} en cierre, la estructura intermedia recupera tendencia alcista.')
+        if _cop_narr_p:
+            historia.append(Spacer(1, 0.1*cm))
+            historia.append(Paragraph(" / ".join(_cop_narr_p), _p(fontSize=7.5, textColor=colors.HexColor("#475569"))))
 
     # ── SEMÁFORO ──────────────────────────────────────────────────────────
     _pdf_sh("🚦 Semáforo Global", historia)
     badge_t = Table(
         [[Paragraph(SEM_DOT, _p(fontName="Helvetica-Bold", fontSize=24, alignment=TA_CENTER))],
          [Paragraph(ST, _p(fontName="Helvetica-Bold", fontSize=9, alignment=TA_CENTER, textColor=SC))],
-         [Paragraph(f"{pct_semaforo:.0f}%", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))]],
+         [Paragraph(f"{_n_pos_p}/{_n_tot_p}", _p(fontName="Helvetica-Bold", fontSize=13, alignment=TA_CENTER))],
+         [Paragraph("factores · 1–5 ses.", _p(fontSize=6.5, alignment=TA_CENTER, textColor=SC))]],
         colWidths=[2.8*cm]
     )
     badge_t.setStyle(TableStyle([
@@ -16324,6 +16534,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             analisis_rsi=analisis_rsi,
                             analisis_vol=analisis_vol,
                             puntuacion_tec=puntuacion_tec,
+                            hist=hist,
+                            info=info,
+                            div_ttm=div_ttm,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
@@ -16365,6 +16578,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             analisis_rsi=analisis_rsi,
                             analisis_vol=analisis_vol,
                             puntuacion_tec=puntuacion_tec,
+                            hist=hist,
+                            info=info,
+                            div_ttm=div_ttm,
                         )
                     _at_dl_c1, _at_dl_c2 = st.columns(2)
                     with _at_dl_c1:
