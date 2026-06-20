@@ -9730,18 +9730,18 @@ def _lectura_integrada(
     # ── Capa fundamental: overlay si hay alertas relevantes ─────────────────
     if info:
         _fund_alerts = _alertas_fundamentales(info, div_ttm)
-        _n_roja = sum(1 for a in _fund_alerts if a.get("tipo") == "rojo")
-        _n_amar = sum(1 for a in _fund_alerts if a.get("tipo") == "amarillo")
+        _n_roja = sum(1 for a in _fund_alerts if a.get("nivel") == "rojo")
+        _n_amar = sum(1 for a in _fund_alerts if a.get("nivel") == "amarillo")
         if _fund_alerts:
-            # Determinar severidad global
+            # Determinar severidad global — umbral correcto: 3+ rojas = deterioro estructural
             if _n_roja >= 3:
                 _f_bg, _f_bc, _f_tc = "#fef2f2", "#dc2626", "#991b1b"
                 _f_ico = "🔴"
-                _f_sev = f"{_n_roja} alertas rojas · {_n_amar} amarillas"
+                _f_sev = f"{_n_roja} alertas rojas" + (f" · {_n_amar} amarillas" if _n_amar else "")
             elif _n_roja >= 1:
                 _f_bg, _f_bc, _f_tc = "#fefce8", "#d97706", "#713f12"
                 _f_ico = "⚠️"
-                _f_sev = f"{_n_roja} alerta{'s' if _n_roja > 1 else ''} roja{'s' if _n_roja > 1 else ''} · {_n_amar} amarillas"
+                _f_sev = f"{_n_roja} alerta{'s' if _n_roja > 1 else ''} roja{'s' if _n_roja > 1 else ''}" + (f" · {_n_amar} amarillas" if _n_amar else "")
             else:
                 _f_bg, _f_bc, _f_tc = "#fefce8", "#d97706", "#713f12"
                 _f_ico = "⚠️"
@@ -9768,6 +9768,12 @@ def _lectura_integrada(
                     "El impulso técnico a corto plazo es positivo, pero los fundamentales muestran un "
                     "deterioro severo. <b>Divergencia lente técnica / lente fundamental.</b> Las subidas "
                     "sin soporte fundamental son más vulnerables a reversiones bruscas."
+                )
+            elif _n_roja >= 3:
+                _sesgo = (
+                    "Múltiples alertas fundamentales activas. El cuadro fundamental muestra un deterioro "
+                    "estructural. Contrastar la tesis técnica con la solidez del negocio antes de asumir "
+                    "cualquier exposición."
                 )
             elif _n_roja >= 1:
                 _sesgo = (
