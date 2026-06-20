@@ -13646,7 +13646,9 @@ de debilidad a corto plazo.
         _sem_color_hex = {"verde": "#16a34a", "amarillo": "#ca8a04", "rojo": "#dc2626"}.get(color_sem, "#94a3b8")
         _sem_bg_hex    = {"verde": "#f0fdf4", "amarillo": "#fefce8", "rojo": "#fef2f2"}.get(color_sem, "#f8fafc")
 
-        # Badge original + grid 3 columnas de factores
+        # Badge + grid 3 columnas de factores
+        _n_pos = sum(1 for _, _, s in factores_sem if s >= 0.75)
+        _n_tot = len(factores_sem)
         tarjetas_html = ""
         for factor, descripcion, _ in factores_sem:
             tarjetas_html += (
@@ -13665,7 +13667,9 @@ de debilidad a corto plazo.
             f'border-radius:12px;padding:12px 8px;background:{_sem_bg_hex};color:{_sem_color_hex}">'
             f'<div style="font-size:30px;line-height:1">{emoji_color}</div>'
             f'<div style="font-size:15px;font-weight:800;margin-top:6px">{color_sem.upper()}</div>'
-            f'<div style="font-size:22px;font-weight:700;color:#1e293b">{pct_sem:.0f}%</div>'
+            f'<div style="font-size:22px;font-weight:700;color:#1e293b">{_n_pos}/{_n_tot}</div>'
+            f'<div style="font-size:9px;color:{_sem_color_hex};font-weight:600;margin-top:1px">factores</div>'
+            f'<div style="font-size:9px;color:#94a3b8;margin-top:5px">1–5 sesiones</div>'
             f'</div>'
             f'<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
             f'{tarjetas_html}'
@@ -13777,14 +13781,16 @@ de debilidad a corto plazo.
                     f'</div>'
                 )
 
+            _sc2_r = round(_sc2 * 2) / 2  # redondear a pasos de 0.5 — evita falsa precision
             st.markdown(
                 f'<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:12px">'
                 f'<div style="min-width:88px;text-align:center;border:3px solid {_pt2_col};'
                 f'border-radius:12px;padding:12px 8px;background:{_pt2_bg};color:{_pt2_col}">'
                 f'<div style="font-size:30px;line-height:1">{_pt2_ico}</div>'
                 f'<div style="font-size:13px;font-weight:800;margin-top:6px">{_sn2.upper()}</div>'
-                f'<div style="font-size:22px;font-weight:700;color:#1e293b">{_sc2:.1f}</div>'
+                f'<div style="font-size:22px;font-weight:700;color:#1e293b">{_sc2_r:.1f}</div>'
                 f'<div style="font-size:10px;color:{_pt2_col};font-weight:600">/ 10</div>'
+                f'<div style="font-size:9px;color:#94a3b8;margin-top:5px">semanas–meses</div>'
                 f'</div>'
                 f'<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
                 f'{_comp_cards_html}'
