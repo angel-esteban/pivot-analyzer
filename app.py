@@ -9567,9 +9567,12 @@ def _lectura_integrada(
     precio: float, rsi_val: float,
     factores_sem: list,
     sector_yf: str = "",
+    info: dict = None,
+    div_ttm: float = None,
 ) -> None:
     """Síntesis accionable: cruza estructura (Diagnóstico) con momento (Semáforo)
-    y genera una lectura en lenguaje de inversor con implicación práctica."""
+    y genera una lectura en lenguaje de inversor con implicación práctica.
+    Integra también alertas fundamentales cuando info está disponible."""
 
     diag_score = (puntuacion_tec or {}).get("score_total", 5.0)
 
@@ -9723,6 +9726,73 @@ def _lectura_integrada(
         f'</div></div>',
         unsafe_allow_html=True
     )
+
+    # ── Capa fundamental: overlay si hay alertas relevantes ─────────────────
+    if info:
+        _fund_alerts = _alertas_fundamentales(info, div_ttm)
+        _n_roja = sum(1 for a in _fund_alerts if a.get("tipo") == "rojo")
+        _n_amar = sum(1 for a in _fund_alerts if a.get("tipo") == "amarillo")
+        if _fund_alerts:
+            # Determinar severidad global
+            if _n_roja >= 3:
+                _f_bg, _f_bc, _f_tc = "#fef2f2", "#dc2626", "#991b1b"
+                _f_ico = "🔴"
+                _f_sev = f"{_n_roja} alertas rojas · {_n_amar} amarillas"
+            elif _n_roja >= 1:
+                _f_bg, _f_bc, _f_tc = "#fefce8", "#d97706", "#713f12"
+                _f_ico = "⚠️"
+                _f_sev = f"{_n_roja} alerta{'s' if _n_roja > 1 else ''} roja{'s' if _n_roja > 1 else ''} · {_n_amar} amarillas"
+            else:
+                _f_bg, _f_bc, _f_tc = "#fefce8", "#d97706", "#713f12"
+                _f_ico = "⚠️"
+                _f_sev = f"{_n_amar} alerta{'s' if _n_amar > 1 else ''} amarilla{'s' if _n_amar > 1 else ''}"
+
+            # Construir lista de alertas en HTML
+            _f_items = "".join(
+                f'<li style="margin-bottom:3px">{a.get("titulo","")}'
+                + (f' — {a.get("detalle","")}' if a.get("detalle") else "")
+                + "</li>"
+                for a in _fund_alerts
+            )
+
+            # Sesgo operativo integrado (técnico × fundamental)
+            if _n_roja >= 3 and diag_nivel in ("medio", "bajo") and color_sem in ("amarillo", "rojo"):
+                _sesgo = (
+                    "La lateralidad técnica puede estar enmascarando un deterioro fundamental que el precio "
+                    "aún no ha terminado de descontar. <b>Riesgo asimétrico:</b> si rompe a la baja, los "
+                    "fundamentales lo respaldan; si rompe al alza, los fundamentales no lo respaldan. "
+                    "<b>Sesgo operativo neto: cautela bajista.</b>"
+                )
+            elif _n_roja >= 3 and color_sem == "verde":
+                _sesgo = (
+                    "El impulso técnico a corto plazo es positivo, pero los fundamentales muestran un "
+                    "deterioro severo. <b>Divergencia lente técnica / lente fundamental.</b> Las subidas "
+                    "sin soporte fundamental son más vulnerables a reversiones bruscas."
+                )
+            elif _n_roja >= 1:
+                _sesgo = (
+                    "Señales de alerta fundamentales presentes. La tesis técnica debe contrastarse con "
+                    "la solidez del negocio antes de asumir exposición significativa."
+                )
+            else:
+                _sesgo = (
+                    "Alertas menores en fundamentales. Monitorizar evolución de márgenes y cobertura de dividendo."
+                )
+
+            st.markdown(
+                f'<div style="margin-top:10px;background:{_f_bg};border:1.5px solid {_f_bc};'
+                f'border-radius:10px;padding:13px 15px">'
+                f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:0.07em;color:{_f_bc};margin-bottom:6px">'
+                f'{_f_ico} Lente fundamental · {_f_sev}</div>'
+                f'<ul style="margin:0 0 8px 0;padding-left:16px;font-size:12px;color:{_f_tc};line-height:1.7">'
+                f'{_f_items}</ul>'
+                f'<div style="font-size:12px;color:{_f_tc};font-weight:500;'
+                f'border-left:3px solid {_f_bc};padding-left:9px;line-height:1.6">'
+                f'{_sesgo}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
 
 def _sh(titulo: str) -> None:
@@ -13600,6 +13670,8 @@ def pantalla_analisis():
             rsi_val=rsi_val,
             factores_sem=factores_sem,
             sector_yf=(info.get("sector") or "") if info else "",
+            info=info,
+            div_ttm=div_ttm,
         )
 
         # ── Capa Operativa ───────────────────────────────────────────────────
@@ -13698,6 +13770,38 @@ def pantalla_analisis():
                     )
                 else:
                     st.metric("Confirmación alcista", "—", help="Sin confluencias ★★ o superiores sobre el precio actual.")
+
+            # ── Narrativa de niveles de invalidación/confirmación ─────────────
+            if _conf_3e_bajo or _conf_3e_alto:
+                _narr_lines = []
+                if _conf_3e_bajo:
+                    _nb_p   = _conf_3e_bajo["precio"]
+                    _nb_est = _conf_3e_bajo.get("estrellas", "★★")
+                    _nb_tfs = _conf_3e_bajo.get("tfs_distintos", "?")
+                    _narr_lines.append(
+                        f"Si pierde <b>{_nb_p:.4f} €</b> {_nb_est} en cierre "
+                        f"({'convergencia en ' + str(_nb_tfs) + ' timeframes'}),"
+                        f" la estructura intermedia queda comprometida. "
+                        f"Buscar confirmación con volumen superior a la media."
+                    )
+                if _conf_3e_alto:
+                    _na_p   = _conf_3e_alto["precio"]
+                    _na_est = _conf_3e_alto.get("estrellas", "★★")
+                    _na_tfs = _conf_3e_alto.get("tfs_distintos", "?")
+                    _narr_lines.append(
+                        f"Si supera <b>{_na_p:.4f} €</b> {_na_est} en cierre "
+                        f"({'convergencia en ' + str(_na_tfs) + ' timeframes'}),"
+                        f" la estructura intermedia recupera tendencia alcista. "
+                        f"Buscar confirmación con volumen superior a la media."
+                    )
+                st.markdown(
+                    '<div style="margin-top:8px;padding:11px 14px;background:#f1f5f9;'
+                    'border-left:4px solid #64748b;border-radius:0 8px 8px 0;'
+                    'font-size:12.5px;color:#1e293b;line-height:1.7">'
+                    + "<br>".join(_narr_lines)
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
 
             # ── Tamaño de posición ───────────────────────────────────────────
             with st.expander("📐 Calculadora de tamaño de posición", expanded=False):
