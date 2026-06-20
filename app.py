@@ -16689,9 +16689,27 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             # ══════════════════════════════════════════════════════════════
             # SELECTOR
             # ══════════════════════════════════════════════════════════════
-            _est_opciones = ["Todas", "💰 Dividendos", "📈 Swing 12-16 sem",
-                             "🏷️ Valor", "🚀 Momentum", "🔄 Rebote Técnico", "🛡️ Señal de Salida"]
-            _est_sel = st.radio("Mostrar estrategia:", _est_opciones,
+            # ── Verificar posición existente en cualquier cartera del usuario ──
+            _uid_est = st.session_state.get("usuario", {}).get("id")
+            _pos_est = None
+            if _uid_est:
+                try:
+                    _pos_rows = ejecutar_consulta(
+                        """SELECT cp.*, c.nombre as cartera_nombre
+                           FROM cartera_posiciones cp
+                           JOIN carteras c ON c.id = cp.cartera_id
+                           WHERE c.usuario_id = %s AND UPPER(cp.ticker) = UPPER(%s)
+                           LIMIT 1""",
+                        [_uid_est, ed["ticker"]], fetchall=True
+                    )
+                    _pos_est = _pos_rows[0] if _pos_rows else None
+                except Exception:
+                    _pos_est = None
+
+            _est_opciones = ["💰 Dividendos", "📈 Swing EOD"]
+            if _pos_est:
+                _est_opciones.append("🗂️ Gestión de posición")
+            _est_sel = st.radio("Estrategia:", _est_opciones,
                                 horizontal=True, key="est_selector",
                                 label_visibility="collapsed")
 
@@ -16831,205 +16849,82 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "El porcentaje indica la proporción de indicadores alineados: 80% alcista significa 8 de 10 indicadores en positivo."))
                 return c
 
-            def _build_valor():
+            def _build_gestion_posicion():
+                """Criterios para gestión de posición existente — mantener / reducir / salir."""
+                # ATR(14) calculado desde hist
+                try:
+                    _g_hi   = _hist["High"].squeeze()
+                    _g_lo   = _hist["Low"].squeeze()
+                    _g_cl   = _hist["Close"].squeeze()
+                    _g_prev = _g_cl.shift(1)
+                    _g_tr   = (_g_hi - _g_lo).combine((_g_hi - _g_prev).abs(), max).combine((_g_lo - _g_prev).abs(), max)
+                    _g_atr  = float(_g_tr.rolling(14).mean().iloc[-1])
+                except Exception:
+                    _g_atr  = None
+
+                _pe_entr  = float(_pos_est.get("precio_entrada") or 0)
+                _q_entr   = float(_pos_est.get("cantidad") or 0)
+                _pl_pct   = ((_precio / _pe_entr - 1) * 100) if _pe_entr > 0 else 0
+                _pl_abs   = (_precio - _pe_entr) * _q_entr
+                _stop_2x  = (_precio - 2 * _g_atr) if _g_atr else None
+                _sobre_stop = (_precio > _stop_2x) if _stop_2x else None
+
                 c = []
-                c.append(_criterio(2 if 0 < _pe < 15 else 1 if _pe < 22 else 0,
-                    f"PER {_pe:.1f}x" if _pe else "PER no disponible",
-                    f"{'Barato ✅' if 0 < _pe < 15 else 'Razonable ⚠️' if _pe < 22 else 'Caro ❌' if _pe else 'Sin datos'}",
-                    "El PER (Price-to-Earnings Ratio) mide cuántos años de beneficios actuales pagas por la acción. PER 15x = pagas 15 años de beneficios. "
-                    "Para inversión en valor buscamos PER &lt;15x — históricamente la zona de compra profunda donde la empresa está estadísticamente barata. "
-                    "Entre 15-22x es zona razonable para empresas sólidas. Por encima de 22x pagas una prima que requiere crecimiento de beneficios para justificarse. "
-                    "Cuidado: un PER muy bajo puede reflejar un negocio en declive, no una oportunidad — hay que contrastar con el resto de la tesis."))
-                _dist200 = (_precio / _sma200 - 1) * 100 if _sma200 > 0 else 0
-                c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 * 0.97 else
-                                   1 if _sma200 > 0 and _precio < _sma200 * 1.03 else 0,
-                    f"vs SMA200: {_dist200:+.1f}%" if _sma200 else "SMA200 no disponible",
-                    f"{'Descuento >3% ✅' if _dist200 < -3 else 'En línea ⚠️' if abs(_dist200) < 3 else 'Prima sobre media ❌'}",
-                    "Para valor profundo buscamos un descuento explícito sobre la media de largo plazo (&gt;3%). "
-                    "El precio por debajo de la SMA200 indica que el mercado ha estado castigando el valor durante meses — "
-                    "es precisamente donde los inversores de valor encuentran oportunidades, cuando el consenso es pesimista y el precio refleja ese pesimismo. "
-                    "Un descuento sin mejora de fundamentales puede ser una trampa de valor — la clave es que el negocio siga siendo sólido."))
-                c.append(_criterio(2 if _beta < 0.8 else 1 if _beta < 1.2 else 0,
-                    f"Beta {_beta:.2f}",
-                    f"{'Defensivo ✅' if _beta < 0.8 else 'Neutro ⚠️' if _beta < 1.2 else 'Especulativo ❌'}",
-                    "La beta mide la sensibilidad del precio a los movimientos del mercado general (referencia: 1.0 = se mueve igual que el índice). "
-                    "Beta 0.7 = si el mercado cae un 10%, este valor tiende a caer solo un 7%. Para valor, una beta baja (&lt;0.8) indica perfil defensivo: "
-                    "el valor no amplifica las caídas del mercado, lo que protege el capital mientras se espera que el mercado reconozca el valor intrínseco. "
-                    "Beta alta (&gt;1.2) añade volatilidad a una estrategia que ya requiere paciencia."))
-                c.append(_criterio(2 if _pos52 < 40 else 1 if _pos52 < 65 else 0,
-                    f"Posición 52W: {_pos52:.0f}%",
-                    f"{'Zona baja ✅' if _pos52 < 40 else 'Zona media ⚠️' if _pos52 < 65 else 'Cerca de máximos ❌'}",
-                    "Indica dónde está el precio dentro del rango máximo-mínimo de los últimos 52 semanas. "
-                    "Para valor buscamos que el precio esté en el cuartil inferior (&lt;40%): el mercado ha castigado el valor durante el año. "
-                    "La tesis de valor requiere que el precio esté deprimido respecto a sus fundamentales — si está cerca de máximos anuales, el mercado ya ha reconocido el valor y la oportunidad es menor."))
-                c.append(_criterio(2 if _rsi < 50 else 1 if _rsi < 60 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'Sin sobrecompra técnica ✅' if _rsi < 50 else 'Aceptable ⚠️' if _rsi < 60 else 'Técnicamente caro ❌'}",
-                    "Para valor, el RSI por debajo de 50 indica que técnicamente el valor no está sobrecomprado — no has llegado tarde al movimiento. "
-                    "No buscamos sobreventa extrema (&lt;30, eso es para rebote técnico), sino ausencia de sobrecompra que indicaría que el precio ya ha corrido mucho. "
-                    "RSI &gt;60 en una estrategia de valor sugiere que el mercado ya está reconociendo la oportunidad — la asimetría riesgo/recompensa ha empeorado."))
-                c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
-                    "OBV / Volumen neto",
-                    _div_txt_alc(),
-                    "El OBV (On-Balance Volume) acumula el volumen de los días alcistas y descuenta el de los bajistas, creando una línea que refleja el flujo de dinero real. "
-                    "Si el OBV sube mientras el precio está deprimido, sugiere que hay compradores institucionales acumulando en silencio — señal positiva para valor. "
-                    "Una divergencia alcista OBV (precio baja, OBV sube) es la 'huella' de los inversores que entran antes de que el precio se recupere."))
-                c.append(_criterio(2 if 0 < _yield < 25 and _yield >= 2 else 1 if _yield > 0 else 0,
-                    f"Yield (rentabilidad) {_yield:.1f}%" if _yield < 25 else f"Yield (rentabilidad) ⚠️ dato dudoso (proveedor: {_yield:.1f}%)",
-                    "El dividendo remunera la espera",
-                    "En valor el dividendo actúa como 'pago por esperar': mientras la tesis se desarrolla y el precio se recupera, el dividendo compensa la espera. "
-                    "No es el criterio principal (ese es el PER y el descuento sobre media), pero un yield ≥2% añade un retorno seguro a la tesis y reduce el coste de oportunidad de mantener la posición. "
-                    "Valores en valor sin dividendo requieren mayor convicción y paciencia."))
+                # 1. P&L actual
+                c.append(_criterio(
+                    2 if _pl_pct > 3 else 1 if _pl_pct >= 0 else 0,
+                    f"P&L actual: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €)",
+                    f"Entrada: {_pe_entr:.4f} € · Actual: {_precio:.4f} € · {int(_q_entr)} títulos",
+                    "Mide cuánto ha ganado o perdido la posición desde la entrada. "
+                    "Positivo y creciente = la tesis se confirma. Negativo y acelerando = revisar invalidación."
+                ))
+                # 2. Precio sobre stop dinámico 2×ATR
+                c.append(_criterio(
+                    2 if _sobre_stop else (1 if _stop_2x is None else 0),
+                    f"Stop 2×ATR: {_stop_2x:.4f} €" if _stop_2x else "Stop 2×ATR: sin datos ATR",
+                    (f"{'✅ Precio por encima del stop' if _sobre_stop else '❌ Precio por debajo del stop — señal de salida'}") if _stop_2x else "⚠️ ATR no disponible",
+                    "El stop a 2×ATR captura el rango de volatilidad normal del activo. "
+                    "Si el precio cierra por debajo de este nivel, el movimiento ya no es ruido — "
+                    "es una señal técnica de que la tesis de la entrada está comprometida."
+                ))
+                # 3. SAR Parabólico
+                c.append(_criterio(
+                    2 if _sar == "alcista" else 0,
+                    f"Parabolic SAR: {_sar}",
+                    f"{'✅ Tendencia activa — SAR bajo el precio' if _sar == 'alcista' else '❌ SAR cruzado — señal de giro de tendencia'}",
+                    "El SAR cambia de lado cuando la tendencia se invierte formalmente. "
+                    "SAR alcista = la tendencia sigue activa y la posición tiene soporte técnico. "
+                    "SAR bajista = la tendencia ha cambiado — el primer nivel de alerta para reducir."
+                ))
+                # 4. Sin divergencia bajista
+                c.append(_criterio(
+                    2 if not _div_baj else (1 if not _div_rsi_baj and not _div_mcd_baj else 0),
+                    f"Divergencias: {_div_txt()}",
+                    "Sin señales de agotamiento" if not _div_baj else "⚠️ Divergencia bajista activa — revisar posición",
+                    "Una divergencia bajista (precio sube pero RSI/MACD no confirman) es la señal de agotamiento "
+                    "más fiable antes de un giro. En una posición abierta, su aparición obliga a revisar el stop "
+                    "y plantearse reducción parcial."
+                ))
+                # 5. RSI sin sobrecompra extrema
+                c.append(_criterio(
+                    2 if _rsi < 70 else 1 if _rsi < 76 else 0,
+                    f"RSI: {_rsi:.1f}",
+                    f"{'✅ Sin sobrecompra' if _rsi < 70 else '⚠️ Sobrecomprado — reducir riesgo' if _rsi < 76 else '❌ Sobrecompra extrema — asimetría desfavorable'}",
+                    "RSI >70 en una posición abierta no obliga a salir, pero reduce la asimetría: "
+                    "el precio ha recorrido ya mucho y las correcciones desde sobrecompra suelen ser más rápidas. "
+                    "RSI >76 en una posición ganadora = momento de ajustar el stop y no añadir."
+                ))
+                # 6. MACD mantiene momentum
+                c.append(_criterio(
+                    2 if _mval is not None and _mseñal is not None and _mval > _mseñal else 0,
+                    f"MACD: {'alcista' if _mval is not None and _mseñal is not None and _mval > _mseñal else 'bajista o sin datos'}",
+                    f"{'✅ Momentum positivo' if _mval is not None and _mseñal is not None and _mval > _mseñal else '❌ Momentum invertido'}",
+                    "MACD sobre su señal = el momentum sigue activo. "
+                    "Cruce bajista MACD = la fuerza del movimiento se agota. "
+                    "Combinado con RSI >70, el cruce bajista del MACD es señal de reducción parcial."
+                ))
                 return c
 
-            def _build_momentum():
-                c = []
-                _dist50 = (_precio / _sma50 - 1) * 100 if _sma50 > 0 else 0
-                c.append(_criterio(2 if _sma50 > 0 and _precio > _sma50 * 1.02 and _sma50 > _sma200
-                                   else 1 if _sma50 > 0 and _precio > _sma50 else 0,
-                    f"Fuerza vs SMA50: {_dist50:+.1f}%" if _sma50 else "SMA50 no disponible",
-                    f"{'≥2% sobre SMA50 en tendencia ✅' if _dist50 >= 2 and _sma50 > _sma200 else 'Sobre SMA50 pero débil ⚠️' if _dist50 > 0 else 'Bajo SMA50 ❌'}",
-                    "Para momentum no buscamos correcciones sino líderes de mercado. Precio ≥2% sobre SMA50 con SMA50 &gt; SMA200 indica que el valor tiene fuerza relativa superior al mercado. "
-                    "Estar un 2% por encima de la media de 50 días dentro de una tendencia alcista significa que el valor ha demostrado consistencia — no es un spike puntual. "
-                    "Por debajo de la SMA50 no hay momentum activo que explotar en esta estrategia."))
-                c.append(_criterio(2 if 55 <= _rsi <= 72 else 1 if 50 <= _rsi <= 75 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'Momentum activo ✅' if 55 <= _rsi <= 72 else 'Zona válida ⚠️' if 50 <= _rsi <= 75 else 'Sobrecomprado — riesgo de corrección ❌' if _rsi > 75 else 'Sin momentum ❌'}",
-                    "En momentum el RSI 'caliente' (55-72) es positivo — indica que el valor está en movimiento activo y sostenido. "
-                    "A diferencia de otras estrategias, aquí NO buscamos sobreventa: queremos que el RSI esté alto porque el valor tiene fuerza. "
-                    "Por encima de 75 hay riesgo de corrección técnica a corto plazo. Por debajo de 50 no hay momentum — el valor no lidera, solo acompaña o rezaga al mercado."))
-                c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
-                    f"MACD {_mhist:+.4f}",
-                    f"{'Acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo ⚠️' if _mhist > 0 else 'Negativo ❌'}",
-                    "Para momentum buscamos que el MACD histograma sea positivo Y creciente: la fuerza del movimiento está aumentando, no solo que el movimiento existe. "
-                    "La diferencia entre histograma positivo creciente (momentum acelerando) y positivo decreciente (momentum madurando) es crítica: "
-                    "el segundo señala que puede estar terminando el impulso. MACD negativo = sin momentum, estrategia no aplicable."))
-                _vol_trend = "acelerando" if _vslope > 0.002 else "creciente" if _vslope > 0 else "cayendo"
-                c.append(_criterio(2 if _vslope > 0.002 else 1 if _vslope > 0 else 0,
-                    f"Volumen ({_vol_trend})",
-                    f"{'Acelerado ✅' if _vslope > 0.002 else 'Creciente ⚠️' if _vslope > 0 else 'Cayendo ❌'}",
-                    "Para momentum, el volumen debe ser creciente o acelerado — confirma que hay demanda genuina y creciente detrás del movimiento. "
-                    "Volumen decreciente durante una subida de precio puede indicar que el movimiento es frágil: si los inversores grandes no están comprando activamente, "
-                    "cualquier noticia adversa puede revertir la subida bruscamente. El volumen acelerado (&gt;0.2% tendencia semanal) es la señal de mayor calidad."))
-                c.append(_criterio(2 if _sar == "alcista" else 0,
-                    f"SAR Parabólico: {_sar}",
-                    f"{'Por debajo del precio — tendencia activa ✅' if _sar == 'alcista' else 'Por encima del precio — tendencia rota ❌'}",
-                    "El SAR Parabólico (Stop and Reverse) genera un punto de precio que sigue al precio como un stop dinámico. "
-                    "SAR alcista = el punto SAR está por debajo del precio, confirmando que la tendencia alcista está intacta. "
-                    "Cuando el precio cruza por debajo del SAR, la tendencia se considera rota — es señal de salida en momentum. "
-                    "Para momentum, el SAR es simultáneamente confirmación de tendencia y referencia para el stop-loss dinámico."))
-                c.append(_criterio(0 if _div_baj else 2,
-                    "Señales de distribución",
-                    _div_txt_baj(),
-                    "Distribución es cuando los grandes inversores venden discretamente mientras el precio aún sube o se mantiene. "
-                    "Se detecta mediante divergencias bajistas: el precio marca nuevos máximos pero RSI o MACD no los confirman — la fuerza compradora se agota. "
-                    "En momentum, detectar distribución antes de que se manifieste en precio es la señal de salida anticipada. "
-                    "Sin señales de distribución, el momentum puede continuar — el criterio puntúa positivo."))
-                c.append(_criterio(2 if _cons[0] == "alcista" else 1 if _cons[0] == "neutro" else 0,
-                    f"Consenso: {_cons[2]}",
-                    "Indicadores alineados al alza",
-                    "El consenso técnico agrega RSI, MACD, SAR, Bollinger y medias móviles en una lectura única. "
-                    "Para momentum necesitamos que todos los indicadores confirmen la dirección — un consenso dividido señala que el movimiento no tiene convicción general. "
-                    "Consenso alcista &gt;70% es la condición óptima: más del 70% de los indicadores confirmando la tendencia."))
-                return c
-
-            def _build_rebote():
-                c = []
-                c.append(_criterio(2 if _rsi < 30 else 1 if _rsi < 38 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'Sobreventa extrema ✅' if _rsi < 30 else 'Zona de interés ⚠️' if _rsi < 38 else 'Sin sobreventa — rebote sin base ❌'}",
-                    "RSI &lt;30 es la condición necesaria para rebote técnico — la velocidad bajista de las últimas 14 sesiones es extrema. "
-                    "Estadísticamente, RSI &lt;30 acompañado de otros factores precede a rebotes hacia la media. "
-                    "Pero RSI &lt;30 solo NO es señal de compra: un valor puede estar en RSI &lt;20 durante semanas si el deterioro fundamental es real. "
-                    "Es la condición de entrada que activa el análisis, no la señal de compra por sí sola."))
-                _sop2 = _niv_soporte[0]["precio"] if _niv_soporte else None
-                c.append(_criterio(2 if _niv_soporte else 0,
-                    f"Soporte técnico: {_sop2:.2f}€" if _sop2 else "Soporte técnico no identificado",
-                    f"Confluencia pivot+media a ±{_tol_est:.2f}€ — ancla de rebote ✅" if _sop2 else f"Sin pivot+media a ±{_tol_est:.2f}€ — rebote sin ancla estructural ❌",
-                    "Para rebote, el soporte es más crítico que en otras estrategias porque el rebote puede fracasar si no hay zona técnica que lo ancle. "
-                    "Un soporte reforzado (pivot + media móvil a menos de {:.2f}€) indica que dos métodos independientes señalan la misma zona como suelo probable. "
-                    "Sin soporte identificado, el precio puede seguir cayendo indefinidamente — el setup no tiene precio de invalidación definido. "
-                    "Si no existe soporte reforzado, evitar el setup o usar posición mínima con stop muy ajustado.".format(_tol_est)))
-                c.append(_criterio(2 if _div_alc else 1 if not _div_baj else 0,
-                    "Divergencia alcista",
-                    _div_txt_alc(),
-                    "La divergencia alcista es la señal más poderosa en rebote técnico: el precio marca mínimos más bajos pero el RSI o el OBV forman mínimos más altos. "
-                    "Indica que la presión vendedora se está agotando — hay menos fuerza detrás de cada nueva caída aunque el precio siga bajando. "
-                    "Es la diferencia entre un rebote de alta convicción y 'atrapar un cuchillo que cae'. Sin divergencia el rebote puede ocurrir, "
-                    "pero la probabilidad es menor — reducir tamaño de posición si no existe."))
-                c.append(_criterio(2 if _pctb is not None and _pctb < 0.1 else
-                                   1 if _pctb is not None and _pctb < 0.25 else 0,
-                    f"Bollinger %B: {_pctb:.2f}" if _pctb is not None else "Bollinger %B n/d",
-                    f"{'Banda inferior extrema ✅' if _pctb and _pctb < 0.1 else 'Zona baja ⚠️' if _pctb and _pctb < 0.25 else 'Fuera de zona ❌'}",
-                    "El %B de Bollinger mide dónde está el precio dentro del canal de volatilidad histórica: 0 = banda inferior, 0.5 = media, 1 = banda superior. "
-                    "%B &lt;0.10 significa que el precio está en el extremo inferior de su rango histórico de volatilidad — estadísticamente improbable que se mantenga ahí. "
-                    "Las Bandas de Bollinger se construyen a ±2 desviaciones estándar: el precio está fuera de su rango habitual el 95% del tiempo. "
-                    "La combinación de RSI &lt;30 + %B &lt;0.10 es uno de los setups de sobreventa más robustos estadísticamente."))
-                _vol_sop = "acumulando" if _vslope > 0.001 else "estable" if _vslope > -0.001 else "cayendo"
-                c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
-                    f"Volumen en soporte ({_vol_sop})",
-                    f"{'Creciendo — acumulación ✅' if _vslope > 0.001 else 'Estable ⚠️' if _vslope > -0.001 else 'Cayendo ❌'}",
-                    "Para rebote, la pauta ideal de volumen es: decreciente en los últimos días de caída (los vendedores se agotan) y creciente en el giro (compradores entrando). "
-                    "Volumen creciendo durante la caída indica distribución activa — los grandes inversores aún están vendiendo, el suelo puede estar más abajo. "
-                    "Volumen acumulando en el soporte (creciente con precio lateral o girando al alza) es la señal de que hay demanda real en esa zona."))
-                c.append(_criterio(2 if _pos52 < 25 else 1 if _pos52 < 40 else 0,
-                    f"Posición 52W: {_pos52:.0f}%",
-                    f"{'Zona de mínimos anuales ✅' if _pos52 < 25 else 'Zona baja ⚠️' if _pos52 < 40 else 'Lejos de mínimos ❌'}",
-                    "Para rebote buscamos que el precio esté en los primeros 25% del rango anual — en zona de mínimos históricos recientes. "
-                    "Cuando el precio está cerca de sus mínimos del año hay más probabilidad de que el mercado lo perciba como 'barato' y entren compradores. "
-                    "Precio en el 60-100% del rango anual con RSI &lt;30 puede indicar un deterioro fundamental real, no una corrección técnica — el rebote sería menos probable."))
-                return c
-
-            def _build_salida():
-                c = []
-                c.append(_criterio(2 if _rsi > 70 else 1 if _rsi > 63 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'Sobrecompra — señal de salida ✅' if _rsi > 70 else 'Zona de vigilancia ⚠️' if _rsi > 63 else 'Sin sobrecompra ❌'}",
-                    "Para señal de salida, RSI &gt;70 indica sobrecompra técnica: el precio ha subido muy rápido en los últimos 14 sesiones. "
-                    "Estadísticamente, RSI &gt;70 precede a correcciones técnicas — no necesariamente un colapso, sino un período de consolidación o retroceso. "
-                    "No es señal de vender automáticamente, sino de revisar si la tesis de inversión sigue intacta o si el movimiento ha agotado su recorrido. "
-                    "RSI &gt;80 es sobrecompra extrema: la corrección suele ser más profunda."))
-                c.append(_criterio(2 if _div_rsi_baj or _div_mcd_baj else 1 if _div_baj else 0,
-                    "Divergencia bajista",
-                    _div_txt_baj(),
-                    "La divergencia bajista es la señal más relevante para salida: el precio sube a nuevos máximos pero el RSI o el MACD no confirman esos máximos. "
-                    "Indica que los compradores tienen cada vez menos fuerza para empujar el precio arriba — el movimiento se agota internamente antes de que el precio gire. "
-                    "Es un semáforo amarillo antes de que el precio caiga: te da tiempo de reducir exposición antes de que los vendedores tomen el control. "
-                    "Divergencia bajista en RSI Y MACD simultáneamente es señal de máxima alerta."))
-                c.append(_criterio(2 if _mhist < 0 and _mval < _mseñal else 1 if _mhist < 0 else 0,
-                    f"MACD {_mhist:+.4f}",
-                    f"{'Negativo con cruce bajista ✅' if _mhist < 0 and _mval < _mseñal else 'Negativo ⚠️' if _mhist < 0 else 'Aún positivo ❌'}",
-                    "Cuando el histograma MACD se vuelve negativo (la línea MACD cruza por debajo de la señal), el momentum se ha invertido de alcista a bajista. "
-                    "Para salida, buscamos confirmación de que el cambio de momentum es real y no solo una corrección temporal: histograma negativo CON cruce bajista. "
-                    "MACD aún positivo significa que el momentum alcista sigue activo — la señal de salida no está confirmada todavía."))
-                c.append(_criterio(2 if _sar == "bajista" else 0,
-                    f"SAR Parabólico: {_sar}",
-                    f"{'Por encima del precio — tendencia rota ✅' if _sar == 'bajista' else 'Aún alcista ❌'}",
-                    "El SAR Parabólico (Stop and Reverse) genera un punto de precio que sigue al precio como un stop dinámico. "
-                    "SAR bajista = el punto SAR está por encima del precio, señalando que la tendencia alcista se ha roto formalmente. "
-                    "Es la señal más objetiva de cambio de tendencia a corto-medio plazo — cuando el precio cierra por debajo del SAR, la tendencia se considera invertida. "
-                    "En momentum o swing activo, el cruce bajista del SAR es la señal de salida más limpia disponible."))
-                c.append(_criterio(2 if _pos52 > 85 else 1 if _pos52 > 70 else 0,
-                    f"Posición 52W: {_pos52:.0f}%",
-                    f"{'Cerca de máximos anuales ✅' if _pos52 > 85 else 'Zona alta ⚠️' if _pos52 > 70 else 'No en zona de salida ❌'}",
-                    "Precio en el 85-100% del rango anual indica que el valor está cerca de sus máximos de 52 semanas. "
-                    "La probabilidad de continuar subiendo desde estos niveles es estadísticamente menor, y el riesgo de caída si se produce una decepción es mayor. "
-                    "No significa que el precio no pueda seguir subiendo — puede. Pero la asimetría riesgo/recompensa ha empeorado significativamente respecto a cuando estaba en zona baja."))
-                _obv_tend = "bajando" if _obvs < -0.001 else "neutro" if _obvs < 0.001 else "subiendo"
-                c.append(_criterio(2 if _obvs < -0.001 else 1 if _obvs < 0.001 else 0,
-                    f"OBV ({_obv_tend})",
-                    f"{'Volumen neto bajando — posibles ventas encubiertas ✅' if _obvs < -0.001 else 'Volumen neutro ⚠️' if _obvs < 0.001 else 'Volumen neto subiendo — posibles compras encubiertas ❌'}",
-                    "El OBV (On-Balance Volume) acumula el volumen de días alcistas y descuenta el de días bajistas. "
-                    "Para salida, OBV bajando mientras el precio aún sube o se mantiene es la 'huella' de la distribución institucional: "
-                    "los grandes inversores están vendiendo discretamente. El precio aguanta porque hay demanda minorista, "
-                    "pero la demanda de fondo se erosiona. Cuando la distribución institucional se completa, el precio suele caer bruscamente."))
-                c.append(_criterio(2 if _cons[0] == "bajista" else 1 if _cons[0] == "neutro" else 0,
-                    f"Consenso: {_cons[2]}",
-                    "Indicadores virados a bajista",
-                    "El consenso agrega RSI, MACD, SAR, Bollinger y medias. Para salida buscamos que la mayoría haya virado a bajista — "
-                    "cuando el consenso técnico general da la vuelta, la presión vendedora tiende a acelerarse. "
-                    "Consenso neutro en una posición ganadora es suficiente para reducir tamaño; consenso bajista es señal de salida total."))
-                return c
 
             # ── Interpretación cualitativa por estrategia ─────────────────
             def _interpretar(key):
@@ -17076,7 +16971,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         rec = ("Vigilar sin comprometer capital. Esperar que RSI baje de 45 o que el precio llegue a zona de soporte "
                                "reforzado para tener una referencia técnica clara de stop.")
 
-                elif key == "📈 Swing 12-16 sem":
+                elif key == "📈 Swing EOD":
                     tend_ok = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
                     if tend_ok:
                         puntos.append("✅ Estructura tendencial completa — precio sobre SMA50 sobre SMA200.")
@@ -17114,138 +17009,79 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         rec = (f"Setup incompleto. {'Tendencia no establecida — ' if not tend_ok else ''}"
                                f"esperar alineación precio>SMA50>SMA200 + RSI 45-62 + soporte identificado antes de comprometer capital.")
 
-                elif key == "🏷️ Valor":
-                    if _pe > 0:
-                        puntos.append(f"{'✅' if _pe < 15 else '⚠️' if _pe < 22 else '❌'} PER {_pe:.1f}x — {'precio atractivo respecto a beneficios' if _pe < 15 else 'valoración razonable' if _pe < 22 else 'precio exigente para estrategia valor'}.")
-                    if _sma200 > 0:
-                        d = (_precio / _sma200 - 1) * 100
-                        puntos.append(f"{'✅' if d < -3 else '⚠️' if abs(d) < 3 else '❌'} El precio cotiza un {abs(d):.1f}% {'por debajo' if d < 0 else 'por encima'} de su media de los últimos 200 días — {'comprar por debajo de ella equivale a hacerlo con descuento respecto al precio medio histórico' if d < -3 else 'está cerca de su precio medio histórico, ni caro ni barato en términos de largo plazo' if abs(d) < 3 else 'está por encima de su precio medio histórico, lo que reduce el margen de seguridad para una estrategia de valor'}.")
-                    if _pos52 > 65:
-                        puntos.append(f"⚠️ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango). Una empresa realmente infravalorada rara vez cotiza en máximos — merece la pena revisar si la tesis de descuento sigue siendo sólida.")
-                    if _div_alc:
-                        puntos.append("✅ OBV/Volumen mostrando acumulación — señal de que el mercado ya reconoce el descuento.")
-                    if _pe > 0 and _pe < 15 and _pos52 < 40 and (_sma200 == 0 or _precio < _sma200):
-                        rec = (f"Candidato de valor claro: PER {_pe:.1f}x + precio bajo SMA200 + zona baja del rango anual. "
-                               f"Profundizar en FCF, nivel de deuda y ROCE antes de entrar. "
-                               f"Si los fundamentales aguantan, entrada escalonada en 3 tramos con stop bajo soporte.")
-                    elif _pe > 0 and _pe < 18 and _pos52 < 55:
-                        rec = (f"Candidato moderado. PER {_pe:.1f}x razonable pero el precio no está en descuento máximo. "
-                               f"Revisar tendencia de BPA y FCF yield (rentabilidad). Entrada parcial posible con stop técnico claro.")
-                    elif _pe <= 0:
-                        rec = ("Sin datos de PER disponibles — imposible evaluar el margen de seguridad fundamental. "
-                               "Profundizar en valoración por FCF o EV/EBITDA antes de considerar la posición.")
-                    else:
-                        rec = (f"Precio no refleja descuento suficiente para estrategia valor: PER {_pe:.1f}x + "
-                               f"posición {_pos52:.0f}% en rango anual. El margen de seguridad es insuficiente. "
-                               f"Esperar corrección hacia SMA200 ({_sma200:.2f}€) o PER < 15x para tener la asimetría adecuada.")
+                elif key == "🗂️ Gestión de posición":
+                    _pe_entr  = float(_pos_est.get("precio_entrada") or 0) if _pos_est else 0
+                    _q_entr   = float(_pos_est.get("cantidad")       or 0) if _pos_est else 0
+                    _cartera_nm = _pos_est.get("cartera_nombre", "")        if _pos_est else ""
+                    _pl_pct   = ((_precio / _pe_entr - 1) * 100) if _pe_entr > 0 else 0
+                    _pl_abs   = (_precio - _pe_entr) * _q_entr
+                    try:
+                        _g_hi   = _hist["High"].squeeze()
+                        _g_lo   = _hist["Low"].squeeze()
+                        _g_cl   = _hist["Close"].squeeze()
+                        _g_prev = _g_cl.shift(1)
+                        _g_tr   = (_g_hi - _g_lo).combine((_g_hi - _g_prev).abs(), max).combine((_g_lo - _g_prev).abs(), max)
+                        _g_atr  = float(_g_tr.rolling(14).mean().iloc[-1])
+                        _stop_2x = _precio - 2 * _g_atr
+                    except Exception:
+                        _g_atr, _stop_2x = None, None
 
-                elif key == "🚀 Momentum":
-                    _dist50 = (_precio / _sma50 - 1) * 100 if _sma50 > 0 else 0
-                    if _sar == "alcista" and _cons[0] == "alcista":
-                        puntos.append("✅ SAR y consenso de indicadores alineados — tendencia activa confirmada.")
-                    if 55 <= _rsi <= 72:
-                        puntos.append(f"✅ RSI en {_rsi:.0f} — momentum activo sin sobrecompra extrema.")
-                    elif _rsi > 72:
-                        puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobrecomprado. Entrada ahora asume riesgo de corrección a corto plazo.")
-                    if _vslope > 0.001:
-                        puntos.append("✅ Volumen creciente — el impulso tiene respaldo institucional.")
-                    else:
-                        puntos.append("⚠️ Volumen sin aceleración — verificar si el movimiento tiene continuidad.")
-                    if _div_baj:
-                        puntos.append("❌ Divergencia bajista detectada — señal de agotamiento. Momentum en riesgo.")
-                    _sma50_str  = f"{_sma50:.4f}€" if _sma50 > 0 else "SMA50"
-                    _resist_str = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "resistencia siguiente"
-                    if _sar == "alcista" and not _div_baj and 55 <= _rsi <= 70 and _vslope > 0:
-                        _dist_sma50 = ((_precio / _sma50 - 1) * 100) if _sma50 > 0 else 0
-                        _dist_label = "margen razonable" if _dist_sma50 < 8 else "algo sobreextendido; considerar esperar retroceso a SMA50"
-                        rec = (f"Momentum activo y limpio. Entrada válida ahora con stop bajo SMA50 ({_sma50_str}). "
-                               f"El precio está un {_dist_sma50:.1f}% sobre SMA50 — {_dist_label}. "
-                               f"Objetivo: {_resist_str}. Trailing stop al 8% desde máximos una vez en beneficio.")
-                    elif _div_baj:
-                        rec = ("⛔ No entrar. Divergencia bajista activa — el momentum se agota aunque el precio aguante. "
-                               "Esperar resolución. Si ya estás en posición, ajustar stop a nivel de soporte más reciente.")
-                    elif _rsi > 72:
-                        rec = (f"RSI en {_rsi:.0f} — sobrecomprado. No perseguir el precio en este nivel. "
-                               f"Esperar retroceso a SMA50 ({_sma50_str}) o RSI < 62 para reentrar con mejor ratio riesgo/beneficio.")
-                    else:
-                        rec = ("Momentum sin las condiciones completas. Esperar SAR alcista + RSI 55-70 + volumen creciente "
-                               "para tener la confluencia de señales que define el setup.")
+                    if _cartera_nm:
+                        puntos.append(f"📁 Posición en cartera: **{_cartera_nm}** — {int(_q_entr)} títulos a {_pe_entr:.4f} €")
 
-                elif key == "🔄 Rebote Técnico":
-                    if _rsi < 30:
-                        puntos.append(f"✅ RSI en {_rsi:.0f} — sobreventa extrema. Zona estadísticamente favorable a rebote.")
-                    elif _rsi < 38:
-                        puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobreventa moderada. Señal de interés pero sin urgencia.")
+                    if _pl_pct >= 0:
+                        puntos.append(f"✅ Posición en beneficio: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €).")
                     else:
-                        puntos.append(f"❌ RSI en {_rsi:.0f} — sin sobreventa. No hay base técnica para rebote a corto.")
-                    if _div_alc:
-                        puntos.append("✅ Divergencia alcista activa — confirmación clave para el rebote.")
-                    else:
-                        puntos.append("⚠️ Sin divergencia alcista confirmada — el rebote no está señalizado por indicadores.")
-                    if _pctb is not None and _pctb < 0.15:
-                        puntos.append(f"✅ %B Bollinger en {_pctb:.2f} — precio en banda inferior extrema.")
-                    _soporte_str = f"{_niv_soporte[0]['precio']:.4f}€" if _niv_soporte else "soporte no identificado"
-                    if _rsi < 32 and _niv_soporte and _div_alc and (_pctb is None or _pctb < 0.20):
-                        rec = (f"Setup de rebote técnico de alta probabilidad. "
-                               f"RSI en {_rsi:.0f} + divergencia alcista activa + soporte reforzado ({_soporte_str}). "
-                               f"Entrada en zona del soporte con stop 2-3% por debajo. "
-                               f"Objetivo: retorno a SMA20 o SMA50 (2-4 semanas). Si el soporte cede: salir sin excusas.")
-                    elif _rsi < 38 and _niv_soporte:
-                        rec = (f"Condiciones parciales. RSI en {_rsi:.0f} con soporte activo pero sin divergencia alcista confirmada. "
-                               f"Posición reducida (30-40%) con stop muy ajustado. Esperar vela de giro o divergencia para completar.")
-                    elif _rsi < 38 and not _niv_soporte:
-                        rec = (f"RSI en {_rsi:.0f} indica sobreventa pero sin soporte técnico identificado — "
-                               f"no hay referencia para el stop. No operar sin saber dónde se invalida la tesis.")
-                    else:
-                        rec = (f"Sin condiciones de rebote: RSI en {_rsi:.0f} sin sobreventa técnica. "
-                               f"Esperar RSI < 35 + soporte + divergencia alcista para tener el setup completo.")
+                        puntos.append(f"❌ Posición en pérdida: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €). Revisar si la tesis de entrada sigue vigente.")
 
-                elif key == "🛡️ Señal de Salida":
-                    if _rsi > 70:
-                        puntos.append(f"✅ RSI en {_rsi:.0f} — sobrecompra técnica. Zona históricamente de menor retorno esperado.")
+                    if _stop_2x:
+                        puntos.append(f"⚙️ Stop dinámico 2×ATR: {_stop_2x:.4f} € "
+                                      f"({'por encima del precio — STOP TOCADO' if _precio <= _stop_2x else f'{((_precio/_stop_2x-1)*100):.1f}% de margen hasta el stop'}).")
+
+                    # Señales de salida / reducción
+                    _exit_sigs = []
+                    if _sar != "alcista":
+                        _exit_sigs.append("SAR bajista — tendencia invertida formalmente")
                     if _div_rsi_baj or _div_mcd_baj:
-                        _tipos_sal = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
-                        _tipos_sal_str = ", ".join(_tipos_sal)
-                        puntos.append(f"✅ Divergencia bajista en {_tipos_sal_str} — señal de agotamiento de alta fiabilidad.")
-                    if _pos52 > 85:
-                        puntos.append(f"⚠️ En el {_pos52:.0f}% del rango anual — precio cerca de máximos. Asimetría riesgo/recompensa desfavorable.")
-                    if _obvs < -0.001:
-                        puntos.append("✅ OBV distribuyendo — el dinero institucional está saliendo bajo la subida.")
-                    if not puntos:
-                        puntos.append("Sin señales de salida activas. La posición no muestra síntomas de agotamiento.")
-                    if _div_rsi_baj or _div_mcd_baj or (_obvs < -0.001):
                         _tipos_baj = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
-                        _tipos_baj_txt = ", ".join(_tipos_baj) if _tipos_baj else "OBV"
-                        rec = (f"⚠️ Señales de distribución activas ({_tipos_baj_txt}). "
-                               f"Acción: reducir 40-50% de la posición al precio actual. "
-                               f"Ajustar stop del resto al soporte técnico más reciente. "
-                               f"Si RSI supera 75 o hay cruce bajista MACD: cerrar posición completa.")
-                    elif _rsi > 70 and _pos52 > 75:
-                        rec = (f"RSI en {_rsi:.0f} + precio en {_pos52:.0f}% del rango anual — asimetría desfavorable. "
-                               f"Sin divergencia activa todavía, pero el riesgo/recompensa no justifica añadir posición. "
-                               f"Ajustar stop al soporte más reciente y vigilar el histograma MACD para señal de deterioro.")
+                        _exit_sigs.append(f"Divergencia bajista {', '.join(_tipos_baj)}")
+                    if _rsi > 76:
+                        _exit_sigs.append(f"RSI en sobrecompra extrema ({_rsi:.0f})")
+                    if _mval is not None and _mseñal is not None and _mval < _mseñal:
+                        _exit_sigs.append("MACD cruzado a bajista")
+                    if _stop_2x and _precio <= _stop_2x:
+                        _exit_sigs.append("Precio por debajo del stop 2×ATR")
+
+                    if len(_exit_sigs) >= 3 or (_stop_2x and _precio <= _stop_2x):
+                        rec = (f"⛔ **Salir.** {len(_exit_sigs)} señales de alerta simultáneas: "
+                               f"{'; '.join(_exit_sigs)}. "
+                               f"El riesgo de continuar supera el potencial de recuperación.")
+                    elif len(_exit_sigs) >= 2:
+                        rec = (f"⚠️ **Reducir 40-50%.** {'; '.join(_exit_sigs)}. "
+                               f"Ajustar stop del resto a {_stop_2x:.4f} €" if _stop_2x else
+                               f"⚠️ **Reducir 40-50%.** {'; '.join(_exit_sigs)}.")
+                    elif len(_exit_sigs) == 1:
+                        rec = (f"⚠️ Vigilar. Una señal de alerta activa: {_exit_sigs[0]}. "
+                               f"No añadir posición. Mantener stop en {_stop_2x:.4f} €." if _stop_2x else
+                               f"⚠️ Vigilar. Una señal de alerta activa: {_exit_sigs[0]}.")
+                    elif _pl_pct > 0 and not _exit_sigs:
+                        rec = (f"✅ **Mantener.** Sin señales de salida activas. "
+                               f"Stop dinámico 2×ATR en {_stop_2x:.4f} €." if _stop_2x else
+                               f"✅ **Mantener.** Sin señales de salida activas.")
                     else:
-                        rec = ("Posición sin señales de salida relevantes. Mantener con stop técnico activo "
-                               "y revisar si RSI supera 70 o aparece divergencia bajista.")
+                        rec = (f"Posición en pérdida sin señales técnicas de recuperación. "
+                               f"Revisar la tesis de entrada y evaluar si el nivel de stop original sigue vigente.")
 
                 return puntos, rec
 
             # ── Mapa estrategias → función de criterios + color de cabecera ──
             _est_map = {
-                "💰 Dividendos":       (_build_dividendos, "#15803d"),
-                "📈 Swing 12-16 sem":  (_build_swing,      "#1d4ed8"),
-                "🏷️ Valor":            (_build_valor,      "#92400e"),
-                "🚀 Momentum":         (_build_momentum,   "#7c3aed"),
-                "🔄 Rebote Técnico":   (_build_rebote,     "#0e7490"),
-                "🛡️ Señal de Salida":  (_build_salida,     "#dc2626"),
+                "💰 Dividendos":          (_build_dividendos,        "#15803d"),
+                "📈 Swing EOD":           (_build_swing,             "#1d4ed8"),
+                "🗂️ Gestión de posición": (_build_gestion_posicion,  "#7c3aed"),
             }
 
-            if _est_sel == "Todas":
-                _keys_show = list(_est_map.keys())
-            elif _est_sel in _est_map:
-                _keys_show = [_est_sel]
-            else:
-                _keys_show = []
+            _keys_show = [_est_sel] if _est_sel in _est_map else []
 
             for _k in _keys_show:
                 _bfn, _col   = _est_map[_k]
