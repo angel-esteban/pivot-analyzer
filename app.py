@@ -7254,6 +7254,118 @@ tr:nth-child(even) td { background:#f8fafc; }
         )
 
     # ── Pre-compute shared values for HTML report ──────────────────────────────
+    # ── Alertas Fundamentales (cards individuales) ───────────────────────────
+    _alertas_section_h = ""
+    if info:
+        _fa_ind = _alertas_fundamentales(info, div_ttm)
+        if _fa_ind:
+            _BG_H  = {"rojo": "#fef2f2", "amarillo": "#fefce8", "verde": "#f0fdf4"}
+            _BC_H  = {"rojo": "#dc2626", "amarillo": "#d97706", "verde": "#16a34a"}
+            _TC_H  = {"rojo": "#991b1b", "amarillo": "#713f12", "verde": "#14532d"}
+            _al_items = ""
+            for _al in _fa_ind:
+                _nv = _al.get("nivel", "amarillo")
+                _al_items += (
+                    f'<div style="background:{_BG_H.get(_nv,"#fefce8")};'
+                    f'border-left:4px solid {_BC_H.get(_nv,"#d97706")};'
+                    f'border-radius:0 8px 8px 0;padding:8px 14px;margin-bottom:4px">'
+                    f'<div style="font-size:12px;font-weight:700;'
+                    f'color:{_BC_H.get(_nv,"#d97706")};margin-bottom:2px">'
+                    f'{_al.get("icono","⚠️")} {_al.get("titulo","")}</div>'
+                    f'<div style="font-size:11.5px;color:{_TC_H.get(_nv,"#713f12")};'
+                    f'line-height:1.45">{_al.get("mensaje","")}</div>'
+                    f'</div>'
+                )
+            _alertas_section_h = (
+                f'<div class="card">'
+                f'<h2>&#9888;&#65039; Alertas Fundamentales</h2>'
+                f'<div style="display:flex;flex-direction:column;gap:6px">'
+                f'{_al_items}</div></div>\n'
+            )
+
+    # ── Semáforo de Valoración vs sector histórico ────────────────────────────
+    _val_sem_section_h = ""
+    if info and tipo_activo != "etf":
+        _sector_yf_h = info.get("sector") or TICKER_SECTOR_FALLBACK.get(
+            (ticker or "").upper(), "")
+        _rr_sector_h = RATIOS_REF.get("sectores", {}).get(_sector_yf_h)
+        if _rr_sector_h:
+            def _sem_ratio_h(label, v_raw, p25, p50, p75, inv=False, suf="x", nota=""):
+                if v_raw is None or p25 is None or p75 is None:
+                    return ""
+                try:    v = float(v_raw)
+                except: return ""
+                if inv:
+                    if v >= p75:   color,txt,bg = "#166534","Barato histórico","#dcfce7"
+                    elif v >= p50: color,txt,bg = "#16a34a","Zona media-baja","#f0fdf4"
+                    elif v >= p25: color,txt,bg = "#ca8a04","Zona media-alta","#fefce8"
+                    else:          color,txt,bg = "#dc2626","Caro histórico","#fef2f2"
+                else:
+                    if v <= p25:   color,txt,bg = "#166534","Barato histórico","#dcfce7"
+                    elif v <= p50: color,txt,bg = "#16a34a","Zona media-baja","#f0fdf4"
+                    elif v <= p75: color,txt,bg = "#ca8a04","Zona media-alta","#fefce8"
+                    else:          color,txt,bg = "#dc2626","Caro histórico","#fef2f2"
+                _ps = f"{p25:.1f}" if p25 else "—"
+                _pm = f"{p50:.1f}" if p50 else "—"
+                _pa = f"{p75:.1f}" if p75 else "—"
+                return (
+                    f'<div style="background:{bg};border-radius:8px;padding:8px 12px;margin:4px 0">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center">'
+                    f'<span style="font-size:12px;font-weight:700;color:#1e293b">{label}</span>'
+                    f'<span style="font-size:13px;font-weight:800;color:{color}">'
+                    f'{v:.1f}{suf} — {txt}</span></div>'
+                    f'<div style="font-size:10px;color:#64748b;margin-top:2px">'
+                    f'Rango histórico: p25={_ps}{suf} · p50={_pm}{suf} · p75={_pa}{suf}'
+                    + (f' · {nota}' if nota else '') + f'</div></div>'
+                )
+            _per_raw  = info.get("trailingPE")
+            _eveb_raw = info.get("enterpriseToEbitda")
+            _pb_raw   = info.get("priceToBook")
+            _fc_raw   = info.get("freeCashflow")
+            _mc_raw   = info.get("marketCap")
+            _fcf_y    = ((_fc_raw / _mc_raw * 100) if _fc_raw and _mc_raw and _mc_raw > 0 else None)
+            _per_d  = _rr_sector_h.get("per", {})
+            _ev_d   = _rr_sector_h.get("ev_ebitda", {})
+            _fcf_d  = _rr_sector_h.get("fcf_yield", {})
+            _pb_d   = _rr_sector_h.get("pb", {})
+            _vs_items = ""
+            if _per_raw and _per_d.get("p25"):
+                _vs_items += _sem_ratio_h("PER (trailing)", _per_raw,
+                    _per_d["p25"], _per_d["p50"], _per_d["p75"],
+                    nota=_per_d.get("metrica_preferida",""))
+            if _eveb_raw and _ev_d.get("p25"):
+                _vs_items += _sem_ratio_h("EV/EBITDA", _eveb_raw,
+                    _ev_d["p25"], _ev_d["p50"], _ev_d["p75"],
+                    nota=_ev_d.get("nota",""))
+            if _fcf_y and _fcf_d.get("p25_pct"):
+                _vs_items += _sem_ratio_h("FCF Yield", _fcf_y,
+                    _fcf_d["p25_pct"], _fcf_d["p50_pct"], _fcf_d["p75_pct"],
+                    inv=True, suf="%", nota=_fcf_d.get("nota",""))
+            if _pb_raw and _pb_d.get("p25"):
+                _vs_items += _sem_ratio_h("P/Book", _pb_raw,
+                    _pb_d["p25"], _pb_d["p50"], _pb_d["p75"])
+            _alertas_sector = _rr_sector_h.get("alertas", [])
+            _alerta_sec_html = ""
+            if _alertas_sector:
+                _alerta_sec_html = (
+                    '<div style="margin-top:10px;padding:8px 12px;background:#f1f5f9;'
+                    'border-radius:6px;font-size:11px;color:#475569">'
+                    '<b>&#9889; Alertas del sector:</b><br>'
+                    + "<br>".join(f"• {a}" for a in _alertas_sector)
+                    + '</div>'
+                )
+            _nom_sector_h = _rr_sector_h.get("nombre_es", _sector_yf_h)
+            if _vs_items:
+                _val_sem_section_h = (
+                    f'<div class="card">'
+                    f'<h2>&#128208; Valoración vs sector histórico &mdash; {_nom_sector_h}</h2>'
+                    f'{_vs_items}{_alerta_sec_html}'
+                    f'<div style="font-size:10px;color:#94a3b8;margin-top:8px">'
+                    f'&#128204; Rangos históricos: p25/p50/p75 (Damodaran NYU, Bloomberg 1995-2025). '
+                    f'[VERIFICAR] con análisis propio.</div>'
+                    f'</div>\n'
+                )
+
     _n_pos_h = sum(1 for _, _, s in (factores_semaforo or []) if s >= 0.75)
     _n_tot_h = len(factores_semaforo or [])
 
@@ -7484,6 +7596,8 @@ tr:nth-child(even) td { background:#f8fafc; }
         + (_divs_section or "")
         + (_huecos_section or "")
         + f"{fund_section}\n"
+        + _alertas_section_h
+        + _val_sem_section_h
     )
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
@@ -9064,7 +9178,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Paragraph(_strip(_sv_t), _p(fontSize=7.5, textColor=_sv_c)))
 
     # ── FUNDAMENTALES (6 columnas: 3 pares etiqueta-valor) ───────────────
-    _pdf_sh("🏦 Ficha ETF", historia)
+    if tipo_activo == "etf":
+        _pdf_sh("🏦 Ficha ETF", historia)
+    elif fundamentales:
+        _pdf_sh("📊 Datos Fundamentales", historia)
     if tipo_activo == "etf":
         # ── Datos desde etf_universe.json ─────────────────────────────
         _eu_pdf = ETF_UNIVERSE.get("etfs", {}).get(ticker, {})
@@ -9321,6 +9438,128 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         historia.append(Paragraph(_strip(_hs_txt_p), _p(fontSize=7.5, textColor=_hs_col_p)))
 
 
+
+    # ── ALERTAS FUNDAMENTALES (cards individuales) ───────────────────────────
+    if info:
+        _fa_pdf = _alertas_fundamentales(info, div_ttm)
+        if _fa_pdf:
+            historia.append(Spacer(1, 0.3*cm))
+            _pdf_sh("⚠️ Alertas Fundamentales", historia)
+            _BG_PDF  = {"rojo": colors.HexColor("#fef2f2"),
+                        "amarillo": colors.HexColor("#fefce8"),
+                        "verde": colors.HexColor("#f0fdf4")}
+            _BC_PDF  = {"rojo": colors.HexColor("#dc2626"),
+                        "amarillo": colors.HexColor("#d97706"),
+                        "verde": colors.HexColor("#16a34a")}
+            for _al_p in _fa_pdf:
+                _nv_p = _al_p.get("nivel", "amarillo")
+                _al_t = Table(
+                    [[Paragraph(
+                        f'<b>{_al_p.get("icono","⚠️")} {_strip(_al_p.get("titulo",""))}</b><br/>'
+                        f'{_strip(_al_p.get("mensaje",""))}',
+                        _p(fontSize=7.5, textColor=_BC_PDF.get(_nv_p, colors.HexColor("#d97706")))
+                    )]],
+                    colWidths=[17*cm]
+                )
+                _al_t.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0),(-1,-1), _BG_PDF.get(_nv_p, colors.HexColor("#fefce8"))),
+                    ("LEFTPADDING",   (0,0),(-1,-1), 10),
+                    ("RIGHTPADDING",  (0,0),(-1,-1), 6),
+                    ("TOPPADDING",    (0,0),(-1,-1), 4),
+                    ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+                    ("LINEAFTER",     (0,0),(0,-1),  3, _BC_PDF.get(_nv_p, colors.HexColor("#d97706"))),
+                ]))
+                historia.append(_al_t)
+                historia.append(Spacer(1, 0.1*cm))
+
+    # ── SEMÁFORO DE VALORACIÓN vs sector histórico ────────────────────────────
+    if info and tipo_activo != "etf":
+        _sector_yf_p = info.get("sector") or TICKER_SECTOR_FALLBACK.get(
+            (ticker or "").upper(), "")
+        _rr_sector_p = RATIOS_REF.get("sectores", {}).get(_sector_yf_p)
+        if _rr_sector_p:
+            _per_rp  = info.get("trailingPE")
+            _eveb_rp = info.get("enterpriseToEbitda")
+            _pb_rp   = info.get("priceToBook")
+            _fc_rp   = info.get("freeCashflow")
+            _mc_rp   = info.get("marketCap")
+            _fcf_yp  = ((_fc_rp / _mc_rp * 100) if _fc_rp and _mc_rp and _mc_rp > 0 else None)
+            _per_dp  = _rr_sector_p.get("per", {})
+            _ev_dp   = _rr_sector_p.get("ev_ebitda", {})
+            _fcf_dp  = _rr_sector_p.get("fcf_yield", {})
+            _pb_dp   = _rr_sector_p.get("pb", {})
+
+            def _val_row_pdf(label, v_raw, p25, p50, p75, inv=False, suf="x", nota=""):
+                if v_raw is None or p25 is None or p75 is None: return None
+                try:    v = float(v_raw)
+                except: return None
+                if inv:
+                    if v >= p75:   col,txt = VE,"Barato histórico"
+                    elif v >= p50: col,txt = colors.HexColor("#16a34a"),"Zona media-baja"
+                    elif v >= p25: col,txt = colors.HexColor("#ca8a04"),"Zona media-alta"
+                    else:          col,txt = RO,"Caro histórico"
+                else:
+                    if v <= p25:   col,txt = VE,"Barato histórico"
+                    elif v <= p50: col,txt = colors.HexColor("#16a34a"),"Zona media-baja"
+                    elif v <= p75: col,txt = colors.HexColor("#ca8a04"),"Zona media-alta"
+                    else:          col,txt = RO,"Caro histórico"
+                _p25s = f"{p25:.1f}" if p25 else "—"
+                _p50s = f"{p50:.1f}" if p50 else "—"
+                _p75s = f"{p75:.1f}" if p75 else "—"
+                return [
+                    Paragraph(label, _p(fontSize=7.5, fontName="Helvetica-Bold")),
+                    Paragraph(f"{v:.1f}{suf}", _p(fontSize=8, fontName="Helvetica-Bold", textColor=col)),
+                    Paragraph(txt, _p(fontSize=7, textColor=col)),
+                    Paragraph(f"p25={_p25s} · p50={_p50s} · p75={_p75s}{suf}"
+                              + (f" · {nota}" if nota else ""),
+                              _p(fontSize=6.5, textColor=colors.HexColor("#64748b"))),
+                ]
+
+            _vr_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=colors.white))
+                       for h in ["Ratio", "Valor", "Señal", "Rango histórico sector"]]
+            _vr_rows = [_vr_hdr]
+            for _row in [
+                _val_row_pdf("PER (trailing)", _per_rp,
+                    _per_dp.get("p25"), _per_dp.get("p50"), _per_dp.get("p75"),
+                    nota=_per_dp.get("metrica_preferida","")),
+                _val_row_pdf("EV/EBITDA", _eveb_rp,
+                    _ev_dp.get("p25"), _ev_dp.get("p50"), _ev_dp.get("p75"),
+                    nota=_ev_dp.get("nota","")),
+                _val_row_pdf("FCF Yield", _fcf_yp,
+                    _fcf_dp.get("p25_pct"), _fcf_dp.get("p50_pct"), _fcf_dp.get("p75_pct"),
+                    inv=True, suf="%", nota=_fcf_dp.get("nota","")),
+                _val_row_pdf("P/Book", _pb_rp,
+                    _pb_dp.get("p25"), _pb_dp.get("p50"), _pb_dp.get("p75")),
+            ]:
+                if _row: _vr_rows.append(_row)
+
+            if len(_vr_rows) > 1:
+                historia.append(Spacer(1, 0.3*cm))
+                _nom_sect_p = _rr_sector_p.get("nombre_es", _sector_yf_p)
+                _pdf_sh(f"📐 Valoración vs sector — {_nom_sect_p}", historia)
+                _vr_t = Table(_vr_rows, colWidths=[3.2*cm, 2.0*cm, 3.8*cm, 9.0*cm])
+                _vr_t.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0),(-1,0), CA),
+                    ("ROWBACKGROUNDS",(0,1),(-1,-1), [BL, GF]),
+                    ("GRID",         (0,0),(-1,-1), 0.2, GB),
+                    ("TOPPADDING",   (0,0),(-1,-1), 3),
+                    ("BOTTOMPADDING",(0,0),(-1,-1), 3),
+                    ("LEFTPADDING",  (0,0),(-1,-1), 4),
+                    ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+                ]))
+                historia.append(_vr_t)
+                _alertas_sect_p = _rr_sector_p.get("alertas", [])
+                if _alertas_sect_p:
+                    historia.append(Spacer(1, 0.1*cm))
+                    historia.append(Paragraph(
+                        "⚡ Alertas del sector: " + " · ".join(_alertas_sect_p),
+                        _p(fontSize=7, textColor=colors.HexColor("#475569"))
+                    ))
+                historia.append(Spacer(1, 0.1*cm))
+                historia.append(Paragraph(
+                    "📌 Rangos históricos: p25/p50/p75 del sector (Damodaran NYU, Bloomberg 1995-2025). [VERIFICAR] con análisis propio.",
+                    _p(fontSize=6.5, textColor=colors.HexColor("#94a3b8"))
+                ))
 
     # ── PIE ───────────────────────────────────────────────────────────────
     historia.append(Spacer(1, 0.5*cm))
