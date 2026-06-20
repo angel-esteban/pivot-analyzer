@@ -2777,8 +2777,10 @@ def analizar_volumen(hist, nombre: str) -> "dict | None":
 
     cierre = hist["Close"]
 
-    vol_5d  = float(vol.tail(5).mean())
-    vol_20d = float(vol.tail(20).mean())
+    # tail(N+1).iloc[:-1] = últimas N sesiones excluyendo hoy
+    # Evita que un spike intraday de hoy infle la media de referencia
+    vol_5d  = float(vol.tail(6).iloc[:-1].mean())
+    vol_20d = float(vol.tail(21).iloc[:-1].mean())
 
     if vol_20d == 0:
         return None
@@ -5978,7 +5980,8 @@ def analisis_volumen(hist: pd.DataFrame):
 
     vol_hoy = float(hist["Volume"].iloc[-1])
     vol_10d = float(hist["Volume"].tail(11).iloc[:-1].mean()) if len(hist) > 10 else vol_hoy
-    vol_3m = float(hist["Volume"].tail(63).mean()) if len(hist) > 20 else vol_hoy
+    # tail(64).iloc[:-1] = últimas 63 sesiones excluyendo hoy — consistente con vol_10d
+    vol_3m = float(hist["Volume"].tail(64).iloc[:-1].mean()) if len(hist) > 20 else vol_hoy
 
     ratio_10d = (vol_hoy / vol_10d * 100) if vol_10d > 0 else 100
     ratio_3m = (vol_hoy / vol_3m * 100) if vol_3m > 0 else 100
@@ -6210,7 +6213,7 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
                 if div_ttm and (info.get("currentPrice") or info.get("regularMarketPrice"))
                 else _fmt_pct(info.get("dividendYield"))
             ),
-            "Beta": _fmt_ratio(info.get("beta")),
+            "Beta (Yahoo)": _fmt_ratio(info.get("beta")),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
             "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
             "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
             "Objetivo analistas": _fmt_precio(info.get("targetMeanPrice")),
