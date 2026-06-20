@@ -2623,8 +2623,10 @@ def analizar_rsi(hist, precio: float, nombre: str) -> "dict | None":
 
     cierre  = hist["Close"]
     delta   = cierre.diff()
-    ganancia = delta.clip(lower=0).rolling(14).mean()
-    perdida  = (-delta.clip(upper=0)).rolling(14).mean()
+    # Wilder's EWM — idéntico a calcular_rsi() y pandas_ta.rsi()
+    # rolling(14).mean() daba RSI ~12 pts por debajo en tendencias bajistas recientes
+    ganancia = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+    perdida  = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
     rs       = ganancia / perdida.replace(0, float("nan"))
     rsi_serie = 100 - (100 / (1 + rs))
     rsi_clean = rsi_serie.dropna()
@@ -5500,8 +5502,8 @@ def detectar_divergencias(hist, n_sesiones=60):
     # ── 1. RSI ───────────────────────────────────────────────────────
     try:
         delta = close.diff()
-        gain  = delta.clip(lower=0).rolling(14).mean()
-        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        gain  = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+        loss  = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
         rsi   = 100 - (100 / (1 + gain / loss.replace(0, _np_div.nan)))
 
         picos, valles = _extremos(close, order=4)
@@ -9631,8 +9633,8 @@ def _mini_analisis_cartera(ticker: str) -> dict:
         precio = float(close.iloc[-1])
         # RSI 14
         delta = close.diff()
-        gain  = delta.clip(lower=0).rolling(14).mean()
-        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        gain  = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+        loss  = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
         rs    = gain / loss.replace(0, 1e-10)
         rsi   = float(100 - 100 / (1 + rs.iloc[-1]))
         # SMAs
@@ -10733,8 +10735,8 @@ def _sc_rsi_14(hist) -> float | None:
         if len(closes) < 15:
             return None
         delta  = closes.diff()
-        gain   = delta.clip(lower=0).rolling(14).mean()
-        loss   = (-delta.clip(upper=0)).rolling(14).mean()
+        gain   = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+        loss   = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
         rs     = gain / loss.replace(0, float("nan"))
         rsi    = 100 - (100 / (1 + rs))
         val    = float(rsi.iloc[-1])
