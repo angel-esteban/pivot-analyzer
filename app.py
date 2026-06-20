@@ -6179,6 +6179,133 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
 # DATOS FUNDAMENTALES
 # =============================================================================
 
+
+def _alertas_fundamentales(info: dict, div_ttm: float = None) -> list:
+    """
+    Evalúa reglas de alerta sobre datos fundamentales raw de yfinance.
+    Devuelve lista de dicts: {nivel, icono, titulo, mensaje}
+    Niveles: "rojo", "amarillo", "verde"
+    """
+    alertas = []
+    if not info:
+        return alertas
+
+    bpa_ttm     = info.get("trailingEps")
+    net_margin  = info.get("profitMargins")
+    roe         = info.get("returnOnEquity")
+    total_debt  = info.get("totalDebt")
+    total_cash  = info.get("totalCash") or info.get("cashAndCashEquivalentsAtCarryingValue") or 0
+    ebitda      = info.get("ebitda")
+    dy_raw      = info.get("dividendYield")
+    precio      = info.get("currentPrice") or info.get("regularMarketPrice")
+
+    # Normalizar dividendYield (.MC devuelve 4.36, no 0.0436)
+    dy = None
+    if dy_raw is not None:
+        dy = dy_raw / 100 if dy_raw > 1 else dy_raw
+    # Fallback: calcular desde div_ttm
+    if dy is None and div_ttm and precio:
+        dy = div_ttm / precio
+
+    # ── BPA TTM negativo ──────────────────────────────────────────────
+    if bpa_ttm is not None and bpa_ttm < 0:
+        alertas.append({
+            "nivel": "rojo", "icono": "🔴",
+            "titulo": f"BPA TTM negativo ({bpa_ttm:+.4f})",
+            "mensaje": (
+                "La empresa registró pérdidas en los últimos 12 meses. "
+                "Riesgo estructural: el precio puede reflejar expectativas de recuperación "
+                "o simplemente no haber descontado aún el deterioro. Verificar tendencia "
+                "de BPA forward y cobertura del dividendo."
+            )
+        })
+
+    # ── Margen neto negativo ──────────────────────────────────────────
+    if net_margin is not None and net_margin < 0:
+        alertas.append({
+            "nivel": "rojo", "icono": "🔴",
+            "titulo": f"Margen neto negativo ({net_margin*100:.1f}%)",
+            "mensaje": (
+                "La empresa no genera beneficio por cada euro de ventas. "
+                "Analizar si es puntual (extraordinarios) o estructural (presión de costes, "
+                "pérdida de pricing power)."
+            )
+        })
+
+    # ── ROE negativo ─────────────────────────────────────────────────
+    if roe is not None and roe < 0:
+        alertas.append({
+            "nivel": "rojo", "icono": "🔴",
+            "titulo": f"ROE negativo ({roe*100:.1f}%)",
+            "mensaje": (
+                "Los recursos propios están generando pérdidas — destrucción de valor "
+                "para el accionista. Verificar si el ROE negativo proviene de pérdidas "
+                "operativas o de impactos contables extraordinarios."
+            )
+        })
+
+    # ── Deuda neta/EBITDA > 3x ───────────────────────────────────────
+    if total_debt is not None and ebitda is not None and ebitda > 0:
+        net_debt = max(0, total_debt - total_cash)
+        dn_ebitda = net_debt / ebitda
+        if dn_ebitda > 5:
+            alertas.append({
+                "nivel": "rojo", "icono": "🔴",
+                "titulo": f"Deuda neta/EBITDA muy elevada ({dn_ebitda:.1f}x)",
+                "mensaje": (
+                    f"Ratio por encima de 5x. En sectores como telecom o utilities "
+                    f"puede ser estructural, pero limita la capacidad de reacción ante "
+                    f"subidas de tipos o caída de ingresos. Ratio actual: {dn_ebitda:.1f}x."
+                )
+            })
+        elif dn_ebitda > 3:
+            alertas.append({
+                "nivel": "amarillo", "icono": "🟡",
+                "titulo": f"Deuda neta/EBITDA elevada ({dn_ebitda:.1f}x)",
+                "mensaje": (
+                    f"Umbral de atención: >3x. Especialmente relevante en sectores "
+                    f"intensivos en capital (telecom, utilities, inmobiliario). "
+                    f"Ratio actual: {dn_ebitda:.1f}x — vigilar tendencia y coste de refinanciación."
+                )
+            })
+
+    # ── Dividendo + BPA (combinación crítica) ────────────────────────
+    if dy is not None and dy > 0:
+        if bpa_ttm is not None and bpa_ttm < 0:
+            # Alerta combinada máxima: dividendo con pérdidas
+            alertas.append({
+                "nivel": "rojo", "icono": "🔴",
+                "titulo": f"⚠️ Dividendo no cubierto por beneficios ({dy*100:.2f}% yield + BPA negativo)",
+                "mensaje": (
+                    f"Rentabilidad por dividendo del {dy*100:.2f}% con BPA TTM negativo ({bpa_ttm:+.4f}). "
+                    f"El dividendo se mantiene con cargo a reservas o deuda, no a beneficios corrientes. "
+                    f"Históricamente, los dividendos no cubiertos por beneficios tienen alta probabilidad "
+                    f"de recorte en 1-3 años. Revisar FCF y política de dividendo del management."
+                )
+            })
+        elif dy > 0.08:
+            alertas.append({
+                "nivel": "amarillo", "icono": "🟡",
+                "titulo": f"Rentabilidad por dividendo muy alta ({dy*100:.2f}%) — verificar sostenibilidad",
+                "mensaje": (
+                    f"Un yield >8% puede indicar atractivo real o puede reflejar que el mercado "
+                    f"anticipa un recorte de dividendo (el precio cae → yield sube artificialmente). "
+                    f"Verificar payout ratio, FCF yield y historial de dividendos."
+                )
+            })
+        elif dy > 0.05:
+            alertas.append({
+                "nivel": "verde", "icono": "🟢",
+                "titulo": f"Rentabilidad por dividendo atractiva ({dy*100:.2f}%)",
+                "mensaje": (
+                    f"Yield del {dy*100:.2f}% por encima de la media histórica del mercado español (~3-4%). "
+                    f"Verificar cobertura (payout ratio <80% es señal de sostenibilidad) y si el dividendo "
+                    f"tiene historial de crecimiento o es variable."
+                )
+            })
+
+    return alertas
+
 def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
     """
     Retorna dict con datos fundamentales según tipo (accion / etf).
@@ -15751,6 +15878,26 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                     f'🏛️ <b>Nota fiscal (España):</b> {_nota}</div>',
                                     unsafe_allow_html=True)
         elif fundamentales:
+            # ── Alertas fundamentales ──────────────────────────────────────
+            _fund_alertas = _alertas_fundamentales(info, div_ttm)
+            if _fund_alertas:
+                _BG  = {"rojo": "#fef2f2", "amarillo": "#fefce8", "verde": "#f0fdf4"}
+                _BC  = {"rojo": "#dc2626", "amarillo": "#d97706", "verde": "#16a34a"}
+                _TC  = {"rojo": "#991b1b", "amarillo": "#713f12", "verde": "#14532d"}
+                _alerta_html = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">'
+                for _al in _fund_alertas:
+                    _nv = _al["nivel"]
+                    _alerta_html += (
+                        f'<div style="background:{_BG[_nv]};border-left:4px solid {_BC[_nv]};'
+                        f'border-radius:0 8px 8px 0;padding:8px 14px">'
+                        f'<div style="font-size:.82rem;font-weight:700;color:{_BC[_nv]};margin-bottom:2px">'
+                        f'{_al["icono"]} {_al["titulo"]}</div>'
+                        f'<div style="font-size:.79rem;color:{_TC[_nv]};line-height:1.4">{_al["mensaje"]}</div>'
+                        f'</div>'
+                    )
+                _alerta_html += '</div>'
+                st.markdown(_alerta_html, unsafe_allow_html=True)
+
             fund_items = [(k, v) for k, v in fundamentales.items() if v not in ("—", "")]
             st.markdown('<div class="fund-metrics">', unsafe_allow_html=True)
             cols_f = st.columns(5)
