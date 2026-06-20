@@ -11121,13 +11121,15 @@ def _generar_pdf_screening(job: dict) -> bytes:
         name = f"{base_name}_{_id[0]}"
         return ParagraphStyle(name, parent=styles["Normal"], **kw)
 
-    S_TITLE   = ps("title",   fontName="Helvetica-Bold", fontSize=16, textColor=C_DARK, spaceAfter=2)
-    S_SUB     = ps("sub",     fontName="Helvetica",      fontSize=9,  textColor=C_GRAY, spaceAfter=8)
-    S_SECTION = ps("section", fontName="Helvetica-Bold", fontSize=11, textColor=C_DARK,
-                   spaceBefore=10, spaceAfter=4)
-    S_TICKER  = ps("ticker",  fontName="Helvetica-Bold", fontSize=9,  textColor=C_DARK,
-                   spaceBefore=6, spaceAfter=2)
-    S_FOOT    = ps("foot",    fontName="Helvetica",      fontSize=7,  textColor=C_SLATE,
+    S_TITLE   = ps("title",   fontName="Helvetica-Bold", fontSize=16, leading=22, textColor=C_DARK,
+                   spaceAfter=10)
+    S_SUB     = ps("sub",     fontName="Helvetica",      fontSize=9,  leading=14, textColor=C_GRAY,
+                   spaceBefore=0, spaceAfter=10)
+    S_SECTION = ps("section", fontName="Helvetica-Bold", fontSize=11, leading=16, textColor=C_DARK,
+                   spaceBefore=12, spaceAfter=6)
+    S_TICKER  = ps("ticker",  fontName="Helvetica-Bold", fontSize=9,  leading=14, textColor=C_DARK,
+                   spaceBefore=8, spaceAfter=3)
+    S_FOOT    = ps("foot",    fontName="Helvetica",      fontSize=7,  leading=10, textColor=C_SLATE,
                    alignment=TA_CENTER)
 
     def p(txt, **kw):
