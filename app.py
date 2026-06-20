@@ -13602,6 +13602,157 @@ def pantalla_analisis():
             sector_yf=(info.get("sector") or "") if info else "",
         )
 
+        # ── Capa Operativa ───────────────────────────────────────────────────
+        _sh("⚙️ Capa Operativa")
+        with st.container():
+            # ── ATR(14) ─────────────────────────────────────────────────────
+            try:
+                _hi  = hist["High"].squeeze()
+                _lo  = hist["Low"].squeeze()
+                _cl  = hist["Close"].squeeze()
+                _prev_cl = _cl.shift(1)
+                _tr = (_hi - _lo).combine((_hi - _prev_cl).abs(), max).combine((_lo - _prev_cl).abs(), max)
+                _atr_eur = float(_tr.rolling(14).mean().iloc[-1])
+                _atr_pct = (_atr_eur / precio * 100) if precio > 0 else None
+            except Exception:
+                _atr_eur = None
+                _atr_pct = None
+
+            # ── Stop sugerido (2×ATR) ────────────────────────────────────────
+            _stop_long  = (precio - 2 * _atr_eur) if _atr_eur else None
+            _stop_short = (precio + 2 * _atr_eur) if _atr_eur else None
+
+            # ── Niveles de invalidación (confluencias ★★★ más cercanas) ─────
+            _conf_3e_bajo = None   # soporte — invalidación bajista
+            _conf_3e_alto = None   # resistencia — confirmación alcista
+            _min_dist_b = float("inf")
+            _min_dist_a = float("inf")
+            for _c in (confluencias or []):
+                _cp = _c["precio"]
+                _es = _c.get("estrellas", "")
+                _fuerza = len(_es)  # 1, 2 o 3
+                if _fuerza < 2:
+                    continue  # mínimo ★★
+                if _cp < precio:
+                    _d = precio - _cp
+                    if _d < _min_dist_b:
+                        _min_dist_b = _d
+                        _conf_3e_bajo = _c
+                elif _cp > precio:
+                    _d = _cp - precio
+                    if _d < _min_dist_a:
+                        _min_dist_a = _d
+                        _conf_3e_alto = _c
+
+            # ── Capital input (sesión state) ─────────────────────────────────
+            if "cap_operativa" not in st.session_state:
+                st.session_state["cap_operativa"] = 10000.0
+            if "riesgo_pct_op" not in st.session_state:
+                st.session_state["riesgo_pct_op"] = 1.0
+
+            _col_atr1, _col_atr2, _col_atr3, _col_atr4 = st.columns(4)
+            with _col_atr1:
+                st.metric(
+                    "ATR(14)",
+                    f"{_atr_eur:.3f} €" if _atr_eur else "—",
+                    delta=f"{_atr_pct:.2f}% del precio" if _atr_pct else None,
+                    delta_color="off",
+                    help="Average True Range de 14 sesiones — mide la volatilidad media diaria real del activo en euros."
+                )
+            with _col_atr2:
+                st.metric(
+                    "Stop largo (2×ATR)",
+                    f"{_stop_long:.4f} €" if _stop_long else "—",
+                    delta=f"−{2*_atr_pct:.2f}% vs precio" if _atr_pct else None,
+                    delta_color="inverse",
+                    help="Stop de protección para posición larga situado 2×ATR por debajo del precio actual. "
+                         "Nivel a partir del cual el movimiento ya no es 'ruido normal' de la volatilidad del activo."
+                )
+            with _col_atr3:
+                if _conf_3e_bajo:
+                    _inv_eur  = precio - _conf_3e_bajo["precio"]
+                    _inv_pct  = _inv_eur / precio * 100
+                    _inv_est  = _conf_3e_bajo.get("estrellas", "")
+                    st.metric(
+                        f"Invalidación bajista {_inv_est}",
+                        f"{_conf_3e_bajo['precio']:.4f} €",
+                        delta=f"−{_inv_pct:.2f}% ({_inv_eur:.3f} €)",
+                        delta_color="inverse",
+                        help="Confluencia multi-timeframe más cercana por debajo del precio. "
+                             "Su ruptura en cierre sería señal de invalidación de la tesis alcista."
+                    )
+                else:
+                    st.metric("Invalidación bajista", "—", help="Sin confluencias ★★ o superiores bajo el precio actual.")
+            with _col_atr4:
+                if _conf_3e_alto:
+                    _res_eur  = _conf_3e_alto["precio"] - precio
+                    _res_pct  = _res_eur / precio * 100
+                    _res_est  = _conf_3e_alto.get("estrellas", "")
+                    st.metric(
+                        f"Confirmación alcista {_res_est}",
+                        f"{_conf_3e_alto['precio']:.4f} €",
+                        delta=f"+{_res_pct:.2f}% ({_res_eur:.3f} €)",
+                        delta_color="normal",
+                        help="Confluencia multi-timeframe más cercana por encima del precio. "
+                             "Su superación en cierre reforzaría la tesis alcista."
+                    )
+                else:
+                    st.metric("Confirmación alcista", "—", help="Sin confluencias ★★ o superiores sobre el precio actual.")
+
+            # ── Tamaño de posición ───────────────────────────────────────────
+            with st.expander("📐 Calculadora de tamaño de posición", expanded=False):
+                _cp1, _cp2 = st.columns(2)
+                with _cp1:
+                    _cap = st.number_input(
+                        "Capital total (€)",
+                        min_value=100.0, max_value=10_000_000.0,
+                        value=st.session_state["cap_operativa"],
+                        step=1000.0, format="%.0f",
+                        key="cap_operativa",
+                        help="Capital total sobre el que calcular el riesgo. No se almacena ni se envía a ningún servidor."
+                    )
+                with _cp2:
+                    _rsk = st.number_input(
+                        "Riesgo máximo por operación (%)",
+                        min_value=0.1, max_value=10.0,
+                        value=st.session_state["riesgo_pct_op"],
+                        step=0.1, format="%.1f",
+                        key="riesgo_pct_op",
+                        help="Porcentaje del capital que se acepta perder si el precio llega al stop."
+                    )
+
+                if _atr_eur and _atr_eur > 0:
+                    _riesgo_eur     = _cap * _rsk / 100
+                    _riesgo_x_acc   = 2 * _atr_eur          # stop = 2×ATR
+                    _n_acciones     = int(_riesgo_eur / _riesgo_x_acc)
+                    _capital_usado  = _n_acciones * precio
+                    _pct_cartera    = _capital_usado / _cap * 100 if _cap > 0 else 0
+
+                    _c1, _c2, _c3, _c4 = st.columns(4)
+                    _c1.metric("Riesgo en €", f"{_riesgo_eur:.2f} €")
+                    _c2.metric("Riesgo/acción (2×ATR)", f"{_riesgo_x_acc:.3f} €")
+                    _c3.metric("Acciones a comprar", f"{_n_acciones:,}")
+                    _c4.metric("Capital usado", f"{_capital_usado:,.0f} € ({_pct_cartera:.1f}%)")
+
+                    if _n_acciones > 0:
+                        st.info(
+                            f"Con {_cap:,.0f} € y riesgo {_rsk:.1f}% → comprar **{_n_acciones:,} acciones** "
+                            f"a {precio:.4f} € = **{_capital_usado:,.0f} € ({_pct_cartera:.1f}% del capital)**. "
+                            f"Stop en {_stop_long:.4f} € ({2*_atr_pct:.2f}% por debajo). "
+                            f"Pérdida máxima asumida: **{_riesgo_eur:.2f} €**."
+                        )
+                    else:
+                        st.warning("El riesgo por acción (2×ATR) excede el importe de riesgo aceptado para este capital. "
+                                   "Considera aumentar el % de riesgo o el capital.")
+                else:
+                    st.warning("ATR no disponible — no se puede calcular el tamaño de posición.")
+
+                st.caption(
+                    "⚠️ Cálculo educativo. El stop a 2×ATR es una heurística — ajusta según la estructura "
+                    "de precio (soportes, confluencias) y tu horizonte de inversión. "
+                    "No constituye asesoramiento de inversión."
+                )
+
         _sh("🚦 Semáforo Global")
         with st.expander("💡 ¿Qué mide el Semáforo Global? — Diferencia con el Diagnóstico Técnico", expanded=False):
             st.markdown("""
