@@ -13176,11 +13176,20 @@ def pantalla_analisis():
         with col_p4:
             _beta_val = beta_calculada if beta_calculada is not None else info.get("beta")
             _beta_str = f"{_beta_val:.2f}" if _beta_val is not None else "—"
-            st.metric("Beta",  _beta_str,
-                      help=f"Beta calculada contra **{_indice_ref_nombre}** "
-                           f"(2 años de retornos diarios). "
-                           f"Beta > 1: más volátil que el índice. "
-                           f"Beta < 1: menos volátil. Beta < 0: correlación inversa.")
+            _beta_label = (f"Beta vs {_indice_ref_nombre}" if beta_calculada is not None
+                           else "Beta (Yahoo/S&P 500)")
+            _beta_help  = (
+                f"Beta calculada por la app contra **{_indice_ref_nombre}** "
+                f"(2 años de retornos diarios EOD). "
+                f"Beta > 1: más volátil que el índice. "
+                f"Beta < 1: menos volátil. Beta < 0: correlación inversa. "
+                f"Puede diferir de la Beta (Yahoo) mostrada en Datos Fundamentales, "
+                f"que usa el S\&P 500 como benchmark."
+                if beta_calculada is not None else
+                f"Beta de Yahoo Finance (benchmark: S\&P 500). "
+                f"No disponible beta calculada contra {_indice_ref_nombre}."
+            )
+            st.metric(_beta_label, _beta_str, help=_beta_help)
 
         st.markdown(
             f'<p style="margin:6px 0 0 0">'
