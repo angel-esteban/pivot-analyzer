@@ -11553,17 +11553,9 @@ def _sc_fcf_vs_div(info: dict) -> str | None:
     else:
         base = "ko"
 
-    # Override: si payout>100% Y BPA<0, el dividendo es insostenible aunque FCF sea positivo.
-    # La empresa paga mas de lo que gana en beneficios Y tiene perdidas — señal estructural de recorte.
-    payout   = info.get("payoutRatio")
-    bpa      = info.get("trailingEps")
-    _p_malo  = payout is not None and (float(payout) > 1.0 or float(payout) < 0)
-    _b_malo  = bpa is not None and float(bpa) < 0
-    if _p_malo and _b_malo:
-        base = "ko"        # ambas fuentes de cobertura fallidas: hard override
-    elif _p_malo or _b_malo:
-        base = {"ok": "warning", "warning": "ko"}.get(base, "ko")  # un factor: downgrade
-
+    # Nota: el override payout/BPA fue eliminado. El K1 global killshot gestiona
+    # los casos payout>100% AND BPA<0 con el veredicto y mensaje correcto.
+    # El criterio FCF refleja únicamente la cobertura FCF vs dividendo.
     return base
 
 
