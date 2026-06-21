@@ -11762,14 +11762,45 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"tendencia estructural negativa incompatible con cartera de rentas",
                     })
 
-        # Aplicar killshots: forzar no_cumple y capear score por debajo de "parcial"
-        if killshots:
+            # K3 — Yield insuficiente para cartera de rentas (soft killshot)
+            # Una empresa con yield real < 2.5% puede ser excelente, pero no pertenece
+            # a una cartera de income. Fuerza veredicto máximo a "Parcial".
+            _ks_precio = (info.get("regularMarketPrice") or
+                          info.get("currentPrice") or info.get("previousClose"))
+            _ks_drate  = info.get("dividendRate")
+            _ks_tady   = info.get("trailingAnnualDividendYield")
+            _ks_dy_raw = info.get("dividendYield")
+            _ks_yield  = None
+            if _ks_drate and _ks_precio and float(_ks_precio) > 0:
+                _ks_yield = float(_ks_drate) / float(_ks_precio)
+            elif _ks_tady and float(_ks_tady) > 0:
+                _ks_yield = float(_ks_tady)
+            elif _ks_dy_raw and float(_ks_dy_raw) > 0:
+                _dy = float(_ks_dy_raw)
+                _ks_yield = _dy / 100 if _dy > 1 else _dy
+            if _ks_yield is not None and 0 < _ks_yield < 0.025:
+                killshots.append({
+                    "tipo":   "soft",
+                    "codigo": "K3",
+                    "razon":  f"Yield {_ks_yield:.1%} insuficiente para cartera de rentas "
+                              f"(mínimo orientativo 2.5%) — empresa de calidad pero "
+                              f"no apta para estrategia de income",
+                })
+
+        # Aplicar killshots
+        # Hard (K1, K2): fuerzan no_cumple + cap en 44
+        # Soft (K3):     fuerzan parcial si el score sería "cumple" + cap en 69
+        if puntuacion >= 70:   estado_global = "cumple"
+        elif puntuacion >= 45: estado_global = "parcial"
+        else:                  estado_global = "no_cumple"
+        _ks_hard = [k for k in killshots if k.get("tipo", "hard") == "hard"]
+        _ks_soft = [k for k in killshots if k.get("tipo") == "soft"]
+        if _ks_hard:
             estado_global = "no_cumple"
-            puntuacion    = min(puntuacion, 44)   # fuerza banda no_cumple (<45)
-        else:
-            if puntuacion >= 70:   estado_global = "cumple"
-            elif puntuacion >= 45: estado_global = "parcial"
-            else:                  estado_global = "no_cumple"
+            puntuacion    = min(puntuacion, 44)
+        elif _ks_soft and estado_global == "cumple":
+            estado_global = "parcial"
+            puntuacion    = min(puntuacion, 69)
 
         return {
             "ticker":                ticker,
@@ -12220,18 +12251,30 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
-                # Killshots — señales de alarma que forzaron el veredicto negativo
+                # Killshots — señales que condicionaron el veredicto
                 for _ks in r.get("killshots", []):
+                    _ks_tipo = _ks.get("tipo", "hard")
+                    if _ks_tipo == "soft":
+                        _ks_bg, _ks_border, _ks_title_col, _ks_text_col, _ks_icon = (
+                            "#fffbeb", "#fbbf24", "#92400e", "#78350f", "⚠️"
+                        )
+                        _ks_label = "Limitación de elegibilidad"
+                    else:
+                        _ks_bg, _ks_border, _ks_title_col, _ks_text_col, _ks_icon = (
+                            "#fef2f2", "#fca5a5", "#dc2626", "#7f1d1d", "🚨"
+                        )
+                        _ks_label = "Señal de alarma"
                     st.markdown(
                         f'<div style="display:flex;align-items:flex-start;gap:8px;'
-                        f'padding:8px 12px;margin-bottom:6px;background:#fef2f2;'
-                        f'border:1px solid #fca5a5;border-left:4px solid #dc2626;'
+                        f'padding:8px 12px;margin-bottom:6px;background:{_ks_bg};'
+                        f'border:1px solid {_ks_border};border-left:4px solid {_ks_border};'
                         f'border-radius:6px">'
-                        f'<span style="font-size:14px">🚨</span>'
-                        f'<div><span style="font-size:0.7rem;font-weight:700;color:#dc2626;'
-                        f'text-transform:uppercase;letter-spacing:0.05em">'
-                        f'Señal de alarma · {_ks.get("codigo","")}</span><br>'
-                        f'<span style="font-size:0.8rem;color:#7f1d1d">{_ks.get("razon","")}</span>'
+                        f'<span style="font-size:14px">{_ks_icon}</span>'
+                        f'<div><span style="font-size:0.7rem;font-weight:700;'
+                        f'color:{_ks_title_col};text-transform:uppercase;letter-spacing:0.05em">'
+                        f'{_ks_label} · {_ks.get("codigo","")}</span><br>'
+                        f'<span style="font-size:0.8rem;color:{_ks_text_col}">'
+                        f'{_ks.get("razon","")}</span>'
                         f'</div></div>',
                         unsafe_allow_html=True
                     )
