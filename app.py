@@ -648,7 +648,7 @@ IBEX_35 = {
     "Merlin Properties":            "MRL.MC",
     "Naturgy":                      "NTGY.MC",
     "Puig Brands":                  "PUIG.MC",
-    "Redeia (REE)":                 "REE.MC",
+    "Redeia (RED)":                 "RED.MC",
     "Repsol":                       "REP.MC",
     "Sacyr":                        "SCYR.MC",
     "Solaria":                      "SLR.MC",
@@ -11450,6 +11450,12 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
     try:
         if dividends is None or len(dividends) == 0:
             return None
+        import pandas as pd
+        # Recency check: si el ultimo dividendo fue hace mas de 3 años, el CAGR no es relevante
+        ultimo_div = dividends.index.max()
+        cutoff_3y  = pd.Timestamp.now(tz=ultimo_div.tzinfo) - pd.DateOffset(years=3)
+        if ultimo_div < cutoff_3y:
+            return None  # datos obsoletos — empresa no paga dividendo actualmente
         annual = dividends.resample("YE").sum()
         annual = annual[annual > 0]
         if len(annual) < 2:
@@ -11645,6 +11651,42 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         hist      = t.history(period="6mo")    if necesita_hist else None
         dividends = t.dividends                if necesita_div  else None
 
+        # ── Filtro de elegibilidad para carteras de dividendo ───────────────
+        # Si hay criterio dividend_yield pero la empresa no paga dividendo en
+        # los ultimos 3 años: marcar como no_apto sin evaluar criterios.
+        _es_cartera_div = any(c.get("id") == "dividend_yield" for c in criterios)
+        if _es_cartera_div:
+            import pandas as pd
+            _tady  = float(info.get("trailingAnnualDividendYield") or 0)
+            _tadr  = float(info.get("trailingAnnualDividendRate")  or 0)
+            _drate = float(info.get("dividendRate")                or 0)
+            _div_reciente = 0.0
+            try:
+                _raw_divs = t.dividends
+                if _raw_divs is not None and len(_raw_divs) > 0:
+                    _cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(years=3)
+                    _div_reciente = float(_raw_divs[
+                        _raw_divs.index.tz_convert("UTC") >= _cutoff
+                    ].sum())
+            except Exception:
+                pass
+            if _tady == 0 and _tadr == 0 and _drate == 0 and _div_reciente == 0:
+                return {
+                    "ticker":               ticker,
+                    "nombre":               nombre,
+                    "puntuacion":           0,
+                    "puntuacion_raw":       0,
+                    "estado_global":        "no_apto",
+                    "criterios":            [],
+                    "n_na":                 0,
+                    "n_evaluados":          0,
+                    "n_total_criterios":    len(criterios),
+                    "evaluacion_incompleta": False,
+                    "no_apto":              True,
+                    "no_apto_razon":        "Sin dividendo en los últimos 3 años — no evaluable en cartera de rentas",
+                    "error":                False,
+                }
+
         resultados_criterios = []
         puntos_total  = 0
         puntos_max    = 0
@@ -11797,9 +11839,9 @@ def _generar_pdf_screening(job: dict) -> bytes:
     C_BG2    = colors.HexColor("#f1f5f9")
     C_BORDER = colors.HexColor("#e2e8f0")
 
-    ESTADO_HEX   = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
-    ESTADO_COLOR = {"cumple": C_GREEN, "parcial": C_AMBER, "no_cumple": C_RED, "error": C_SLATE}
-    ESTADO_LABEL = {"cumple": "Cumple", "parcial": "Parcial", "no_cumple": "No cumple", "error": "Error"}
+    ESTADO_HEX   = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8", "no_apto": "#7c3aed"}
+    ESTADO_COLOR = {"cumple": C_GREEN, "parcial": C_AMBER, "no_cumple": C_RED, "error": C_SLATE, "no_apto": colors.HexColor("#7c3aed")}
+    ESTADO_LABEL = {"cumple": "Cumple", "parcial": "Parcial", "no_cumple": "No cumple", "error": "Error", "no_apto": "Sin dividendo"}
     CRIT_HEX     = {"ok": "#16a34a", "warning": "#d97706", "ko": "#dc2626",
                     "sin_datos": "#94a3b8", "manual": "#64748b"}
     CRIT_LABEL   = {"ok": "OK", "warning": "~OK", "ko": "KO", "sin_datos": "N/A", "manual": "Manual"}
@@ -11926,6 +11968,17 @@ def _generar_pdf_screening(job: dict) -> bytes:
             ]))
             continue
 
+        if r.get("no_apto"):
+            story.append(KeepTogether([
+                p(f"<b>{ticker}</b>  <font color='#64748b'>{nombre}</font>  "
+                  f"| <font color='#7c3aed'><b>Sin dividendo — No evaluable</b></font>",
+                  fontName="Helvetica-Bold", fontSize=9, textColor=C_DARK,
+                  spaceBefore=6, spaceAfter=2),
+                p(r.get("no_apto_razon", ""), fontSize=7.5, textColor=C_GRAY, spaceAfter=4),
+                Spacer(1, 0.1*cm),
+            ]))
+            continue
+
         criterios = r.get("criterios", [])
         crit_rows = [[
             p("<b>Criterio</b>", fontSize=7, textColor=C_GRAY),
@@ -12003,8 +12056,8 @@ def _render_screening_resultados(job: dict):
         return
 
     EMOJI = {"ok": "✅", "warning": "⚠️", "ko": "❌", "sin_datos": "❓", "manual": "🔍", "error": "💥"}
-    COLOR = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8"}
-    ICONO_GLOBAL = {"cumple": "✅", "parcial": "⚠️", "no_cumple": "❌", "error": "💥"}
+    COLOR = {"cumple": "#16a34a", "parcial": "#d97706", "no_cumple": "#dc2626", "error": "#94a3b8", "no_apto": "#7c3aed"}
+    ICONO_GLOBAL = {"cumple": "✅", "parcial": "⚠️", "no_cumple": "❌", "error": "💥", "no_apto": "🚫"}
 
     # Ordenar alfabéticamente por ticker
     resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
@@ -12014,10 +12067,15 @@ def _render_screening_resultados(job: dict):
     n_parcial  = sum(1 for r in resultado if r.get("estado_global") == "parcial")
     n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
     n_error    = sum(1 for r in resultado if r.get("error"))
+    n_no_apto  = sum(1 for r in resultado if r.get("no_apto"))
     _err_html  = (f'<span style="background:#f1f5f9;border:1px solid #e2e8f0;'
                   f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
                   f'color:#64748b">💥 Sin datos: <b>{n_error}</b></span>&nbsp;'
                   if n_error else "")
+    _napto_html = (f'<span style="background:#ede9fe;border:1px solid #c4b5fd;'
+                   f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
+                   f'color:#6d28d9">🚫 Sin dividendo: <b>{n_no_apto}</b></span>&nbsp;'
+                   if n_no_apto else "")
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:10px;'
         f'flex-wrap:wrap;margin:6px 0 10px">'
@@ -12030,7 +12088,7 @@ def _render_screening_resultados(job: dict):
         f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
         f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#b91c1c">'
         f'❌ No cumplen: <b>{n_no}</b></span>'
-        f'{_err_html}</div>',
+        f'{_napto_html}{_err_html}</div>',
         unsafe_allow_html=True
     )
 
@@ -12071,6 +12129,14 @@ def _render_screening_resultados(job: dict):
         with st.expander(label, expanded=False):
             if r.get("error"):
                 st.error(f"Error al obtener datos: {r.get('error_msg','')}")
+            elif r.get("no_apto"):
+                st.markdown(
+                    '<div style="padding:10px;background:#ede9fe;border-radius:8px;'
+                    'border-left:4px solid #7c3aed">'
+                    f'<b>🚫 {r.get("no_apto_razon", "Sin dividendo — no evaluable")}</b>'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
             else:
                 _badge_eg = ("✅ Cumple" if eg=="cumple"
                              else "⚠️ Cumple parcialmente" if eg=="parcial"
