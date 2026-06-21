@@ -11423,21 +11423,28 @@ def _sc_atr_relativo_14(hist) -> float | None:
 
 
 def _sc_anos_dividendo(dividends) -> int:
+    """Cuenta años consecutivos de dividendo hacia atrás desde el ultimo año
+    con pago (no desde el año actual, que puede estar incompleto en mid-year).
+    Esto corrige el bug por el que empresas que pagaron en 2025 muestran 0
+    porque en junio de 2026 aun no han distribuido el dividendo de este año.
+    """
     try:
         if dividends is None or len(dividends) == 0:
             return 0
         import pandas as pd
+        from datetime import datetime
         años_con_div = dividends.resample("YE").sum()
         años_con_div = años_con_div[años_con_div > 0]
         if len(años_con_div) == 0:
             return 0
-        # Contar años consecutivos hasta hoy
-        años_ordenados = sorted(años_con_div.index.year, reverse=True)
-        from datetime import datetime
+        años_set  = set(años_con_div.index.year)
         año_actual = datetime.now().year
+        # Anclar al último año con pago real, no al año en curso
+        # Así evitamos romper el streak por año incompleto (ej: junio 2026)
+        año_inicio = min(año_actual, max(años_set))
         consecutivos = 0
-        for año in range(año_actual, año_actual - 15, -1):
-            if año in años_ordenados:
+        for año in range(año_inicio, año_inicio - 25, -1):
+            if año in años_set:
                 consecutivos += 1
             else:
                 break
