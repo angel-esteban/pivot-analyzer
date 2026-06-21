@@ -11696,7 +11696,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
     elif operador == "lte":
         ok_thr  = crit.get("umbral_ok", float("inf"))
         wrn_thr = crit.get("umbral_warning", ok_thr * 1.5)
-        if valor <= ok_thr:            estado = "ok"
+        if valor < ok_thr:             estado = "ok"      # estrictamente < umbral
         elif valor <= wrn_thr:         estado = "warning"
         else:                          estado = "ko"
 
