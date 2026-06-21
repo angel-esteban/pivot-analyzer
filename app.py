@@ -11480,14 +11480,29 @@ def _sc_fcf_vs_div(info: dict) -> str | None:
     if not fcf or not mcap or mcap <= 0:
         return None
     fcf_yield = fcf / mcap
+
+    # Cobertura FCF vs dividendo (base)
     if fcf_yield <= 0:
-        return "ko"
+        base = "ko"
     elif fcf_yield >= dy * 1.2:
-        return "ok"
+        base = "ok"
     elif fcf_yield >= dy:
-        return "warning"
+        base = "warning"
     else:
-        return "ko"
+        base = "ko"
+
+    # Override: si payout>100% Y BPA<0, el dividendo es insostenible aunque FCF sea positivo.
+    # La empresa paga mas de lo que gana en beneficios Y tiene perdidas — señal estructural de recorte.
+    payout   = info.get("payoutRatio")
+    bpa      = info.get("trailingEps")
+    _p_malo  = payout is not None and (float(payout) > 1.0 or float(payout) < 0)
+    _b_malo  = bpa is not None and float(bpa) < 0
+    if _p_malo and _b_malo:
+        base = "ko"        # ambas fuentes de cobertura fallidas: hard override
+    elif _p_malo or _b_malo:
+        base = {"ok": "warning", "warning": "ko"}.get(base, "ko")  # un factor: downgrade
+
+    return base
 
 
 def _fmt_valor(valor, criterio_id: str) -> str:
