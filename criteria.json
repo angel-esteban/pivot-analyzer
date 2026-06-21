@@ -3,7 +3,7 @@
     "version": "1.0",
     "fuente_datos": "yfinance",
     "nota": "Fuente única de verdad: los textos de guía y los parámetros de evaluación del screening comparten este archivo. Cualquier cambio de umbral se refleja automáticamente en ambos.",
-    "ultima_revision": "2026-06-17",
+    "ultima_revision": "2026-06-21",
     "operadores": {
       "gte": "mayor o igual que `umbral_ok`",
       "lte": "menor o igual que `umbral_ok`",
@@ -23,6 +23,35 @@
     "dividendos": {
       "titulo": "💰 Cartera de Dividendos",
       "subtitulo": "La idea es sencilla: inviertes para cobrar, no para vender. Cada acción que compras es como un pequeño inquilino que te paga una renta periódica. Con el tiempo, si reinviertes esos pagos, el efecto del interés compuesto hace el trabajo pesado por ti.",
+      "filtros_previos": {
+        "elegibilidad": "Antes de evaluar cualquier criterio, se comprueba si la empresa ha pagado dividendo en los últimos 3 años. Si trailingAnnualDividendYield = 0, dividendRate = 0 y no hay pagos en el historial en ese período → estado 'no_apto', sin evaluación.",
+        "killshots": [
+          {
+            "codigo": "K1",
+            "tipo": "hard",
+            "nombre": "Payout insostenible con pérdidas",
+            "condicion": "payoutRatio > 100% Y trailingEps (BPA) < 0",
+            "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
+            "razon": "La empresa no cubre el dividendo ni con beneficios ni con caja. Doble confirmación de insostenibilidad estructural."
+          },
+          {
+            "codigo": "K2",
+            "tipo": "hard",
+            "nombre": "Recorte sistemático del dividendo",
+            "condicion": "CAGR dividendo 5 años < -10%",
+            "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
+            "razon": "Una caída media del 10% anual durante 5 años equivale a perder más del 40% del dividendo. Es una tendencia estructural, no un ajuste puntual."
+          },
+          {
+            "codigo": "K3",
+            "tipo": "soft",
+            "nombre": "Yield insuficiente para estrategia de income",
+            "condicion": "Yield real < 2,5%",
+            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
+            "razon": "La empresa puede ser excelente, pero su yield no justifica incluirla en una cartera orientada a rentas."
+          }
+        ]
+      },
       "composicion": [
         {
           "peso_pct": "60–70%",
@@ -44,8 +73,9 @@
         {
           "id": "dividend_yield",
           "nombre": "Rentabilidad por dividendo",
-          "fuente": "yfinance_info",
-          "campo": "dividendYield",
+          "fuente": "yfinance_historia",
+          "campo": "dividends",
+          "funcion": "calcular_dividendo_yield_ttm",
           "operador": "between",
           "min": 0.025,
           "max": 0.08,
@@ -53,7 +83,7 @@
           "umbral_warning_max": 0.09,
           "peso": 3,
           "textos": {
-            "guia": "Busca entre el 2,5% y el 8%. Por debajo del 2,5% el ingreso es marginal; por encima del 8% hay que investigar — a veces es una señal de que el mercado desconfía de que ese dividendo se pueda mantener.",
+            "guia": "**Qué es**: Yield (rentabilidad por dividendo) = Dividendo anual por acción ÷ Precio de cotización. Mide cuánto cobras en dividendo por cada euro invertido.\n\n**Cómo se calcula**: Fuente prioritaria (1) dividendRate ÷ precio de mercado — importe real pagado dividido entre el precio actual. Si no está disponible: (2) trailingAnnualDividendYield de yfinance — dividendo de los últimos 12 meses. En último recurso: (3) dividendYield, normalizado si viene en formato porcentaje en vez de decimal.\n\n**Umbrales**: OK 2,5%–8% · Warning 1,5%–9% · KO fuera de esos rangos. Yield > 12% se etiqueta como posible value trap — el mercado puede estar anticipando un recorte.\n\n**K3 (killshot suave)**: Si yield < 2,5%, el veredicto no puede superar 'Parcial' aunque el resto de criterios sean perfectos. Una empresa excelente con yield del 1,2% no pertenece a una cartera de income.",
             "ok": "Yield atractivo y dentro del rango sostenible ({valor:.1%}).",
             "warning": "Yield fuera del rango óptimo ({valor:.1%}) — acceptable pero con reservas.",
             "ko": "Yield anómalo ({valor:.1%}): demasiado bajo para estrategia de rentas o posible señal de riesgo de recorte."
@@ -69,7 +99,7 @@
           "umbral_warning": 0.9,
           "peso": 3,
           "textos": {
-            "guia": "Es el porcentaje del beneficio que la empresa destina a pagar el dividendo. Si paga el 90% o más, le queda poco margen para imprevistos. Por debajo del 75% en empresas normales es señal de que el dividendo está bien respaldado.",
+            "guia": "**Qué es**: Payout ratio = DPA ÷ BPA (Dividendo Por Acción ÷ Beneficio Por Acción). Indica qué porcentaje del beneficio neto se destina a dividendo. BPA = beneficio neto total ÷ número de acciones en circulación.\n\n**Cómo se calcula**: Campo directo `payoutRatio` de yfinance — dato contable basado en el último ejercicio fiscal completo.\n\n**Umbrales**: OK ≤75% · Warning 75%–90% · KO >90%.\n\n**K1 (killshot duro)**: Si payout > 100% Y BPA < 0 simultáneamente, el veredicto es forzado a 'No cumple' con independencia del score. Significa que la empresa paga más dividendo del que gana en beneficios y encima pierde dinero — el dividendo no puede sostenerse desde ninguna fuente de resultado. Ejemplo: Telefónica con payout 111% y BPA -0,42€.",
             "ok": "Dividendo bien cubierto: la empresa destina el {valor:.0%} de su beneficio, con margen suficiente para imprevistos.",
             "warning": "Cobertura ajustada ({valor:.0%}). El dividendo es sostenible a corto plazo, pero sin margen para sorpresas negativas en resultados.",
             "ko": "Payout excesivo ({valor:.0%}): la empresa está pagando más de lo que puede permitirse de forma sostenida. Alto riesgo de recorte."
@@ -86,7 +116,7 @@
           "umbral_warning": 3,
           "peso": 2,
           "textos": {
-            "guia": "Al menos 5 años pagando sin recortar. Mejor si ha crecido año a año, aunque sea poco. Una empresa que ha mantenido su dividendo en crisis anteriores es más fiable que una que lo acaba de iniciar.",
+            "guia": "**Qué es**: Número de años consecutivos con al menos un pago de dividendo. Mide la continuidad y fiabilidad del compromiso de la empresa con el accionista.\n\n**Cómo se calcula**: Se cuenta hacia atrás desde el último año con pago real (no desde el año en curso, que puede estar incompleto). Por ejemplo, una empresa que pagó en 2025 pero aún no en 2026 (junio) empieza a contar desde 2025. El streak se rompe en el primer año sin pago. Lookback máximo de 25 años.\n\n**Umbrales**: OK ≥5 años · Warning ≥3 años · KO <3 años.\n\n**Nota**: No se evalúa empresas que llevan más de 3 años sin pagar ningún dividendo — son filtradas como 'no aptas' antes del análisis. Empresas como IAG o MEL que retomaron el dividendo tras COVID muestran los años desde la reanudación, lo que es metodológicamente correcto: el historial pre-interrupción no garantiza el compromiso futuro.",
             "ok": "{valor} años pagando dividendo de forma consecutiva — historial sólido.",
             "warning": "{valor} años de historial — suficiente para evaluar, pero sin track record largo en ciclos completos.",
             "ko": "Historial de dividendo inferior a 3 años o con interrupciones recientes — perfil no apto para cartera de rentas."
@@ -103,7 +133,7 @@
           "nota": "yfinance devuelve debtToEquity en porcentaje: 150 equivale a ratio 1,5×",
           "peso": 2,
           "textos": {
-            "guia": "Una empresa muy endeudada puede verse obligada a recortar el dividendo para pagar intereses. En sectores cíclicos, la deuda debería ser inferior a 1,5 veces los fondos propios.",
+            "guia": "**Qué es**: D/E (Deuda total ÷ Equity) — ratio de apalancamiento financiero. Equity = fondos propios o patrimonio neto. Mide cuántos euros de deuda hay por cada euro de capital propio.\n\n**Cómo se calcula**: Campo `debtToEquity` de yfinance. Atención: yfinance lo devuelve en porcentaje, no en ratio directo — un valor de 150 equivale a un ratio D/E de 1,5×.\n\n**Umbrales**: OK ≤1,5× · Warning ≤2,5× · KO >2,5×.\n\n**Excepción sectorial**: Utilities y REITs regulados operan estructuralmente con más deuda (activos de infraestructura financiados a largo plazo). Para estos sectores, un D/E de hasta 2,5× puede ser normal y no implica el mismo riesgo que en una empresa industrial cíclica.",
             "ok": "Deuda controlada (ratio {valor_ratio:.1f}×) — poco riesgo de que la deuda comprometa el dividendo.",
             "warning": "Deuda elevada (ratio {valor_ratio:.1f}×) — acceptable en utilities o REITs regulados, pero a vigilar en sectores cíclicos.",
             "ko": "Deuda muy alta (ratio {valor_ratio:.1f}×) — el pago de intereses puede competir con el dividendo en una desaceleración económica."
@@ -122,7 +152,7 @@
           "operador": "computed",
           "peso": 3,
           "textos": {
-            "guia": "El dividendo se paga con caja real, no con beneficio contable. Comprueba que la empresa genera más dinero en efectivo del que necesita para mantener el negocio — ese excedente es el que financia tu renta.",
+            "guia": "**Qué es**: FCF (Free Cash Flow, flujo de caja libre) = caja generada por operaciones menos capex (inversión en mantenimiento del negocio). Es el dinero real disponible para pagar dividendos, sin trampas contables.\n\n**Cómo se calcula**: FCF Yield = freeCashflow ÷ marketCap. Se compara contra el dividend yield real de la empresa. Si FCF Yield ≥ Div Yield × 1,2 → OK (margen holgado). Si FCF Yield ≥ Div Yield → Warning (cobertura ajustada). Si FCF Yield < Div Yield o FCF < 0 → KO.\n\n**K1 override**: Si payout >100% Y BPA <0, el resultado se fuerza a KO independientemente del FCF calculado. Una empresa con FCF positivo puede seguir siendo insostenible si sus pérdidas contables y payout excesivo coexisten — señal de que el dividendo se financia erosionando el balance.",
             "ok": "El flujo de caja libre cubre holgadamente el dividendo — el pago está respaldado por dinero real.",
             "warning": "El flujo de caja libre cubre el dividendo de forma justa, sin margen amplio. A vigilar si los resultados empeoran.",
             "ko": "El flujo de caja libre es insuficiente para cubrir el dividendo — la empresa podría estar pagándolo con deuda o con reservas."
@@ -146,7 +176,7 @@
           ],
           "peso": 1,
           "textos": {
-            "guia": "Utilities (eléctricas, agua), consumo básico (alimentación, higiene), telecomunicaciones, REITs (inmobiliario cotizado), salud e infraestructuras. Son negocios con ingresos predecibles, que es lo que necesita una cartera de rentas.",
+            "guia": "**Qué es**: Clasificación sectorial de yfinance según el negocio principal de la empresa. Determina si el modelo de negocio es compatible con una estrategia de rentas.\n\n**Cómo se calcula**: Campo `sector` de yfinance (en inglés). Se comprueba si pertenece a la lista de sectores aptos.\n\n**Sectores OK**: Utilities (eléctricas, agua, gas), Consumer Defensive (alimentación, higiene, bebidas), Communication Services (telecomunicaciones, medios), Real Estate (REITs, SOCIMIs, inmobiliario cotizado), Healthcare (salud, farmacia), Industrials (infraestructuras, logística, industria estable), Energy (petróleo integrado, gas), Financial Services (bancos, aseguradoras, gestoras).\n\n**Sectores menos compatibles**: Technology y Consumer Cyclical — ingresos más volátiles y menor tradición de dividendo sostenido. No son automáticamente KO, pero penalizan el criterio sectorial.",
             "ok": "Sector {valor} — negocio con ingresos predecibles, compatible con estrategia de dividendos.",
             "warning": "Sector {valor} — no es el perfil clásico de dividendo, pero puede ser válido si el resto de criterios son sólidos.",
             "ko": "Sector {valor} — sectores con ingresos muy volátiles hacen menos predecible el mantenimiento del dividendo."
@@ -163,7 +193,7 @@
           "umbral_warning": 0.0,
           "peso": 2,
           "textos": {
-            "guia": "Un dividendo que crece cada año, aunque sea poco, protege tu renta de la inflación. Lo ideal es que haya crecido al menos un 3% anual de media en los últimos 5 años. Una empresa que mantiene el dividendo plano durante años está perdiendo poder adquisitivo.",
+            "guia": "**Qué es**: CAGR (Compound Annual Growth Rate, tasa de crecimiento anual compuesto) del dividendo en los últimos 5 años. Mide si la renta que cobras crece, se estanca o se erosiona con el tiempo.\n\n**Cómo se calcula**: Se toman los dividendos anuales históricos de los últimos 6 años (mínimo 2 con datos). CAGR = (Dividendo_final ÷ Dividendo_inicial)^(1/n) − 1, donde n = número de años entre ambos valores. Condición de recencia: si el último dividendo pagado fue hace más de 3 años, el cálculo devuelve N/A — el historial antiguo no es representativo del comportamiento actual.\n\n**Umbrales**: OK ≥3% anual · Warning ≥0% (dividendo plano) · KO <0% (recorte).\n\n**K2 (killshot duro)**: Si CAGR < -10% anual, el veredicto se fuerza a 'No cumple'. Una caída del 10% anual durante 5 años equivale a perder más del 40% del dividendo — es una tendencia estructural de deterioro, no un ajuste puntual.",
             "ok": "El dividendo ha crecido a un ritmo del {valor:.1%} anual en los últimos 5 años — por encima de la inflación media.",
             "warning": "El dividendo se ha mantenido estable pero sin crecimiento relevante. Protege la renta, pero no la hace crecer.",
             "ko": "El dividendo ha caído o no hay historial suficiente para calcular la tendencia."
@@ -183,7 +213,7 @@
           "umbral_warning": 0.15,
           "peso": 1,
           "textos": {
-            "guia": "El free float es el porcentaje de acciones que realmente se puede comprar y vender en el mercado — el resto está en manos de accionistas de control que no venden. Un free float bajo significa que hay poco papel disponible: si muchos inversores quieren salir a la vez, el precio cae más de lo normal.",
+            "guia": "**Qué es**: Free Float = acciones en circulación libre ÷ acciones totales en circulación. Mide qué porcentaje del capital está disponible para comprar y vender en el mercado. El resto está en manos de accionistas de control (Estado, familia fundadora, socio estratégico) que no operan.\n\n**Cómo se calcula**: floatShares ÷ sharesOutstanding, ambos de yfinance. Resultado en porcentaje (0–100%).\n\n**Umbrales**: OK ≥25% · Warning ≥15% · KO <15%.\n\n**Por qué importa en dividendos**: Un free float muy bajo puede dificultar la salida si necesitas liquidar la posición — el spread comprador/vendedor se amplía porque hay poco papel circulando. Ejemplo: empresa con free float del 10% donde el Estado controla el 90% — si quisieran salir varios fondos a la vez, moverían el precio de forma relevante.",
             "ok": "Free float del {valor:.0%} — volumen de acciones en circulación suficiente para operar con normalidad.",
             "warning": "Free float del {valor:.0%} — concentración accionarial significativa. La liquidez puede deteriorarse en momentos de estrés.",
             "ko": "Free float del {valor:.0%} — la mayor parte de las acciones están en manos de accionistas de control. Deshacer una posición relevante puede ser difícil sin impactar el precio."
@@ -199,7 +229,7 @@
           "umbral_warning": 18.0,
           "peso": 1,
           "textos": {
-            "guia": "El EV/EBITDA mide cuántas veces estás pagando los beneficios operativos de la empresa. Para una empresa de dividendos, no quieres pagar demasiado caro — la rentabilidad efectiva por dividendo depende del precio que pagues hoy.",
+            "guia": "**Qué es**: EV/EBITDA = Enterprise Value ÷ EBITDA. EV (Enterprise Value) = capitalización bursátil + deuda neta − caja. EBITDA = Earnings Before Interest, Taxes, Depreciation and Amortization (beneficio antes de intereses, impuestos, depreciación y amortización) — proxy del resultado operativo en efectivo.\n\n**Cómo se calcula**: Campo `enterpriseToEbitda` de yfinance — ratio directo, sin transformación.\n\n**Umbrales**: OK ≤12× · Warning ≤18× · KO >18×.\n\n**Por qué importa en dividendos**: En una cartera de rentas, el precio de entrada condiciona el yield efectivo. Si pagas 20× EBITDA por una empresa que da el 4% de dividendo, hay poco margen de seguridad si los resultados decepcionan. Nota: utilities y real estate suelen cotizar con EV/EBITDA estructuralmente más altos (12–18×) por la predictibilidad de sus flujos — el umbral de warning de 18× tiene esto en cuenta.",
             "ok": "EV/EBITDA de {valor:.1f}× — valoración razonable para una empresa de dividendos.",
             "warning": "EV/EBITDA de {valor:.1f}× — algo elevado. El precio ya descuenta buenas noticias; el margen de seguridad se reduce.",
             "ko": "EV/EBITDA de {valor:.1f}× — valoración exigente para un perfil de rentas. El riesgo de revisión a la baja del precio es mayor."

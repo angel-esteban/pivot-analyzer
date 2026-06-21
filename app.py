@@ -11480,6 +11480,55 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
         return None
 
 
+def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
+    """Yield real = suma de dividendos pagados en los ultimos 14 meses / precio actual.
+    14 meses (no 12) para capturar pagos anuales que caigan en la frontera del año.
+    Mas fiable que dividendYield de yfinance para acciones .MC, donde ese campo
+    devuelve valores inconsistentes (decimal fraccion vs decimal porcentaje).
+    Fallback: trailingAnnualDividendYield > trailingAnnualDividendRate/precio > dividendRate/precio.
+    """
+    import pandas as pd
+    try:
+        precio = (info.get("regularMarketPrice") or
+                  info.get("currentPrice") or
+                  info.get("previousClose"))
+        if not precio or float(precio) <= 0:
+            return None
+        precio = float(precio)
+
+        # Opcion 1: suma de dividendos reales de los ultimos 14 meses
+        # 14 meses = buffer de 2 meses para pagos anuales en frontera de ano
+        if dividends is not None and len(dividends) > 0:
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=14)
+            try:
+                recent = dividends[dividends.index.tz_convert("UTC") >= cutoff]
+            except Exception:
+                recent = dividends[dividends.index >= cutoff]
+            if len(recent) > 0:
+                total_ttm = float(recent.sum())
+                if total_ttm > 0:
+                    return total_ttm / precio
+
+        # Opcion 2: trailingAnnualDividendYield (ya es fraccion decimal)
+        tady = info.get("trailingAnnualDividendYield")
+        if tady and float(tady) > 0:
+            return float(tady)
+
+        # Opcion 3: trailingAnnualDividendRate / precio
+        tadr = info.get("trailingAnnualDividendRate")
+        if tadr and float(tadr) > 0:
+            return float(tadr) / precio
+
+        # Opcion 4: dividendRate / precio
+        drate = info.get("dividendRate")
+        if drate and float(drate) > 0:
+            return float(drate) / precio
+
+        return None
+    except Exception:
+        return None
+
+
 def _sc_fcf_vs_div(info: dict) -> str | None:
     """Compara FCF yield vs dividend yield."""
     fcf   = info.get("freeCashflow")
@@ -11584,6 +11633,8 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
             valor = _sc_anos_dividendo(dividends)
         elif funcion == "calcular_cagr_dividendo_5y" and dividends is not None:
             valor = _sc_cagr_dividendo_5y(dividends)
+        elif funcion == "calcular_dividendo_yield_ttm":
+            valor = _sc_dividend_yield_ttm(info, dividends)
 
     if valor is None:
         return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
@@ -11763,26 +11814,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     })
 
             # K3 — Yield insuficiente para cartera de rentas (soft killshot)
-            # Una empresa con yield real < 2.5% puede ser excelente, pero no pertenece
-            # a una cartera de income. Fuerza veredicto máximo a "Parcial".
-            _ks_precio = (info.get("regularMarketPrice") or
-                          info.get("currentPrice") or info.get("previousClose"))
-            _ks_drate  = info.get("dividendRate")
-            _ks_tady   = info.get("trailingAnnualDividendYield")
-            _ks_dy_raw = info.get("dividendYield")
-            _ks_yield  = None
-            if _ks_drate and _ks_precio and float(_ks_precio) > 0:
-                _ks_yield = float(_ks_drate) / float(_ks_precio)
-            elif _ks_tady and float(_ks_tady) > 0:
-                _ks_yield = float(_ks_tady)
-            elif _ks_dy_raw and float(_ks_dy_raw) > 0:
-                _dy = float(_ks_dy_raw)
-                _ks_yield = _dy / 100 if _dy > 1 else _dy
-            if _ks_yield is not None and 0 < _ks_yield < 0.025:
+            # Usa _sc_dividend_yield_ttm para coherencia con el criterio de scoring:
+            # suma de dividendos reales 14 meses / precio, mismo cálculo que el criterio.
+            _ks_yield_ttm = _sc_dividend_yield_ttm(info, dividends)
+            if _ks_yield_ttm is not None and 0 < float(_ks_yield_ttm) < 0.025:
                 killshots.append({
                     "tipo":   "soft",
                     "codigo": "K3",
-                    "razon":  f"Yield {_ks_yield:.1%} insuficiente para cartera de rentas "
+                    "razon":  f"Yield {_ks_yield_ttm:.1%} (TTM) insuficiente para cartera de rentas "
                               f"(mínimo orientativo 2.5%) — empresa de calidad pero "
                               f"no apta para estrategia de income",
                 })
