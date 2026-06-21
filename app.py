@@ -11958,21 +11958,32 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 })
 
         # Aplicar killshots
-        # Hard (K1, K2): fuerzan no_cumple + cap en 44
-        # Soft (K3-K5):  fuerzan parcial si el score sería "cumple" + cap en 69
-        # Aviso (K1b-K1d): visibles en UI, sin efecto sobre veredicto ni score
+        # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
+        # Aviso degrade (K1b, K1d): si estado sería "cumple" → degrada a parcial + cap 69
+        # Soft  (K3, K4): solo informativas — sin efecto sobre veredicto ni score
+        # Aviso puro (K1c): visible en UI, sin efecto sobre veredicto
         if puntuacion >= 70:   estado_global = "cumple"
         elif puntuacion >= 45: estado_global = "parcial"
         else:                  estado_global = "no_cumple"
-        _ks_hard  = [k for k in killshots if k.get("tipo", "hard") == "hard"]
-        _ks_soft  = [k for k in killshots if k.get("tipo") == "soft"]
-        # _ks_aviso: solo se muestran en la UI, no modifican veredicto
+        _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
+        _ks_aviso_degrade = [k for k in killshots
+                             if k.get("tipo") == "aviso"
+                             and k.get("codigo") in ("K1b", "K1d")]
+        nota_degradacion = None
         if _ks_hard:
             estado_global = "no_cumple"
             puntuacion    = min(puntuacion, 44)
-        elif _ks_soft and estado_global == "cumple":
+        elif _ks_aviso_degrade and estado_global == "cumple":
+            _score_pre    = puntuacion
             estado_global = "parcial"
             puntuacion    = min(puntuacion, 69)
+            _kd_codes     = " + ".join(k["codigo"] for k in _ks_aviso_degrade)
+            nota_degradacion = (
+                f"Score {_score_pre} — estado degradado a Parcial por señal {_kd_codes} activa. "
+                f"La puntuación refleja criterios individuales; la señal cualitativa "
+                f"prevalece sobre el score numérico en la determinación del estado final."
+            )
+        # K3, K4 (soft): puramente informativas — no modifican veredicto
 
         return {
             "ticker":                ticker,
@@ -11986,6 +11997,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "n_total_criterios":     n_total_c,
             "evaluacion_incompleta": evaluacion_incompleta,
             "killshots":             killshots,
+            "nota_degradacion":      nota_degradacion,
             "error":                 False,
         }
     except Exception as e:
@@ -12423,6 +12435,15 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
+                _nota_deg = r.get("nota_degradacion")
+                if _nota_deg:
+                    st.markdown(
+                        f'<div style="font-size:0.75rem;color:#78350f;background:#fffbeb;'
+                        f'border:1px solid #fbbf24;border-left:3px solid #f59e0b;'
+                        f'border-radius:4px;padding:5px 10px;margin-bottom:6px">'
+                        f'📊 {_nota_deg}</div>',
+                        unsafe_allow_html=True
+                    )
                 # Killshots — señales que condicionaron el veredicto
                 for _ks in r.get("killshots", []):
                     _ks_tipo = _ks.get("tipo", "hard")
