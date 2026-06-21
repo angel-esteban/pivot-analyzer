@@ -12805,20 +12805,72 @@ def pestaña_cartera():
                 unsafe_allow_html=True
             )
 
+        # ── Helper: convierte guia text (markdown-lite) a HTML ──────────
+        def _guia_html(text: str) -> str:
+            """Convierte **negrita** y \n\n en HTML para render en div."""
+            import re as _re
+            text = _re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+            partes = [p.strip() for p in text.split("\n\n") if p.strip()]
+            return "".join(
+                f'<p style="margin:0 0 6px 0;font-size:12px;color:#374151;'
+                f'line-height:1.55">{p}</p>'
+                for p in partes
+            )
+
+        # ── Filtros previos y killshots (solo si existen en el JSON) ──────
+        filtros = info.get("filtros_previos", {})
+        if filtros:
+            st.markdown("#### 🛡️ Filtros de elegibilidad y señales de alarma")
+            # Elegibilidad
+            elegib = filtros.get("elegibilidad", "")
+            if elegib:
+                st.markdown(
+                    f'<div style="padding:8px 14px;margin-bottom:8px;background:#ede9fe;'
+                    f'border-left:4px solid #7c3aed;border-radius:6px;'
+                    f'font-size:12px;color:#4c1d95">🚫 <b>Filtro previo:</b> {elegib}</div>',
+                    unsafe_allow_html=True
+                )
+            # Killshots
+            for ks in filtros.get("killshots", []):
+                _tipo  = ks.get("tipo", "hard")
+                _bg    = "#fef2f2" if _tipo == "hard" else "#fffbeb"
+                _border= "#dc2626" if _tipo == "hard" else "#f59e0b"
+                _tcol  = "#7f1d1d" if _tipo == "hard" else "#78350f"
+                _icon  = "🚨" if _tipo == "hard" else "⚠️"
+                st.markdown(
+                    f'<div style="padding:8px 14px;margin-bottom:6px;background:{_bg};'
+                    f'border-left:4px solid {_border};border-radius:6px">'
+                    f'<div style="font-size:11px;font-weight:700;color:{_border};'
+                    f'text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">'
+                    f'{_icon} {ks.get("codigo","")} · {ks.get("nombre","")}</div>'
+                    f'<div style="font-size:12px;color:{_tcol}"><b>Condición:</b> '
+                    f'{ks.get("condicion","")}</div>'
+                    f'<div style="font-size:12px;color:{_tcol}"><b>Efecto:</b> '
+                    f'{ks.get("efecto","")}</div>'
+                    f'<div style="font-size:11px;color:#64748b;margin-top:2px">'
+                    f'{ks.get("razon","")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
         # ── Criterios ─────────────────────────────────────────────────────
         st.markdown("#### ✅ Criterios de selección")
-        for criterio in info.get("criterios", []):
+        for i_cr, criterio in enumerate(info.get("criterios", [])):
             nombre_c    = criterio.get("nombre", "")
+            peso_c      = criterio.get("peso", "")
             descripcion = criterio.get("textos", {}).get("guia", "")
             es_alerta   = any(p in nombre_c.lower() for p in ("señal", "alerta", "evitar", "error"))
-            icono_color = "#dc2626" if es_alerta else "#16a34a"
+            icono_color = "#dc2626" if es_alerta else "#0369a1"
+            peso_html   = (f'<span style="float:right;font-size:10px;font-weight:600;'
+                            f'color:#64748b;background:#e2e8f0;padding:1px 6px;'
+                            f'border-radius:9px">Peso {peso_c}</span>'
+                            if peso_c else "")
             st.markdown(
-                f'<div style="display:flex;align-items:flex-start;gap:10px;'
-                f'padding:7px 12px;margin-bottom:5px;background:#f8fafc;'
-                f'border-radius:8px">'
-                f'<div style="min-width:150px;font-size:12px;font-weight:700;'
-                f'color:{icono_color}">{nombre_c}</div>'
-                f'<div style="font-size:12px;color:#374151;line-height:1.5">{descripcion}</div>'
+                f'<div style="padding:10px 14px;margin-bottom:6px;background:#f8fafc;'
+                f'border-left:3px solid {icono_color};border-radius:6px">'
+                f'<div style="font-size:12px;font-weight:700;color:{icono_color};'
+                f'margin-bottom:6px">{nombre_c}{peso_html}</div>'
+                f'{_guia_html(descripcion)}'
                 f'</div>',
                 unsafe_allow_html=True
             )
