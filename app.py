@@ -6199,13 +6199,17 @@ def _alertas_fundamentales(info: dict, div_ttm: float = None) -> list:
     dy_raw      = info.get("dividendYield")
     precio      = info.get("currentPrice") or info.get("regularMarketPrice")
 
-    # Normalizar dividendYield (.MC devuelve 4.36, no 0.0436)
+    # Prioridad: div_ttm (pagos reales TTM) > trailingAnnualDividendYield > dividendYield
     dy = None
-    if dy_raw is not None:
-        dy = dy_raw / 100 if dy_raw > 1 else dy_raw
-    # Fallback: calcular desde div_ttm
-    if dy is None and div_ttm and precio:
+    if div_ttm is not None and div_ttm > 0 and precio:
         dy = div_ttm / precio
+    else:
+        _tady_a = info.get("trailingAnnualDividendYield")
+        if _tady_a is not None and float(_tady_a) > 0:
+            dy = float(_tady_a)  # ya es fraccion decimal (ej. 0.0107)
+        elif dy_raw is not None:
+            _dr = float(dy_raw)
+            dy = _dr / 100 if _dr > 1 else _dr
 
     # ── BPA TTM negativo ──────────────────────────────────────────────
     if bpa_ttm is not None and bpa_ttm < 0:
@@ -11467,8 +11471,12 @@ def _sc_fcf_vs_div(info: dict) -> str | None:
     """Compara FCF yield vs dividend yield."""
     fcf   = info.get("freeCashflow")
     mcap  = info.get("marketCap")
-    _dy_r = info.get("dividendYield") or 0
-    dy    = _dy_r / 100 if _dy_r > 1 else _dy_r  # yfinance .MC devuelve pct (4.36), no decimal
+    _tady_fcf = float(info.get("trailingAnnualDividendYield") or 0)
+    if _tady_fcf > 0:
+        dy = _tady_fcf  # ya es fraccion decimal (ej. 0.0107)
+    else:
+        _dy_r = info.get("dividendYield") or 0
+        dy    = _dy_r / 100 if _dy_r > 1 else _dy_r  # yfinance .MC devuelve pct (4.36), no decimal
     if not fcf or not mcap or mcap <= 0:
         return None
     fcf_yield = fcf / mcap
@@ -17094,8 +17102,20 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 if _div_ttm_ed > 0 and _precio_ed > 0:
                     _yield = _div_ttm_ed / _precio_ed * 100
                 else:
-                    _yr = float(_info.get("dividendYield", 0) or 0)
-                    _yield = _yr if _yr > 1.0 else _yr * 100
+                    # Cadena fiable: trailing real > rate calculado > dividendYield (evitar: stale)
+                    _pr_fb = float(_info.get("currentPrice") or _info.get("regularMarketPrice") or _precio_ed or 0)
+                    _tady  = float(_info.get("trailingAnnualDividendYield", 0) or 0)
+                    _tadr  = float(_info.get("trailingAnnualDividendRate",  0) or 0)
+                    _drate = float(_info.get("dividendRate",               0) or 0)
+                    if _tady > 0:
+                        _yield = _tady * 100          # 0.0107 -> 1.07%
+                    elif _tadr > 0 and _pr_fb > 0:
+                        _yield = _tadr / _pr_fb * 100
+                    elif _drate > 0 and _pr_fb > 0:
+                        _yield = _drate / _pr_fb * 100  # dividendRate en EUR / precio EUR
+                    else:
+                        _yr = float(_info.get("dividendYield", 0) or 0)
+                        _yield = min(_yr if _yr > 1.0 else _yr * 100, 25.0)
             except: _yield = 0.0
             try: _payout  = float(_info.get("payoutRatio",   0) or 0) * 100
             except: _payout = 0.0
