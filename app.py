@@ -11845,6 +11845,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _b_pos  = (_kb is not None and _kb >= 0)
                 _fcf_ko = (_ks_fcf_k1 == "ko")
                 _fcf_ok = (_ks_fcf_k1 in ("ok", "warning"))
+                _fcf_na = (_ks_fcf_k1 is None)   # FCF no disponible (banca, holdings)
                 _kp_fmt = f"{_kp:.0%}"
 
                 # Nivel 1 — VETO (hard): los tres indicadores simultáneamente malos
@@ -11877,8 +11878,9 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"Riesgo elevado de recorte si los beneficios se normalizan",
                     })
 
-                # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre (colchón mínimo)
-                elif _p_alto and _b_pos and _fcf_ok:
+                # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre o no disponible
+                # _fcf_na cubre banca y holdings donde freeCashflow no es una métrica aplicable
+                elif _p_alto and _b_pos and (_fcf_ok or _fcf_na):
                     killshots.append({
                         "tipo":   "aviso",
                         "codigo": "K1-Payout",
@@ -11905,9 +11907,13 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     if _k2_cagr:
                         _k2_partes.append(f"CAGR 5a {_ks_cagr:.1%}")
                     if _k2_red:
+                        # Solo incluir CAGR inline si _k2_cagr no lo mostró ya (evitar duplicado)
+                        _k2_red_suffix = (
+                            f" (CAGR 5a {_ks_cagr:.1%})"
+                            if _ks_cagr is not None and not _k2_cagr else ""
+                        )
                         _k2_partes.append(
-                            f"{_ks_red} años consecutivos de reducción"
-                            + (f" (CAGR 5a {_ks_cagr:.1%})" if _ks_cagr is not None else "")
+                            f"{_ks_red} años consecutivos de reducción{_k2_red_suffix}"
                         )
                     killshots.append({
                         "codigo": "K2",
