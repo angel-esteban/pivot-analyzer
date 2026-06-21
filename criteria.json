@@ -49,6 +49,14 @@
             "condicion": "Yield real < 2,5%",
             "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
             "razon": "La empresa puede ser excelente, pero su yield no justifica incluirla en una cartera orientada a rentas."
+          },
+          {
+            "codigo": "K4",
+            "tipo": "soft",
+            "nombre": "Historial corto con FCF insuficiente",
+            "condicion": "Años de historial consecutivo < 7 Y FCF yield < Dividend yield",
+            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
+            "razon": "Menos de 7 años de historial significa que la empresa no ha demostrado su compromiso con el dividendo a través de un ciclo completo (COVID 2020 + ciclo de tipos 2022). Si además el FCF no cubre el dividendo, el riesgo de recorte en la próxima contracción es alto. Caso canónico: AENA (IPO 2015, dividendo cortado en COVID, historial reiniciado ~2021)."
           }
         ]
       },

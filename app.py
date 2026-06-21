@@ -11824,6 +11824,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"no apta para estrategia de income",
                 })
 
+            # K4 — Historial corto + FCF insuficiente (soft killshot)
+            # Un historial < 7 años significa que la empresa NO ha demostrado capacidad
+            # de mantener/crecer el dividendo a través de un ciclo completo (COVID 2020 +
+            # ciclo de tipos 2022). Si además el FCF no cubre el dividendo, el riesgo
+            # de recorte en la próxima recesión es alto. Casos típicos: AENA (IPO 2015,
+            # dividendo cortado en COVID → historial reiniciado ~2021).
+            _ks_anos    = _sc_anos_dividendo(dividends)
+            _ks_fcf_est = _sc_fcf_vs_div(info)
+            if _ks_anos < 7 and _ks_fcf_est == "ko":
+                killshots.append({
+                    "tipo":   "soft",
+                    "codigo": "K4",
+                    "razon":  f"Historial de {_ks_anos} años (mínimo 7) con FCF insuficiente — "
+                              f"sin track record en ciclos completos y cobertura de caja comprometida. "
+                              f"Riesgo de recorte elevado ante próxima contracción",
+                })
+
         # Aplicar killshots
         # Hard (K1, K2): fuerzan no_cumple + cap en 44
         # Soft (K3):     fuerzan parcial si el score sería "cumple" + cap en 69
