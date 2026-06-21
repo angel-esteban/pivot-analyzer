@@ -11465,6 +11465,12 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
             return None  # datos obsoletos — empresa no paga dividendo actualmente
         annual = dividends.resample("YE").sum()
         annual = annual[annual > 0]
+        # Excluir el año en curso si aún no ha terminado: un pago parcial de enero
+        # haría que el año pareciera de dividendo bajo (ej. ELE 2026=0.50€ vs año completo ~1.3€)
+        from datetime import datetime as _dt
+        _ahora = _dt.now()
+        if _ahora.month < 12:
+            annual = annual[annual.index.year < _ahora.year]
         if len(annual) < 2:
             return None
         últimos = annual.iloc[-min(6, len(annual)):]
