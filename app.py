@@ -11966,13 +11966,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
 
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
-        # Aviso degrade (K1-BPA, K1-Payout): si estado sería "cumple" → degrada a parcial + cap 69
-        # Soft  (K3, K4): solo informativas — sin efecto sobre veredicto ni score
+        # Aviso degrade (K1-BPA, K1-Payout): si "cumple" → degrada a parcial + cap 69
+        # Soft degrade  (K3, K4): si "cumple" → degrada a parcial + cap 69
+        #   K3: yield < 2.5% — no apto para income por definición
+        #   K4: historial corto + FCF ko — doble riesgo (FCF-ko ya es condición de disparo)
         # Aviso puro (K1-FCF): visible en UI, sin efecto sobre veredicto
         if puntuacion >= 70:   estado_global = "cumple"
         elif puntuacion >= 45: estado_global = "parcial"
         else:                  estado_global = "no_cumple"
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
+        _ks_soft          = [k for k in killshots if k.get("tipo") == "soft"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
                              and k.get("codigo") in ("K1-BPA", "K1-Payout")]
@@ -11990,7 +11993,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 f"La puntuación refleja criterios individuales; la señal cualitativa "
                 f"prevalece sobre el score numérico en la determinación del estado final."
             )
-        # K3, K4 (soft): puramente informativas — no modifican veredicto
+        elif _ks_soft and estado_global == "cumple":
+            _score_pre    = puntuacion
+            estado_global = "parcial"
+            puntuacion    = min(puntuacion, 69)
+            _kd_codes     = " + ".join(k["codigo"] for k in _ks_soft)
+            nota_degradacion = (
+                f"Score {_score_pre} — estado degradado a Parcial por señal {_kd_codes} activa. "
+                f"La puntuación refleja criterios individuales; la señal cualitativa "
+                f"prevalece sobre el score numérico en la determinación del estado final."
+            )
 
         return {
             "ticker":                ticker,
