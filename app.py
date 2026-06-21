@@ -11964,6 +11964,30 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"corporativa consolidada. Liquidez insuficiente para salida ordenada",
                 })
 
+            # K6 — FCF insuficiente standalone (aviso informativo)
+            # Se activa cuando FCF ko Y ninguna señal ya captura el riesgo FCF:
+            #   K1      → ya lo captura (payout>100% + BPA<0 + FCF ko)
+            #   K1-FCF  → ya lo captura (payout>100% + BPA>0 + FCF ko)
+            #   K4      → ya lo captura (historial corto + FCF ko)
+            # Objetivo: hacer visible FCF ko en empresas con historial sólido y payout
+            # razonable (Endesa, Repsol) donde el riesgo es real pero no eliminatorio.
+            _ks_fcf_k6 = _sc_fcf_vs_div(info)
+            _k6_ya_cubierto = any(
+                k.get("codigo") in ("K1", "K1-FCF", "K4") for k in killshots
+            )
+            if _ks_fcf_k6 == "ko" and not _k6_ya_cubierto:
+                _ks_anos_k6 = _sc_anos_dividendo(dividends)
+                killshots.append({
+                    "tipo":   "aviso",
+                    "codigo": "K6",
+                    "razon":  f"FCF yield inferior al dividend yield — el flujo de caja libre "
+                              f"no cubre el dividendo en el ejercicio actual. Con {_ks_anos_k6} "
+                              f"años de historial el compromiso está acreditado, pero revisar si "
+                              f"el déficit es estructural (modelo intensivo en capital, utility "
+                              f"regulada) o cíclico (año de capex elevado, presión de commodity). "
+                              f"Señal informativa: no modifica el veredicto.",
+                })
+
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
         # Aviso degrade (K1-BPA, K1-Payout): si "cumple" → degrada a parcial + cap 69
