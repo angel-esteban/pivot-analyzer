@@ -17234,15 +17234,31 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 return "Sin divergencias detectadas"
 
             def _build_dividendos():
-                _yield_ok = _yield > 0 and _yield < 25  # >25% = dato yfinance anómalo
-                _y_show   = _yield if _yield_ok else 0
+                # Tres franjas: >12% value trap · 1-12% rango normal · <1% insuficiente
+                _y_extremo = _yield > 12
+                _y_bajo    = 0 < _yield < 1
+                _y_normal  = 1 <= _yield <= 12
+                if _y_extremo:
+                    _y_score = 0
+                    _y_label = f"Dividend yield extremadamente alto: {_yield:.1f}% ⚠️ posible value trap o dato a verificar"
+                    _y_expl  = f"Yield del {_yield:.1f}% — verifica el dividendo real en la web de la empresa"
+                elif _y_bajo:
+                    _y_score = 0
+                    _y_label = f"Dividend yield insuficiente: {_yield:.2f}% (<1%)"
+                    _y_expl  = "Por debajo del 1% el ingreso por dividendo no es relevante para estrategia de rentas"
+                elif _y_normal:
+                    _y_score = 2 if _yield >= 3.5 else 1 if _yield >= 2 else 0
+                    _y_label = f"Dividend yield (rent. por dividendo) {_yield:.2f}%"
+                    _y_expl  = "≥3.5% atractivo · 2-3.5% aceptable · 1-2% bajo para rentas"
+                else:  # _yield == 0
+                    _y_score = 0
+                    _y_label = "Sin dividendo"
+                    _y_expl  = "La empresa no distribuye dividendo — no apta para estrategia de rentas"
                 c = []
-                c.append(_criterio(2 if _y_show >= 3.5 else 1 if _y_show >= 2 else 0,
-                    f"Dividend yield (rent. por dividendo) {_y_show:.1f}%" + (f" ⚠️ dato dudoso (proveedor: {_yield:.1f}%)" if not _yield_ok and _yield > 0 else ""),
-                    "≥3.5% atractivo · 2-3.5% aceptable · <2% insuficiente",
+                c.append(_criterio(_y_score, _y_label, _y_expl,
                     "El yield mide cuánto cobras anualmente en dividendos por cada euro invertido. Si la acción vale 10€ y paga 0.40€/año, el yield es 4%. "
                     "Para rentas buscamos ≥3.5% porque por debajo el ingreso no compensa el riesgo de renta variable frente a alternativas conservadoras. "
-                    "Yield &gt;8%: el mercado puede estar descontando que ese dividendo no es sostenible — hay que investigar el payout antes de entrar."))
+                    "Yield &gt;12%: el mercado puede estar descontando que el dividendo no es sostenible (value trap) — o el dato puede ser incorrecto. Verificar siempre en la web de la empresa."))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
                     f"{'El precio está por debajo de su media de los últimos 200 días — históricamente un buen momento para entrar ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días — puede que no sea el mejor momento de entrada' if _sma200 > 0 else ''}",
@@ -17427,14 +17443,18 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             def _interpretar(key):
                 puntos, rec = [], ""
                 if key == "💰 Dividendos":
-                    _y_ok = 0 < _yield < 25
-                    _yv   = _yield if _y_ok else 0
-                    if not _y_ok and _yield > 0:
-                        puntos.append(f"⚠️ El yield (rentabilidad) que muestra el proveedor de datos parece anómalo ({_yield:.1f}%) — verifica el dividendo real en la web de la empresa.")
-                    if _yv >= 3.5:
-                        puntos.append(f"✅ Yield (rentabilidad) del {_yv:.1f}% por encima del umbral de interés para estrategia de rentas.")
-                    elif _yv > 0:
-                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yv:.1f}% — retorno por dividendo modesto para estrategia de rentas pura.")
+                    if _yield > 12:
+                        puntos.append(f"⚠️ Yield extremadamente alto ({_yield:.1f}%) — posible value trap o dato erróneo. Verifica el dividendo real en la web de la empresa antes de cualquier decisión.")
+                    elif _yield >= 3.5:
+                        puntos.append(f"✅ Yield (rentabilidad) del {_yield:.1f}% — atractivo para estrategia de rentas.")
+                    elif _yield >= 2:
+                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yield:.1f}% — aceptable pero modesto para estrategia de rentas pura.")
+                    elif _yield >= 1:
+                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yield:.1f}% — bajo para estrategia de rentas. El ingreso por dividendo apenas supera el 1%.")
+                    elif _yield > 0:
+                        puntos.append(f"❌ Yield (rentabilidad) del {_yield:.2f}% — insuficiente para estrategia de rentas. Por debajo del 1% el dividendo no es relevante como fuente de ingreso.")
+                    else:
+                        puntos.append("❌ Sin dividendo — empresa no apta para estrategia de rentas.")
                     if _sma200 > 0 and _precio > _sma200:
                         gap = (_precio / _sma200 - 1) * 100
                         puntos.append(f"❌ El precio está un {gap:.1f}% por encima de su media de los últimos 200 días. Si esperas a que retroceda hacia los {_sma200:.2f}€, mejorarías significativamente la rentabilidad por dividendo que obtendrías al entrar.")
