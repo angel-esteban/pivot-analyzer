@@ -29,18 +29,42 @@
           {
             "codigo": "K1",
             "tipo": "hard",
-            "nombre": "Payout insostenible con pérdidas",
-            "condicion": "payoutRatio > 100% Y trailingEps (BPA) < 0",
+            "nombre": "Triple insostenibilidad del dividendo",
+            "condicion": "Payout > 100% Y BPA < 0 Y FCF yield < Dividend yield (los tres simultáneos)",
             "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
-            "razon": "La empresa no cubre el dividendo ni con beneficios ni con caja. Doble confirmación de insostenibilidad estructural."
+            "razon": "Los tres pilares de sostenibilidad fallan a la vez: la empresa paga más de lo que gana en beneficios contables, registra pérdidas netas y además el flujo de caja libre no cubre el dividendo. No existe ningún respaldo real para el pago."
+          },
+          {
+            "codigo": "K1b",
+            "tipo": "aviso",
+            "nombre": "Pérdidas contables — caja cubre hoy",
+            "condicion": "Payout > 100% Y BPA < 0 Y FCF yield ≥ Dividend yield",
+            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "razon": "La empresa paga dividendo mientras registra pérdidas contables. El flujo de caja lo cubre en el momento actual, pero la estructura es frágil: cualquier deterioro de ingresos o márgenes eliminaría ese respaldo."
+          },
+          {
+            "codigo": "K1c",
+            "tipo": "aviso",
+            "nombre": "Payout insostenible — caja comprometida",
+            "condicion": "Payout > 100% Y BPA > 0 Y FCF yield < Dividend yield",
+            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "razon": "El beneficio contable es positivo pero el payout supera el 100% y la caja libre no respalda el dividendo. Dos indicadores de insostenibilidad: el contable no cuadra y la caja tampoco. Riesgo elevado de recorte."
+          },
+          {
+            "codigo": "K1d",
+            "tipo": "aviso",
+            "nombre": "Colchón contable mínimo",
+            "condicion": "Payout entre 85% y 100% Y BPA > 0 Y FCF yield ≥ Dividend yield",
+            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "razon": "La caja aguanta y los beneficios son positivos, pero el margen contable es escaso. Un descenso de beneficios del 15% comprometería la sostenibilidad. Empresa apta para seguimiento activo, no para compra y olvido."
           },
           {
             "codigo": "K2",
             "tipo": "hard",
             "nombre": "Recorte sistemático del dividendo",
-            "condicion": "CAGR dividendo 5 años < -10%",
+            "condicion": "CAGR dividendo 5 años < -10% OR 2 o más años consecutivos de reducción del dividendo anual",
             "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
-            "razon": "Una caída media del 10% anual durante 5 años equivale a perder más del 40% del dividendo. Es una tendencia estructural, no un ajuste puntual."
+            "razon": "Dos señales independientes, cualquiera activa el veto. (A) CAGR < -10%: una caída media del 10% anual durante 5 años equivale a perder más del 40% del dividendo — no es ruido estadístico. (B) 2+ años consecutivos de reducción: tendencia negativa reciente sostenida, independientemente del CAGR agregado. Un año de bajada puede ser puntual; dos consecutivos indican una dirección deliberada."
           },
           {
             "codigo": "K3",

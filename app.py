@@ -11486,6 +11486,32 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
         return None
 
 
+def _sc_anos_reduccion_div(dividends) -> int:
+    """Cuántos años consecutivos (desde el más reciente hacia atrás) el dividendo
+    anual total fue inferior al año anterior. Excluye el año en curso si es parcial,
+    igual que _sc_cagr_dividendo_5y. Devuelve 0 si no hay datos suficientes."""
+    try:
+        if dividends is None or len(dividends) == 0:
+            return 0
+        from datetime import datetime as _dt
+        annual = dividends.resample("YE").sum()
+        annual = annual[annual > 0]
+        _ahora = _dt.now()
+        if _ahora.month < 12:
+            annual = annual[annual.index.year < _ahora.year]
+        if len(annual) < 2:
+            return 0
+        consecutivos = 0
+        for i in range(len(annual) - 1, 0, -1):
+            if float(annual.iloc[i]) < float(annual.iloc[i - 1]):
+                consecutivos += 1
+            else:
+                break
+        return consecutivos
+    except Exception:
+        return 0
+
+
 def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
     """Yield real = suma de dividendos pagados en los ultimos 14 meses / precio actual.
     14 meses (no 12) para capturar pagos anuales que caigan en la frontera del año.
@@ -11783,31 +11809,82 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         killshots = []
         _es_cartera_div_ks = any(c.get("id") == "dividend_yield" for c in criterios)
         if _es_cartera_div_ks:
-            # K1 — Payout insostenible + BPA negativo
-            # La empresa paga más de lo que gana en beneficios y encima pierde dinero.
-            # El dividendo no puede sostenerse ni desde earnings ni desde la lógica contable.
+            # K1 — Sistema de tres niveles de sostenibilidad del payout
+            # Nivel 1 (hard/veto): triple insostenibilidad — payout>100% + BPA<0 + FCF ko
+            # Nivel 2 (aviso): combinaciones de dos factores malos — señal visible, sin veto
             _ks_payout = info.get("payoutRatio")
             _ks_bpa    = info.get("trailingEps")
-            _ks_p_malo = (_ks_payout is not None and
-                          (float(_ks_payout) > 1.0 or float(_ks_payout) < 0))
-            _ks_b_malo = (_ks_bpa is not None and float(_ks_bpa) < 0)
-            if _ks_p_malo and _ks_b_malo:
-                _p_fmt = f"{float(_ks_payout):.0%}" if _ks_payout is not None else "N/A"
-                killshots.append({
-                    "codigo": "K1",
-                    "razon":  f"Payout insostenible ({_p_fmt}) con BPA negativo — "
-                              f"el dividendo no está cubierto por beneficios ni por caja operativa",
-                })
+            _ks_fcf_k1 = _sc_fcf_vs_div(info)   # "ok"/"warning"/"ko"/None
 
-            # K2 — Recorte sistemático del dividendo (CAGR 5a muy negativo)
-            # Una empresa que lleva 5 años recortando el dividendo no es candidata a cartera de rentas.
-            # Umbral: < -10% anual (equivale a perder >40% del dividendo en 5 años).
+            if _ks_payout is not None:
+                _kp = float(_ks_payout)
+                _kb = float(_ks_bpa) if _ks_bpa is not None else None
+                _p_over = (_kp > 1.0 or _kp < 0)       # payout >100% o negativo
+                _p_alto = (0.85 < _kp <= 1.0)           # payout 85–100%
+                _b_neg  = (_kb is not None and _kb < 0)
+                _b_pos  = (_kb is not None and _kb >= 0)
+                _fcf_ko = (_ks_fcf_k1 == "ko")
+                _fcf_ok = (_ks_fcf_k1 in ("ok", "warning"))
+                _kp_fmt = f"{_kp:.0%}"
+
+                # Nivel 1 — VETO (hard): los tres indicadores simultáneamente malos
+                if _p_over and _b_neg and _fcf_ko:
+                    killshots.append({
+                        "tipo":   "hard",
+                        "codigo": "K1",
+                        "razon":  f"Triple insostenibilidad: payout {_kp_fmt}, BPA negativo y "
+                                  f"FCF insuficiente — el dividendo no está cubierto por beneficios, "
+                                  f"resultados contables ni caja libre",
+                    })
+
+                # Nivel 2a — AVISO: payout >100% + BPA negativo + FCF cubre (estructura frágil)
+                elif _p_over and _b_neg and _fcf_ok:
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K1b",
+                        "razon":  f"Payout {_kp_fmt} con BPA negativo — la empresa paga dividendo "
+                                  f"con pérdidas contables. El FCF lo cubre hoy, pero la estructura "
+                                  f"es frágil ante cualquier deterioro de márgenes o ingresos",
+                    })
+
+                # Nivel 2b — AVISO: payout >100% + BPA positivo + FCF insuficiente
+                elif _p_over and _b_pos and _fcf_ko:
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K1c",
+                        "razon":  f"Payout {_kp_fmt} (>100%) con FCF insuficiente — el contable "
+                                  f"muestra beneficios pero la caja no respalda el dividendo. "
+                                  f"Riesgo elevado de recorte si los beneficios se normalizan",
+                    })
+
+                # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre (colchón mínimo)
+                elif _p_alto and _b_pos and _fcf_ok:
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K1d",
+                        "razon":  f"Payout {_kp_fmt} (85–100%): la caja cubre el dividendo pero "
+                                  f"el colchón contable es mínimo. Un descenso de beneficios "
+                                  f"comprometería la sostenibilidad sin margen de reacción",
+                    })
+
+            # K2 — Recorte sistemático del dividendo (dos condiciones independientes, OR)
+            # Condición A: CAGR 5a < -10% — caída acumulada tan grande que no es ruido estadístico.
+            # Condición B: 2+ años consecutivos de reducción — tendencia reciente sostenida,
+            #              independientemente del CAGR agregado.
             if dividends is not None:
                 _ks_cagr = _sc_cagr_dividendo_5y(dividends)
-                if _ks_cagr is not None and float(_ks_cagr) < -0.10:
+                _ks_red  = _sc_anos_reduccion_div(dividends)
+                _k2_cagr = (_ks_cagr is not None and float(_ks_cagr) < -0.10)
+                _k2_red  = (_ks_red >= 2)
+                if _k2_cagr or _k2_red:
+                    _k2_partes = []
+                    if _k2_cagr:
+                        _k2_partes.append(f"CAGR 5a {_ks_cagr:.1%}")
+                    if _k2_red:
+                        _k2_partes.append(f"{_ks_red} años consecutivos de reducción")
                     killshots.append({
                         "codigo": "K2",
-                        "razon":  f"Recorte sistemático del dividendo (CAGR 5a: {_ks_cagr:.1%}) — "
+                        "razon":  f"Recorte sistemático del dividendo ({' · '.join(_k2_partes)}) — "
                                   f"tendencia estructural negativa incompatible con cartera de rentas",
                     })
 
@@ -11861,12 +11938,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
 
         # Aplicar killshots
         # Hard (K1, K2): fuerzan no_cumple + cap en 44
-        # Soft (K3):     fuerzan parcial si el score sería "cumple" + cap en 69
+        # Soft (K3-K5):  fuerzan parcial si el score sería "cumple" + cap en 69
+        # Aviso (K1b-K1d): visibles en UI, sin efecto sobre veredicto ni score
         if puntuacion >= 70:   estado_global = "cumple"
         elif puntuacion >= 45: estado_global = "parcial"
         else:                  estado_global = "no_cumple"
-        _ks_hard = [k for k in killshots if k.get("tipo", "hard") == "hard"]
-        _ks_soft = [k for k in killshots if k.get("tipo") == "soft"]
+        _ks_hard  = [k for k in killshots if k.get("tipo", "hard") == "hard"]
+        _ks_soft  = [k for k in killshots if k.get("tipo") == "soft"]
+        # _ks_aviso: solo se muestran en la UI, no modifican veredicto
         if _ks_hard:
             estado_global = "no_cumple"
             puntuacion    = min(puntuacion, 44)
@@ -12331,7 +12410,12 @@ def _render_screening_resultados(job: dict):
                             "#fffbeb", "#fbbf24", "#92400e", "#78350f", "⚠️"
                         )
                         _ks_label = "Limitación de elegibilidad"
-                    else:
+                    elif _ks_tipo == "aviso":
+                        _ks_bg, _ks_border, _ks_title_col, _ks_text_col, _ks_icon = (
+                            "#fff7ed", "#f97316", "#9a3412", "#7c2d12", "🔔"
+                        )
+                        _ks_label = "Alerta de sostenibilidad"
+                    else:  # hard
                         _ks_bg, _ks_border, _ks_title_col, _ks_text_col, _ks_icon = (
                             "#fef2f2", "#fca5a5", "#dc2626", "#7f1d1d", "🚨"
                         )
@@ -12905,10 +12989,12 @@ def pestaña_cartera():
             # Killshots
             for ks in filtros.get("killshots", []):
                 _tipo  = ks.get("tipo", "hard")
-                _bg    = "#fef2f2" if _tipo == "hard" else "#fffbeb"
-                _border= "#dc2626" if _tipo == "hard" else "#f59e0b"
-                _tcol  = "#7f1d1d" if _tipo == "hard" else "#78350f"
-                _icon  = "🚨" if _tipo == "hard" else "⚠️"
+                if _tipo == "hard":
+                    _bg, _border, _tcol, _icon = "#fef2f2", "#dc2626", "#7f1d1d", "🚨"
+                elif _tipo == "aviso":
+                    _bg, _border, _tcol, _icon = "#fff7ed", "#f97316", "#7c2d12", "🔔"
+                else:  # soft
+                    _bg, _border, _tcol, _icon = "#fffbeb", "#f59e0b", "#78350f", "⚠️"
                 st.markdown(
                     f'<div style="padding:8px 14px;margin-bottom:6px;background:{_bg};'
                     f'border-left:4px solid {_border};border-radius:6px">'
