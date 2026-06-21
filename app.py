@@ -11895,13 +11895,20 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _ks_cagr = _sc_cagr_dividendo_5y(dividends)
                 _ks_red  = _sc_anos_reduccion_div(dividends)
                 _k2_cagr = (_ks_cagr is not None and float(_ks_cagr) < -0.10)
-                _k2_red  = (_ks_red >= 2)
+                # K2B guarda: reducciones consecutivas solo disparan si CAGR ≤ 0%
+                # Si CAGR global es positivo, las bajadas son normalización post-pico,
+                # no deterioro estructural (caso Rovi: CAGR +40% con 2 bajadas desde máximos)
+                _k2_red  = (_ks_red >= 2
+                            and (_ks_cagr is None or float(_ks_cagr) <= 0.0))
                 if _k2_cagr or _k2_red:
                     _k2_partes = []
                     if _k2_cagr:
                         _k2_partes.append(f"CAGR 5a {_ks_cagr:.1%}")
                     if _k2_red:
-                        _k2_partes.append(f"{_ks_red} años consecutivos de reducción")
+                        _k2_partes.append(
+                            f"{_ks_red} años consecutivos de reducción"
+                            + (f" (CAGR 5a {_ks_cagr:.1%})" if _ks_cagr is not None else "")
+                        )
                     killshots.append({
                         "codigo": "K2",
                         "razon":  f"Recorte sistemático del dividendo ({' · '.join(_k2_partes)}) — "

@@ -62,9 +62,9 @@
             "codigo": "K2",
             "tipo": "hard",
             "nombre": "Recorte sistemático del dividendo",
-            "condicion": "CAGR dividendo 5 años < -10% OR 2 o más años consecutivos de reducción del dividendo anual",
+            "condicion": "CAGR dividendo 5 años < -10% OR (2+ años consecutivos de reducción AND CAGR 5a ≤ 0%)",
             "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
-            "razon": "Dos señales independientes, cualquiera activa el veto. (A) CAGR < -10%: una caída media del 10% anual durante 5 años equivale a perder más del 40% del dividendo — no es ruido estadístico. (B) 2+ años consecutivos de reducción: tendencia negativa reciente sostenida, independientemente del CAGR agregado. Un año de bajada puede ser puntual; dos consecutivos indican una dirección deliberada."
+            "razon": "Dos señales, cualquiera activa el veto. (A) CAGR < -10%: caída media del 10% anual durante 5 años — pérdida de más del 40% del dividendo, deterioro estructural inequívoco. (B) 2+ años consecutivos de reducción CON CAGR ≤ 0%: la condición de guarda filtra falsos positivos donde la empresa recorta desde máximos tras crecimiento extraordinario (ej. windfall pandemia). Si el CAGR 5a es positivo, las bajadas recientes son normalización post-pico, no declive estructural."
           },
           {
             "codigo": "K3",
