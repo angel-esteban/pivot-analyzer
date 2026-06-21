@@ -35,7 +35,7 @@
             "razon": "Los tres pilares de sostenibilidad fallan a la vez: la empresa paga más de lo que gana en beneficios contables, registra pérdidas netas y además el flujo de caja libre no cubre el dividendo. No existe ningún respaldo real para el pago."
           },
           {
-            "codigo": "K1b",
+            "codigo": "K1-BPA",
             "tipo": "aviso",
             "nombre": "Pérdidas contables — caja cubre hoy",
             "condicion": "Payout > 100% Y BPA < 0 Y FCF yield ≥ Dividend yield",
@@ -43,7 +43,7 @@
             "razon": "La empresa paga dividendo mientras registra pérdidas contables. El flujo de caja lo cubre en el momento actual, pero la estructura es frágil: cualquier deterioro de ingresos o márgenes eliminaría ese respaldo."
           },
           {
-            "codigo": "K1c",
+            "codigo": "K1-FCF",
             "tipo": "aviso",
             "nombre": "Payout insostenible — caja comprometida",
             "condicion": "Payout > 100% Y BPA > 0 Y FCF yield < Dividend yield",
@@ -51,7 +51,7 @@
             "razon": "El beneficio contable es positivo pero el payout supera el 100% y la caja libre no respalda el dividendo. Dos indicadores de insostenibilidad: el contable no cuadra y la caja tampoco. Riesgo elevado de recorte."
           },
           {
-            "codigo": "K1d",
+            "codigo": "K1-Payout",
             "tipo": "aviso",
             "nombre": "Colchón contable mínimo",
             "condicion": "Payout entre 85% y 100% Y BPA > 0 Y FCF yield ≥ Dividend yield",

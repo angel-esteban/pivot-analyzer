@@ -11861,7 +11861,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 elif _p_over and _b_neg and _fcf_ok:
                     killshots.append({
                         "tipo":   "aviso",
-                        "codigo": "K1b",
+                        "codigo": "K1-BPA",
                         "razon":  f"Payout {_kp_fmt} con BPA negativo — la empresa paga dividendo "
                                   f"con pérdidas contables. El FCF lo cubre hoy, pero la estructura "
                                   f"es frágil ante cualquier deterioro de márgenes o ingresos",
@@ -11871,7 +11871,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 elif _p_over and _b_pos and _fcf_ko:
                     killshots.append({
                         "tipo":   "aviso",
-                        "codigo": "K1c",
+                        "codigo": "K1-FCF",
                         "razon":  f"Payout {_kp_fmt} (>100%) con FCF insuficiente — el contable "
                                   f"muestra beneficios pero la caja no respalda el dividendo. "
                                   f"Riesgo elevado de recorte si los beneficios se normalizan",
@@ -11881,7 +11881,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 elif _p_alto and _b_pos and _fcf_ok:
                     killshots.append({
                         "tipo":   "aviso",
-                        "codigo": "K1d",
+                        "codigo": "K1-Payout",
                         "razon":  f"Payout {_kp_fmt} (85–100%): la caja cubre el dividendo pero "
                                   f"el colchón contable es mínimo. Un descenso de beneficios "
                                   f"comprometería la sostenibilidad sin margen de reacción",
@@ -11966,16 +11966,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
 
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
-        # Aviso degrade (K1b, K1d): si estado sería "cumple" → degrada a parcial + cap 69
+        # Aviso degrade (K1-BPA, K1-Payout): si estado sería "cumple" → degrada a parcial + cap 69
         # Soft  (K3, K4): solo informativas — sin efecto sobre veredicto ni score
-        # Aviso puro (K1c): visible en UI, sin efecto sobre veredicto
+        # Aviso puro (K1-FCF): visible en UI, sin efecto sobre veredicto
         if puntuacion >= 70:   estado_global = "cumple"
         elif puntuacion >= 45: estado_global = "parcial"
         else:                  estado_global = "no_cumple"
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1b", "K1d")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout")]
         nota_degradacion = None
         if _ks_hard:
             estado_global = "no_cumple"
