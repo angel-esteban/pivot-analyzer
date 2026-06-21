@@ -11841,6 +11841,24 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"Riesgo de recorte elevado ante próxima contracción",
                 })
 
+            # K5 — Free float muy bajo + historial corto (soft killshot)
+            # Free float < 20% significa que el 80%+ está en manos de insiders/familia.
+            # El riesgo operativo es doble: (1) liquidez reducida — salir en mercado
+            # adverso puede ser costoso; (2) el dividendo depende de la voluntad
+            # familiar, no de política corporativa consolidada. Si además el historial
+            # es < 5 años, el compromiso con el dividendo no está probado.
+            # Caso canónico: PUIG (familia Puig ~88% del capital, IPO 2024, 2 años historial).
+            _ks_ff  = _sc_free_float(info)
+            if _ks_ff is not None and float(_ks_ff) < 0.20 and _ks_anos < 5:
+                _ff_pct = float(_ks_ff) * 100
+                killshots.append({
+                    "tipo":   "soft",
+                    "codigo": "K5",
+                    "razon":  f"Free float {_ff_pct:.1f}% (mínimo 20%) con historial de {_ks_anos} años — "
+                              f"liquidez limitada para salir en mercado adverso y compromiso "
+                              f"con el dividendo no consolidado",
+                })
+
         # Aplicar killshots
         # Hard (K1, K2): fuerzan no_cumple + cap en 44
         # Soft (K3):     fuerzan parcial si el score sería "cumple" + cap en 69

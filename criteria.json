@@ -57,6 +57,14 @@
             "condicion": "Años de historial consecutivo < 7 Y FCF yield < Dividend yield",
             "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
             "razon": "Menos de 7 años de historial significa que la empresa no ha demostrado su compromiso con el dividendo a través de un ciclo completo (COVID 2020 + ciclo de tipos 2022). Si además el FCF no cubre el dividendo, el riesgo de recorte en la próxima contracción es alto. Caso canónico: AENA (IPO 2015, dividendo cortado en COVID, historial reiniciado ~2021)."
+          },
+          {
+            "codigo": "K5",
+            "tipo": "soft",
+            "nombre": "Free float muy bajo con historial sin consolidar",
+            "condicion": "Free float < 20% Y años de historial consecutivo < 5",
+            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
+            "razon": "Un free float inferior al 20% implica que más del 80% del capital está en manos de insiders o familia controladora. El riesgo es doble: (1) liquidez reducida — salir en mercado adverso puede ser costoso o imposible a precio razonable; (2) el dividendo refleja la voluntad de una familia, no una política corporativa consolidada y sometida a escrutinio institucional. Si además el historial es inferior a 5 años, el compromiso con el dividendo no ha sido probado. Caso canónico: PUIG (familia Puig ~88% del capital, IPO 2024, 2 años de historial)."
           }
         ]
       },
