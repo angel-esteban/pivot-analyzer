@@ -11656,18 +11656,29 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "peso":      peso,
             })
 
-        puntuacion = round(puntos_total / puntos_max * 100) if puntos_max > 0 else 0
+        n_na        = sum(1 for c in resultados_criterios if c["estado"] in ("manual", "sin_datos"))
+        n_total_c   = len(resultados_criterios)
+        n_evaluados = n_total_c - n_na
+        puntuacion_raw = round(puntos_total / puntos_max * 100) if puntos_max > 0 else 0
+        # Penalizacion: cada N/A resta 10 puntos al maximo alcanzable
+        puntuacion   = min(puntuacion_raw, max(0, 100 - n_na * 10))
+        evaluacion_incompleta = n_na >= 3
         if puntuacion >= 70:       estado_global = "cumple"
         elif puntuacion >= 45:     estado_global = "parcial"
         else:                      estado_global = "no_cumple"
 
         return {
-            "ticker":        ticker,
-            "nombre":        nombre,
-            "puntuacion":    puntuacion,
-            "estado_global": estado_global,
-            "criterios":     resultados_criterios,
-            "error":         False,
+            "ticker":                ticker,
+            "nombre":                nombre,
+            "puntuacion":            puntuacion,
+            "puntuacion_raw":        puntuacion_raw,
+            "estado_global":         estado_global,
+            "criterios":             resultados_criterios,
+            "n_na":                  n_na,
+            "n_evaluados":           n_evaluados,
+            "n_total_criterios":     n_total_c,
+            "evaluacion_incompleta": evaluacion_incompleta,
+            "error":                 False,
         }
     except Exception as e:
         return {"ticker": ticker, "nombre": ticker, "puntuacion": 0,
@@ -11932,10 +11943,18 @@ def _generar_pdf_screening(job: dict) -> bytes:
             *ct_row_styles,
         ]))
 
+        _na_pdf  = r.get("n_na", 0)
+        _ev_pdf  = r.get("n_evaluados", 0)
+        _to_pdf  = r.get("n_total_criterios", 0)
+        _inc_pdf = r.get("evaluacion_incompleta", False)
+        _na_txt  = (f" | {_ev_pdf}/{_to_pdf} criterios ({_na_pdf} N/A · máx. {100-_na_pdf*10}%)"
+                    if _na_pdf > 0 else "")
+        _inc_txt = " | ⚠️ EVALUACION INCOMPLETA" if _inc_pdf else ""
         story.append(KeepTogether([
             p(f"<b>{ticker}</b>  <font color='#64748b'>{nombre}</font>  "
               f"| Score: <b>{score}/100</b>  "
-              f"| <font color='{ehex}'><b>{elbl}</b></font>",
+              f"| <font color='{ehex}'><b>{elbl}</b></font>"
+              f"{_na_txt}{_inc_txt}",
               fontName="Helvetica-Bold", fontSize=9, textColor=C_DARK,
               spaceBefore=6, spaceAfter=2),
             ct,
@@ -12025,21 +12044,44 @@ def _render_screening_resultados(job: dict):
         score  = r.get("puntuacion", 0)
         nombre = r.get("nombre", r.get("ticker", ""))
         ticker = r.get("ticker", "")
-        icono  = ICONO_GLOBAL.get(eg, "💥")
-        label  = f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
+        icono   = ICONO_GLOBAL.get(eg, "💥")
+        _n_na_r = r.get("n_na", 0)
+        _n_ev_r = r.get("n_evaluados", r.get("n_total_criterios", 0))
+        _suf_r  = (f" — {_n_ev_r} evaluables, {_n_na_r} sin datos"
+                   if _n_na_r > 0 else "")
+        _inc_r  = "  ⚠️ *Incompleto*" if r.get("evaluacion_incompleta") else ""
+        label  = (f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
+                  f"{_suf_r}{_inc_r}")
 
         with st.expander(label, expanded=False):
             if r.get("error"):
                 st.error(f"Error al obtener datos: {r.get('error_msg','')}")
             else:
+                _badge_eg = ("✅ Cumple" if eg=="cumple"
+                             else "⚠️ Cumple parcialmente" if eg=="parcial"
+                             else "❌ No cumple")
+                _n_na_exp = r.get("n_na", 0)
+                _n_ev_exp = r.get("n_evaluados", 0)
+                _n_to_exp = r.get("n_total_criterios", 0)
+                _inc_exp  = r.get("evaluacion_incompleta", False)
+                _info_exp = (f" · {_n_ev_exp}/{_n_to_exp} criterios evaluados"
+                             f" ({_n_na_exp} sin datos · máx. {100-_n_na_exp*10}%)"
+                             if _n_na_exp > 0 else "")
+                _inc_html = (
+                    '<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
+                    'background:#fef3c7;color:#92400e;font-weight:700;font-size:0.75rem">'
+                    '⚠️ Evaluación incompleta</div>' if _inc_exp else ""
+                )
                 st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
                     f'<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
-                    f'background:{color}22;color:{color};font-weight:700;font-size:0.8rem;'
-                    f'margin-bottom:8px">'
-                    f'{"✅ Cumple" if eg=="cumple" else "⚠️ Cumple parcialmente" if eg=="parcial" else "❌ No cumple"}'
+                    f'background:{color}22;color:{color};font-weight:700;font-size:0.8rem">'
+                    f'{_badge_eg}</div>'
+                    f'{_inc_html}'
+                    f'<span style="font-size:0.75rem;color:#64748b">{_info_exp}</span>'
                     f'</div>',
-                unsafe_allow_html=True
-            )
+                    unsafe_allow_html=True
+                )
             for crit in r.get("criterios", []):
                 _c_est = crit.get("estado","ko")
                 emoji  = EMOJI.get(_c_est, "—")
