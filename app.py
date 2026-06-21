@@ -11705,16 +11705,21 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         mx       = crit.get("max", float("inf"))
         wrn_mn   = crit.get("umbral_warning_min", mn * 0.8)
         wrn_mx   = crit.get("umbral_warning_max", mx * 1.2)
-        if mn <= valor <= mx:          estado = "ok"
+        if mn <= valor <= mx:           estado = "ok"
         elif wrn_mn <= valor <= wrn_mx: estado = "warning"
-        else:                          estado = "ko"
+        elif valor > wrn_mx:            estado = "ko_alto"   # yield trampa o valoración excesiva
+        else:                           estado = "ko_bajo"   # yield insuficiente
 
     elif operador == "in_list":
         valores_ok = crit.get("valores_ok", [])
         estado = "ok" if valor in valores_ok else "warning"
 
     valor_fmt = _fmt_valor(valor, cid)
-    msg_tpl   = textos.get(estado, textos.get("warning", ""))
+    # ko_bajo / ko_alto: busca texto específico; si no existe, cae en "ko" genérico
+    _estado_key = estado
+    if estado in ("ko_bajo", "ko_alto") and estado not in textos:
+        _estado_key = "ko"
+    msg_tpl   = textos.get(_estado_key, textos.get("warning", ""))
     try:
         mensaje = msg_tpl.format(valor=valor, valor_fmt=valor_fmt,
                                  valor_ratio=valor/100 if isinstance(valor,(int,float)) else valor,
@@ -11722,7 +11727,10 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
     except Exception:
         mensaje = msg_tpl
 
-    return {"estado": estado, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
+    # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
+    # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
+    _estado_final = "ko" if estado in ("ko_bajo", "ko_alto") else estado
+    return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
 
 
 # ── Evaluador de un ticker completo ─────────────────────────────────────────

@@ -126,7 +126,9 @@
             "guia": "**Qué es**: Yield (rentabilidad por dividendo) = Dividendo anual por acción ÷ Precio de cotización. Mide cuánto cobras en dividendo por cada euro invertido.\n\n**Cómo se calcula**: Fuente prioritaria (1) dividendRate ÷ precio de mercado — importe real pagado dividido entre el precio actual. Si no está disponible: (2) trailingAnnualDividendYield de yfinance — dividendo de los últimos 12 meses. En último recurso: (3) dividendYield, normalizado si viene en formato porcentaje en vez de decimal.\n\n**Umbrales**: OK 2,5%–8% · Warning 1,5%–9% · KO fuera de esos rangos. Yield > 12% se etiqueta como posible value trap — el mercado puede estar anticipando un recorte.\n\n**K3 (killshot suave)**: Si yield < 2,5%, el veredicto no puede superar 'Parcial' aunque el resto de criterios sean perfectos. Una empresa excelente con yield del 1,2% no pertenece a una cartera de income.",
             "ok": "Yield atractivo y dentro del rango sostenible ({valor:.1%}).",
             "warning": "Yield fuera del rango óptimo ({valor:.1%}) — acceptable pero con reservas.",
-            "ko": "Yield anómalo ({valor:.1%}): demasiado bajo para estrategia de rentas o posible señal de riesgo de recorte."
+            "ko": "Yield {valor:.1%} — fuera del rango sostenible para cartera de rentas.",
+            "ko_bajo": "Yield {valor:.1%} — demasiado bajo para una estrategia de rentas. La empresa no genera renta suficiente en relación al precio de entrada. Considera si el crecimiento futuro del dividendo justifica la entrada.",
+            "ko_alto": "Yield {valor:.1%} — señal de alerta: un yield excesivamente alto suele reflejar expectativa de recorte inminente o precio deprimido por deterioro del negocio (yield trap). Verificar sostenibilidad antes de interpretar como oportunidad."
           }
         },
         {
