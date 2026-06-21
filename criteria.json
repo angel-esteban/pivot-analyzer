@@ -84,11 +84,11 @@
           },
           {
             "codigo": "K5",
-            "tipo": "soft",
-            "nombre": "Free float muy bajo con historial sin consolidar",
-            "condicion": "Free float < 20% Y años de historial consecutivo < 5",
-            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
-            "razon": "Un free float inferior al 20% implica que más del 80% del capital está en manos de insiders o familia controladora. El riesgo es doble: (1) liquidez reducida — salir en mercado adverso puede ser costoso o imposible a precio razonable; (2) el dividendo refleja la voluntad de una familia, no una política corporativa consolidada y sometida a escrutinio institucional. Si además el historial es inferior a 5 años, el compromiso con el dividendo no ha sido probado. Caso canónico: PUIG (familia Puig ~88% del capital, IPO 2024, 2 años de historial)."
+            "tipo": "hard",
+            "nombre": "Free float insuficiente",
+            "condicion": "Free float < 20%",
+            "efecto": "Fuerza veredicto 'No cumple'. Score capado en 44/100.",
+            "razon": "Más del 80% del capital está en manos de un accionista de control o familia fundadora. El dividendo refleja su voluntad, no una política corporativa sometida a escrutinio institucional. Además, la liquidez del mercado secundario es insuficiente para construir o deshacer una posición de tamaño relevante sin impacto en precio. Veto estructural: no se modera con historial largo ni con FCF sólido."
           }
         ]
       },
@@ -249,14 +249,14 @@
           ],
           "funcion": "calcular_free_float_pct",
           "operador": "gte",
-          "umbral_ok": 0.25,
-          "umbral_warning": 0.15,
+          "umbral_ok": 0.35,
+          "umbral_warning": 0.2,
           "peso": 1,
           "textos": {
-            "guia": "**Qué es**: Free Float = acciones en circulación libre ÷ acciones totales en circulación. Mide qué porcentaje del capital está disponible para comprar y vender en el mercado. El resto está en manos de accionistas de control (Estado, familia fundadora, socio estratégico) que no operan.\n\n**Cómo se calcula**: floatShares ÷ sharesOutstanding, ambos de yfinance. Resultado en porcentaje (0–100%).\n\n**Umbrales**: OK ≥25% · Warning ≥15% · KO <15%.\n\n**Por qué importa en dividendos**: Un free float muy bajo puede dificultar la salida si necesitas liquidar la posición — el spread comprador/vendedor se amplía porque hay poco papel circulando. Ejemplo: empresa con free float del 10% donde el Estado controla el 90% — si quisieran salir varios fondos a la vez, moverían el precio de forma relevante.",
-            "ok": "Free float del {valor:.0%} — volumen de acciones en circulación suficiente para operar con normalidad.",
-            "warning": "Free float del {valor:.0%} — concentración accionarial significativa. La liquidez puede deteriorarse en momentos de estrés.",
-            "ko": "Free float del {valor:.0%} — la mayor parte de las acciones están en manos de accionistas de control. Deshacer una posición relevante puede ser difícil sin impactar el precio."
+            "guia": "**Qué es.** Porcentaje del capital en manos del mercado libre — excluye participaciones de accionistas de control, familias fundadoras, estado y autocartera. Mide cuánto del capital puede comprarse y venderse libremente.\n\n**Cómo se calcula.** `floatShares / sharesOutstanding` de yfinance. Capado en 100% si yfinance devuelve floatShares > sharesOutstanding (error de datos).\n\n**Umbrales.** OK >35% · Warning 20–35% · KO <20%. El KO activa además el veto duro K5: free float <20% fuerza 'No cumple' independientemente del resto del score.\n\n**Por qué importa en dividendos.** Con float bajo tienes dos problemas: (1) el dividendo lo decide el controlador, no la presión institucional — puede recortarse sin coste reputacional serio; (2) si quieres salir, el mercado secundario puede ser estrecho y el impacto en precio, alto.",
+            "ok": "Free float {valor:.1%} — capital suficientemente distribuido. Liquidez y gobernanza adecuadas para cartera de rentas.",
+            "warning": "Free float {valor:.1%} — concentración accionarial relevante. Vigilar dependencia del accionista de control para la política de dividendo.",
+            "ko": "Free float {valor:.1%} — concentración extrema. Activa veto K5: 'No cumple' independientemente del score."
           }
         },
         {
@@ -265,14 +265,35 @@
           "fuente": "yfinance_info",
           "campo": "enterpriseToEbitda",
           "operador": "lte",
-          "umbral_ok": 12.0,
-          "umbral_warning": 18.0,
+          "umbral_ok": 15.0,
+          "umbral_warning": 22.0,
           "peso": 1,
           "textos": {
-            "guia": "**Qué es**: EV/EBITDA = Enterprise Value ÷ EBITDA. EV (Enterprise Value) = capitalización bursátil + deuda neta − caja. EBITDA = Earnings Before Interest, Taxes, Depreciation and Amortization (beneficio antes de intereses, impuestos, depreciación y amortización) — proxy del resultado operativo en efectivo.\n\n**Cómo se calcula**: Campo `enterpriseToEbitda` de yfinance — ratio directo, sin transformación.\n\n**Umbrales**: OK ≤12× · Warning ≤18× · KO >18×.\n\n**Por qué importa en dividendos**: En una cartera de rentas, el precio de entrada condiciona el yield efectivo. Si pagas 20× EBITDA por una empresa que da el 4% de dividendo, hay poco margen de seguridad si los resultados decepcionan. Nota: utilities y real estate suelen cotizar con EV/EBITDA estructuralmente más altos (12–18×) por la predictibilidad de sus flujos — el umbral de warning de 18× tiene esto en cuenta.",
-            "ok": "EV/EBITDA de {valor:.1f}× — valoración razonable para una empresa de dividendos.",
-            "warning": "EV/EBITDA de {valor:.1f}× — algo elevado. El precio ya descuenta buenas noticias; el margen de seguridad se reduce.",
-            "ko": "EV/EBITDA de {valor:.1f}× — valoración exigente para un perfil de rentas. El riesgo de revisión a la baja del precio es mayor."
+            "guia": "**Qué es.** EV/EBITDA = Enterprise Value ÷ EBITDA. EV = capitalización bursátil + deuda neta − caja. EBITDA = resultado operativo antes de amortizaciones — proxy del flujo operativo bruto.\n\n**Cómo se calcula.** Campo `enterpriseToEbitda` directo de yfinance.\n\n**Umbrales.** OK <15× · ~OK 15–22× · KO >22×. No es criterio eliminatorio: reduce el score pero no veta la empresa.\n\n**Por qué importa en dividendos.** El precio de entrada condiciona el yield efectivo. A 25× EBITDA con un 4% de yield hay poco margen de seguridad si los resultados decepcionan. El umbral KO en 22× es deliberadamente generoso: utilities y telecomunicaciones —sectores naturales de cartera de rentas— cotizan habitualmente entre 8× y 14×; superar 22× implica una prima de crecimiento incompatible con un yield atractivo hoy.\n\n**Excepciones.** N/A para Real Estate (SOCIMIs, REITs) y Banca/Seguros: en esos modelos de negocio el EBITDA no es la métrica de valoración relevante (se usa NAV, FFO o P/BV respectivamente). Excluido del score en esos sectores.",
+            "ok": "EV/EBITDA {valor:.1f}× — valoración razonable. Margen de seguridad compatible con cartera de rentas.",
+            "warning": "EV/EBITDA {valor:.1f}× — valoración algo exigente. El yield de entrada está probablemente comprimido y el margen de seguridad se reduce.",
+            "ko": "EV/EBITDA {valor:.1f}× — valoración incompatible con un yield atractivo en horizonte corto. Prima de crecimiento elevada para un perfil de rentas."
+          },
+          "sectores_na": [
+            "Real Estate",
+            "Financial Services"
+          ],
+          "sectores_na_mensaje": "EV/EBITDA no es métrica relevante para este modelo de negocio. En real estate (SOCIMIs, REITs) el valor se mide por NAV y FFO. En banca y seguros, el EBITDA no tiene equivalente operativo. Criterio excluido del score para estos sectores."
+        },
+        {
+          "id": "volumen_diario",
+          "nombre": "Liquidez (volumen diario €)",
+          "fuente": "calculado",
+          "funcion": "calcular_volumen_euros",
+          "operador": "gte",
+          "umbral_ok": 10000000,
+          "umbral_warning": 3000000,
+          "peso": 1,
+          "textos": {
+            "guia": "**Qué es.** Volumen medio diario negociado en euros. Mide la liquidez operativa real: cuánto dinero se mueve cada día en el mercado secundario de esta acción.\n\n**Cómo se calcula.** `averageVolume × regularMarketPrice` de yfinance. `averageVolume` es la media de las últimas ~10 sesiones en número de acciones.\n\n**Umbrales.** OK >10M€/día · Warning 3–10M€/día · KO <3M€/día. Referencia IBEX: Iberdrola y Santander mueven >200M€/día; Logista o Vidrala, entre 5M€ y 15M€.\n\n**Por qué importa en dividendos.** Una cartera de rentas se construye para mantener, pero necesitas poder salir si el tesis se rompe. Con <3M€/día, una posición de tamaño medio puede mover el precio en tu contra al vender. No es criterio eliminatorio, pero por debajo de 3M€ la liquidez es operativamente insuficiente.",
+            "ok": "Volumen {valor:,.0f}€/día — liquidez suficiente para construir y deshacer posición sin impacto relevante.",
+            "warning": "Volumen {valor:,.0f}€/día — liquidez moderada. Aceptable para posiciones pequeñas; vigilar en tamaños mayores.",
+            "ko": "Volumen {valor:,.0f}€/día — liquidez insuficiente. Construir o deshacer posición puede impactar el precio."
           }
         }
       ]
@@ -778,132 +799,7 @@
           "operador": "computed",
           "peso": 3,
           "textos": {
-            "guia": "En España, la normativa PRIIPs impide al inversor minorista comprar ETFs estadounidenses (como el SPY o el QQQ originales). Solo puedes comprar ETFs con estructura UCITS, domiciliados en Irlanda o Luxemburgo. El equivalente europeo del SPY es el CSPX o el VUAA; el del QQQ es el EQQQ. Tu broker ya filtra esto automáticamente en la mayoría de casos.",
-            "ok": "ETF con estructura UCITS — apto para el inversor minorista español bajo normativa PRIIPs.",
-            "warning": "No se ha podido verificar la estructura UCITS — comprueba manualmente en el folleto del fondo antes de comprar.",
-            "ko": "ETF sin estructura UCITS — no comercializable para minoristas en España. Busca la versión UCITS equivalente."
-          }
-        },
-        {
-          "id": "ter_ma",
-          "nombre": "Coste anual del fondo (TER)",
-          "fuente": "yfinance_info",
-          "campo": "annualReportExpenseRatio",
-          "operador": "lte",
-          "umbral_ok": 0.004,
-          "umbral_warning": 0.0065,
-          "peso": 3,
-          "textos": {
-            "guia": "En una cartera multi-activo usas varios ETFs de distintas clases. El coste de cada uno se acumula: si el bloque de RV tiene un TER del 0,20% y el de materias primas un 0,40%, el coste medio ponderado de la cartera sube. Para ETFs de mercado amplio (MSCI World, bonos gobierno), busca por debajo del 0,20%. Para clases especializadas (commodities, REITs, inflation-linked), hasta un 0,50% es razonable si no hay alternativa más barata con la misma exposición.",
-            "ok": "TER del {valor:.2%} — coste competitivo para esta clase de activo.",
-            "warning": "TER del {valor:.2%} — coste moderado. Compara con alternativas en justETF antes de decidir.",
-            "ko": "TER del {valor:.2%} — demasiado caro. En una cartera multi-activo el coste compuesto de varios ETFs caros erosiona significativamente la rentabilidad a largo plazo."
-          }
-        },
-        {
-          "id": "aum_ma",
-          "nombre": "Patrimonio bajo gestión (AUM)",
-          "fuente": "yfinance_info",
-          "campo": "totalAssets",
-          "operador": "gte",
-          "umbral_ok": 200000000,
-          "umbral_warning": 75000000,
-          "peso": 2,
-          "textos": {
-            "guia": "En clases de activo menos populares (inflation-linked, REITs europeos, commodities agrícolas), es más difícil encontrar fondos grandes. Para estas clases, un AUM de 75-200 millones es aceptable si no hay alternativas más grandes con la misma exposición. Por debajo de 75 millones el riesgo de cierre o fusión del fondo aumenta, lo que puede generar eventos fiscales no deseados.",
-            "ok": "Patrimonio de {valor_fmt} — masa crítica suficiente para esta clase de activo.",
-            "warning": "Patrimonio de {valor_fmt} — tamaño modesto para una cartera multi-activo. Acepta si no hay alternativas más grandes con la misma exposición.",
-            "ko": "Patrimonio de {valor_fmt} — fondo muy pequeño. Riesgo real de cierre o fusión. Busca alternativa con mayor AUM en la misma clase de activo."
-          }
-        },
-        {
-          "id": "volumen_ma",
-          "nombre": "Liquidez en mercado secundario",
-          "fuente": "calculado",
-          "campos": [
-            "averageVolume",
-            "regularMarketPrice"
-          ],
-          "funcion": "calcular_volumen_euros",
-          "operador": "gte",
-          "umbral_ok": 500000,
-          "umbral_warning": 150000,
-          "peso": 2,
-          "textos": {
-            "guia": "En una cartera multi-activo rebalanceas periódicamente — vendes el activo que ha subido más y compras el que se ha quedado atrás. Para hacer eso sin perder dinero en spreads, necesitas que cada ETF tenga volumen diario suficiente. Un volumen diario de 500.000 euros garantiza que puedes comprar o vender sin mover el precio.",
-            "ok": "Volumen diario de {valor_fmt} — liquidez suficiente para rebalanceos sin impacto relevante en precio.",
-            "warning": "Volumen diario de {valor_fmt} — liquidez justa. Usa órdenes límite y evita rebalancear en días de estrés de mercado.",
-            "ko": "Volumen diario de {valor_fmt} — liquidez insuficiente. El spread puede comerse una parte relevante de la rentabilidad en cada rebalanceo."
-          }
-        },
-        {
-          "id": "replica_fisica_ma",
-          "nombre": "Método de réplica del índice",
-          "fuente": "manual",
-          "nota": "No disponible en yfinance. Verificar en justETF o en el folleto del fondo.",
-          "enlace_referencia": "https://www.justetf.com",
-          "peso": 2,
-          "textos": {
-            "guia": "La réplica física compra directamente los activos del índice. La sintética usa derivados (swaps) para replicar el comportamiento, añadiendo riesgo de contraparte. Para una cartera multi-activo donde ya tienes varios tipos de riesgo, la réplica física en los bloques principales (RV global y RF) reduce complejidad. Los ETFs de materias primas suelen usar derivados por la naturaleza física del subyacente — en ese caso es normal y aceptable.",
-            "ok": "Réplica física — el ETF posee directamente los activos del índice. Máxima transparencia.",
-            "warning": "Verificar en justETF o el folleto. Si el ETF usa réplica sintética, comprueba el nivel de colateral y el riesgo de contraparte.",
-            "ko": "Réplica sintética con alto riesgo de contraparte — en un bloque central de la cartera, prefiere alternativa con réplica física si existe."
-          }
-        },
-        {
-          "id": "acumulacion_ma",
-          "nombre": "Política de dividendos (acumulación preferida)",
-          "fuente": "manual",
-          "nota": "Verificar en el nombre del ETF: Acc = acumulación, Dist = distribución.",
-          "enlace_referencia": "https://www.justetf.com",
-          "peso": 2,
-          "textos": {
-            "guia": "Para el inversor español a largo plazo, los ETFs de acumulación (Acc) son más eficientes: reinvierten internamente los dividendos y cupones sin tributar hasta que vendes. Los de distribución (Dist) pagan periódicamente, generando un evento fiscal cada vez. En una cartera multi-activo con varios bloques distribuyendo, el coste fiscal de gestionar todos esos cobros es relevante. Excepción: si necesitas rentas periódicas para vivir, la distribución tiene sentido aunque sea menos eficiente.",
-            "ok": "ETF de acumulación (Acc) — los rendimientos se reinvierten sin evento fiscal. Óptimo para el crecimiento del capital en España.",
-            "warning": "Verificar si es acumulación o distribución. Si es Dist, evalúa el impacto fiscal en tu declaración anual.",
-            "ko": "ETF de distribución (Dist) en un bloque de largo plazo — considera el equivalente en acumulación para maximizar el efecto del interés compuesto diferiendo impuestos."
-          }
-        },
-        {
-          "id": "duracion_rf_ma",
-          "nombre": "Duración del bono (solo renta fija)",
-          "fuente": "manual",
-          "nota": "Solo aplicable a ETFs de renta fija. Verificar en la ficha del fondo o en justETF la duración modificada.",
-          "enlace_referencia": "https://www.justetf.com",
-          "peso": 3,
-          "textos": {
-            "guia": "La duración mide la sensibilidad del precio del ETF al movimiento de tipos: si el BCE sube tipos 1%, un ETF con duración 7 pierde aproximadamente un 7% de valor. Con el BCE iniciando un nuevo ciclo de subidas en junio 2026 (IPC eurozona al 3,2%), la duración es el riesgo más importante de los ETFs de bonos. Busca duración modificada de 1 a 5 años para el bloque de renta fija. Solo si el BCE hace una pausa clara y el IPC cede por debajo del 2,5% tiene sentido extender duración hacia los 7-10 años.",
-            "ok": "Duración corta/media (1-5 años) — protege el capital en el entorno de subidas de tipos actual. Carry atractivo sin riesgo de precio excesivo.",
-            "warning": "Duración media/larga (5-8 años) — exposición relevante al riesgo de tipos. Solo si tienes alta convicción en que el BCE para pronto.",
-            "ko": "Duración larga (>8 años) — en un ciclo de subidas, la pérdida potencial de precio supera el carry. Recuerda: en 2022 los fondos de bono largo perdieron 20-40%."
-          }
-        },
-        {
-          "id": "clase_diferenciada_ma",
-          "nombre": "Clase de activo diferenciada del resto",
-          "fuente": "manual",
-          "nota": "Verificar que el ETF cubre una clase de activo distinta a los otros componentes de la cartera. Referencia: matriz de correlación en justETF o Morningstar.",
-          "enlace_referencia": "https://www.justetf.com",
-          "peso": 2,
-          "textos": {
-            "guia": "El objetivo de la cartera multi-activo es la descorrelación real — que cuando un bloque cae, los otros no caigan igual. Pero dos ETFs que parecen distintos pueden comportarse casi igual: un ETF de renta variable global y un ETF de tecnología tienen correlación >0,9. Antes de añadir un nuevo bloque, pregúntate: ¿este ETF cae cuando los demás suben, o caen todos juntos? La correlación histórica está disponible en justETF y Morningstar.",
-            "ok": "ETF que cubre una clase diferenciada — contribuye a la descorrelación real del conjunto.",
-            "warning": "Posible solapamiento con otro componente de la cartera. Verifica la correlación antes de incluirlo.",
-            "ko": "Alta correlación con otro bloque ya existente — añadir este ETF no reduce el riesgo real de la cartera, solo añade coste y complejidad."
-          }
-        },
-        {
-          "id": "cobertura_divisa_ma",
-          "nombre": "Exposición a divisa y cobertura",
-          "fuente": "manual",
-          "nota": "Verificar si el ETF ofrece versión EUR hedged. Para un inversor en euros, la exposición al USD añade riesgo de divisa.",
-          "enlace_referencia": "https://www.justetf.com",
-          "peso": 1,
-          "textos": {
-            "guia": "Un ETF sobre el MSCI World invierte en empresas de todo el mundo, pero una parte importante cotiza en USD. Si el dólar cae frente al euro, la rentabilidad en euros disminuye aunque el mercado americano suba. Las versiones EUR hedged cubren ese riesgo, pero tienen un coste adicional (generalmente 0,10-0,30% anual). Para plazos largos (>10 años), el riesgo de divisa tiende a compensarse. Para plazos medios o si tienes una visión clara sobre el EUR/USD, la cobertura puede tener sentido.",
-            "ok": "ETF con cobertura EUR hedged o exposición mayoritariamente en euros — sin riesgo de divisa relevante para el inversor español.",
-            "warning": "ETF con exposición significativa a USD u otras divisas sin cobertura. Considera si el riesgo de divisa se alinea con tu horizonte y convicción sobre EUR/USD.",
-            "ko": "Alta exposición a divisa extranjera sin cobertura y horizonte corto/medio — el riesgo de divisa puede dominar el retorno del activo subyacente."
+            "guia": "**Qué es.** Estructura legal obligatoria para ETFs accesibles al inversor minorista español. UCITS (Undertakings for Collective Investment in Transferable Securities) es la denominación europea equivalente al fondo de inversión registrado bajo normativa de la UE.\n\n**Por qué importa.** La normativa PRIIPs prohíbe al minorista español comprar ETFs domiciliados en EE.UU. (SPY, QQQ, VTI...) sin documento KID europeo. Solo son accesibles ETFs con estructura UCITS, domiciliados habitualmente en Irlanda o Luxemburgo. El equivalente de un ETF del S&P 500 para el inversor español es el iShares Core S&P 500 UCITS ETF (CSPX) o el Vanguard S&P 500 UCITS ETF (VUSA).\n\n**Umbrales.** OK si el ETF tiene estructura UCITS confirmada. KO si es un fondo domiciliado en EE.UU. sin equivalente UCITS disponible en el broker."
           }
         }
       ]

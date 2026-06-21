@@ -11622,6 +11622,18 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
     operador = crit.get("operador", "")
     textos   = crit.get("textos", {})
 
+    # ── N/A por sector (patrón reutilizable) ────────────────────────────
+    # Si el criterio tiene "sectores_na", comprobar si el ticker pertenece
+    # a uno de ellos antes de intentar evaluar el valor.
+    _sectores_na = crit.get("sectores_na", [])
+    if _sectores_na:
+        _sector_t = (info.get("sector") or "").strip()
+        if any(s.lower() in _sector_t.lower() for s in _sectores_na):
+            _msg_na = crit.get("sectores_na_mensaje",
+                               "Métrica no aplicable a este sector — excluida del score.")
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+                    "mensaje": _msg_na, "nombre": crit.get("nombre", "")}
+
     # ── Obtener valor raw ───────────────────────────────────────────────
     valor = None
     if fuente == "manual":
@@ -11918,22 +11930,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"Riesgo de recorte elevado ante próxima contracción",
                 })
 
-            # K5 — Free float muy bajo + historial corto (soft killshot)
-            # Free float < 20% significa que el 80%+ está en manos de insiders/familia.
-            # El riesgo operativo es doble: (1) liquidez reducida — salir en mercado
-            # adverso puede ser costoso; (2) el dividendo depende de la voluntad
-            # familiar, no de política corporativa consolidada. Si además el historial
-            # es < 5 años, el compromiso con el dividendo no está probado.
-            # Caso canónico: PUIG (familia Puig ~88% del capital, IPO 2024, 2 años historial).
+            # K5 — Free float < 20% (hard killshot)
+            # Riesgo estructural de concentración accionarial: más del 80% en manos de
+            # insiders/familia. El dividendo depende de la voluntad de un controlador,
+            # no de política corporativa sometida a escrutinio institucional. Además,
+            # la liquidez real del mercado secundario es insuficiente para construir o
+            # deshacer una posición relevante sin impacto de precio.
+            # El umbral 20% es un veto duro — no se modera con otros factores.
             _ks_ff  = _sc_free_float(info)
-            if _ks_ff is not None and float(_ks_ff) < 0.20 and _ks_anos < 5:
+            if _ks_ff is not None and float(_ks_ff) < 0.20:
                 _ff_pct = float(_ks_ff) * 100
                 killshots.append({
-                    "tipo":   "soft",
+                    "tipo":   "hard",
                     "codigo": "K5",
-                    "razon":  f"Free float {_ff_pct:.1f}% (mínimo 20%) con historial de {_ks_anos} años — "
-                              f"liquidez limitada para salir en mercado adverso y compromiso "
-                              f"con el dividendo no consolidado",
+                    "razon":  f"Free float {_ff_pct:.1f}% — más del 80% del capital en manos de "
+                              f"insiders o accionista de control. Riesgo de concentración estructural: "
+                              f"el dividendo refleja la voluntad del controlador, no una política "
+                              f"corporativa consolidada. Liquidez insuficiente para salida ordenada",
                 })
 
         # Aplicar killshots
