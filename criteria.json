@@ -39,7 +39,7 @@
             "tipo": "aviso",
             "nombre": "Pérdidas contables — caja cubre hoy",
             "condicion": "Payout > 100% Y BPA < 0 Y FCF yield ≥ Dividend yield",
-            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "efecto": "Degrada veredicto máximo a 'Parcial'. Score capado en 69/100 si el score sería 'Cumple'.",
             "razon": "La empresa paga dividendo mientras registra pérdidas contables. El flujo de caja lo cubre en el momento actual, pero la estructura es frágil: cualquier deterioro de ingresos o márgenes eliminaría ese respaldo."
           },
           {
@@ -55,7 +55,7 @@
             "tipo": "aviso",
             "nombre": "Colchón contable mínimo",
             "condicion": "Payout entre 85% y 100% Y BPA > 0 Y FCF yield ≥ Dividend yield",
-            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "efecto": "Degrada veredicto máximo a 'Parcial'. Score capado en 69/100 si el score sería 'Cumple'.",
             "razon": "La caja aguanta y los beneficios son positivos, pero el margen contable es escaso. Un descenso de beneficios del 15% comprometería la sostenibilidad. Empresa apta para seguimiento activo, no para compra y olvido."
           },
           {
@@ -71,7 +71,7 @@
             "tipo": "soft",
             "nombre": "Yield insuficiente para estrategia de income",
             "condicion": "Yield real < 2,5%",
-            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
+            "efecto": "Señal informativa. Sin efecto sobre veredicto ni score.",
             "razon": "La empresa puede ser excelente, pero su yield no justifica incluirla en una cartera orientada a rentas."
           },
           {
@@ -79,7 +79,7 @@
             "tipo": "soft",
             "nombre": "Historial corto con FCF insuficiente",
             "condicion": "Años de historial consecutivo < 7 Y FCF yield < Dividend yield",
-            "efecto": "Veredicto máximo 'Parcial'. Score capado en 69/100.",
+            "efecto": "Señal informativa. Sin efecto sobre veredicto ni score.",
             "razon": "Menos de 7 años de historial significa que la empresa no ha demostrado su compromiso con el dividendo a través de un ciclo completo (COVID 2020 + ciclo de tipos 2022). Si además el FCF no cubre el dividendo, el riesgo de recorte en la próxima contracción es alto. Caso canónico: AENA (IPO 2015, dividendo cortado en COVID, historial reiniciado ~2021)."
           },
           {
@@ -232,13 +232,13 @@
           "funcion": "calcular_cagr_dividendo_5y",
           "operador": "gte",
           "umbral_ok": 0.03,
-          "umbral_warning": 0.0,
+          "umbral_warning": -0.05,
           "peso": 2,
           "textos": {
-            "guia": "**Qué es**: CAGR (Compound Annual Growth Rate, tasa de crecimiento anual compuesto) del dividendo en los últimos 5 años. Mide si la renta que cobras crece, se estanca o se erosiona con el tiempo.\n\n**Cómo se calcula**: Se toman los dividendos anuales históricos de los últimos 6 años (mínimo 2 con datos). CAGR = (Dividendo_final ÷ Dividendo_inicial)^(1/n) − 1, donde n = número de años entre ambos valores. Condición de recencia: si el último dividendo pagado fue hace más de 3 años, el cálculo devuelve N/A — el historial antiguo no es representativo del comportamiento actual.\n\n**Umbrales**: OK ≥3% anual · Warning ≥0% (dividendo plano) · KO <0% (recorte).\n\n**K2 (killshot duro)**: Si CAGR < -10% anual, el veredicto se fuerza a 'No cumple'. Una caída del 10% anual durante 5 años equivale a perder más del 40% del dividendo — es una tendencia estructural de deterioro, no un ajuste puntual.",
-            "ok": "El dividendo ha crecido a un ritmo del {valor:.1%} anual en los últimos 5 años — por encima de la inflación media.",
-            "warning": "El dividendo se ha mantenido estable pero sin crecimiento relevante. Protege la renta, pero no la hace crecer.",
-            "ko": "El dividendo ha caído o no hay historial suficiente para calcular la tendencia."
+            "guia": "**Qué es**: CAGR (Compound Annual Growth Rate, tasa de crecimiento anual compuesto) del dividendo en los últimos 5 años. Mide si la renta que cobras crece, se estanca o se erosiona con el tiempo.\n\n**Cómo se calcula**: Se toman los dividendos anuales históricos de los últimos 6 años (mínimo 2 con datos). CAGR = (Dividendo_final ÷ Dividendo_inicial)^(1/n) − 1, donde n = número de años entre ambos valores. Condición de recencia: si el último dividendo pagado fue hace más de 3 años, el cálculo devuelve N/A — el historial antiguo no es representativo del comportamiento actual.\n\n**Umbrales**: OK ≥3% anual · Warning ≥-5% (plano o erosión leve) · KO <-5% (recorte significativo).\n\n**Coherencia con K2**: el umbral de KO del criterio individual (-5%) es la mitad del umbral de veto K2 (-10%). Un CAGR entre -5% y 0% es una señal de atención —no un problema estructural— y puntúa como Warning. Por debajo de -5% el recorte ya es material aunque no alcance el veto.\n\n**K2 (killshot duro)**: Si CAGR < -10% anual, el veredicto se fuerza a 'No cumple'. Una caída del 10% anual durante 5 años equivale a perder más del 40% del dividendo — es una tendencia estructural de deterioro, no un ajuste puntual.",
+            "ok": "CAGR {valor:.1%} anual — el dividendo crece por encima de la inflación media. Renta protegida y en expansión.",
+            "warning": "CAGR {valor:.1%} anual — dividendo plano o con erosión leve (entre -5% y +3%). Zona de atención: la renta no crece en términos reales pero tampoco muestra deterioro estructural.",
+            "ko": "CAGR {valor:.1%} anual — recorte sistemático superior al 5% anual. Deterioro significativo de la renta; sin alcanzar el umbral de veto K2 (-10%) pero con impacto real en el income a 5 años."
           }
         },
         {
@@ -801,7 +801,10 @@
           "operador": "computed",
           "peso": 3,
           "textos": {
-            "guia": "**Qué es.** Estructura legal obligatoria para ETFs accesibles al inversor minorista español. UCITS (Undertakings for Collective Investment in Transferable Securities) es la denominación europea equivalente al fondo de inversión registrado bajo normativa de la UE.\n\n**Por qué importa.** La normativa PRIIPs prohíbe al minorista español comprar ETFs domiciliados en EE.UU. (SPY, QQQ, VTI...) sin documento KID europeo. Solo son accesibles ETFs con estructura UCITS, domiciliados habitualmente en Irlanda o Luxemburgo. El equivalente de un ETF del S&P 500 para el inversor español es el iShares Core S&P 500 UCITS ETF (CSPX) o el Vanguard S&P 500 UCITS ETF (VUSA).\n\n**Umbrales.** OK si el ETF tiene estructura UCITS confirmada. KO si es un fondo domiciliado en EE.UU. sin equivalente UCITS disponible en el broker."
+            "guia": "**Qué es.** Estructura legal obligatoria para ETFs accesibles al inversor minorista español. UCITS (Undertakings for Collective Investment in Transferable Securities) es la denominación europea equivalente al fondo de inversión registrado bajo normativa de la UE.\n\n**Por qué importa.** La normativa PRIIPs prohíbe al minorista español comprar ETFs domiciliados en EE.UU. (la mayoría de los ETFs populares de Vanguard, BlackRock y State Street en su versión americana) sin KID europeo. El KID (Key Information Document) es obligatorio bajo PRIIPs para fondos vendidos a minoristas en la UE. Los ETFs UCITS tienen ISIN IE (Irlanda) o LU (Luxemburgo) y están registrados en bolsas europeas (Euronext, Xetra, Borsa Italiana, LSE en EUR/GBP).\n\n**Umbrales.** OK si UCITS verificado · KO si no UCITS o no verificable.",
+            "ok": "Estructura UCITS confirmada — ETF elegible para inversor minorista español bajo normativa PRIIPs.",
+            "warning": "Estructura no verificada. Confirmar elegibilidad antes de operar.",
+            "ko": "No UCITS — ETF no elegible para el inversor minorista español. Requiere cuenta de inversor profesional o broker con acceso a mercados no-UE."
           }
         }
       ]
