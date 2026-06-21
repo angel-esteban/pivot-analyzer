@@ -11596,10 +11596,10 @@ def _fmt_valor(valor, criterio_id: str) -> str:
     if valor is None:
         return "—"
     pct_ids = {"dividend_yield","payout_ratio","gross_margin","roe","operating_margin",
-               "reinversion","free_float","free_float_swing","cagr_dividendo","revenue_growth",
-               "earnings_growth"}
+               "reinversion","free_float","free_float_swing","cagr_dividendo",
+               "crecimiento_dividendo","revenue_growth","earnings_growth"}
     mult_ids = {"deuda_equity","deuda","debtToEquity"}
-    eur_ids  = {"liquidez_volumen","volumen_medio","market_cap","aum"}
+    eur_ids  = {"liquidez_volumen","volumen_medio","market_cap","aum","volumen_diario"}
     if criterio_id in pct_ids:
         return f"{valor:.1%}"
     if criterio_id in mult_ids:
