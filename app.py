@@ -12345,7 +12345,10 @@ def _panel_indices_config():
 def _render_screening_panel(tipo_key: str, uid: int):
     """Panel de lanzamiento de screening y visualización de resultados."""
     st.markdown("---")
-    with st.expander("🔍 Screening de índice — analiza todos los valores contra los criterios", expanded=False):
+    # Auto-abrir si viene desde notificación
+    _exp_open = st.session_state.pop(f"_sc_expander_open_{tipo_key}", False)
+    with st.expander("🔍 Screening de índice — analiza todos los valores contra los criterios",
+                     expanded=_exp_open):
 
         # ── Job activo de este tipo ─────────────────────────────────────
         jobs      = _obtener_jobs_usuario(uid)
@@ -12381,10 +12384,24 @@ def _render_screening_panel(tipo_key: str, uid: int):
                     _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
                     _ico  = "✅" if _hj["estado"] == "completado" else "💥"
                     _hist_labels.append(f"{_ico} {_hj.get('indice','')} — {_ts_s}")
-                _sel_idx = st.selectbox(
+                # Si viene de notificación, preseleccionar ese job
+            _job_ver_id = st.session_state.get("_sc_job_ver")
+            _default_idx = 0
+            if _job_ver_id:
+                for _ji, _hj in enumerate(_hist_jobs):
+                    if _hj["id"] == _job_ver_id:
+                        _default_idx = _ji
+                        break
+                # Limpiar solo si este tipo_key coincide con el notificado
+                if st.session_state.get("_sc_job_ver_tipo") == tipo_key:
+                    st.session_state.pop("_sc_job_ver", None)
+                    st.session_state.pop("_sc_job_ver_tipo", None)
+                    st.session_state.pop(f"_sc_mostrar_resultado_{tipo_key}", None)
+            _sel_idx = st.selectbox(
                     "Historial de screenings (últimos 10)",
                     options=range(len(_hist_labels)),
                     format_func=lambda i: _hist_labels[i],
+                    index=_default_idx,
                     key=f"sc_hist_sel_{tipo_key}",
                     label_visibility="collapsed"
                 )
@@ -13416,7 +13433,12 @@ def pantalla_analisis():
                         if st.button("Ver resultados →", key=f"notif_ver_{_nf['id']}",
                                      use_container_width=True):
                             st.session_state["_sc_job_ver"] = _nf["job_id"]
-                            st.session_state[f"_sc_mostrar_resultado_{_nf.get('tipo_cartera','')}"] = True
+                            _tc_notif = _nf.get("tipo_cartera", "")
+                            st.session_state[f"_sc_mostrar_resultado_{_tc_notif}"] = True
+                            st.session_state["_sc_job_ver_tipo"] = _tc_notif
+                            # Navegar a Cartera y abrir el expander
+                            st.session_state["nav_sidebar"] = "📁 Cartera"
+                            st.session_state[f"_sc_expander_open_{_tc_notif}"] = True
                             _marcar_notificaciones_leidas(uid)
                             st.rerun()
                 st.divider()
