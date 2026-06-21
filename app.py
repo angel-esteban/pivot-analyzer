@@ -11727,9 +11727,49 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # Penalizacion: cada N/A resta 10 puntos al maximo alcanzable
         puntuacion   = min(puntuacion_raw, max(0, 100 - n_na * 10))
         evaluacion_incompleta = n_na >= 3
-        if puntuacion >= 70:       estado_global = "cumple"
-        elif puntuacion >= 45:     estado_global = "parcial"
-        else:                      estado_global = "no_cumple"
+
+        # ── Killshots: señales que fuerzan no_cumple independientemente del score ──
+        # Un score aditivo no puede capturar combinaciones que hacen el dividendo
+        # estructuralmente insostenible. Los killshots son vetos analíticos explícitos.
+        killshots = []
+        _es_cartera_div_ks = any(c.get("id") == "dividend_yield" for c in criterios)
+        if _es_cartera_div_ks:
+            # K1 — Payout insostenible + BPA negativo
+            # La empresa paga más de lo que gana en beneficios y encima pierde dinero.
+            # El dividendo no puede sostenerse ni desde earnings ni desde la lógica contable.
+            _ks_payout = info.get("payoutRatio")
+            _ks_bpa    = info.get("trailingEps")
+            _ks_p_malo = (_ks_payout is not None and
+                          (float(_ks_payout) > 1.0 or float(_ks_payout) < 0))
+            _ks_b_malo = (_ks_bpa is not None and float(_ks_bpa) < 0)
+            if _ks_p_malo and _ks_b_malo:
+                _p_fmt = f"{float(_ks_payout):.0%}" if _ks_payout is not None else "N/A"
+                killshots.append({
+                    "codigo": "K1",
+                    "razon":  f"Payout insostenible ({_p_fmt}) con BPA negativo — "
+                              f"el dividendo no está cubierto por beneficios ni por caja operativa",
+                })
+
+            # K2 — Recorte sistemático del dividendo (CAGR 5a muy negativo)
+            # Una empresa que lleva 5 años recortando el dividendo no es candidata a cartera de rentas.
+            # Umbral: < -10% anual (equivale a perder >40% del dividendo en 5 años).
+            if dividends is not None:
+                _ks_cagr = _sc_cagr_dividendo_5y(dividends)
+                if _ks_cagr is not None and float(_ks_cagr) < -0.10:
+                    killshots.append({
+                        "codigo": "K2",
+                        "razon":  f"Recorte sistemático del dividendo (CAGR 5a: {_ks_cagr:.1%}) — "
+                                  f"tendencia estructural negativa incompatible con cartera de rentas",
+                    })
+
+        # Aplicar killshots: forzar no_cumple y capear score por debajo de "parcial"
+        if killshots:
+            estado_global = "no_cumple"
+            puntuacion    = min(puntuacion, 44)   # fuerza banda no_cumple (<45)
+        else:
+            if puntuacion >= 70:   estado_global = "cumple"
+            elif puntuacion >= 45: estado_global = "parcial"
+            else:                  estado_global = "no_cumple"
 
         return {
             "ticker":                ticker,
@@ -11742,6 +11782,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "n_evaluados":           n_evaluados,
             "n_total_criterios":     n_total_c,
             "evaluacion_incompleta": evaluacion_incompleta,
+            "killshots":             killshots,
             "error":                 False,
         }
     except Exception as e:
@@ -12025,6 +12066,14 @@ def _generar_pdf_screening(job: dict) -> bytes:
         _na_txt  = (f" | {_ev_pdf}/{_to_pdf} criterios ({_na_pdf} N/A · máx. {100-_na_pdf*10}%)"
                     if _na_pdf > 0 else "")
         _inc_txt = " | ⚠️ EVALUACION INCOMPLETA" if _inc_pdf else ""
+        _ks_pdf  = r.get("killshots", [])
+        _ks_section = []
+        for _ks in _ks_pdf:
+            _ks_section.append(
+                p(f"🚨 <b>Señal de alarma · {_ks.get('codigo','')}:</b> {_ks.get('razon','')}",
+                  fontSize=7.5, textColor=colors.HexColor("#7f1d1d"),
+                  backColor=colors.HexColor("#fef2f2"), spaceBefore=2, spaceAfter=2)
+            )
         story.append(KeepTogether([
             p(f"<b>{ticker}</b>  <font color='#64748b'>{nombre}</font>  "
               f"| Score: <b>{score}/100</b>  "
@@ -12032,6 +12081,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
               f"{_na_txt}{_inc_txt}",
               fontName="Helvetica-Bold", fontSize=9, textColor=C_DARK,
               spaceBefore=6, spaceAfter=2),
+            *_ks_section,
             ct,
             Spacer(1, 0.2*cm),
         ]))
@@ -12170,6 +12220,21 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
+                # Killshots — señales de alarma que forzaron el veredicto negativo
+                for _ks in r.get("killshots", []):
+                    st.markdown(
+                        f'<div style="display:flex;align-items:flex-start;gap:8px;'
+                        f'padding:8px 12px;margin-bottom:6px;background:#fef2f2;'
+                        f'border:1px solid #fca5a5;border-left:4px solid #dc2626;'
+                        f'border-radius:6px">'
+                        f'<span style="font-size:14px">🚨</span>'
+                        f'<div><span style="font-size:0.7rem;font-weight:700;color:#dc2626;'
+                        f'text-transform:uppercase;letter-spacing:0.05em">'
+                        f'Señal de alarma · {_ks.get("codigo","")}</span><br>'
+                        f'<span style="font-size:0.8rem;color:#7f1d1d">{_ks.get("razon","")}</span>'
+                        f'</div></div>',
+                        unsafe_allow_html=True
+                    )
             for crit in r.get("criterios", []):
                 _c_est = crit.get("estado","ko")
                 emoji  = EMOJI.get(_c_est, "—")
