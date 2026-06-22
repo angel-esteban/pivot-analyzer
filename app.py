@@ -11970,7 +11970,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"corporativa consolidada. Liquidez insuficiente para salida ordenada",
                 })
 
-            # K6 — FCF insuficiente standalone (aviso informativo)
+            # K6 — FCF insuficiente standalone (aviso-degrade: degrada a Parcial si Cumple)
             # Se activa cuando FCF ko Y ninguna señal ya captura el riesgo FCF:
             #   K1      → ya lo captura (payout>100% + BPA<0 + FCF ko)
             #   K1-FCF  → ya lo captura (payout>100% + BPA>0 + FCF ko)
@@ -11988,10 +11988,11 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     "codigo": "K6",
                     "razon":  f"FCF yield inferior al dividend yield — el flujo de caja libre "
                               f"no cubre el dividendo en el ejercicio actual. Con {_ks_anos_k6} "
-                              f"años de historial el compromiso está acreditado, pero revisar si "
-                              f"el déficit es estructural (modelo intensivo en capital, utility "
-                              f"regulada) o cíclico (año de capex elevado, presión de commodity). "
-                              f"Señal informativa: no modifica el veredicto.",
+                              f"años de historial el pago está acreditado, pero el dividendo "
+                              f"descansa sobre endeudamiento o reservas, no sobre generación de caja. "
+                              f"Revisar si el déficit es estructural (modelo intensivo en capital, "
+                              f"utility regulada) o cíclico (capex elevado, presión de commodity). "
+                              f"Vigilar si el patrón se sostiene más de 2 ejercicios consecutivos.",
                 })
 
         # Aplicar killshots
@@ -12008,7 +12009,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_soft          = [k for k in killshots if k.get("tipo") == "soft"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K6")]
         nota_degradacion = None
         if _ks_hard:
             estado_global = "no_cumple"
