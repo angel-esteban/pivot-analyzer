@@ -11836,7 +11836,26 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _ks_bpa    = info.get("trailingEps")
             _ks_fcf_k1 = _sc_fcf_vs_div(info)   # "ok"/"warning"/"ko"/None
 
-            if _ks_payout is not None:
+            # Detectar sectores donde el payout contable no es métrica válida
+            # (Financial Services: banca + seguros — mismo tratamiento que EV/EBITDA)
+            _k1_sector       = (info.get("sector") or "").strip().lower()
+            _k1_payout_na    = "financial" in _k1_sector
+
+            if _k1_payout_na:
+                # Sector financiero: omitir toda la lógica payout-dependiente.
+                # K1-BPA puede activar si hay BPA negativo (señal universal de pérdidas).
+                _kb_fin = float(_ks_bpa) if _ks_bpa is not None else None
+                if _kb_fin is not None and _kb_fin < 0:
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K1-BPA",
+                        "razon":  f"BPA negativo ({_kb_fin:.2f}€) — pérdidas contables en el "
+                                  f"último ejercicio. El payout no se evalúa en banca/seguros "
+                                  f"(métrica no válida para este modelo de negocio), pero el "
+                                  f"BPA negativo es señal universal de deterioro de resultados.",
+                    })
+
+            elif _ks_payout is not None:
                 _kp = float(_ks_payout)
                 _kb = float(_ks_bpa) if _ks_bpa is not None else None
                 _p_over = (_kp > 1.0 or _kp < 0)       # payout >100% o negativo
@@ -11845,7 +11864,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _b_pos  = (_kb is not None and _kb >= 0)
                 _fcf_ko = (_ks_fcf_k1 == "ko")
                 _fcf_ok = (_ks_fcf_k1 in ("ok", "warning"))
-                _fcf_na = (_ks_fcf_k1 is None)   # FCF no disponible (banca, holdings)
+                _fcf_na = (_ks_fcf_k1 is None)   # FCF no disponible (holdings)
                 _kp_fmt = f"{_kp:.0%}"
 
                 # Nivel 1 — VETO (hard): los tres indicadores simultáneamente malos
@@ -11878,8 +11897,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"Riesgo elevado de recorte si los beneficios se normalizan",
                     })
 
-                # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre o no disponible
-                # _fcf_na cubre banca y holdings donde freeCashflow no es una métrica aplicable
+                # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre
                 elif _p_alto and _b_pos and (_fcf_ok or _fcf_na):
                     killshots.append({
                         "tipo":   "aviso",

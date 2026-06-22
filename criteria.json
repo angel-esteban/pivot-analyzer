@@ -161,7 +161,11 @@
             "ok": "Dividendo bien cubierto: la empresa destina el {valor:.0%} de su beneficio, con margen suficiente para imprevistos.",
             "warning": "Cobertura ajustada ({valor:.0%}). El dividendo es sostenible a corto plazo, pero sin margen para sorpresas negativas en resultados.",
             "ko": "Payout excesivo ({valor:.0%}): la empresa está pagando más de lo que puede permitirse de forma sostenida. Alto riesgo de recorte."
-          }
+          },
+          "sectores_na": [
+            "Financial Services"
+          ],
+          "sectores_na_mensaje": "El payout contable (DPA/BPA) no es métrica válida para evaluar sostenibilidad del dividendo en banca y seguros. La métrica relevante sería el pay-out sobre capital generado (distribución sobre CET1 excedentario), dato no disponible en yfinance de forma fiable. Criterio excluido del score para estos sectores."
         },
         {
           "id": "historial_dividendo",
