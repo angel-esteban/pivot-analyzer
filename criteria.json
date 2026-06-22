@@ -97,6 +97,14 @@
             "condicion": "FCF yield < Dividend yield Y K1/K1-FCF/K4 no activos",
             "efecto": "Señal informativa. Sin efecto sobre veredicto ni score.",
             "razon": "El flujo de caja libre no cubre el dividendo, pero el historial largo (≥7 años) acredita el compromiso de la empresa con el pago. No es un veto porque el déficit puede ser estructural aceptable (utility regulada, modelo intensivo en capital) o cíclico (año de capex elevado, presión de commodity). El usuario debe revisar si el patrón es recurrente o puntual antes de incluir el valor."
+          },
+          {
+            "codigo": "K7",
+            "nombre": "Valoración exigente",
+            "tipo": "aviso",
+            "condicion": "EV/EBITDA > 22× (excluye Real Estate y Financial Services)",
+            "efecto": "Señal informativa. Sin efecto sobre veredicto ni score.",
+            "razon": "Prima de crecimiento incompatible con el margen de seguridad de una cartera de rentas. El criterio ev_ebitda ya penaliza en score (peso 1); K7 hace visible la señal en el bloque de alarmas."
           }
         ]
       },

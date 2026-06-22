@@ -11995,6 +11995,31 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"Vigilar si el patrón se sostiene más de 2 ejercicios consecutivos.",
                 })
 
+            # K7 — Valoración exigente (aviso informativo — aviso-puro)
+            # EV/EBITDA > 22× indica una prima de crecimiento incompatible con
+            # el margen de seguridad que requiere una cartera de rentas.
+            # El criterio ev_ebitda ya penaliza el score (peso 1); K7 lo hace visible
+            # en el bloque de alarmas (principio: señales visibles, no silenciosas).
+            # Excluye Real Estate y Financial Services donde EV/EBITDA no es métrica válida.
+            _ks_ev = info.get("enterpriseToEbitda")
+            _ks_sector_k7 = (info.get("sector") or "").strip().lower()
+            _k7_sector_excluido = any(
+                s in _ks_sector_k7 for s in ("real estate", "financial")
+            )
+            if (
+                _ks_ev is not None
+                and not _k7_sector_excluido
+                and float(_ks_ev) > 22.0
+            ):
+                killshots.append({
+                    "tipo":   "aviso",
+                    "codigo": "K7",
+                    "razon":  f"EV/EBITDA {float(_ks_ev):.1f}× — valoración exigente para cartera de rentas. "
+                              f"El umbral KO es 22×: por encima de ese nivel la prima de crecimiento "
+                              f"comprime el margen de seguridad sobre el dividendo. "
+                              f"Señal informativa: no modifica el veredicto.",
+                })
+
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
         # Aviso degrade (K1-BPA, K1-Payout): si "cumple" → degrada a parcial + cap 69
