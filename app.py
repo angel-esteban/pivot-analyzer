@@ -11640,7 +11640,8 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         return {"estado": "manual", "valor_raw": None, "valor_fmt": "verificar",
                 "mensaje": textos.get("warning", "Verificar manualmente.")}
 
-    _valor_calculado = False   # marca para distinguir valor directo vs calculado
+    _payout_origen   = None   # directo | calculado | calculado_bpa_negativo | no_disponible
+    _dpa_es_calculado = False  # True cuando DPA viene de t.dividends, no de trailingAnnualDividendRate
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
         valor = info.get(campo)
@@ -11649,15 +11650,44 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         # Normalizamos si el valor es > 1 y el criterio es de tipo ratio/pct
         if campo == "dividendYield" and isinstance(valor, (int, float)) and valor > 1:
             valor = valor / 100
-        # Fallback A: payoutRatio no disponible -> calcular DPA / BPA
-        if campo == "payoutRatio" and valor is None:
-            _dpa = info.get("trailingAnnualDividendRate")
-            _bpa = info.get("trailingEps")
-            if _dpa is not None and _bpa is not None and float(_bpa) > 0 and float(_dpa) > 0:
-                valor = float(_dpa) / float(_bpa)
-                _valor_calculado = True
-            # DPA=0 en yfinance con dividendo real existente es fallo de datos, no payout cero
-            # -> dejar valor=None para que el criterio devuelva N/A en lugar de 0.0% falso
+        # ── Fallback payoutRatio: dos niveles ──────────────────────────────
+        if campo == "payoutRatio":
+            if valor is not None:
+                _payout_origen = "directo"
+            else:
+                # Nivel 1: trailingAnnualDividendRate de info{}
+                _dpa = info.get("trailingAnnualDividendRate")
+                _dpa_es_calculado = False
+                # Nivel 2: sumar dividends del año calendario anterior completo
+                if (not _dpa or float(_dpa) == 0) and dividends is not None and len(dividends) > 0:
+                    try:
+                        import pandas as _pd_pay
+                        _anyo_ref = int(dividends.index[-1].year) - 1
+                        _dpa_hist = float(dividends[dividends.index.year == _anyo_ref].sum())
+                        if _dpa_hist > 0:
+                            _dpa = _dpa_hist
+                            _dpa_es_calculado = True
+                        else:
+                            # Ultimo recurso: año en curso
+                            _anyo_cur = int(dividends.index[-1].year)
+                            _dpa_cur  = float(dividends[dividends.index.year == _anyo_cur].sum())
+                            if _dpa_cur > 0:
+                                _dpa = _dpa_cur
+                                _dpa_es_calculado = True
+                    except Exception:
+                        pass
+                _bpa = info.get("trailingEps")
+                if _dpa and _bpa and float(_dpa) > 0:
+                    if float(_bpa) > 0:
+                        valor = float(_dpa) / float(_bpa)
+                        _payout_origen = "calculado"
+                    else:
+                        # BPA negativo: ratio sobre valor absoluto, marcar especialmente
+                        valor = float(_dpa) / abs(float(_bpa))
+                        _payout_origen = "calculado_bpa_negativo"
+                else:
+                    _payout_origen = "no_disponible"
+                    # valor sigue None -> cae en sin_datos mas adelante
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -11725,7 +11755,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         estado = "ok" if valor in valores_ok else "warning"
 
     valor_fmt = _fmt_valor(valor, cid)
-    if _valor_calculado:
+    if _payout_origen in ("calculado", "calculado_bpa_negativo"):
         valor_fmt = valor_fmt + chr(42)   # asterisco: valor estimado, no directo de yfinance
     # ko_bajo / ko_alto: busca texto específico; si no existe, cae en "ko" genérico
     _estado_key = estado
@@ -11738,15 +11768,22 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
                                  stop_min=valor*1.5 if isinstance(valor,(int,float)) else 0)
     except Exception:
         mensaje = msg_tpl
+    mensaje = mensaje.replace("1 años", "1 año")   # corrección gramatical singular
 
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
     _estado_final = "ko" if estado in ("ko_bajo", "ko_alto") else estado
-    if _valor_calculado:
-        mensaje = (
-            chr(9889) + " Estimado DPA/BPA (payoutRatio no disponible en yfinance). "
-            "Verificar contra informe anual. "
-        ) + mensaje
+    if _payout_origen == "calculado":
+        _nota_py = (chr(9889) + " Calculado DPA/BPA"
+                    + (" (DPA desde historial)" if _dpa_es_calculado else
+                       " (payoutRatio no disponible en yfinance)")
+                    + ". Verificar contra informe anual. ")
+        mensaje = _nota_py + mensaje
+    elif _payout_origen == "calculado_bpa_negativo":
+        _nota_py = (chr(9889) + " Calculado sobre BPA negativo"
+                    + (" (DPA desde historial)" if _dpa_es_calculado else "")
+                    + " — interpretar con cautela. ")
+        mensaje = _nota_py + mensaje
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
 
 
