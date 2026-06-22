@@ -12015,14 +12015,15 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             estado_global = "no_cumple"
             puntuacion    = min(puntuacion, 44)
         elif _ks_aviso_degrade and estado_global == "cumple":
-            _score_pre    = puntuacion
+            # Sin cap: el score real (ej. 84) permanece visible.
+            # El badge "Parcial" es el veredicto correcto; el score alto informa
+            # que el problema es específico (FCF, payout), no estructural.
             estado_global = "parcial"
-            puntuacion    = min(puntuacion, 69)
             _kd_codes     = " + ".join(k["codigo"] for k in _ks_aviso_degrade)
             nota_degradacion = (
-                f"Score {_score_pre} — estado degradado a Parcial por señal {_kd_codes} activa. "
-                f"La puntuación refleja criterios individuales; la señal cualitativa "
-                f"prevalece sobre el score numérico en la determinación del estado final."
+                f"Score {puntuacion} con veredicto Parcial — señal {_kd_codes} activa. "
+                f"El score refleja la calidad del perfil dividendo; el veredicto "
+                f"se degrada por la señal cualitativa, no por los criterios individuales."
             )
         elif _ks_soft and estado_global == "cumple":
             _score_pre    = puntuacion
