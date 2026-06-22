@@ -11894,7 +11894,11 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     if (cid == "crecimiento_dividendo" and estado == "ko"
             and isinstance(valor, (int, float)) and valor < -0.10):
         _estado_key = "ko_k2"
-    msg_tpl   = textos.get(_estado_key, textos.get("ko", textos.get("warning", "")))
+    # CAGR > 20%: nota de verificación por posible distorsión de base baja (COVID, etc.)
+    if (cid == "crecimiento_dividendo" and estado == "ok"
+            and isinstance(valor, (int, float)) and valor > 0.20):
+        _estado_key = "ok_alto"
+    msg_tpl   = textos.get(_estado_key, textos.get("ok", textos.get("warning", "")))
     _anos_label = "año" if isinstance(valor, (int, float)) and int(valor) == 1 else "años"
     try:
         mensaje = msg_tpl.format(valor=valor, valor_fmt=valor_fmt,

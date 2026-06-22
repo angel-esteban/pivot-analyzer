@@ -259,7 +259,8 @@
             "ok": "CAGR {valor:.1%} anual — el dividendo crece por encima de la inflación media. Renta protegida y en expansión.",
             "warning": "CAGR {valor:.1%} anual — dividendo plano o con erosión leve (entre -5% y +3%). Zona de atención: la renta no crece en términos reales pero tampoco muestra deterioro estructural.",
             "ko": "CAGR {valor:.1%} anual — recorte sistemático entre -5% y -10% anual. Deterioro material de la renta real sin alcanzar el umbral de veto K2.",
-            "ko_k2": "CAGR {valor:.1%} anual — recorte severo superior al 10% anual. Activa el veto K2: veredicto No cumple forzado. A este ritmo el dividendo pierde más del 40% de su valor en 5 años."
+            "ko_k2": "CAGR {valor:.1%} anual — recorte severo superior al 10% anual. Activa el veto K2: veredicto No cumple forzado. A este ritmo el dividendo pierde más del 40% de su valor en 5 años.",
+            "ok_alto": "CAGR {valor:.1%} anual — crecimiento muy elevado. [VERIFICAR] Una tasa superior al 20% suele reflejar base distorsionada: suspensión o recorte severo del dividendo en años previos (COVID, reestructuración) seguido de restablecimiento. El dato es matemáticamente correcto pero puede sobrestimar el crecimiento estructural real. Comparar con los 2-3 años anteriores al período base antes de interpretarlo."
           }
         },
         {
