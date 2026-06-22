@@ -11702,6 +11702,15 @@ def _fmt_valor(valor, criterio_id: str) -> str:
 
 # ── Evaluador de un criterio individual ────────────────────────────────────
 
+def _es_sector_sin_metricas_convencionales(info: dict) -> bool:
+    """Devuelve True para sectores donde payout, FCF, D/E y EV/EBITDA no son métricas válidas.
+    Cubre Financial Services (bancos, brokers) e Insurance (cualquier sub-sector).
+    """
+    sector   = (info.get("sector")   or "").strip()
+    industry = (info.get("industry") or "").strip()
+    return sector == "Financial Services" or industry.startswith("Insurance")
+
+
 def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflow=None) -> dict:
     """Evalúa un criterio contra los datos del ticker. Devuelve {estado, valor_raw, valor_fmt, mensaje}."""
     cid      = crit.get("id", "")
@@ -11731,6 +11740,13 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     _dpa_es_calculado = False  # True cuando DPA viene de t.dividends, no de trailingAnnualDividendRate
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
+        if campo == "debtToEquity" and _es_sector_sin_metricas_convencionales(info):
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+                    "mensaje": ("Deuda/Equity convencional no es métrica válida para bancos y "
+                                "aseguradoras — el apalancamiento se evalúa mediante ratios "
+                                "regulatorios (CET1, Tier 1, Solvencia II) no disponibles en "
+                                "esta fuente. Excluido del score."),
+                    "nombre": crit.get("nombre", "")}
         valor = info.get(campo)
         # yfinance devuelve dividendYield en forma de porcentaje (ej: 4.36)
         # para tickers de algunas bolsas, no como decimal (0.0436)
@@ -11784,6 +11800,13 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         elif funcion == "calcular_distancia_sma200":    valor = _sc_distancia_sma200(info)
         elif funcion == "verificar_tendencia_sma":      valor = _sc_tendencia_sma(info)
         elif funcion == "calcular_fcf_yield_vs_div_yield":
+            if _es_sector_sin_metricas_convencionales(info):
+                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+                        "mensaje": ("FCF convencional (flujo operativo−capex) no es métrica válida "
+                                    "para bancos y aseguradoras — los flujos operativos incluyen "
+                                    "variaciones en créditos, depósitos, primas y siniestros que "
+                                    "distorsionan la comparación con el dividendo. Excluido del score."),
+                        "nombre": crit.get("nombre", "")}
             _fcf_res, _fcf_calc = _sc_fcf_con_cashflow(info, cashflow)
             if _fcf_res is None:
                 return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
@@ -11868,13 +11891,16 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     if estado in ("ko_bajo", "ko_alto") and estado not in textos:
         _estado_key = "ko"
     msg_tpl   = textos.get(_estado_key, textos.get("warning", ""))
+    _anos_label = "año" if isinstance(valor, (int, float)) and int(valor) == 1 else "años"
     try:
         mensaje = msg_tpl.format(valor=valor, valor_fmt=valor_fmt,
+                                 anos_label=_anos_label,
                                  valor_ratio=valor/100 if isinstance(valor,(int,float)) else valor,
                                  stop_min=valor*1.5 if isinstance(valor,(int,float)) else 0)
     except Exception:
         mensaje = msg_tpl
-    mensaje = mensaje.replace("1 años", "1 año")   # corrección gramatical singular
+    import re as _re_gram
+    mensaje = _re_gram.sub(r"(?<!\d)1 años", "1 año", mensaje)   # safety net gramatical
 
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
@@ -12147,7 +12173,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 killshots.append({
                     "tipo":   "soft",
                     "codigo": "K4",
-                    "razon":  f"Historial de {_ks_anos} años (mínimo 7) con FCF insuficiente — "
+                    "razon":  f"Historial de {_ks_anos} {'año' if _ks_anos == 1 else 'años'} (mínimo 7) con FCF insuficiente — "
                               f"sin track record en ciclos completos y cobertura de caja comprometida. "
                               f"Riesgo de recorte elevado ante próxima contracción",
                 })
@@ -12189,7 +12215,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     "codigo": "K6",
                     "razon":  f"FCF yield inferior al dividend yield — el flujo de caja libre "
                               f"no cubre el dividendo en el ejercicio actual. Con {_ks_anos_k6} "
-                              f"años de historial el compromiso está acreditado. Revisar si el "
+                              f"{'año' if _ks_anos_k6 == 1 else 'años'} de historial el compromiso está acreditado. Revisar si el "
                               f"déficit es estructural (modelo intensivo en capital, utility "
                               f"regulada) o cíclico (capex elevado, presión de commodity). "
                               f"Señal informativa: no modifica el veredicto.",
@@ -12534,7 +12560,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
                 p(c.get("valor_fmt", "—"), fontSize=7, alignment=TA_CENTER),
                 p(f"<font color='{c_hex}'><b>{c_lbl}</b></font>",
                   fontSize=7, alignment=TA_CENTER),
-                p((c.get("mensaje") or "")[:90], fontSize=6.5, textColor=C_GRAY),
+                p((c.get("mensaje") or ""), fontSize=6.5, textColor=C_GRAY),
             ])
         ct = Table(crit_rows, colWidths=[4.5*cm, 1.5*cm, 1.5*cm, 8*cm])
         ct_row_styles = []

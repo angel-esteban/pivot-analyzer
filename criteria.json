@@ -179,8 +179,8 @@
           "peso": 2,
           "textos": {
             "guia": "**Qué es**: Número de años consecutivos con al menos un pago de dividendo. Mide la continuidad y fiabilidad del compromiso de la empresa con el accionista.\n\n**Cómo se calcula**: Se cuenta hacia atrás desde el último año con pago real (no desde el año en curso, que puede estar incompleto). Por ejemplo, una empresa que pagó en 2025 pero aún no en 2026 (junio) empieza a contar desde 2025. El streak se rompe en el primer año sin pago. Lookback máximo de 25 años.\n\n**Umbrales**: OK ≥5 años · Warning ≥3 años · KO <3 años.\n\n**Nota**: No se evalúa empresas que llevan más de 3 años sin pagar ningún dividendo — son filtradas como 'no aptas' antes del análisis. Empresas como IAG o MEL que retomaron el dividendo tras COVID muestran los años desde la reanudación, lo que es metodológicamente correcto: el historial pre-interrupción no garantiza el compromiso futuro.",
-            "ok": "{valor} años pagando dividendo de forma consecutiva — historial sólido.",
-            "warning": "{valor} años de historial — suficiente para evaluar, pero sin track record largo en ciclos completos.",
+            "ok": "{valor} {anos_label} pagando dividendo de forma consecutiva — historial sólido.",
+            "warning": "{valor} {anos_label} de historial — suficiente para evaluar, pero sin track record largo en ciclos completos.",
             "ko": "Historial de dividendo inferior a 3 años o con interrupciones recientes — perfil no apto para cartera de rentas."
           }
         },
