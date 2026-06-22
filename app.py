@@ -11890,7 +11890,11 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     _estado_key = estado
     if estado in ("ko_bajo", "ko_alto") and estado not in textos:
         _estado_key = "ko"
-    msg_tpl   = textos.get(_estado_key, textos.get("warning", ""))
+    # CAGR < -10%: usa plantilla ko_k2 (K2 activo) en lugar de ko genérico
+    if (cid == "crecimiento_dividendo" and estado == "ko"
+            and isinstance(valor, (int, float)) and valor < -0.10):
+        _estado_key = "ko_k2"
+    msg_tpl   = textos.get(_estado_key, textos.get("ko", textos.get("warning", "")))
     _anos_label = "año" if isinstance(valor, (int, float)) and int(valor) == 1 else "años"
     try:
         mensaje = msg_tpl.format(valor=valor, valor_fmt=valor_fmt,
