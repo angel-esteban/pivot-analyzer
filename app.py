@@ -11591,6 +11591,93 @@ def _sc_fcf_vs_div(info: dict) -> str | None:
     return base
 
 
+
+def _sc_fcf_con_cashflow(info: dict, cashflow_df=None):
+    """
+    Versión extendida de _sc_fcf_vs_div con fallback desde t.cashflow.
+    Solo usada desde _evaluar_criterio — killshots siguen con _sc_fcf_vs_div(info).
+
+    Devuelve: (resultado_dict | None, fcf_es_calculado: bool)
+      resultado_dict = {"estado": "ok"|"warning"|"ko", "fcf": float,
+                        "fcf_yield": float, "div_yield": float, "calculado": bool}
+    """
+    import math as _math_fcf
+    _fcf_es_calculado = False
+
+    fcf  = info.get("freeCashflow")
+    mcap = info.get("marketCap")
+
+    # ── Fallback: calcular FCF = Flujo operativo + Capex desde t.cashflow ──
+    if (not fcf or fcf == 0) and cashflow_df is not None and not cashflow_df.empty:
+        try:
+            # Ordenar columnas de más reciente a más antigua y usar año anterior completo
+            _cols_ord = sorted(cashflow_df.columns, key=lambda c: c.year, reverse=True)
+            _anyo_ref = _cols_ord[0].year - 1
+            _cols_ant = [c for c in _cols_ord if c.year == _anyo_ref]
+            _col      = _cols_ant[0] if _cols_ant else _cols_ord[0]
+
+            _NOMBRES_OP = [
+                "Operating Cash Flow",
+                "Cash From Operations",
+                "Total Cash From Operating Activities",
+                "Net Cash Provided By Operating Activities",
+            ]
+            _NOMBRES_CAPEX = [
+                "Capital Expenditure",
+                "Capital Expenditures",
+                "Purchase Of Plant And Equipment",
+                "Purchases Of Property Plant And Equipment",
+            ]
+
+            _op    = next(
+                (cashflow_df.loc[n, _col] for n in _NOMBRES_OP
+                 if n in cashflow_df.index), None
+            )
+            _capex = next(
+                (cashflow_df.loc[n, _col] for n in _NOMBRES_CAPEX
+                 if n in cashflow_df.index), None
+            )
+
+            if _op is not None and _capex is not None:
+                _op_f, _capex_f = float(_op), float(_capex)
+                if not _math_fcf.isnan(_op_f) and not _math_fcf.isnan(_capex_f):
+                    fcf = _op_f + _capex_f   # capex viene negativo en yfinance
+                    _fcf_es_calculado = True
+
+        except Exception:
+            pass   # fcf sigue None -> caera a N/A abajo
+
+    if not fcf or not mcap or mcap <= 0:
+        return None, False
+
+    fcf_yield = fcf / mcap
+
+    # Dividend yield — mismo calculo que _sc_fcf_vs_div para consistencia
+    _tady = float(info.get("trailingAnnualDividendYield") or 0)
+    if _tady > 0:
+        div_yield = _tady
+    else:
+        _dpa    = info.get("trailingAnnualDividendRate", 0) or 0
+        _precio = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+        div_yield = float(_dpa) / float(_precio) if _precio > 0 else 0
+
+    if fcf_yield >= div_yield * 1.2:
+        _estado_fcf = "ok"
+    elif fcf_yield >= div_yield:
+        _estado_fcf = "warning"
+    elif fcf_yield > 0:
+        _estado_fcf = "ko"
+    else:
+        _estado_fcf = "ko"
+
+    return {
+        "estado":    _estado_fcf,
+        "fcf":       fcf,
+        "fcf_yield": fcf_yield,
+        "div_yield": div_yield,
+        "calculado": _fcf_es_calculado,
+    }, _fcf_es_calculado
+
 def _fmt_valor(valor, criterio_id: str) -> str:
     """Formatea el valor raw para mostrarlo en la tabla de resultados."""
     if valor is None:
@@ -11615,7 +11702,7 @@ def _fmt_valor(valor, criterio_id: str) -> str:
 
 # ── Evaluador de un criterio individual ────────────────────────────────────
 
-def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict:
+def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflow=None) -> dict:
     """Evalúa un criterio contra los datos del ticker. Devuelve {estado, valor_raw, valor_fmt, mensaje}."""
     cid      = crit.get("id", "")
     fuente   = crit.get("fuente", "yfinance_info")
@@ -11696,7 +11783,26 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         elif funcion == "calcular_posicion_52w":        valor = _sc_posicion_52w(info)
         elif funcion == "calcular_distancia_sma200":    valor = _sc_distancia_sma200(info)
         elif funcion == "verificar_tendencia_sma":      valor = _sc_tendencia_sma(info)
-        elif funcion == "calcular_fcf_yield_vs_div_yield": valor = _sc_fcf_vs_div(info)
+        elif funcion == "calcular_fcf_yield_vs_div_yield":
+            _fcf_res, _fcf_calc = _sc_fcf_con_cashflow(info, cashflow)
+            if _fcf_res is None:
+                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
+                        "mensaje": "No evaluable — FCF no disponible (freeCashflow ni flujos desde cashflow). Excluido del score.",
+                        "nombre": crit.get("nombre", "")}
+            _est_fcf = _fcf_res["estado"]
+            _suf_fcf = chr(42) if _fcf_calc else ""
+            _notas_fcf = {
+                "ok":      textos.get("ok", "El flujo de caja libre cubre holgadamente el dividendo — el pago esta respaldado por generacion real de caja."),
+                "warning": textos.get("warning", "El flujo de caja libre cubre el dividendo de forma justa, sin margen amplio. A vigilar si el capex aumenta."),
+                "ko":      textos.get("ko", "El flujo de caja libre es insuficiente para cubrir el dividendo — la empresa podria estar usando deuda o reservas."),
+            }
+            _msg_fcf = _notas_fcf.get(_est_fcf, "")
+            if _fcf_calc:
+                _msg_fcf += (" " + chr(9632) + " FCF calculado Flujo operativo" + chr(8722)
+                             + "Capex (freeCashflow no disponible en yfinance).")
+            return {"estado": _est_fcf, "valor_raw": _est_fcf,
+                    "valor_fmt": _est_fcf + _suf_fcf,
+                    "mensaje": _msg_fcf, "nombre": crit.get("nombre", "")}
         elif funcion == "calcular_market_cap_fmt":      valor = info.get("marketCap")
 
     elif fuente == "yfinance_historia":
@@ -11819,8 +11925,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         necesita_div  = any(c.get("fuente") == "yfinance_historia" and
                             "dividendo" in c.get("funcion","")
                             for c in criterios)
+        necesita_cashflow = any(c.get("id") == "free_cash_flow" for c in criterios)
         hist      = t.history(period="6mo")    if necesita_hist else None
         dividends = t.dividends                if necesita_div  else None
+        cashflow  = None
+        if necesita_cashflow:
+            try:
+                _cf = t.cashflow
+                cashflow = _cf if (_cf is not None and not _cf.empty) else None
+            except Exception:
+                cashflow = None
 
         # ── Filtro de elegibilidad para carteras de dividendo ───────────────
         # Si hay criterio dividend_yield pero la empresa no paga dividendo en
@@ -11864,7 +11978,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
 
         for crit in criterios:
             peso   = crit.get("peso", 1)
-            res    = _evaluar_criterio(crit, info, hist, dividends)
+            res    = _evaluar_criterio(crit, info, hist, dividends, cashflow)
             estado = res["estado"]
 
             if estado == "ok":          pts = peso * 2
