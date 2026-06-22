@@ -11653,9 +11653,11 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         if campo == "payoutRatio" and valor is None:
             _dpa = info.get("trailingAnnualDividendRate")
             _bpa = info.get("trailingEps")
-            if _dpa is not None and _bpa is not None and float(_bpa) > 0:
+            if _dpa is not None and _bpa is not None and float(_bpa) > 0 and float(_dpa) > 0:
                 valor = float(_dpa) / float(_bpa)
                 _valor_calculado = True
+            # DPA=0 en yfinance con dividendo real existente es fallo de datos, no payout cero
+            # -> dejar valor=None para que el criterio devuelva N/A en lugar de 0.0% falso
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -18471,7 +18473,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
         st.markdown("## 📚 Tutoriales")
         st.caption("Aprende qué significa cada indicador, cómo interpretar ratios por sector y qué lecciones dejan los grandes eventos de mercado.")
 
-        _edu_tabs = st.tabs(["📖 Glosario", "📊 Ratios por sector", "🎯 Guías por estrategia", "📉 Patrones históricos"])
+        _edu_tabs = st.tabs(["📖 Glosario", "📊 Ratios por sector", "🎯 Guías por estrategia", "📉 Patrones históricos", "📄 Documentos"])
 
         # ── SUB-TAB 1: GLOSARIO ──────────────────────────────────────────────
         with _edu_tabs[0]:
@@ -18652,6 +18654,47 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                     st.markdown(str(mag))
                             if _cd.get("leccion"):
                                 st.info(_cd["leccion"], icon="💡")
+
+        # ── SUB-TAB 5: DOCUMENTOS ────────────────────────────────────────
+        with _edu_tabs[4]:
+            st.markdown("### 📄 Documentos de referencia")
+            st.caption("Manuales generados desde la configuración real del screener. "
+                       "Siempre reflejan los criterios, umbrales y señales K activos en la versión actual.")
+            st.divider()
+
+            # ── Documento: Manual Screener Dividendos ────────────────────
+            import os as _os_doc
+            _doc_path = _os_doc.path.join(_os_doc.path.dirname(__file__),
+                                          "Screener_Dividendos_Manual_Reglas_v1.docx")
+            _doc_col1, _doc_col2 = st.columns([3, 1])
+            with _doc_col1:
+                st.markdown(
+                    "<div style='background:#eff6ff;border-left:4px solid #2563eb;"
+                    "border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:4px'>"
+                    "<div style='font-weight:700;color:#1e40af;font-size:1rem'>"
+                    "📊 Screener de Dividendos — Manual de Reglas</div>"
+                    "<div style='color:#374151;font-size:0.85rem;margin-top:4px'>"
+                    "Sistema de puntuación, 10 criterios con umbrales, señales K1-K7, "
+                    "reglas sectoriales (banca, REITs) y marcas de datos estimados.</div>"
+                    "<div style='color:#6b7280;font-size:0.75rem;margin-top:6px'>"
+                    "Versión 1.0 · Junio 2026 · Formato Word (.docx)</div>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            with _doc_col2:
+                if _os_doc.path.isfile(_doc_path):
+                    with open(_doc_path, "rb") as _df:
+                        st.download_button(
+                            label="⬇️ Descargar",
+                            data=_df.read(),
+                            file_name="Screener_Dividendos_Manual_Reglas_v1.docx",
+                            mime="application/vnd.openxmlformats-officedocument"
+                                  ".wordprocessingml.document",
+                            use_container_width=True,
+                            key="dl_screener_dividendos"
+                        )
+                else:
+                    st.warning("Documento no encontrado.", icon="⚠️")
 
     # ---- TAB ANALISIS IA ----
     if _on_ia:
