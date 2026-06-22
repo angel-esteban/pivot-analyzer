@@ -12417,8 +12417,10 @@ def _render_screening_resultados(job: dict):
 
     # Botón descarga PDF
     _indice_slug = (job.get('indice') or 'screening').replace(' ', '_')
-    _fecha_slug  = str(job.get('completed_at') or job.get('created_at') or '')[:10]
-    _pdf_filename = f"screening_{_indice_slug}_{_fecha_slug}.pdf"
+    _dt_job      = job.get('completed_at') or job.get('created_at')
+    _fecha_slug  = str(_dt_job)[:10].replace('-', '') if _dt_job else 'sin_fecha'
+    _hora_slug   = str(_dt_job)[11:16].replace(':', '') if _dt_job else ''
+    _pdf_filename = f"screening_{_indice_slug}_{_fecha_slug}_{_hora_slug}.pdf"
     try:
         _pdf_bytes = _generar_pdf_screening(job)
         st.download_button(
