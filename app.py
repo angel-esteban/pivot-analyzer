@@ -11942,7 +11942,13 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     try:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
         info = _yf_info_con_retry(ticker) or {}
-        nombre = (info.get("longName") or info.get("shortName") or ticker)[:60]
+        _TICKER_NOMBRES_FIJOS = {
+            "REE.MC": "Red Eléctrica de España, S.A.U.",  # ticker obsoleto — yfinance no resuelve nombre
+        }
+        _nombre_raw = (info.get("longName") or info.get("shortName") or "").strip()
+        if not _nombre_raw or _nombre_raw == ticker:
+            _nombre_raw = _TICKER_NOMBRES_FIJOS.get(ticker, ticker)
+        nombre = _nombre_raw[:60]
 
         # Historia solo si hay criterios que la necesitan
         necesita_hist = any(c.get("fuente") == "yfinance_historia" and
