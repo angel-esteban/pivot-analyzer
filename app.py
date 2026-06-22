@@ -12959,6 +12959,119 @@ def _render_screening_panel(tipo_key: str, uid: int):
                     st.error("No se pudo crear el job. Revisa la conexión con la base de datos.")
 
 
+def _render_screening_cartera(tipo_key: str, uid: int, tickers_cartera: dict):
+    """Screening sobre los valores ya en la cartera — sin selección de índice."""
+    _port_key = f"port_{tipo_key}"
+    _exp_open = st.session_state.pop(f"_sc_expander_open_{_port_key}", False)
+    with st.expander(
+        "🔍 Revisar posiciones de la cartera — analiza tus valores contra los criterios",
+        expanded=_exp_open,
+    ):
+        if not tickers_cartera:
+            st.info("Añade valores a la cartera para poder analizarlos.")
+            return
+
+        jobs       = _obtener_jobs_usuario(uid)
+        job_activo = next(
+            (j for j in jobs if j["tipo_cartera"] == _port_key
+             and j["estado"] in ("ejecutando", "completado")), None
+        )
+
+        if job_activo and job_activo["estado"] == "ejecutando":
+            total    = job_activo.get("total_tickers", 1) or 1
+            progreso = job_activo.get("progreso", 0)
+            pct      = min(progreso / total, 1.0)
+            st.info(
+                f"⏳ Análisis en curso: **{progreso}/{total}** valores procesados "
+                f"({pct*100:.0f}%). La página se actualiza automáticamente."
+            )
+            st.progress(pct)
+            st.button("🔄 Actualizar estado", key=f"sc_refresh_{_port_key}",
+                      on_click=lambda: None)
+            return
+
+        _pedir_nuevo = st.session_state.get(f"_sc_mostrar_form_{_port_key}", False)
+        _hist_jobs   = [j for j in jobs
+                        if j["tipo_cartera"] == _port_key
+                        and j["estado"] in ("completado", "fallido")]
+
+        if _hist_jobs and not _pedir_nuevo:
+            _col_sel, _col_btn = st.columns([4, 1])
+            with _col_sel:
+                _hist_labels = []
+                for _hj in _hist_jobs:
+                    _ts   = _hj.get("completed_at")
+                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
+                    _ico  = "✅" if _hj["estado"] == "completado" else "💥"
+                    _hist_labels.append(f"{_ico} Cartera — {_ts_s}")
+            _job_ver_id  = st.session_state.get("_sc_job_ver")
+            _default_idx = 0
+            if _job_ver_id:
+                for _ji, _hj in enumerate(_hist_jobs):
+                    if _hj["id"] == _job_ver_id:
+                        _default_idx = _ji
+                        break
+                if st.session_state.get("_sc_job_ver_tipo") == _port_key:
+                    st.session_state.pop("_sc_job_ver", None)
+                    st.session_state.pop("_sc_job_ver_tipo", None)
+                    st.session_state.pop(f"_sc_mostrar_resultado_{_port_key}", None)
+            _sel_idx = st.selectbox(
+                "Historial de screenings (últimos 10)",
+                options=range(len(_hist_labels)),
+                format_func=lambda i: _hist_labels[i],
+                index=_default_idx,
+                key=f"sc_hist_sel_{_port_key}",
+                label_visibility="collapsed",
+            )
+            with _col_btn:
+                if st.button("🔁 Nuevo", key=f"sc_nuevo_{_port_key}",
+                             use_container_width=True):
+                    st.session_state[f"_sc_mostrar_form_{_port_key}"] = True
+                    st.rerun()
+
+            _job_sel = _hist_jobs[_sel_idx]
+            if _job_sel["estado"] == "fallido":
+                st.error("❌ Este análisis falló. Lanza uno nuevo.")
+            else:
+                _job_full = _obtener_job_resultado(_job_sel["id"])
+                if _job_full:
+                    _render_screening_resultados(_job_full)
+                else:
+                    st.warning("No se pudieron cargar los resultados.")
+            return
+
+        if _hist_jobs:
+            if st.button("← Volver al historial", key=f"sc_back_{_port_key}"):
+                st.session_state[f"_sc_mostrar_form_{_port_key}"] = False
+                st.rerun()
+
+        n_tickers   = len(tickers_cartera)
+        _names_prev = list(tickers_cartera.keys())[:5]
+        _names_str  = ", ".join(_names_prev)
+        if n_tickers > 5:
+            _names_str += f" y {n_tickers - 5} más"
+        st.markdown(
+            f"Analiza los **{n_tickers} valores** de la cartera contra los criterios: "
+            f"*{_names_str}*."
+        )
+        lanzar = st.button(
+            "🚀 Analizar cartera", key=f"sc_lanzar_{_port_key}", type="primary",
+            help="Lanza el análisis sobre los valores actuales de la cartera"
+        )
+        if lanzar:
+            job_id = _lanzar_screening(uid, "cartera", tickers_cartera,
+                                       tipo_cartera=_port_key)
+            if job_id:
+                st.success(
+                    f"✅ Análisis lanzado ({n_tickers} valores). "
+                    f"Recibirás una notificación 🔔 cuando termine."
+                )
+                st.session_state[f"_sc_mostrar_form_{_port_key}"] = False
+                st.rerun()
+            else:
+                st.error("No se pudo crear el job. Revisa la conexión con la base de datos.")
+
+
 def pestaña_cartera():
     """Pestaña de gestión de carteras personales del usuario."""
     usuario = st.session_state["usuario"]
@@ -13171,8 +13284,11 @@ def pestaña_cartera():
                 st.info(f"No tienes carteras de {etiqueta} todavía. Pulsa **➕ Nueva** para crear una.")
 
             if not carteras:
-                # Sin carteras: mostrar screening igualmente para descubrir valores
-                _render_screening_panel(tipo_key, uid)
+                st.info(
+                    f"No tienes carteras de {etiqueta} todavía. "
+                    "Pulsa **➕ Nueva** para crear una. "
+                    "Para hacer screening sobre un índice, usa la sección **🎯 Estrategia**."
+                )
                 return
 
             # ── Línea 2 por cartera: "Cartera N: nombre" + icono eliminar ─
@@ -13634,8 +13750,14 @@ def pestaña_cartera():
                                     else:
                                         st.error("No se pudo guardar la posición.")
 
-            # ── Panel de Screening — al final, después de los valores ─────
-            _render_screening_panel(tipo_key, uid)
+            # ── Panel de revisión de posiciones (solo los valores en cartera) ─
+            _port_tickers = {}
+            for _c_scan in carteras:
+                for _pos_scan in obtener_posiciones_cartera(_c_scan["id"]):
+                    _nom_scan = _pos_scan.get("nombre") or _pos_scan["ticker"]
+                    _port_tickers[_nom_scan] = _pos_scan["ticker"]
+            if _port_tickers:
+                _render_screening_cartera(tipo_key, uid, _port_tickers)
 
     _render_tipo("dividendos",  tab_div)
     _render_tipo("crecimiento", tab_cre)
@@ -17541,6 +17663,23 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
     # ---- TAB ESTRATEGIA ----
     if _on_estrategia:
+        inicializar_tabla_screening()
+
+        # ── Screener de estrategia ──────────────────────────────────────
+        st.markdown("## 🎯 Screener de Estrategia")
+        st.caption(
+            "Analiza todos los valores de un índice contra los criterios de cada estrategia. "
+            "Selecciona la estrategia y el índice que quieres explorar."
+        )
+        _est_tab_div, _est_tab_swg = st.tabs(["💰 Dividendos", "⚡ Swing Trading"])
+        with _est_tab_div:
+            _render_screening_panel("dividendos", uid)
+        with _est_tab_swg:
+            _render_screening_panel("swing", uid)
+
+        st.divider()
+        st.markdown("## 📊 Análisis Individual")
+
         ed = st.session_state.get("estrategia_data")
 
         if not ed:
