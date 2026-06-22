@@ -11640,6 +11640,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         return {"estado": "manual", "valor_raw": None, "valor_fmt": "verificar",
                 "mensaje": textos.get("warning", "Verificar manualmente.")}
 
+    _valor_calculado = False   # marca para distinguir valor directo vs calculado
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
         valor = info.get(campo)
@@ -11648,6 +11649,13 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         # Normalizamos si el valor es > 1 y el criterio es de tipo ratio/pct
         if campo == "dividendYield" and isinstance(valor, (int, float)) and valor > 1:
             valor = valor / 100
+        # Fallback A: payoutRatio no disponible -> calcular DPA / BPA
+        if campo == "payoutRatio" and valor is None:
+            _dpa = info.get("trailingAnnualDividendRate")
+            _bpa = info.get("trailingEps")
+            if _dpa is not None and _bpa is not None and float(_bpa) > 0:
+                valor = float(_dpa) / float(_bpa)
+                _valor_calculado = True
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -11715,6 +11723,8 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
         estado = "ok" if valor in valores_ok else "warning"
 
     valor_fmt = _fmt_valor(valor, cid)
+    if _valor_calculado:
+        valor_fmt = valor_fmt + chr(42)   # asterisco: valor estimado, no directo de yfinance
     # ko_bajo / ko_alto: busca texto específico; si no existe, cae en "ko" genérico
     _estado_key = estado
     if estado in ("ko_bajo", "ko_alto") and estado not in textos:
@@ -11730,8 +11740,28 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None) -> dict
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
     _estado_final = "ko" if estado in ("ko_bajo", "ko_alto") else estado
+    if _valor_calculado:
+        mensaje = (
+            chr(9889) + " Estimado DPA/BPA (payoutRatio no disponible en yfinance). "
+            "Verificar contra informe anual. "
+        ) + mensaje
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
 
+
+
+def _yf_info_con_retry(ticker: str, max_intentos: int = 3) -> dict:
+    """Obtiene yfinance info con reintentos y backoff. Mitiga errores transitorios de red."""
+    import yfinance as yf, time
+    for _intento in range(max_intentos):
+        try:
+            _info = yf.Ticker(ticker).info
+            if _info and len(_info) > 5:   # dict con pocas claves = fallo sigiloso -> reintentar
+                return _info
+        except Exception:
+            pass
+        if _intento < max_intentos - 1:
+            time.sleep(2 + _intento)       # 2s, luego 3s
+    return {}
 
 # ── Evaluador de un ticker completo ─────────────────────────────────────────
 
@@ -11739,8 +11769,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     """Descarga datos y evalúa todos los criterios. Devuelve el resultado completo."""
     import yfinance as yf
     try:
-        t    = yf.Ticker(ticker)
-        info = t.info or {}
+        t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
+        info = _yf_info_con_retry(ticker) or {}
         nombre = (info.get("longName") or info.get("shortName") or ticker)[:60]
 
         # Historia solo si hay criterios que la necesitan
