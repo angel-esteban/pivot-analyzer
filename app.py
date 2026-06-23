@@ -11850,8 +11850,22 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
             valor = _sc_dividend_yield_ttm(info, dividends)
 
     if valor is None:
-        return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "—",
-                "mensaje": "No evaluable — dato no disponible. Excluido del score."}
+        # Mensaje específico por campo — diferencia "sin datos de yfinance" de "N/A por sector"
+        _campo_sin_dato = crit.get("campo", "") or crit.get("funcion", "")
+        _msg_sin_dato_map = {
+            "debtToEquity":        "Ratio Deuda/Equity no disponible en yfinance para este ticker. Verifica en el informe anual o en Bloomberg/Refinitiv.",
+            "enterpriseToEbitda":  "EV/EBITDA no disponible en yfinance. Puede ocurrir en empresas con EBITDA negativo o datos aún no actualizados.",
+            "payoutRatio":         "Payout no disponible y no reconstruible desde DPA/BPA. Verifica manualmente en el informe de resultados.",
+            "freeCashflow":        "Flujo de caja libre no disponible en yfinance para este ticker.",
+            "annualReportExpenseRatio": "TER no disponible en yfinance — consulta el folleto del fondo.",
+            "totalAssets":         "AUM no disponible en yfinance para este fondo.",
+        }
+        _msg_sin_dato = _msg_sin_dato_map.get(
+            _campo_sin_dato,
+            "Dato no disponible en yfinance para este ticker. Excluido del score."
+        )
+        return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (s.d.)",
+                "mensaje": _msg_sin_dato, "nombre": crit.get("nombre", "")}
 
     # ── Evaluar estado ──────────────────────────────────────────────────
     estado = "ko"
@@ -11959,8 +11973,9 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
         info = _yf_info_con_retry(ticker) or {}
         _TICKER_NOMBRES_FIJOS = {
-            # Fallback para tickers donde yfinance devuelve vacío o el propio ticker como nombre.
-            # REE.MC eliminado — sustituido por RED.MC (Redeia) que yfinance resuelve correctamente.
+            # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
+            # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
+            "RED.MC": "Redeia Corporación, S.A.",   # yfinance a veces devuelve vacío para RED.MC
         }
         _nombre_raw = (info.get("longName") or info.get("shortName") or "").strip()
         if not _nombre_raw or _nombre_raw == ticker:
@@ -12865,27 +12880,27 @@ def inicializar_tabla_indices_config():
                             (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
                         )
                     conn.commit()
-                    # ── Migración REE.MC → RED.MC ────────────────────────────────
-                    # ON CONFLICT DO NOTHING no actualiza entradas existentes.
-                    # Si la BD tiene el ticker obsoleto REE.MC, parcheamos el JSON.
-                    cur.execute("SELECT tickers FROM indices_config WHERE clave = 'ibex35'")
-                    _row = cur.fetchone()
-                    if _row:
-                        _tk = _row["tickers"]
-                        if isinstance(_tk, str):
-                            try: _tk = _json.loads(_tk)
-                            except Exception: _tk = {}
-                        if "REE.MC" in _tk.values():
-                            _tk_nuevo = {k: ("RED.MC" if v == "REE.MC" else v)
-                                         for k, v in _tk.items()}
-                            # Renombrar la clave también si era "Red Eléctrica"
-                            if "Red Eléctrica" in _tk_nuevo:
-                                _tk_nuevo["Redeia (RED)"] = _tk_nuevo.pop("Red Eléctrica")
-                            cur.execute(
-                                "UPDATE indices_config SET tickers = %s WHERE clave = 'ibex35'",
-                                (_json.dumps(_tk_nuevo, ensure_ascii=False),)
-                            )
-                            conn.commit()
+                # ── Migración REE.MC → RED.MC ────────────────────────────────
+                # Ejecuta SIEMPRE (idempotente): solo actúa si REE.MC sigue en BD.
+                # Estaba dentro del bloque "if tabla vacía" — bug: nunca corría
+                # en instancias con datos previos. Movida fuera del bloque.
+                cur.execute("SELECT tickers FROM indices_config WHERE clave = 'ibex35'")
+                _row = cur.fetchone()
+                if _row:
+                    _tk = _row["tickers"]
+                    if isinstance(_tk, str):
+                        try: _tk = _json.loads(_tk)
+                        except Exception: _tk = {}
+                    if "REE.MC" in _tk.values():
+                        _tk_nuevo = {k: ("RED.MC" if v == "REE.MC" else v)
+                                     for k, v in _tk.items()}
+                        if "Red Eléctrica" in _tk_nuevo:
+                            _tk_nuevo["Redeia (RED)"] = _tk_nuevo.pop("Red Eléctrica")
+                        cur.execute(
+                            "UPDATE indices_config SET tickers = %s WHERE clave = 'ibex35'",
+                            (_json.dumps(_tk_nuevo, ensure_ascii=False),)
+                        )
+                        conn.commit()
         finally:
             release_db_connection(conn)
     except Exception:
