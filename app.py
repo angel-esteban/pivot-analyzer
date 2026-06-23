@@ -11951,7 +11951,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
         info = _yf_info_con_retry(ticker) or {}
         _TICKER_NOMBRES_FIJOS = {
-            "REE.MC": "Red Eléctrica de España, S.A.U.",  # ticker obsoleto — yfinance no resuelve nombre
+            # Fallback para tickers donde yfinance devuelve vacío o el propio ticker como nombre.
+            # REE.MC eliminado — sustituido por RED.MC (Redeia) que yfinance resuelve correctamente.
         }
         _nombre_raw = (info.get("longName") or info.get("shortName") or "").strip()
         if not _nombre_raw or _nombre_raw == ticker:
@@ -12852,6 +12853,27 @@ def inicializar_tabla_indices_config():
                             (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
                         )
                     conn.commit()
+                    # ── Migración REE.MC → RED.MC ────────────────────────────────
+                    # ON CONFLICT DO NOTHING no actualiza entradas existentes.
+                    # Si la BD tiene el ticker obsoleto REE.MC, parcheamos el JSON.
+                    cur.execute("SELECT tickers FROM indices_config WHERE clave = 'ibex35'")
+                    _row = cur.fetchone()
+                    if _row:
+                        _tk = _row["tickers"]
+                        if isinstance(_tk, str):
+                            try: _tk = _json.loads(_tk)
+                            except Exception: _tk = {}
+                        if "REE.MC" in _tk.values():
+                            _tk_nuevo = {k: ("RED.MC" if v == "REE.MC" else v)
+                                         for k, v in _tk.items()}
+                            # Renombrar la clave también si era "Red Eléctrica"
+                            if "Red Eléctrica" in _tk_nuevo:
+                                _tk_nuevo["Redeia (RED)"] = _tk_nuevo.pop("Red Eléctrica")
+                            cur.execute(
+                                "UPDATE indices_config SET tickers = %s WHERE clave = 'ibex35'",
+                                (_json.dumps(_tk_nuevo, ensure_ascii=False),)
+                            )
+                            conn.commit()
         finally:
             release_db_connection(conn)
     except Exception:
