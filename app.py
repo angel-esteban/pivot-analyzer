@@ -12880,27 +12880,20 @@ def inicializar_tabla_indices_config():
                             (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
                         )
                     conn.commit()
-                # ── Migración REE.MC → RED.MC ────────────────────────────────
-                # Ejecuta SIEMPRE (idempotente): solo actúa si REE.MC sigue en BD.
-                # Estaba dentro del bloque "if tabla vacía" — bug: nunca corría
-                # en instancias con datos previos. Movida fuera del bloque.
-                cur.execute("SELECT tickers FROM indices_config WHERE clave = 'ibex35'")
-                _row = cur.fetchone()
-                if _row:
-                    _tk = _row[0]  # cursor sin RealDictCursor → tupla, no dict
-                    if isinstance(_tk, str):
-                        try: _tk = _json.loads(_tk)
-                        except Exception: _tk = {}
-                    if "REE.MC" in _tk.values():
-                        _tk_nuevo = {k: ("RED.MC" if v == "REE.MC" else v)
-                                     for k, v in _tk.items()}
-                        if "Red Eléctrica" in _tk_nuevo:
-                            _tk_nuevo["Redeia (RED)"] = _tk_nuevo.pop("Red Eléctrica")
-                        cur.execute(
-                            "UPDATE indices_config SET tickers = %s WHERE clave = 'ibex35'",
-                            (_json.dumps(_tk_nuevo, ensure_ascii=False),)
-                        )
-                        conn.commit()
+                # ── Migración REE.MC → RED.MC (SQL nativo — sin parsing Python) ──
+                # Usa replace() sobre el texto JSONB directamente.
+                # Idempotente: WHERE filtra si REE.MC ya no está.
+                # No depende del tipo de cursor ni de json.loads en Python.
+                cur.execute("""
+                    UPDATE indices_config
+                    SET tickers = replace(
+                                    replace(tickers::text, '"REE.MC"', '"RED.MC"'),
+                                    '"Red El\u00e9ctrica"', '"Redeia (RED)"'
+                                  )::jsonb
+                    WHERE clave = 'ibex35'
+                      AND tickers::text LIKE '%%REE.MC%%'
+                """)
+                conn.commit()
         finally:
             release_db_connection(conn)
     except Exception:
