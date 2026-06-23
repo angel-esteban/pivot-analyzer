@@ -12018,22 +12018,21 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     import yfinance as yf
     try:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
-        # Estructural + fundamental desde Neon (capa de persistencia); respaldo en vivo
-        # si el dato falta o está caducado. El nivel mercado se sigue obteniendo en vivo.
+        # info combinado: yfinance en vivo aporta el nivel MERCADO (precio, volumen,
+        # dividendRate, floatShares...) y Neon aporta el nivel fundamental/estructural
+        # ya VALIDADO (manda sobre el vivo en esos campos). Si Neon falla, queda el vivo;
+        # si el vivo falla, los fundamentales aguantan desde Neon.
+        _info_live = _yf_info_con_retry(ticker) or {}
         try:
             import repositorio as _repo
             _conn = get_db_connection()
             try:
-                info, _frescura = _repo.componer_info(ticker, _conn)
+                _info_neon, _frescura = _repo.componer_info(ticker, _conn)
             finally:
                 release_db_connection(_conn)
-            if (not info
-                    or _repo.necesita_live(_frescura, "estructural")
-                    or _repo.necesita_live(_frescura, "fundamental")):
-                _info_live = _yf_info_con_retry(ticker) or {}
-                info = {**_info_live, **info}        # Neon manda; live rellena huecos
+            info = {**_info_live, **_info_neon}       # vivo = mercado; Neon = fundamental (manda)
         except Exception:
-            info = _yf_info_con_retry(ticker) or {}  # fallback robusto: comportamiento previo
+            info = _info_live                         # fallback robusto: comportamiento previo
         _TICKER_NOMBRES_FIJOS = {
             # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
             # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
@@ -14532,7 +14531,7 @@ def pantalla_analisis():
         "📚 Tutoriales",
     ]
     if es_admin:
-        _nav_items.append("⚙️ Usuarios")
+        _nav_items.append("⚙️ Administración")
     _nav_items.append("📖 Ayuda")
     tabs_list = _nav_items  # compatibilidad con código existente
 
@@ -14587,7 +14586,7 @@ def pantalla_analisis():
     _on_cartera     = _nav_sel == "📁 Cartera"
     _on_pp          = _nav_sel == "🧭 ¿Por dónde empiezo?"
     _on_edu         = _nav_sel == "📚 Tutoriales"
-    _on_usuarios    = _nav_sel == "⚙️ Usuarios"
+    _on_usuarios    = _nav_sel == "⚙️ Administración"
     _on_ayuda       = _nav_sel == "📖 Ayuda"
     tab_perfil = None  # Mi Perfil es ahora un diálogo, no un tab
 
