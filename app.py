@@ -11560,13 +11560,15 @@ def _sc_anos_reduccion_div(dividends) -> int:
 
 
 def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
-    """Yield real = suma de dividendos pagados en los ultimos 14 meses / precio actual.
-    14 meses (no 12) para capturar pagos anuales que caigan en la frontera del año.
-    Mas fiable que dividendYield de yfinance para acciones .MC, donde ese campo
-    devuelve valores inconsistentes (decimal fraccion vs decimal porcentaje).
-    Fallback: trailingAnnualDividendYield > trailingAnnualDividendRate/precio > dividendRate/precio.
+    """Yield = suma de dividendos del ULTIMO AÑO NATURAL COMPLETO / precio actual.
+
+    Año natural completo = el año anterior al actual. El año en curso se ignora
+    porque está incompleto (sumarlo subestimaría el yield). Esto evita el problema
+    de la ventana móvil, que infracontaba dividendos fraccionados en valores .MC.
+    Fallback (solo si no hay serie de dividendos): trailingAnnualDividendYield >
+    trailingAnnualDividendRate/precio > dividendRate/precio.
     """
-    import pandas as pd
+    import datetime as _dt
     try:
         precio = (info.get("regularMarketPrice") or
                   info.get("currentPrice") or
@@ -11575,18 +11577,16 @@ def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
             return None
         precio = float(precio)
 
-        # Opcion 1: suma de dividendos reales de los ultimos 14 meses
-        # 14 meses = buffer de 2 meses para pagos anuales en frontera de ano
+        # Opcion 1: dividendos pagados durante el ultimo año natural completo
         if dividends is not None and len(dividends) > 0:
-            cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=14)
+            anio_completo = _dt.datetime.now(_dt.timezone.utc).year - 1
             try:
-                recent = dividends[dividends.index.tz_convert("UTC") >= cutoff]
+                anios = dividends.index.tz_convert("UTC").year
             except Exception:
-                recent = dividends[dividends.index >= cutoff]
-            if len(recent) > 0:
-                total_ttm = float(recent.sum())
-                if total_ttm > 0:
-                    return round(total_ttm / precio, 4)
+                anios = dividends.index.year
+            total_anio = float(dividends[anios == anio_completo].sum())
+            if total_anio > 0:
+                return round(total_anio / precio, 4)
 
         # Opcion 2: trailingAnnualDividendYield (ya es fraccion decimal)
         tady = info.get("trailingAnnualDividendYield")
