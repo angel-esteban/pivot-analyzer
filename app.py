@@ -12018,22 +12018,48 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     import yfinance as yf
     try:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
-        # Identidad de valores: cuando yfinance responde, SUS valores mandan, de modo que
-        # cada criterio da el mismo valor que antes del cambio de arquitectura. Neon solo
-        # RELLENA los campos que yfinance no devuelva (resiliencia ante fallos/rate limiting);
-        # nunca sobrescribe un dato vivo. El nivel mercado siempre va en vivo.
+        # Selección de datos por CALIDAD (nivel 0 rangos + nivel 1 coherencia):
+        #  · dato en vivo válido             -> manda el vivo (idéntico a antes)
+        #  · vivo no válido pero BBDD válido  -> se usa el de Neon (validado en ingesta)
+        #  · sin valor fiable en ninguna      -> se excluye y dispara K8 (informativo)
+        # El nivel mercado (precio, volumen, dividendRate...) va siempre en vivo.
         _info_live = _yf_info_con_retry(ticker) or {}
+        _campos_sin_calidad = []
         try:
             import repositorio as _repo
+            import validador_nivel0 as _v0
+            import validador_coherencia as _vcoh
             _conn = get_db_connection()
             try:
-                _info_neon, _frescura = _repo.componer_info(ticker, _conn)
+                _info_neon, _frescura, _db_invalidos = _repo.componer_info(ticker, _conn)
             finally:
                 release_db_connection(_conn)
-            _live_no_nulos = {k: v for k, v in _info_live.items() if v is not None}
-            info = {**_info_neon, **_live_no_nulos}    # vivo manda; Neon solo rellena huecos
+            # Campos en vivo NO fiables: fallan rango (nivel 0) o coherencia (nivel 1)
+            _specs_q = _v0.cargar_specs_desde_criteria("criteria.json")
+            _live_inval = set()
+            for _k, _v in _info_live.items():
+                _sp = _specs_q.get(_k)
+                if _sp is not None and _v0.validar_campo(_v, _sp).estado is _v0.Estado.SOSPECHOSO:
+                    _live_inval.add(_k)
+            _coh2campo = {"payout": "payoutRatio", "market_cap": "marketCap",
+                          "ev_ebitda": "enterpriseToEbitda", "free_float": "free_float",
+                          "yield": "dividend_yield"}
+            for _chk in _vcoh.validar_coherencia(_info_live).detalle:
+                _live_inval.add(_coh2campo.get(_chk, _chk))
+            # Combinar por campo según calidad
+            info = {}
+            for _k in set(_info_live) | set(_info_neon):
+                _lv = _info_live.get(_k)
+                _live_ok = _lv is not None and _k not in _live_inval
+                _db_ok   = (_k in _info_neon) and (_info_neon.get(_k) is not None) and (_k not in _db_invalidos)
+                if _live_ok:
+                    info[_k] = _lv
+                elif _db_ok:
+                    info[_k] = _info_neon[_k]            # vivo malo -> dato validado de Neon
+                elif (_lv is not None) or (_k in _info_neon):
+                    _campos_sin_calidad.append(_k)       # sin valor fiable en ninguna fuente
         except Exception:
-            info = _info_live                         # fallback robusto: comportamiento previo
+            info = _info_live                            # fallback robusto: comportamiento previo
         _TICKER_NOMBRES_FIJOS = {
             # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
             # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
@@ -12349,6 +12375,25 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"comprime el margen de seguridad sobre el dividendo. "
                               f"Señal informativa: no modifica el veredicto.",
                 })
+
+        # K8 — Dato sin calidad fiable en NINGUNA fuente (yfinance ni BBDD). Aviso informativo.
+        # Se dispara cuando un campo era inválido en vivo (rango o coherencia) y la BBDD
+        # tampoco tiene un valor fiable (lo marcó la ingesta o no lo tiene). Aplica a todas
+        # las carteras, por eso va fuera del bloque de dividendos.
+        if _campos_sin_calidad:
+            _nombres_k8 = {"payoutRatio": "payout", "debtToEquity": "deuda/equity",
+                           "enterpriseToEbitda": "EV/EBITDA", "marketCap": "market cap",
+                           "beta": "beta", "returnOnEquity": "ROE", "grossMargins": "margen bruto",
+                           "operatingMargins": "margen operativo", "revenueGrowth": "crec. ingresos",
+                           "earningsGrowth": "crec. beneficio", "pegRatio": "PEG", "trailingEps": "BPA"}
+            _lst_k8 = ", ".join(_nombres_k8.get(c, c) for c in _campos_sin_calidad)
+            killshots.append({
+                "tipo":   "aviso",
+                "codigo": "K8",
+                "razon":  f"Dato sin calidad fiable en ninguna fuente (yfinance ni BBDD): {_lst_k8}. "
+                          f"Esos criterios se excluyen por falta de un valor de confianza. "
+                          f"Señal informativa: no modifica el veredicto.",
+            })
 
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44

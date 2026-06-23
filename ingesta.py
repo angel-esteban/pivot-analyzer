@@ -1,18 +1,14 @@
 """
 ingesta.py — Capa de ingesta de datos del screener.
 
-Flujo:  yfinance ─▶ validación nivel 0 ─▶ UPSERT a Neon ─▶ registro en ingesta_log
+Flujo:  yfinance ─▶ validación nivel 0 (rangos, ausente≠0) ─▶ validación nivel 1
+        (coherencia entre campos) ─▶ UPSERT a Neon ─▶ registro en ingesta_log.
 
-Tres entradas según nivel de dato (ver DISENO_Persistencia_Datos_Screener.md):
-  - ingerir_estructural(...)   -> tabla `instrumento`         (refresco manual)
-  - ingerir_fundamental(...)   -> tablas `fundamental` + `dividendo_pago` (cron+manual)
-  - (el nivel mercado NO se ingiere: se consulta en vivo desde el screener)
+Cada campo no fiable queda en `incidencias` (jsonb {campo: motivo}) de la fila, y
+`valido` resume si hubo alguna. El screener lee esas incidencias para decidir, campo
+a campo, si fiarse del dato de la BBDD.
 
-Principios de diseño (alineados con la revisión de arquitectura):
-  - Desacoplado de Streamlit: la conexión a BD y la fuente de datos se INYECTAN.
-  - Identificadores SQL literales (constantes del módulo); valores parametrizados.
-  - Reintentos ante fallos de red de yfinance.
-  - Todo dato pasa por el validador de nivel 0 antes de persistirse.
+Desacoplado de Streamlit: conexión y fuente de datos inyectables.
 """
 
 from __future__ import annotations
@@ -25,14 +21,22 @@ from typing import Any, Callable, Iterable
 
 from validador_nivel0 import (Estado, FieldSpec, cargar_specs_desde_criteria,
                               validar_campo)
+from validador_coherencia import validar_coherencia
+
+# Mapea el nombre del check de coherencia a la clave de campo (alineada con spec_key)
+COHERENCIA_A_CAMPO = {
+    "payout":     "payoutRatio",
+    "market_cap": "marketCap",
+    "ev_ebitda":  "enterpriseToEbitda",
+    "free_float": "free_float",
+    "yield":      "dividend_yield",
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fuente de datos (inyectable). La de producción usa yfinance con reintentos.
 # ─────────────────────────────────────────────────────────────────────────────
 class FuenteYFinance:
-    """Fuente real. Importa yfinance de forma perezosa (no se necesita para test)."""
-
     def __init__(self, reintentos: int = 3, espera: float = 1.5):
         self.reintentos = reintentos
         self.espera = espera
@@ -43,12 +47,12 @@ class FuenteYFinance:
 
     def info(self, ticker: str) -> dict[str, Any]:
         ult = None
-        for intento in range(self.reintentos):
+        for _ in range(self.reintentos):
             try:
                 info = self._ticker(ticker).info
                 if info and len(info) > 3:
                     return info
-            except Exception as e:        # noqa: BLE001 — se reintenta y se propaga al final
+            except Exception as e:        # noqa: BLE001
                 ult = e
             time.sleep(self.espera)
         if ult:
@@ -56,7 +60,6 @@ class FuenteYFinance:
         return {}
 
     def dividendos(self, ticker: str) -> list[tuple[Any, float]]:
-        """Devuelve [(fecha_ex, importe), ...]. Convierte la Serie de pandas a lista."""
         for _ in range(self.reintentos):
             try:
                 serie = self._ticker(ticker).dividends
@@ -70,7 +73,7 @@ class FuenteYFinance:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helpers de cálculo (autónomos: no dependen de pandas ni de app.py)
+# Helpers de cálculo (autónomos)
 # ─────────────────────────────────────────────────────────────────────────────
 def _fcf_yield(info: dict, _div) -> float | None:
     fcf, mcap = info.get("freeCashflow"), info.get("marketCap")
@@ -83,7 +86,6 @@ def _fcf_yield(info: dict, _div) -> float | None:
 
 
 def _anos_div_consecutivos(_info, dividendos: list[tuple[Any, float]]) -> int | None:
-    """Años consecutivos con pago, contando hacia atrás desde el último año con pago."""
     if not dividendos:
         return None
     anos = sorted({getattr(f, "year", None) or int(str(f)[:4])
@@ -101,7 +103,6 @@ def _anos_div_consecutivos(_info, dividendos: list[tuple[Any, float]]) -> int | 
 
 
 def _cagr_dividendo_5y(_info, dividendos: list[tuple[Any, float]]) -> float | None:
-    """CAGR del dividendo anual agregando los últimos 5 años completos disponibles."""
     if not dividendos:
         return None
     por_ano: dict[int, float] = {}
@@ -111,7 +112,7 @@ def _cagr_dividendo_5y(_info, dividendos: list[tuple[Any, float]]) -> float | No
     anos = sorted(por_ano)
     if len(anos) < 2:
         return None
-    ventana = anos[-6:-1] if len(anos) >= 6 else anos[:-1]  # excluye el año en curso (incompleto)
+    ventana = anos[-6:-1] if len(anos) >= 6 else anos[:-1]
     if len(ventana) < 2:
         ventana = anos
     ini, fin = por_ano[ventana[0]], por_ano[ventana[-1]]
@@ -130,7 +131,7 @@ def _es_ucits(info: dict, _div):
     if (info.get("quoteType") or "").upper() != "ETF":
         return None
     nombre = (info.get("longName") or info.get("shortName") or "").upper()
-    return "UCITS" in nombre or None     # None si no se puede afirmar (ausente, no False)
+    return "UCITS" in nombre or None
 
 
 def _free_float_fraccion(info: dict, _div) -> float | None:
@@ -159,8 +160,6 @@ def _campo(clave: str) -> Callable:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Mapeo de columnas. (col_db, spec_key|None, extractor, transform|None)
-#   spec_key None  -> se almacena tal cual, sin validación de nivel 0 (texto descriptivo)
-#   transform      -> se aplica al valor saneado antes de almacenar
 # ─────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class Mapa:
@@ -171,18 +170,18 @@ class Mapa:
 
 
 MAPA_ESTRUCTURAL: list[Mapa] = [
-    Mapa("nombre",         None,                     lambda i, d: i.get("longName") or i.get("shortName")),
-    Mapa("isin",           None,                     _campo("isin")),
-    Mapa("sector",         "sector",                 _campo("sector")),
-    Mapa("industria",      None,                     _campo("industry")),
-    Mapa("pais",           None,                     _campo("country")),
-    Mapa("divisa",         None,                     _campo("currency")),
-    Mapa("mercado",        None,                     _campo("exchange")),
-    Mapa("tipo_activo",    None,                     _tipo_activo),
-    Mapa("free_float_pct", "free_float",             _free_float_fraccion, lambda v: round(v * 100, 2)),
-    Mapa("es_ucits",       "estructura_ucits",       _es_ucits),
+    Mapa("nombre",         None,                       lambda i, d: i.get("longName") or i.get("shortName")),
+    Mapa("isin",           None,                       _campo("isin")),
+    Mapa("sector",         "sector",                   _campo("sector")),
+    Mapa("industria",      None,                       _campo("industry")),
+    Mapa("pais",           None,                       _campo("country")),
+    Mapa("divisa",         None,                       _campo("currency")),
+    Mapa("mercado",        None,                       _campo("exchange")),
+    Mapa("tipo_activo",    None,                       _tipo_activo),
+    Mapa("free_float_pct", "free_float",               _free_float_fraccion, lambda v: round(v * 100, 2)),
+    Mapa("es_ucits",       "estructura_ucits",         _es_ucits),
     Mapa("ter",            "annualReportExpenseRatio", _campo("annualReportExpenseRatio")),
-    Mapa("aum",            "totalAssets",            _campo("totalAssets")),
+    Mapa("aum",            "totalAssets",              _campo("totalAssets")),
 ]
 
 MAPA_FUNDAMENTAL: list[Mapa] = [
@@ -204,8 +203,11 @@ MAPA_FUNDAMENTAL: list[Mapa] = [
     Mapa("fecha_resultados",  None,                  _fecha_resultados),
 ]
 
-_COLS_INSTRUMENTO = [m.col for m in MAPA_ESTRUCTURAL] + ["ticker", "fuente", "valido", "motivo_invalidez"]
-_COLS_FUNDAMENTAL = [m.col for m in MAPA_FUNDAMENTAL] + ["ticker", "fuente", "valido", "motivo_invalidez"]
+_COLS_INSTRUMENTO = ([m.col for m in MAPA_ESTRUCTURAL] +
+                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias"])
+_COLS_FUNDAMENTAL = ([m.col for m in MAPA_FUNDAMENTAL] +
+                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias"])
+_COLS_JSONB = {"incidencias"}
 
 _SPEC_PERMISIVA = FieldSpec("?", tipo_valor="ratio", rango_valido=None)
 
@@ -221,20 +223,24 @@ class ResumenIngesta:
     ok: int = 0
     fallidos: int = 0
     detalle_fallidos: dict[str, str] = field(default_factory=dict)
-    filas: list[dict] = field(default_factory=list)   # filas que se (intentaron) upsertar
+    incidencias: dict[str, dict] = field(default_factory=dict)   # {ticker: {campo: motivo}}
+    filas: list[dict] = field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Construcción de fila validada
+# Construcción de fila validada (nivel 0 + nivel 1 coherencia)
 # ─────────────────────────────────────────────────────────────────────────────
 def _construir_fila(ticker: str, info: dict, dividendos: list,
-                    mapa: list[Mapa], specs: dict[str, FieldSpec]) -> tuple[dict, bool, str | None]:
+                    mapa: list[Mapa], specs: dict[str, FieldSpec]
+                    ) -> tuple[dict, dict[str, str]]:
+    """Devuelve (fila, incidencias{campo: motivo}). incidencias vacío = todo válido."""
     fila: dict[str, Any] = {}
-    motivos: list[str] = []
-    valido = True
+    incidencias: dict[str, str] = {}
+
+    # Nivel 0: rangos + ausente≠0, por campo
     for m in mapa:
         crudo = m.extractor(info, dividendos)
-        if m.spec_key is None:                       # descriptivo: sin nivel 0
+        if m.spec_key is None:
             fila[m.col] = crudo.strip() if isinstance(crudo, str) else crudo
             continue
         spec = specs.get(m.spec_key) or _SPEC_PERMISIVA
@@ -244,17 +250,27 @@ def _construir_fila(ticker: str, info: dict, dividendos: list,
             val = m.transform(val)
         fila[m.col] = val
         if rc.estado is Estado.SOSPECHOSO:
-            valido = False
-            motivos.append(f"{m.col}: {rc.motivo}")
-    return fila, valido, ("; ".join(motivos) or None)
+            incidencias[m.spec_key] = f"nivel0: {rc.motivo}"
+
+    # Nivel 1: coherencia entre campos (no pisa una incidencia de nivel 0)
+    coh = validar_coherencia(info)
+    for check, msg in coh.detalle.items():
+        campo = COHERENCIA_A_CAMPO.get(check, check)
+        incidencias.setdefault(campo, f"coherencia: {msg}")
+
+    return fila, incidencias
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SQL (identificadores literales, valores parametrizados)
+# SQL (identificadores literales, valores parametrizados; jsonb con ::jsonb)
 # ─────────────────────────────────────────────────────────────────────────────
+def _ph(col: str) -> str:
+    return "%s::jsonb" if col in _COLS_JSONB else "%s"
+
+
 def _sql_upsert(tabla: str, columnas: list[str], conflicto: list[str]) -> str:
     cols = ", ".join(columnas)
-    ph = ", ".join(["%s"] * len(columnas))
+    ph = ", ".join(_ph(c) for c in columnas)
     sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in columnas if c not in conflicto)
     return (f"INSERT INTO {tabla} ({cols}) VALUES ({ph}) "
             f"ON CONFLICT ({', '.join(conflicto)}) DO UPDATE SET {sets}")
@@ -265,7 +281,7 @@ def _upsert(cur, tabla: str, columnas: list[str], conflicto: list[str], fila: di
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Registro de auditoría (ingesta_log)
+# Registro de auditoría
 # ─────────────────────────────────────────────────────────────────────────────
 def _abrir_log(cur, nivel: str, disparado_por: str, fuente: str) -> int:
     cur.execute(
@@ -275,10 +291,11 @@ def _abrir_log(cur, nivel: str, disparado_por: str, fuente: str) -> int:
 
 
 def _cerrar_log(cur, log_id: int, r: ResumenIngesta) -> None:
+    detalle = {"fallidos": r.detalle_fallidos, "incidencias": r.incidencias}
     cur.execute(
         "UPDATE ingesta_log SET fin = now(), tickers_procesados = %s, tickers_ok = %s, "
         "tickers_fallidos = %s, detalle_fallidos = %s::jsonb WHERE id = %s",
-        [r.procesados, r.ok, r.fallidos, json.dumps(r.detalle_fallidos, ensure_ascii=False), log_id])
+        [r.procesados, r.ok, r.fallidos, json.dumps(detalle, ensure_ascii=False, default=str), log_id])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -305,9 +322,16 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                 raise ValueError("yfinance no devolvió datos (.info vacío)")
             dividendos = fuente.dividendos(ticker) if (con_dividendos or nivel == "fundamental") else []
 
-            fila, valido, motivo = _construir_fila(ticker, info, dividendos, mapa, specs)
-            fila.update(ticker=ticker, fuente=nombre_fuente, valido=valido, motivo_invalidez=motivo)
+            fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs)
+            fila.update(
+                ticker=ticker, fuente=nombre_fuente,
+                valido=not incidencias,
+                motivo_invalidez=("; ".join(f"{k}: {v}" for k, v in incidencias.items()) or None),
+                incidencias=(json.dumps(incidencias, ensure_ascii=False) if incidencias else None),
+            )
             r.filas.append(fila)
+            if incidencias:
+                r.incidencias[ticker] = incidencias
 
             if not dry_run:
                 _upsert(cur, tabla, columnas, ["ticker"], fila)
@@ -318,7 +342,7 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                                 {"ticker": ticker, "fecha_ex": fecha_ex,
                                  "importe": importe, "fuente": nombre_fuente})
             r.ok += 1
-        except Exception as e:               # noqa: BLE001 — un ticker no debe tumbar el lote
+        except Exception as e:               # noqa: BLE001
             r.fallidos += 1
             r.detalle_fallidos[ticker] = str(e)
 

@@ -17,6 +17,7 @@ Nota de alcance: en esta versión se sirven desde Neon los campos directos de
 from __future__ import annotations
 
 import datetime
+import json
 from typing import Any
 
 # Columna en BD -> clave de yfinance que esperan los criterios de criteria.json
@@ -87,15 +88,19 @@ def _estado_frescura(actualizado_en, tolerancia_dias: int, ahora, valido) -> str
 
 
 def componer_info(ticker: str, conn, ahora: datetime.datetime | None = None
-                  ) -> tuple[dict[str, Any], dict[str, dict]]:
+                  ) -> tuple[dict[str, Any], dict[str, dict], set[str]]:
     """
-    Devuelve (info, frescura):
+    Devuelve (info, frescura, db_invalidos):
       - info: dict con claves de yfinance pobladas desde Neon (solo valores no nulos)
       - frescura: {nivel: {estado, actualizado_en, valido}} para cada nivel persistido
+      - db_invalidos: set de campos (clave yfinance / id de criterio) que la BBDD marcó
+        como NO fiables en la ingesta (columna `incidencias`). El screener lo usa para
+        decidir si un campo de Neon es de fiar.
     """
     ahora = ahora or _ahora()
     info: dict[str, Any] = {}
     frescura: dict[str, dict] = {}
+    db_invalidos: set[str] = set()
 
     for tabla, mapa, nivel in (("instrumento", MAP_INSTRUMENTO, "estructural"),
                                ("fundamental", MAP_FUNDAMENTAL, "fundamental")):
@@ -107,13 +112,20 @@ def componer_info(ticker: str, conn, ahora: datetime.datetime | None = None
             v = fila.get(col)
             if v is not None:
                 info[yk] = v
+        inc = fila.get("incidencias") or {}
+        if isinstance(inc, str):
+            try:
+                inc = json.loads(inc)
+            except Exception:
+                inc = {}
+        db_invalidos.update(inc.keys())
         frescura[nivel] = {
             "estado": _estado_frescura(fila.get("actualizado_en"),
                                        TOLERANCIA_DIAS[nivel], ahora, fila.get("valido")),
             "actualizado_en": fila.get("actualizado_en"),
             "valido": fila.get("valido"),
         }
-    return info, frescura
+    return info, frescura, db_invalidos
 
 
 def necesita_live(frescura: dict, nivel: str) -> bool:
