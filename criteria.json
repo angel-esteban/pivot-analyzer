@@ -293,7 +293,7 @@
           "umbral_warning": 22.0,
           "peso": 1,
           "textos": {
-            "guia": "**Qué es.** EV/EBITDA = Enterprise Value ÷ EBITDA. EV = capitalización bursátil + deuda neta − caja. EBITDA = resultado operativo antes de amortizaciones — proxy del flujo operativo bruto.\n\n**Cómo se calcula.** Campo `enterpriseToEbitda` directo de yfinance.\n\n**Umbrales.** OK <15× · ~OK 15–22× · KO >22×. No es criterio eliminatorio: reduce el score pero no veta la empresa.\n\n**Por qué importa en dividendos.** El precio de entrada condiciona el yield efectivo. A 25× EBITDA con un 4% de yield hay poco margen de seguridad si los resultados decepcionan. El umbral KO en 22× es deliberadamente generoso: utilities y telecomunicaciones —sectores naturales de cartera de rentas— cotizan habitualmente entre 8× y 14×; superar 22× implica una prima de crecimiento incompatible con un yield atractivo hoy.\n\n**Excepciones.** N/A para Real Estate (SOCIMIs, REITs) y Banca/Seguros: en esos modelos de negocio el EBITDA no es la métrica de valoración relevante (se usa NAV, FFO o P/BV respectivamente). Excluido del score en esos sectores.",
+            "guia": "**Qué es.** EV/EBITDA = Enterprise Value ÷ EBITDA. EV = capitalización bursátil + deuda neta − caja. EBITDA = resultado operativo antes de amortizaciones — proxy del flujo operativo bruto.\n\n**Cómo se calcula.** Campo `enterpriseToEbitda` directo de yfinance.\n\n**Umbrales.** OK <15× · ~OK 15–22× · KO >22×. No es criterio eliminatorio: reduce el score pero no veta la empresa.\n\n**Por qué importa en dividendos.** El precio de entrada condiciona el yield efectivo. A 25× EBITDA con un 4% de yield hay poco margen de seguridad si los resultados decepcionan. El umbral KO en 22× es deliberadamente generoso: utilities y telecomunicaciones —sectores naturales de cartera de rentas— cotizan habitualmente entre 8× y 14×; superar 22× implica una prima de crecimiento incompatible con un yield atractivo hoy.\n\n**Excepciones.** N/A para REITs/SOCIMIs reales (Colonial, Merlin — valorados por NAV y FFO) y Banca/Seguros (P/BV). Infraestructura inmobiliaria como torres de telecomunicaciones (Cellnex) NO está excluida: EV/EBITDA es la métrica primaria que usan los analistas del sector. La distinción se hace por sub-sector: `industry` con prefijo 'REIT' → excluido; resto de Real Estate → evaluado.",
             "ok": "EV/EBITDA {valor:.1f}× — valoración razonable. Margen de seguridad compatible con cartera de rentas.",
             "warning": "EV/EBITDA {valor:.1f}× — valoración algo exigente. El yield de entrada está probablemente comprimido y el margen de seguridad se reduce.",
             "ko": "EV/EBITDA {valor:.1f}× — valoración incompatible con un yield atractivo en horizonte corto. Prima de crecimiento elevada para un perfil de rentas."
@@ -826,7 +826,39 @@
             "guia": "**Qué es.** Estructura legal obligatoria para ETFs accesibles al inversor minorista español. UCITS (Undertakings for Collective Investment in Transferable Securities) es la denominación europea equivalente al fondo de inversión registrado bajo normativa de la UE.\n\n**Por qué importa.** La normativa PRIIPs prohíbe al minorista español comprar ETFs domiciliados en EE.UU. (la mayoría de los ETFs populares de Vanguard, BlackRock y State Street en su versión americana) sin KID europeo. El KID (Key Information Document) es obligatorio bajo PRIIPs para fondos vendidos a minoristas en la UE. Los ETFs UCITS tienen ISIN IE (Irlanda) o LU (Luxemburgo) y están registrados en bolsas europeas (Euronext, Xetra, Borsa Italiana, LSE en EUR/GBP).\n\n**Umbrales.** OK si UCITS verificado · KO si no UCITS o no verificable.",
             "ok": "Estructura UCITS confirmada — ETF elegible para inversor minorista español bajo normativa PRIIPs.",
             "warning": "Estructura no verificada. Confirmar elegibilidad antes de operar.",
-            "ko": "No UCITS — ETF no elegible para el inversor minorista español. Requiere cuenta de inversor profesional o broker con acceso a mercados no-UE."
+            "ko": "No UCITS — ETF no comercializable para el inversor minorista español bajo normativa PRIIPs. Los ETFs domiciliados en EE.UU. no tienen KID europeo. Filtra siempre por UCITS en tu plataforma antes de operar."
+          }
+        },
+        {
+          "id": "ter",
+          "nombre": "Coste anual del fondo (TER)",
+          "fuente": "yfinance_info",
+          "campo": "annualReportExpenseRatio",
+          "operador": "lte",
+          "umbral_ok": 0.003,
+          "umbral_warning": 0.005,
+          "peso": 2,
+          "textos": {
+            "guia": "**Qué es.** TER (Total Expense Ratio): lo que cobra la gestora cada año sobre el patrimonio del fondo. En carteras multi-activo con varios ETFs, el coste agregado ponderado puede erosionar significativamente el retorno compuesto a largo plazo.\n\n**Umbrales.** OK <0,30% · ~OK 0,30–0,50% · KO >0,50%.",
+            "ok": "TER {valor:.2%} — coste eficiente para una cartera multi-activo. El impacto sobre el retorno compuesto es manejable.",
+            "warning": "TER {valor:.2%} — coste en el límite. Valora si hay alternativas equivalentes más baratas antes de incluirlo en la cartera.",
+            "ko": "TER {valor:.2%} — coste excesivo para un vehículo indexado. En una cartera de largo plazo, este nivel erosiona el retorno compuesto de forma material."
+          }
+        },
+        {
+          "id": "aum",
+          "nombre": "Patrimonio gestionado (AUM)",
+          "fuente": "yfinance_info",
+          "campo": "totalAssets",
+          "operador": "gte",
+          "umbral_ok": 500000000,
+          "umbral_warning": 100000000,
+          "peso": 2,
+          "textos": {
+            "guia": "**Qué es.** AUM (Assets Under Management): el patrimonio total del fondo. Un ETF con poco patrimonio puede cerrarse por decisión de la gestora o presentar spreads bid-ask amplios por falta de liquidez en el mercado secundario.\n\n**Umbrales.** OK >500M€ · ~OK 100–500M€ · KO <100M€.",
+            "ok": "AUM {valor_fmt} — fondo con masa crítica suficiente. Riesgo de cierre bajo y liquidez secundaria adecuada.",
+            "warning": "AUM {valor_fmt} — patrimonio en el límite. Viable pero con mayor riesgo de cierre o spreads más amplios en momentos de estrés.",
+            "ko": "AUM {valor_fmt} — fondo con patrimonio insuficiente. Alto riesgo de cierre o de spreads inaceptables para operar con garantías."
           }
         }
       ]

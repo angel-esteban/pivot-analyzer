@@ -117,7 +117,7 @@ TICKER_SECTOR_FALLBACK = {
     "NH.MC": "Consumer Cyclical",
     # IBEX 35 — Materiales/Industria
     "ACX.MC": "Basic Materials",
-    "CLNX.MC": "Real Estate",
+    "CLNX.MC": "Communication Services",  # Torres telecom — no REIT/SOCIMI
     "COL.MC": "Industrials",
     "FER.MC": "Industrials",
     "GRF.MC": "Healthcare",
@@ -11723,8 +11723,16 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     # a uno de ellos antes de intentar evaluar el valor.
     _sectores_na = crit.get("sectores_na", [])
     if _sectores_na:
-        _sector_t = (info.get("sector") or "").strip()
-        if any(s.lower() in _sector_t.lower() for s in _sectores_na):
+        _sector_t   = (info.get("sector")   or "").strip()
+        _industry_t = (info.get("industry") or "").strip()
+        def _sectores_na_match(s_na):
+            # "Real Estate" solo aplica a REITs/SOCIMIs reales (industry empieza por "REIT").
+            # Infraestructura inmobiliaria (torres, data centers) queda fuera del veto.
+            if s_na.lower() == "real estate":
+                return (_sector_t.lower() == "real estate"
+                        and _industry_t.lower().startswith("reit"))
+            return s_na.lower() in _sector_t.lower()
+        if any(_sectores_na_match(s) for s in _sectores_na):
             _msg_na = crit.get("sectores_na_mensaje",
                                "Métrica no aplicable a este sector — excluida del score.")
             return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
@@ -12243,9 +12251,13 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             # en el bloque de alarmas (principio: señales visibles, no silenciosas).
             # Excluye Real Estate y Financial Services donde EV/EBITDA no es métrica válida.
             _ks_ev = info.get("enterpriseToEbitda")
-            _ks_sector_k7 = (info.get("sector") or "").strip().lower()
-            _k7_sector_excluido = any(
-                s in _ks_sector_k7 for s in ("real estate", "financial")
+            _ks_sector_k7   = (info.get("sector")   or "").strip().lower()
+            _ks_industry_k7 = (info.get("industry") or "").strip().lower()
+            # "Real Estate" excluye solo REITs/SOCIMIs reales (industry con prefijo "reit").
+            # Infraestructura (torres, data centers) recibe evaluación EV/EBITDA normal.
+            _k7_sector_excluido = (
+                ("financial" in _ks_sector_k7) or
+                ("real estate" in _ks_sector_k7 and _ks_industry_k7.startswith("reit"))
             )
             if (
                 _ks_ev is not None
