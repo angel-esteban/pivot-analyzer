@@ -11539,22 +11539,22 @@ def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
             if len(recent) > 0:
                 total_ttm = float(recent.sum())
                 if total_ttm > 0:
-                    return total_ttm / precio
+                    return round(total_ttm / precio, 4)
 
         # Opcion 2: trailingAnnualDividendYield (ya es fraccion decimal)
         tady = info.get("trailingAnnualDividendYield")
         if tady and float(tady) > 0:
-            return float(tady)
+            return round(float(tady), 4)
 
         # Opcion 3: trailingAnnualDividendRate / precio
         tadr = info.get("trailingAnnualDividendRate")
         if tadr and float(tadr) > 0:
-            return float(tadr) / precio
+            return round(float(tadr) / precio, 4)
 
         # Opcion 4: dividendRate / precio
         drate = info.get("dividendRate")
         if drate and float(drate) > 0:
-            return float(drate) / precio
+            return round(float(drate) / precio, 4)
 
         return None
     except Exception:
@@ -11875,7 +11875,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         wrn_mn   = crit.get("umbral_warning_min", mn * 0.8)
         wrn_mx   = crit.get("umbral_warning_max", mx * 1.2)
         if mn <= valor <= mx:           estado = "ok"
-        elif wrn_mn <= valor <= wrn_mx: estado = "warning"
+        elif wrn_mn < valor <= wrn_mx:  estado = "warning"  # límite inferior estricto: el umbral exacto → ko_bajo
         elif valor > wrn_mx:            estado = "ko_alto"   # yield trampa o valoración excesiva
         else:                           estado = "ko_bajo"   # yield insuficiente
 
