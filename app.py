@@ -12887,7 +12887,7 @@ def inicializar_tabla_indices_config():
                 cur.execute("SELECT tickers FROM indices_config WHERE clave = 'ibex35'")
                 _row = cur.fetchone()
                 if _row:
-                    _tk = _row["tickers"]
+                    _tk = _row[0]  # cursor sin RealDictCursor → tupla, no dict
                     if isinstance(_tk, str):
                         try: _tk = _json.loads(_tk)
                         except Exception: _tk = {}
