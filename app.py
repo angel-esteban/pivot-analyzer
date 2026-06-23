@@ -9593,6 +9593,53 @@ def panel_admin():
         st.error(f"Error al obtener usuarios: {e}")
         return
 
+    # ── Datos del screener: ingesta a Neon (estructural / fundamental) ──────────
+    with st.expander("🗄️ Datos del screener — refrescar desde yfinance"):
+        st.caption(
+            "Rellena las tablas de Neon (instrumento / fundamental / dividendos) con datos "
+            "validados (nivel 0). Estructural: cambia raramente. Fundamental: tras resultados."
+        )
+        try:
+            import ingesta as _ingesta
+            _idx_opts = list(_cargar_todos_indices().keys())
+            if not _idx_opts:
+                st.info("No hay índices configurados en la base de datos.")
+            else:
+                _idx_sel = st.selectbox("Índice a refrescar", _idx_opts, key="_adm_ingesta_idx")
+                _nom_idx = _cargar_todos_indices()[_idx_sel]["nombre"]
+                _tickers_idx = list(_obtener_tickers_indice(_nom_idx).values())
+                st.caption(f"{len(_tickers_idx)} tickers en «{_nom_idx}».")
+                _disp = f"admin:{st.session_state.get('usuario', {}).get('username', '?')}"
+                _ci1, _ci2 = st.columns(2)
+                with _ci1:
+                    if st.button("Refrescar estructural", key="_adm_ing_estr", use_container_width=True):
+                        _conn = get_db_connection()
+                        try:
+                            with st.spinner(f"Extrayendo {len(_tickers_idx)} tickers de yfinance…"):
+                                _r = _ingesta.ingerir_estructural(
+                                    _tickers_idx, _conn, criteria_path="criteria.json",
+                                    disparado_por=_disp)
+                        finally:
+                            release_db_connection(_conn)
+                        st.success(f"Estructural · ok {_r.ok} · fallidos {_r.fallidos} · log #{_r.log_id}")
+                        if _r.detalle_fallidos:
+                            st.warning("Fallidos: " + ", ".join(_r.detalle_fallidos))
+                with _ci2:
+                    if st.button("Refrescar fundamental", key="_adm_ing_fund", use_container_width=True):
+                        _conn = get_db_connection()
+                        try:
+                            with st.spinner(f"Extrayendo {len(_tickers_idx)} tickers (fundamental + dividendos)…"):
+                                _r = _ingesta.ingerir_fundamental(
+                                    _tickers_idx, _conn, criteria_path="criteria.json",
+                                    disparado_por=_disp)
+                        finally:
+                            release_db_connection(_conn)
+                        st.success(f"Fundamental · ok {_r.ok} · fallidos {_r.fallidos} · log #{_r.log_id}")
+                        if _r.detalle_fallidos:
+                            st.warning("Fallidos: " + ", ".join(_r.detalle_fallidos))
+        except Exception as _e:
+            st.error(f"No se pudo preparar la ingesta: {_e}")
+
     # ══════════════════════════════════════════════════════════════════════════
     # VISTA A: PERFIL DEL USUARIO SELECCIONADO
     # ══════════════════════════════════════════════════════════════════════════
@@ -11971,7 +12018,22 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     import yfinance as yf
     try:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
-        info = _yf_info_con_retry(ticker) or {}
+        # Estructural + fundamental desde Neon (capa de persistencia); respaldo en vivo
+        # si el dato falta o está caducado. El nivel mercado se sigue obteniendo en vivo.
+        try:
+            import repositorio as _repo
+            _conn = get_db_connection()
+            try:
+                info, _frescura = _repo.componer_info(ticker, _conn)
+            finally:
+                release_db_connection(_conn)
+            if (not info
+                    or _repo.necesita_live(_frescura, "estructural")
+                    or _repo.necesita_live(_frescura, "fundamental")):
+                _info_live = _yf_info_con_retry(ticker) or {}
+                info = {**_info_live, **info}        # Neon manda; live rellena huecos
+        except Exception:
+            info = _yf_info_con_retry(ticker) or {}  # fallback robusto: comportamiento previo
         _TICKER_NOMBRES_FIJOS = {
             # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
             # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
