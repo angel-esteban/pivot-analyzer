@@ -12018,10 +12018,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     import yfinance as yf
     try:
         t    = yf.Ticker(ticker)  # noqa: F841 — mantenido para historial/dividends
-        # info combinado: yfinance en vivo aporta el nivel MERCADO (precio, volumen,
-        # dividendRate, floatShares...) y Neon aporta el nivel fundamental/estructural
-        # ya VALIDADO (manda sobre el vivo en esos campos). Si Neon falla, queda el vivo;
-        # si el vivo falla, los fundamentales aguantan desde Neon.
+        # Identidad de valores: cuando yfinance responde, SUS valores mandan, de modo que
+        # cada criterio da el mismo valor que antes del cambio de arquitectura. Neon solo
+        # RELLENA los campos que yfinance no devuelva (resiliencia ante fallos/rate limiting);
+        # nunca sobrescribe un dato vivo. El nivel mercado siempre va en vivo.
         _info_live = _yf_info_con_retry(ticker) or {}
         try:
             import repositorio as _repo
@@ -12030,7 +12030,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _info_neon, _frescura = _repo.componer_info(ticker, _conn)
             finally:
                 release_db_connection(_conn)
-            info = {**_info_live, **_info_neon}       # vivo = mercado; Neon = fundamental (manda)
+            _live_no_nulos = {k: v for k, v in _info_live.items() if v is not None}
+            info = {**_info_neon, **_live_no_nulos}    # vivo manda; Neon solo rellena huecos
         except Exception:
             info = _info_live                         # fallback robusto: comportamiento previo
         _TICKER_NOMBRES_FIJOS = {
