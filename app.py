@@ -12864,8 +12864,7 @@ def inicializar_tabla_indices_config():
                 conn.commit()
                 cur.execute("SELECT COUNT(*) FROM indices_config")
                 if cur.fetchone()[0] == 0:
-                    _defaults = [
-                        ("ibex35",          "IBEX 35",         ".MC",  IBEX_35),
+                    _otros = [
                         ("ibex_medium_cap", "IBEX Medium Cap", ".MC",  IBEX_MEDIUM_CAP),
                         ("ibex_small_cap",  "IBEX Small Cap",  ".MC",  IBEX_SMALL_CAP),
                         ("eurostoxx50",     "Euro Stoxx 50",   "",     EUROSTOXX_50),
@@ -12873,27 +12872,24 @@ def inicializar_tabla_indices_config():
                         ("cac40",           "CAC 40",          ".PA",  {}),
                         ("ftse100",         "FTSE 100",        ".L",   {}),
                     ]
-                    for clave, nombre, sufijo, tickers in _defaults:
+                    for clave, nombre, sufijo, tickers in _otros:
                         cur.execute(
                             "INSERT INTO indices_config (clave, nombre, sufijo, tickers) "
                             "VALUES (%s, %s, %s, %s) ON CONFLICT (clave) DO NOTHING",
                             (clave, nombre, sufijo, _json.dumps(tickers, ensure_ascii=False))
                         )
                     conn.commit()
-                # ── Migración REE.MC → RED.MC (SQL nativo — sin parsing Python) ──
-                # Usa replace() sobre el texto JSONB directamente.
-                # Idempotente: WHERE filtra si REE.MC ya no está.
-                # No depende del tipo de cursor ni de json.loads en Python.
-                cur.execute("""
-                    UPDATE indices_config
-                    SET tickers = replace(
-                                    replace(tickers::text, '"REE.MC"', '"RED.MC"'),
-                                    '"Red El\u00e9ctrica"', '"Redeia (RED)"'
-                                  )::jsonb
-                    WHERE clave = 'ibex35'
-                      AND tickers::text LIKE '%%REE.MC%%'
-                """)
+                # ibex35 siempre se sincroniza con el dict hardcodeado (fuera del if vacío).
+                # ON CONFLICT DO UPDATE garantiza que tickers obsoletos (REE.MC, etc.)
+                # se reemplacen en cada arranque sin necesidad de migraciones separadas.
+                cur.execute(
+                    "INSERT INTO indices_config (clave, nombre, sufijo, tickers) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (clave) DO UPDATE SET tickers = EXCLUDED.tickers",
+                    ("ibex35", "IBEX 35", ".MC", _json.dumps(IBEX_35, ensure_ascii=False))
+                )
                 conn.commit()
+                _cargar_todos_indices.clear()
         finally:
             release_db_connection(conn)
     except Exception:
