@@ -9640,6 +9640,45 @@ def panel_admin():
         except Exception as _e:
             st.error(f"No se pudo preparar la ingesta: {_e}")
 
+    # ── Monitor de calidad de datos (solo lectura: cobertura, frescura, degradación) ──
+    with st.expander("📊 Monitor de calidad de datos"):
+        st.caption("Vigila el proceso: cobertura por campo, frescura y degradación de la "
+                   "fuente. No modifica datos.")
+        if st.button("Calcular monitor", key="_adm_monitor_btn"):
+            try:
+                import monitor_calidad as _mon
+                import pandas as _pd_mon
+                _conn = get_db_connection()
+                try:
+                    _inf = _mon.informe(_conn)
+                finally:
+                    release_db_connection(_conn)
+                if _inf.alertas:
+                    for _a in _inf.alertas:
+                        st.warning(_a)
+                else:
+                    st.success("Sin alertas: cobertura y frescura dentro de lo esperado.")
+                st.markdown("**Cobertura por campo**")
+                _rows_cov = []
+                for _tab, _cob in _inf.cobertura.items():
+                    for _campo, _m in _cob.items():
+                        _rows_cov.append({"tabla": _tab, "campo": _campo,
+                                          "cobertura": f"{_m['pct']:.0%}",
+                                          "n": f"{_m['n']}/{_m['total']}"})
+                st.dataframe(_pd_mon.DataFrame(_rows_cov), use_container_width=True, hide_index=True)
+                st.markdown("**Frescura**")
+                for _tab, _fr in _inf.frescura.items():
+                    _msg = (f"{_tab}: más reciente {_fr.get('mas_reciente')} · "
+                            f"caducados {_fr.get('caducados', 0)} (> {_fr.get('tolerancia_dias')} días)")
+                    if "sin_refresco_tras_resultados" in _fr:
+                        _msg += f" · sin refresco tras resultados: {_fr['sin_refresco_tras_resultados']}"
+                    st.write(_msg)
+                if _inf.incidencias_tendencia:
+                    st.markdown("**Campos con incidencias (última ingesta)**")
+                    st.write(", ".join(f"{_k}: {_v}" for _k, _v in _inf.incidencias_tendencia.items()))
+            except Exception as _e:
+                st.error(f"No se pudo calcular el monitor: {_e}")
+
     # ══════════════════════════════════════════════════════════════════════════
     # VISTA A: PERFIL DEL USUARIO SELECCIONADO
     # ══════════════════════════════════════════════════════════════════════════
