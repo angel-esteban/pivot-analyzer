@@ -22,6 +22,7 @@ from typing import Any, Callable, Iterable
 from validador_nivel0 import (Estado, FieldSpec, cargar_specs_desde_criteria,
                               validar_campo)
 from validador_coherencia import validar_coherencia
+from normalizador import normalizar_info
 
 # Mapea el nombre del check de coherencia a la clave de campo (alineada con spec_key)
 COHERENCIA_A_CAMPO = {
@@ -320,6 +321,7 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
             info = fuente.info(ticker)
             if not info:
                 raise ValueError("yfinance no devolvió datos (.info vacío)")
+            info, _ = normalizar_info(info)   # unidades canónicas antes de validar
             dividendos = fuente.dividendos(ticker) if (con_dividendos or nivel == "fundamental") else []
 
             fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs)

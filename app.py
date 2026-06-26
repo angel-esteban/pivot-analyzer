@@ -12024,6 +12024,11 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         #  · sin valor fiable en ninguna      -> se excluye y dispara K8 (informativo)
         # El nivel mercado (precio, volumen, dividendRate...) va siempre en vivo.
         _info_live = _yf_info_con_retry(ticker) or {}
+        try:                                       # normaliza unidades (fracción vs %) antes de validar
+            import normalizador as _norm
+            _info_live, _ = _norm.normalizar_info(_info_live)
+        except Exception:
+            pass
         _campos_sin_calidad = []
         try:
             import repositorio as _repo
