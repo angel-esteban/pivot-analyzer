@@ -12027,20 +12027,29 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
     _estado_final = "ko" if estado in ("ko_bajo", "ko_alto") else estado
-    if _payout_origen == "calculado":
+    # Guard compartido BPA<=0 (#5): el payout no es interpretable con beneficio negativo,
+    # INDEPENDIENTEMENTE de si el dato vino nativo o por fallback DPA/BPA. Ramifica por el
+    # SIGNO del BPA antes que por el bucket de magnitud: el 71% de TEF y el 3% de CLNX no
+    # son "bien cubierto", están tan vacíos como el 344% de ACX. Que uno caiga en bucket
+    # malo y otro en bueno es azar del número, no análisis. Predicado único reutilizable.
+    _bpa_payout = info.get("trailingEps")
+    _payout_no_interpretable = (
+        cid == "payout_ratio"
+        and _bpa_payout is not None
+        and float(_bpa_payout) <= 0
+    )
+    if _payout_no_interpretable:
+        _estado_final = "ko"
+        mensaje = (chr(9889) + " Payout no interpretable: BPA negativo (pérdidas en el "
+                   "último ejercicio). El beneficio es negativo, así que el dividendo no "
+                   "se está pagando contra beneficio; criterio tratado como KO. "
+                   "Ver alarma K1-BPA en cabecera.")
+    elif _payout_origen == "calculado":
         _nota_py = (chr(9889) + " Calculado DPA/BPA"
                     + (" (DPA desde historial)" if _dpa_es_calculado else
                        " (payoutRatio no disponible en yfinance)")
                     + ". Verificar contra informe anual. ")
         mensaje = _nota_py + mensaje
-    elif _payout_origen == "calculado_bpa_negativo":
-        # Guard BPA<=0: DPA/|BPA| no es interpretable con pérdidas. Forzar KO y mensaje
-        # propio en vez de pasar el ratio por el operador lte (que etiquetaría, p.ej.,
-        # un 71% como "bien cubierto"). El detalle estructural lo da el killshot K1-BPA.
-        _estado_final = "ko"
-        mensaje = (chr(9889) + " Payout no interpretable: BPA negativo (pérdidas en el "
-                   "último ejercicio). El dividendo no está cubierto por beneficios; "
-                   "criterio tratado como KO. Ver alarma K1-BPA en cabecera.")
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
 
 
@@ -12446,13 +12455,33 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                            "beta": "beta", "returnOnEquity": "ROE", "grossMargins": "margen bruto",
                            "operatingMargins": "margen operativo", "revenueGrowth": "crec. ingresos",
                            "earningsGrowth": "crec. beneficio", "pegRatio": "PEG", "trailingEps": "BPA"}
-            _lst_k8 = ", ".join(_nombres_k8.get(c, c) for c in _campos_sin_calidad)
+            # #4 — Separar dos situaciones que NO son lo mismo:
+            #  · Campos que SON criterio de cribado (afectan al score vía penalización N/A).
+            #  · Campos auxiliares (market cap, PEG, beta...) que no son de los criterios y
+            #    no afectan al score ni al veredicto.
+            # El payout NO entra aquí cuando se evaluó por fallback (se filtró arriba): nunca
+            # se presenta como "excluido". El "no modifica el veredicto" solo aplica a los
+            # auxiliares; los criterios excluidos sí penalizan el score.
+            _campos_criterio_set = {c.get("campo") for c in criterios if c.get("campo")}
+            _k8_criterio = [c for c in _campos_sin_calidad if c in _campos_criterio_set]
+            _k8_aux      = [c for c in _campos_sin_calidad if c not in _campos_criterio_set]
+            _partes_k8 = []
+            if _k8_criterio:
+                _lst_c = ", ".join(_nombres_k8.get(c, c) for c in _k8_criterio)
+                _partes_k8.append(
+                    f"Criterios sin dato fiable en ninguna fuente (yfinance ni BBDD), "
+                    f"excluidos del score y penalizados como N/A: {_lst_c}."
+                )
+            if _k8_aux:
+                _lst_a = ", ".join(_nombres_k8.get(c, c) for c in _k8_aux)
+                _partes_k8.append(
+                    f"Datos auxiliares no disponibles (no forman parte de los criterios de "
+                    f"cribado; no afectan al score ni al veredicto): {_lst_a}."
+                )
             killshots.append({
                 "tipo":   "aviso",
                 "codigo": "K8",
-                "razon":  f"Dato sin calidad fiable en ninguna fuente (yfinance ni BBDD): {_lst_k8}. "
-                          f"Esos criterios se excluyen por falta de un valor de confianza. "
-                          f"Señal informativa: no modifica el veredicto.",
+                "razon":  " ".join(_partes_k8),
             })
 
         # Aplicar killshots
@@ -12600,7 +12629,13 @@ def _generar_pdf_screening(job: dict) -> bytes:
     n_parcial = sum(1 for r in resultado if r.get("estado_global") == "parcial")
     n_no      = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
     n_error   = sum(1 for r in resultado if r.get("error"))
+    n_no_apto = sum(1 for r in resultado if r.get("no_apto"))   # Sin dividendo / No evaluable
     total     = len(resultado)
+    # Invariante de cabecera (#3): los estados terminales deben AGOTAR el total. Si no
+    # cuadra hay un estado sin columna (p.ej. 'Sin dividendo' caía fuera). Se reporta de
+    # forma visible en el informe en vez de mostrar una cabecera silenciosamente incoherente.
+    _suma_estados  = n_cumple + n_parcial + n_no + n_error + n_no_apto
+    _descuadre_cab = total - _suma_estados
 
     # ── Colores ───────────────────────────────────────────────────────
     C_DARK   = colors.HexColor("#1e3a5f")
@@ -12668,13 +12703,14 @@ def _generar_pdf_screening(job: dict) -> bytes:
         ]
 
     met_data = list(zip(
-        metric_cell("Cumplen",    n_cumple,  "#16a34a"),
-        metric_cell("Parcial",    n_parcial, "#d97706"),
-        metric_cell("No cumplen", n_no,      "#dc2626"),
-        metric_cell("Sin datos",  n_error,   "#94a3b8"),
-        metric_cell("Total",      total,     "#1e3a5f"),
+        metric_cell("Cumplen",     n_cumple,  "#16a34a"),
+        metric_cell("Parcial",     n_parcial, "#d97706"),
+        metric_cell("No cumplen",  n_no,      "#dc2626"),
+        metric_cell("Sin datos",   n_error,   "#94a3b8"),
+        metric_cell("No evaluable",n_no_apto, "#7c3aed"),   # estado terminal 'Sin dividendo'
+        metric_cell("Total",       total,     "#1e3a5f"),
     ))
-    met_tbl = Table(met_data, colWidths=[3*cm]*5)
+    met_tbl = Table(met_data, colWidths=[2.85*cm]*6)
     met_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (-1,0), C_BG2),
         ("BACKGROUND",    (0,1), (-1,1), colors.white),
@@ -12684,6 +12720,13 @@ def _generar_pdf_screening(job: dict) -> bytes:
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
     ]))
     story.append(met_tbl)
+    if _descuadre_cab != 0:
+        # Invariante roto: estado terminal sin columna. Aviso ruidoso en el propio informe.
+        story.append(p(
+            f"<b>&#9888; Aviso de integridad:</b> el desglose de estados no cuadra con el "
+            f"total ({_suma_estados} &#8800; {total}; descuadre {_descuadre_cab}). Hay un "
+            f"estado terminal sin columna asignada — revisar el clasificador.",
+            fontSize=8, textColor=C_RED, alignment=TA_CENTER))
     story.append(Spacer(1, 0.5*cm))
 
     # ── Tabla resumen tickers ──────────────────────────────────────────
@@ -12851,6 +12894,13 @@ def _render_screening_resultados(job: dict):
     n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
     n_error    = sum(1 for r in resultado if r.get("error"))
     n_no_apto  = sum(1 for r in resultado if r.get("no_apto"))
+    # Invariante de cabecera (#3): los estados terminales deben agotar el total.
+    _desc_html = ""
+    _falt_cab  = len(resultado) - (n_cumple + n_parcial + n_no + n_error + n_no_apto)
+    if _falt_cab != 0:
+        _desc_html = (f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
+                      f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
+                      f'color:#b91c1c">&#9888; Descuadre de conteo: <b>{_falt_cab}</b></span>&nbsp;')
     _err_html  = (f'<span style="background:#f1f5f9;border:1px solid #e2e8f0;'
                   f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
                   f'color:#64748b">💥 Sin datos: <b>{n_error}</b></span>&nbsp;'
@@ -12871,7 +12921,7 @@ def _render_screening_resultados(job: dict):
         f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
         f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#b91c1c">'
         f'❌ No cumplen: <b>{n_no}</b></span>'
-        f'{_napto_html}{_err_html}</div>',
+        f'{_napto_html}{_err_html}{_desc_html}</div>',
         unsafe_allow_html=True
     )
 
