@@ -11885,6 +11885,12 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                 else:
                     _payout_origen = "no_disponible"
                     # valor sigue None -> cae en sin_datos mas adelante
+                # Fuente única de verdad: persistir el fallback en info para que la
+                # familia de killshots K1 lea el MISMO número que la celda de la tabla.
+                # Antes K1 leía info["payoutRatio"]=None y se saltaba la evaluación.
+                if valor is not None and _payout_origen in ("calculado", "calculado_bpa_negativo"):
+                    info["payoutRatio"] = valor
+                    info["_payout_bpa_negativo"] = (_payout_origen == "calculado_bpa_negativo")
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -12028,10 +12034,13 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                     + ". Verificar contra informe anual. ")
         mensaje = _nota_py + mensaje
     elif _payout_origen == "calculado_bpa_negativo":
-        _nota_py = (chr(9889) + " Calculado sobre BPA negativo"
-                    + (" (DPA desde historial)" if _dpa_es_calculado else "")
-                    + " — interpretar con cautela. ")
-        mensaje = _nota_py + mensaje
+        # Guard BPA<=0: DPA/|BPA| no es interpretable con pérdidas. Forzar KO y mensaje
+        # propio en vez de pasar el ratio por el operador lte (que etiquetaría, p.ej.,
+        # un 71% como "bien cubierto"). El detalle estructural lo da el killshot K1-BPA.
+        _estado_final = "ko"
+        mensaje = (chr(9889) + " Payout no interpretable: BPA negativo (pérdidas en el "
+                   "último ejercicio). El dividendo no está cubierto por beneficios; "
+                   "criterio tratado como KO. Ver alarma K1-BPA en cabecera.")
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
 
 
@@ -12246,7 +12255,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _fcf_na = (_ks_fcf_k1 is None)   # FCF no disponible (holdings)
                 _kp_fmt = f"{_kp:.0%}"
 
-                # Nivel 1 — VETO (hard): los tres indicadores simultáneamente malos
+                # Nivel 1 — VETO (hard): payout >100% + BPA<0 + FCF ko (triple)
                 if _p_over and _b_neg and _fcf_ko:
                     killshots.append({
                         "tipo":   "hard",
@@ -12256,14 +12265,17 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"resultados contables ni caja libre",
                     })
 
-                # Nivel 2a — AVISO: payout >100% + BPA negativo + FCF cubre (estructura frágil)
-                elif _p_over and _b_neg and _fcf_ok:
+                # Nivel 2a — AVISO: BPA<0 (pérdidas) en cualquier otro caso.
+                # El payout DPA/|BPA| no es interpretable con BPA negativo, así que K1-BPA
+                # dispara por la sola presencia de pérdidas, sin depender del % de payout.
+                elif _b_neg:
                     killshots.append({
                         "tipo":   "aviso",
                         "codigo": "K1-BPA",
-                        "razon":  f"Payout {_kp_fmt} con BPA negativo — la empresa paga dividendo "
-                                  f"con pérdidas contables. El FCF lo cubre hoy, pero la estructura "
-                                  f"es frágil ante cualquier deterioro de márgenes o ingresos",
+                        "razon":  f"BPA negativo — pérdidas en el último ejercicio. El payout "
+                                  f"(DPA/BPA = {_kp_fmt}) no es interpretable con beneficios "
+                                  f"negativos: el dividendo no está cubierto por resultados "
+                                  f"contables. Señal universal de deterioro; degrada el veredicto",
                     })
 
                 # Nivel 2b — AVISO: payout >100% + BPA positivo + FCF insuficiente
@@ -12424,6 +12436,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # Se dispara cuando un campo era inválido en vivo (rango o coherencia) y la BBDD
         # tampoco tiene un valor fiable (lo marcó la ingesta o no lo tiene). Aplica a todas
         # las carteras, por eso va fuera del bloque de dividendos.
+        # Coherencia con el fallback: si el payout se evaluó por DPA/BPA, no declararlo
+        # "excluido por falta de valor de confianza" en K8 (se evaluó, no se excluyó).
+        if info.get("payoutRatio") is not None and "payoutRatio" in _campos_sin_calidad:
+            _campos_sin_calidad = [c for c in _campos_sin_calidad if c != "payoutRatio"]
         if _campos_sin_calidad:
             _nombres_k8 = {"payoutRatio": "payout", "debtToEquity": "deuda/equity",
                            "enterpriseToEbitda": "EV/EBITDA", "marketCap": "market cap",
@@ -18413,9 +18429,12 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "Indica dónde está el precio actual dentro del rango máximo-mínimo de los últimos 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
                     "Para dividendos, comprar en el 0-35% del rango significa que pagas un precio bajo frente a lo que el mercado ha pedido durante el último año. "
                     "Consecuencia práctica: el yield efectivo que obtienes es el más alto del período — por cada euro invertido cobras más dividendo que si hubieras entrado en máximos."))
-                c.append(_criterio(2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
-                    f"Payout ratio {_payout:.0f}%" if _payout else "Payout no disponible",
-                    f"{'Sostenible ✅' if _payout < 70 else 'Ajustado ⚠️' if _payout < 90 else 'Riesgo de recorte ❌'}",
+                # Guard BPA<0: con pérdidas el payout no es interpretable (mismo criterio
+                # que el screening). Forzar score 0 y etiqueta KO; nunca "Sostenible".
+                _payout_bpa_neg = (_eps_ttm < 0)
+                c.append(_criterio(0 if _payout_bpa_neg else 2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
+                    "Payout no interpretable (BPA negativo)" if _payout_bpa_neg else (f"Payout ratio {_payout:.0f}%" if _payout else "Payout no disponible"),
+                    "El BPA es negativo (pérdidas): el payout no refleja cobertura real del dividendo ❌" if _payout_bpa_neg else f"{'Sostenible ✅' if _payout < 70 else 'Ajustado ⚠️' if _payout < 90 else 'Riesgo de recorte ❌'}",
                     "El payout es el porcentaje del beneficio neto que la empresa distribuye como dividendo. "
                     "Payout 50% = de cada 100€ de beneficio, 50€ van a dividendo y 50€ se reinvierten en el negocio. "
                     "Por debajo del 70% hay margen de seguridad: aunque los beneficios caigan un 30%, el dividendo se puede mantener. "
@@ -18598,7 +18617,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         puntos.append(f"✅ El precio está por debajo de su media de los últimos 200 días, lo que históricamente ha sido un buen momento para entrar.")
                     if _pos52 > 70:
                         puntos.append(f"❌ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango anual). Esperar una corrección no tiene un coste alto y mejoraría el precio de entrada.")
-                    if _payout > 0 and _payout < 70:
+                    if _eps_ttm < 0:
+                        puntos.append(f"❌ BPA negativo (pérdidas): el payout no es interpretable — el dividendo no está cubierto por beneficios. Señal de deterioro a vigilar.")
+                    elif _payout > 0 and _payout < 70:
                         puntos.append(f"✅ Payout del {_payout:.0f}% — dividendo bien cubierto por beneficios.")
                     elif _payout >= 70:
                         puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado. Revisar tendencia de BPA.")
