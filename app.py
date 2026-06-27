@@ -12024,6 +12024,14 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     import re as _re_gram
     mensaje = _re_gram.sub(r"(?<!\d)1 años", "1 año", mensaje)   # safety net gramatical
 
+    # #7 — CAGR cross-gap: si la racha continua < periodo (5a), la ventana del CAGR cruza
+    # una interrupción de dividendo y el dato no es comparable. Se marca explícitamente
+    # (ortogonal a la magnitud: IAG −5.0% con racha=2 no lo capta el aviso de CAGR >20%).
+    if (cid == "crecimiento_dividendo" and dividends is not None
+            and _sc_anos_dividendo(dividends) < 5):
+        mensaje = ("[VERIFICAR base: serie de dividendo con interrupción, racha < 5 años] "
+                   + mensaje)
+
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
     _estado_final = "ko" if estado in ("ko_bajo", "ko_alto") else estado
@@ -12215,10 +12223,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         n_na        = sum(1 for c in resultados_criterios if c["estado"] in ("manual", "sin_datos"))
         n_total_c   = len(resultados_criterios)
         n_evaluados = n_total_c - n_na
+        # #8(b) — El techo por N/A solo debe penalizar los N/A por FALTA DE DATO, no los
+        # N/A "por sector" (criterios legítimamente no aplicables a banca/REITs). Antes los
+        # 4 N/A sectoriales de un banco capaban el score a 60 y SAN (yield ~OK + K3) empataba
+        # con BBVA (limpio). Ahora el score se calcula desde los criterios evaluables y el cap
+        # sectorial deja de aplastar la calidad relativa. (Decisión Polaris: techo fuera.)
+        n_na_sector = sum(1 for c in resultados_criterios
+                          if "(sector)" in str(c.get("valor_fmt", "")))
+        n_na_cap    = n_na - n_na_sector          # solo N/A por falta de dato penalizan
         puntuacion_raw = round(puntos_total / puntos_max * 100) if puntos_max > 0 else 0
-        # Penalizacion: cada N/A resta 10 puntos al maximo alcanzable
-        puntuacion   = min(puntuacion_raw, max(0, 100 - n_na * 10))
-        evaluacion_incompleta = n_na >= 3
+        # Penalizacion: cada N/A por falta de dato resta 10 puntos al maximo alcanzable
+        puntuacion   = min(puntuacion_raw, max(0, 100 - n_na_cap * 10))
+        # #8(c) — Penalización explícita por KO: −5 puntos por cada criterio en KO, para que
+        # el score sea estrictamente monótono en nº de KO (guarda de regresión #8.4: añadir
+        # un KO SIEMPRE baja el score). Antes FER (2 KO) empataba a 69 con VID/ROVI (0 KO).
+        _n_ko_pen  = sum(1 for c in resultados_criterios if c.get("estado") == "ko")
+        puntuacion = max(0, puntuacion - 5 * _n_ko_pen)
+        evaluacion_incompleta = n_na_cap >= 3
 
         # ── Killshots: señales que fuerzan no_cumple independientemente del score ──
         # Un score aditivo no puede capturar combinaciones que hacen el dividendo
@@ -12231,7 +12252,15 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             # Nivel 2 (aviso): combinaciones de dos factores malos — señal visible, sin veto
             _ks_payout = info.get("payoutRatio")
             _ks_bpa    = info.get("trailingEps")
-            _ks_fcf_k1 = _sc_fcf_vs_div(info)   # "ok"/"warning"/"ko"/None
+            # #6-B — FCF para alarmas/vetos con el MISMO fallback (Flujo operativo−Capex)
+            # que la celda de la tabla. Antes los killshots leían _sc_fcf_vs_div(info), que
+            # solo mira freeCashflow nativo: un FCF 'ko*' (calculado por fallback) NO
+            # disparaba K4/K6 (caso IBE, que mostraba ko* sin ninguna alarma de cabecera,
+            # frente a ELE/REP/RED con ko nativo que sí saltaban K6). Mismo patrón payout/K8
+            # del bloque 1, ahora en FCF: el valor estimado alimenta el motor igual que el nativo.
+            _fcf_res_ks, _ = _sc_fcf_con_cashflow(info, cashflow)
+            _fcf_estado_ks = _fcf_res_ks["estado"] if _fcf_res_ks else _sc_fcf_vs_div(info)
+            _ks_fcf_k1 = _fcf_estado_ks   # "ok"/"warning"/"ko"/None (fallback-aware)
 
             # Detectar sectores donde el payout contable no es métrica válida
             # (Financial Services: banca + seguros — mismo tratamiento que EV/EBITDA)
@@ -12314,12 +12343,21 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             if dividends is not None:
                 _ks_cagr = _sc_cagr_dividendo_5y(dividends)
                 _ks_red  = _sc_anos_reduccion_div(dividends)
-                _k2_cagr = (_ks_cagr is not None and float(_ks_cagr) < -0.10)
+                # #7 — Gate de racha: el CAGR 5a no es fiable si la racha continua de
+                # dividendo < 5 años (la ventana de 5 ejercicios cruza una interrupción:
+                # recorte/suspensión/restablecimiento). NO se debe vetar (K2) sobre un CAGR
+                # cross-gap. Caso GRF: racha=1 y CAGR 5a=−13.8% disparaba K2→No cumple sobre
+                # un estadístico medido a través de un hueco. El chequeo de longitud de racha
+                # es ortogonal al de magnitud (IAG −5.0% con racha=2 tampoco se marcaba por %).
+                _k2_racha = _sc_anos_dividendo(dividends)
+                _k2_racha_ok = (_k2_racha >= 5)
+                _k2_cagr = (_ks_cagr is not None and float(_ks_cagr) < -0.10 and _k2_racha_ok)
                 # K2B guarda: reducciones consecutivas solo disparan si CAGR ≤ 0%
                 # Si CAGR global es positivo, las bajadas son normalización post-pico,
                 # no deterioro estructural (caso Rovi: CAGR +40% con 2 bajadas desde máximos)
                 _k2_red  = (_ks_red >= 2
-                            and (_ks_cagr is None or float(_ks_cagr) <= 0.0))
+                            and (_ks_cagr is None or float(_ks_cagr) <= 0.0)
+                            and _k2_racha_ok)
                 if _k2_cagr or _k2_red:
                     _k2_partes = []
                     if _k2_cagr:
@@ -12359,7 +12397,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             # de recorte en la próxima recesión es alto. Casos típicos: AENA (IPO 2015,
             # dividendo cortado en COVID → historial reiniciado ~2021).
             _ks_anos    = _sc_anos_dividendo(dividends)
-            _ks_fcf_est = _sc_fcf_vs_div(info)
+            _ks_fcf_est = _fcf_estado_ks   # #6-B: fallback-aware (antes _sc_fcf_vs_div nativo)
             if _ks_anos < 7 and _ks_fcf_est == "ko":
                 killshots.append({
                     "tipo":   "soft",
@@ -12388,6 +12426,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"corporativa consolidada. Liquidez insuficiente para salida ordenada",
                 })
 
+            # K10 — Veto duro por historial de dividendo insuficiente (racha continua < 5 años).
+            # (Decisión Polaris: umbral 5 = periodo del CAGR.) Un track record < 5 ejercicios no
+            # acredita sostenibilidad a través de un ciclo y hace inestable cualquier estadístico
+            # de 5a. GRF (racha=1) cae AQUÍ —la razón correcta— en vez de por un K2 sobre CAGR
+            # cross-gap (que ya se gateó en #7). Reemplaza el veto-sobre-dato-malo por veto-sobre-hecho.
+            _k10_racha = _sc_anos_dividendo(dividends)
+            if _k10_racha < 5:
+                killshots.append({
+                    "tipo":   "hard",
+                    "codigo": "K10",
+                    "razon":  f"Historial de dividendo insuficiente: {_k10_racha} "
+                              f"{'año' if _k10_racha == 1 else 'años'} de racha continua "
+                              f"(mínimo 5). Sin track record que acredite sostenibilidad a "
+                              f"través de un ciclo completo; los estadísticos a 5 años "
+                              f"(CAGR) no son fiables sobre una serie tan corta.",
+                })
+
             # K6 — FCF insuficiente standalone (aviso informativo — sin efecto sobre veredicto)
             # Se activa cuando FCF ko Y ninguna señal ya captura el riesgo FCF:
             #   K1      → ya lo captura (payout>100% + BPA<0 + FCF ko)
@@ -12395,7 +12450,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             #   K4      → ya lo captura (historial corto + FCF ko)
             # Objetivo: hacer visible FCF ko en empresas con historial sólido y payout
             # razonable (Endesa, Repsol) donde el riesgo es real pero no eliminatorio.
-            _ks_fcf_k6 = _sc_fcf_vs_div(info)
+            _ks_fcf_k6 = _fcf_estado_ks   # #6-B: fallback-aware (antes _sc_fcf_vs_div nativo)
             _k6_ya_cubierto = any(
                 k.get("codigo") in ("K1", "K1-FCF", "K4") for k in killshots
             )
@@ -12484,6 +12539,26 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "razon":  " ".join(_partes_k8),
             })
 
+        # #6-A — Regla de cierre: TODO criterio en KO debe subir a cabecera. Los KO con
+        # K-código propio ya lo hacen (payout→K1*, yield→K3, FCF→K1-FCF/K4/K6, free float→K5,
+        # CAGR→K2, EV/EBITDA→K7). Los demás (D/E, historial, liquidez...) quedaban mudos:
+        # ACS/SCYR con D/E en KO o IAG/MEL con historial en KO no generaban alarma. Una sola
+        # entrada genérica los hace visibles sin tocar el veredicto (el score ya refleja el KO).
+        _ids_con_kcode = {"payout_ratio", "dividend_yield", "free_cash_flow",
+                          "free_float", "crecimiento_dividendo", "ev_ebitda"}
+        _ko_sin_alarma = [c for c in resultados_criterios
+                          if c.get("estado") == "ko" and c.get("id") not in _ids_con_kcode]
+        if _ko_sin_alarma:
+            _lst_ko = ", ".join(f"{c.get('nombre', '?')} ({c.get('valor_fmt', '')})"
+                                for c in _ko_sin_alarma)
+            killshots.append({
+                "tipo":   "aviso",
+                "codigo": "K9",
+                "razon":  f"Criterio(s) en KO sin alarma específica: {_lst_ko}. Visibles en "
+                          f"cabecera por la regla de cierre; el score ya refleja el KO. "
+                          f"Señal informativa: no modifica el veredicto.",
+            })
+
         # Aplicar killshots
         # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
         # Aviso degrade (K1-BPA, K1-Payout): si "cumple" → degrada a parcial + cap 69
@@ -12501,8 +12576,18 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                              and k.get("codigo") in ("K1-BPA", "K1-Payout")]
         nota_degradacion = None
         if _ks_hard:
+            # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
+            # NO sobrescribe el score. Antes todos los vetados se capaban a 44, mezclando
+            # GRF (9/10 máx 90, historial=1, pésimo) con ENG (10/10, 23 años, solo CAGR en KO):
+            # ambos leían 44 y el ranking de vetados era inservible. Conservar el score permite
+            # ordenarlos por calidad residual. El veto determina el veredicto, no el score.
             estado_global = "no_cumple"
-            puntuacion    = min(puntuacion, 44)
+            _kh_codes = " + ".join(k.get("codigo", "") for k in _ks_hard)
+            nota_degradacion = (
+                f"Veredicto No cumple forzado por veto {_kh_codes}. El score ({puntuacion}) "
+                f"se conserva como medida de calidad residual; el veto determina el veredicto, "
+                f"no el score."
+            )
         elif _ks_aviso_degrade and estado_global == "cumple":
             # Sin cap: el score real (ej. 84) permanece visible.
             # El badge "Parcial" es el veredicto correcto; el score alto informa
@@ -12533,6 +12618,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "estado_global":         estado_global,
             "criterios":             resultados_criterios,
             "n_na":                  n_na,
+            "n_na_cap":              n_na_cap,
             "n_evaluados":           n_evaluados,
             "n_total_criterios":     n_total_c,
             "evaluacion_incompleta": evaluacion_incompleta,
@@ -12829,10 +12915,11 @@ def _generar_pdf_screening(job: dict) -> bytes:
         ]))
 
         _na_pdf  = r.get("n_na", 0)
+        _na_cap_pdf = r.get("n_na_cap", _na_pdf)   # #8(b): el máx refleja solo N/A penalizables
         _ev_pdf  = r.get("n_evaluados", 0)
         _to_pdf  = r.get("n_total_criterios", 0)
         _inc_pdf = r.get("evaluacion_incompleta", False)
-        _na_txt  = (f" | {_ev_pdf}/{_to_pdf} criterios ({_na_pdf} N/A · máx. {100-_na_pdf*10}%)"
+        _na_txt  = (f" | {_ev_pdf}/{_to_pdf} criterios ({_na_pdf} N/A · máx. {100-_na_cap_pdf*10}%)"
                     if _na_pdf > 0 else "")
         _inc_txt = " | ⚠️ EVALUACION INCOMPLETA" if _inc_pdf else ""
         _ks_pdf  = r.get("killshots", [])
@@ -12977,11 +13064,12 @@ def _render_screening_resultados(job: dict):
                              else "⚠️ Cumple parcialmente" if eg=="parcial"
                              else "❌ No cumple")
                 _n_na_exp = r.get("n_na", 0)
+                _n_na_cap_exp = r.get("n_na_cap", _n_na_exp)   # #8(b): máx solo por N/A penalizables
                 _n_ev_exp = r.get("n_evaluados", 0)
                 _n_to_exp = r.get("n_total_criterios", 0)
                 _inc_exp  = r.get("evaluacion_incompleta", False)
                 _info_exp = (f" · {_n_ev_exp}/{_n_to_exp} criterios evaluados"
-                             f" ({_n_na_exp} sin datos · máx. {100-_n_na_exp*10}%)"
+                             f" ({_n_na_exp} sin datos · máx. {100-_n_na_cap_exp*10}%)"
                              if _n_na_exp > 0 else "")
                 _inc_html = (
                     '<div style="display:inline-block;padding:3px 10px;border-radius:12px;'
