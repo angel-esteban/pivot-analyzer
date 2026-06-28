@@ -12426,21 +12426,32 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                               f"corporativa consolidada. Liquidez insuficiente para salida ordenada",
                 })
 
-            # K10 — Veto duro por historial de dividendo insuficiente (racha continua < 5 años).
-            # (Decisión Polaris: umbral 5 = periodo del CAGR.) Un track record < 5 ejercicios no
-            # acredita sostenibilidad a través de un ciclo y hace inestable cualquier estadístico
-            # de 5a. GRF (racha=1) cae AQUÍ —la razón correcta— en vez de por un K2 sobre CAGR
-            # cross-gap (que ya se gateó en #7). Reemplaza el veto-sobre-dato-malo por veto-sobre-hecho.
+            # K10 — Historial de dividendo, GRADUADO por tramos de racha continua (job #33):
+            #   racha < 3  → veto DURO (No cumple): sin historial mínimo (coincide con el KO
+            #                de tabla "inferior a 3 años").
+            #   racha 3–4  → DEGRADANTE (cap a Parcial, nunca Cumple; no rescata un No cumple):
+            #                track record insuficiente para un ciclo completo, pero no
+            #                descalificante si el resto es sólido (AMS 92, AENA 74, IAG 76).
+            #   racha ≥ 5  → sin K10 (acredita sostenibilidad a través de un ciclo).
+            # Antes era un hard-fail único en <5 que tumbaba nombres de calidad. Misma variable
+            # (racha_continua) que el marcado [VERIFICAR base] del CAGR (#7): un solo hecho.
             _k10_racha = _sc_anos_dividendo(dividends)
-            if _k10_racha < 5:
+            if _k10_racha < 3:
                 killshots.append({
                     "tipo":   "hard",
                     "codigo": "K10",
                     "razon":  f"Historial de dividendo insuficiente: {_k10_racha} "
                               f"{'año' if _k10_racha == 1 else 'años'} de racha continua "
-                              f"(mínimo 5). Sin track record que acredite sostenibilidad a "
-                              f"través de un ciclo completo; los estadísticos a 5 años "
-                              f"(CAGR) no son fiables sobre una serie tan corta.",
+                              f"(< 3 mínimo). Sin historial mínimo que acredite el dividendo.",
+                })
+            elif _k10_racha < 5:
+                killshots.append({
+                    "tipo":   "aviso",
+                    "codigo": "K10",
+                    "razon":  f"Historial de dividendo corto: {_k10_racha} años de racha "
+                              f"continua (3–4). Track record insuficiente para acreditar un "
+                              f"ciclo completo — degrada a Parcial, pero no descalifica si el "
+                              f"resto del perfil es sólido. Verificar contra recorte reciente.",
                 })
 
             # K6 — FCF insuficiente standalone (aviso informativo — sin efecto sobre veredicto)
@@ -12573,7 +12584,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_soft          = [k for k in killshots if k.get("tipo") == "soft"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10")]
         nota_degradacion = None
         if _ks_hard:
             # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
