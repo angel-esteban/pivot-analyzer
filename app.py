@@ -12420,11 +12420,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _ks_yield_ttm = _sc_dividend_yield_ttm(info, dividends)
             if _ks_yield_ttm is not None and 0 < float(_ks_yield_ttm) < 0.025:
                 killshots.append({
-                    "tipo":   "aviso",   # #C: informativa (K3/K4 ya no degradan el veredicto)
+                    # K3 — CAP degradante (income discipline, decisión Polaris): yield bajo
+                    # invalida la tesis de rentas. Capa a Parcial vía _ks_aviso_degrade (no toca
+                    # el score, nunca eleva). K4 sí queda informativa (no duplicar con K10/FCF).
+                    "tipo":   "aviso",
                     "codigo": "K3",
                     "razon":  f"Yield {_ks_yield_ttm:.1%} (TTM) insuficiente para cartera de rentas "
-                              f"(mínimo orientativo 2.5%) — empresa de calidad pero "
-                              f"no apta para estrategia de income",
+                              f"(mínimo orientativo 2.5%): invalida la tesis income "
+                              f"— degrada a Parcial",
                 })
 
             # K4 — Historial corto + FCF insuficiente (soft killshot)
@@ -12619,7 +12622,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3")]
         nota_degradacion = None
         if _ks_hard:
             # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
@@ -12658,13 +12661,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "K1-BPA":    ("BPA negativo",                     "cap"),
             "K1-Payout": ("payout ≥ 85%",                     "cap"),
             "K10-cap":   ("historial corto (3–4 a.)",        "cap"),
+            "K3":        ("yield bajo",                       "cap"),
         }
-        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap"]  # más severo primero
+        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap", "K3"]  # más severo primero
         _activos_mot = []
         for _k in killshots:
             _cod, _tip = _k.get("codigo"), _k.get("tipo", "hard")
-            if _cod == "K10":                                 _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
-            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout"): _activos_mot.append(_cod)
+            if _cod == "K10":                                       _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
+            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout", "K3"): _activos_mot.append(_cod)
         motivo, motivo_tipo = "—", "score"
         if estado_global == "no_cumple":
             _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "veto"]
