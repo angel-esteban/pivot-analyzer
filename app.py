@@ -11573,9 +11573,13 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
 
 
 def _sc_cagr_dividendo_ventana(dividends, ventana: int) -> float | None:
-    """#D — CAGR del dividendo sobre los últimos `ventana` años completos de la serie.
-    Con ventana = min(5, racha) la ventana cae DENTRO de la racha continua → nunca cruza
-    una interrupción (cross-gap). Devuelve None si no hay datos suficientes."""
+    """#D/#F — CAGR del dividendo sobre la racha CONTINUA, usando `ventana` INTERVALOS
+    (= ventana+1 puntos anuales). Clave: 'CAGR de N años' usa N+1 puntos / N intervalos.
+    Con ventana=5 reproduce EXACTAMENTE el cómputo previo (6 puntos, 5 intervalos); el bug
+    de #D fue tomar `ventana` puntos (4 intervalos) y desplazar la base un año, lo que en
+    nombres con hueco COVID disparaba el CAGR (REP +4.6%→+34%, SAN +0.4%→+31%, IAG −5%→−50%).
+    La serie se limita a los años consecutivos más recientes → nunca cruza una interrupción.
+    Devuelve None si no hay datos suficientes."""
     try:
         if dividends is None or len(dividends) == 0 or int(ventana) < 2:
             return None
@@ -11590,7 +11594,17 @@ def _sc_cagr_dividendo_ventana(dividends, ventana: int) -> float | None:
             annual = annual[annual.index.year < _dt.now().year]
         if len(annual) < 2:
             return None
-        _ult = annual.iloc[-min(int(ventana), len(annual)):]
+        # Limitar a la racha CONTINUA (años consecutivos desde el más reciente) → sin cross-gap.
+        _years = [int(y) for y in annual.index.year]
+        _streak = 1
+        for _i in range(len(_years) - 1, 0, -1):
+            if _years[_i] - _years[_i - 1] == 1:
+                _streak += 1
+            else:
+                break
+        _cont = annual.iloc[-_streak:]
+        # ventana = nº de INTERVALOS → ventana+1 puntos, acotado por la racha disponible.
+        _ult = _cont.iloc[-min(int(ventana) + 1, len(_cont)):]
         if len(_ult) < 2:
             return None
         _ini, _fin = float(_ult.iloc[0]), float(_ult.iloc[-1])
@@ -12428,11 +12442,15 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                         _k2_fire   = True
                         _k2_motivo = f"CAGR {_k2_ventana}a {_k2_cagr_w:.1%}"
                 elif 3 <= _k2_racha <= 4:
-                    _cagr_severo = (_k2_cagr_w is not None and float(_k2_cagr_w) < -0.20)
-                    if _cagr_severo or _k2_red >= 2:
+                    # #F §6 — En 3–4 años el CAGR de pocos puntos es inestable (caso IAG: base
+                    # anómala tras reanudar el dividendo → −50% falso). K2 solo ESCALA si hay
+                    # DOS caídas YoY consecutivas del DPA (patrón real de recorte); el umbral
+                    # CAGR < −20% es confirmación en el mensaje, NO disparador único.
+                    if _k2_red >= 2:
                         _k2_fire   = True
-                        _k2_motivo = (f"CAGR {_k2_ventana}a {_k2_cagr_w:.1%}" if _cagr_severo
-                                      else f"{_k2_red} años consecutivos de reducción")
+                        _conf = (f", CAGR {_k2_ventana}a {_k2_cagr_w:.1%}"
+                                 if (_k2_cagr_w is not None and float(_k2_cagr_w) < -0.20) else "")
+                        _k2_motivo = f"{_k2_red} años consecutivos de reducción{_conf}"
                 if _k2_fire:
                     killshots.append({
                         "codigo": "K2",
