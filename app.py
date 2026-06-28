@@ -11572,6 +11572,36 @@ def _sc_cagr_dividendo_5y(dividends) -> float | None:
         return None
 
 
+def _sc_cagr_dividendo_ventana(dividends, ventana: int) -> float | None:
+    """#D — CAGR del dividendo sobre los últimos `ventana` años completos de la serie.
+    Con ventana = min(5, racha) la ventana cae DENTRO de la racha continua → nunca cruza
+    una interrupción (cross-gap). Devuelve None si no hay datos suficientes."""
+    try:
+        if dividends is None or len(dividends) == 0 or int(ventana) < 2:
+            return None
+        import pandas as pd
+        ultimo_div = dividends.index.max()
+        if ultimo_div < pd.Timestamp.now(tz=ultimo_div.tzinfo) - pd.DateOffset(years=3):
+            return None
+        annual = dividends.resample("YE").sum()
+        annual = annual[annual > 0]
+        from datetime import datetime as _dt
+        if _dt.now().month < 12:
+            annual = annual[annual.index.year < _dt.now().year]
+        if len(annual) < 2:
+            return None
+        _ult = annual.iloc[-min(int(ventana), len(annual)):]
+        if len(_ult) < 2:
+            return None
+        _ini, _fin = float(_ult.iloc[0]), float(_ult.iloc[-1])
+        _n = len(_ult) - 1
+        if _ini <= 0 or _n <= 0:
+            return None
+        return (_fin / _ini) ** (1 / _n) - 1
+    except Exception:
+        return None
+
+
 def _sc_anos_reduccion_div(dividends) -> int:
     """Cuántos años consecutivos (desde el más reciente hacia atrás) el dividendo
     anual total fue inferior al año anterior. Excluye el año en curso si es parcial,
@@ -11967,11 +11997,21 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         elif funcion == "calcular_anos_dividendo_consecutivo" and dividends is not None:
             valor = _sc_anos_dividendo(dividends)
         elif funcion == "calcular_cagr_dividendo_5y" and dividends is not None:
-            valor = _sc_cagr_dividendo_5y(dividends)
+            # #D — CAGR sobre ventana = min(5, racha): dentro de la racha continua, nunca
+            # cross-gap. racha < 3 → None (no se computa una tasa a través de un hueco).
+            _cagr_racha = _sc_anos_dividendo(dividends)
+            valor = (_sc_cagr_dividendo_ventana(dividends, min(5, _cagr_racha))
+                     if _cagr_racha >= 3 else None)
         elif funcion == "calcular_dividendo_yield_ttm":
             valor = _sc_dividend_yield_ttm(info, dividends)
 
     if valor is None:
+        # #D — CAGR sin ventana suficiente (racha < 3 años): n/d explícito, no un 5y cross-gap.
+        if cid == "crecimiento_dividendo":
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "n/d",
+                    "mensaje": "CAGR n/d (histórico de dividendo < 3 años): ventana "
+                               "insuficiente para una tasa interpretable.",
+                    "nombre": crit.get("nombre", "")}
         # Mensaje específico por campo — diferencia "sin datos de yfinance" de "N/A por sector"
         _campo_sin_dato = crit.get("campo", "") or crit.get("funcion", "")
         _msg_sin_dato_map = {
@@ -12030,6 +12070,9 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     valor_fmt = _fmt_valor(valor, cid)
     if _payout_origen in ("calculado", "calculado_bpa_negativo"):
         valor_fmt = valor_fmt + chr(42)   # asterisco: valor estimado, no directo de yfinance
+    # #D — Etiqueta dinámica de ventana para el CAGR: "CAGR {N}a" (N = min(5, racha)).
+    if cid == "crecimiento_dividendo" and dividends is not None:
+        valor_fmt = f"{valor_fmt} · CAGR {min(5, _sc_anos_dividendo(dividends))}a"
     # ko_bajo / ko_alto: busca texto específico; si no existe, cae en "ko" genérico
     _estado_key = estado
     if estado in ("ko_bajo", "ko_alto") and estado not in textos:
@@ -12054,13 +12097,8 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     import re as _re_gram
     mensaje = _re_gram.sub(r"(?<!\d)1 años", "1 año", mensaje)   # safety net gramatical
 
-    # #7 — CAGR cross-gap: si la racha continua < periodo (5a), la ventana del CAGR cruza
-    # una interrupción de dividendo y el dato no es comparable. Se marca explícitamente
-    # (ortogonal a la magnitud: IAG −5.0% con racha=2 no lo capta el aviso de CAGR >20%).
-    if (cid == "crecimiento_dividendo" and dividends is not None
-            and _sc_anos_dividendo(dividends) < 5):
-        mensaje = ("[VERIFICAR base: serie de dividendo con interrupción, racha < 5 años] "
-                   + mensaje)
+    # #D — El workaround [VERIFICAR base] se retiró: el CAGR ya usa ventana = min(5, racha),
+    # contenida en la racha continua, así que nunca es cross-gap (no hay interrupción que advertir).
 
     # Normalizar ko_bajo/ko_alto → "ko" para el semáforo y el scoring
     # La distinción ya está capturada en el mensaje; el estado vuelve a ser "ko"
@@ -12373,44 +12411,32 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"comprometería la sostenibilidad sin margen de reacción",
                     })
 
-            # K2 — Recorte sistemático del dividendo (dos condiciones independientes, OR)
-            # Condición A: CAGR 5a < -10% — caída acumulada tan grande que no es ruido estadístico.
-            # Condición B: 2+ años consecutivos de reducción — tendencia reciente sostenida,
-            #              independientemente del CAGR agregado.
+            # K2 — Recorte sistemático del dividendo, sobre VENTANA contenida en la racha (#D).
+            # ventana = min(5, racha) → el CAGR cae dentro de la serie continua, nunca cross-gap.
+            #   racha ≥ 5  → veto si CAGR_ventana < -10% (recorte sostenido).
+            #   racha 3–4  → K10 ya capa a Parcial; K2 solo ESCALA a No cumple si el recorte es
+            #                SEVERO: CAGR_ventana < -20% o dos caídas interanuales consecutivas.
+            #   racha < 3  → K2 no aplica (K10-duro ya fuerza No cumple).
             if dividends is not None:
-                _ks_cagr = _sc_cagr_dividendo_5y(dividends)
-                _ks_red  = _sc_anos_reduccion_div(dividends)
-                # #7 — Gate de racha: el CAGR 5a no es fiable si la racha continua de
-                # dividendo < 5 años (la ventana de 5 ejercicios cruza una interrupción:
-                # recorte/suspensión/restablecimiento). NO se debe vetar (K2) sobre un CAGR
-                # cross-gap. Caso GRF: racha=1 y CAGR 5a=−13.8% disparaba K2→No cumple sobre
-                # un estadístico medido a través de un hueco. El chequeo de longitud de racha
-                # es ortogonal al de magnitud (IAG −5.0% con racha=2 tampoco se marcaba por %).
-                _k2_racha = _sc_anos_dividendo(dividends)
-                _k2_racha_ok = (_k2_racha >= 5)
-                _k2_cagr = (_ks_cagr is not None and float(_ks_cagr) < -0.10 and _k2_racha_ok)
-                # K2B guarda: reducciones consecutivas solo disparan si CAGR ≤ 0%
-                # Si CAGR global es positivo, las bajadas son normalización post-pico,
-                # no deterioro estructural (caso Rovi: CAGR +40% con 2 bajadas desde máximos)
-                _k2_red  = (_ks_red >= 2
-                            and (_ks_cagr is None or float(_ks_cagr) <= 0.0)
-                            and _k2_racha_ok)
-                if _k2_cagr or _k2_red:
-                    _k2_partes = []
-                    if _k2_cagr:
-                        _k2_partes.append(f"CAGR 5a {_ks_cagr:.1%}")
-                    if _k2_red:
-                        # Solo incluir CAGR inline si _k2_cagr no lo mostró ya (evitar duplicado)
-                        _k2_red_suffix = (
-                            f" (CAGR 5a {_ks_cagr:.1%})"
-                            if _ks_cagr is not None and not _k2_cagr else ""
-                        )
-                        _k2_partes.append(
-                            f"{_ks_red} años consecutivos de reducción{_k2_red_suffix}"
-                        )
+                _k2_racha   = _sc_anos_dividendo(dividends)
+                _k2_ventana = min(5, _k2_racha)
+                _k2_cagr_w  = _sc_cagr_dividendo_ventana(dividends, _k2_ventana)
+                _k2_red     = _sc_anos_reduccion_div(dividends)
+                _k2_fire, _k2_motivo = False, ""
+                if _k2_racha >= 5:
+                    if _k2_cagr_w is not None and float(_k2_cagr_w) < -0.10:
+                        _k2_fire   = True
+                        _k2_motivo = f"CAGR {_k2_ventana}a {_k2_cagr_w:.1%}"
+                elif 3 <= _k2_racha <= 4:
+                    _cagr_severo = (_k2_cagr_w is not None and float(_k2_cagr_w) < -0.20)
+                    if _cagr_severo or _k2_red >= 2:
+                        _k2_fire   = True
+                        _k2_motivo = (f"CAGR {_k2_ventana}a {_k2_cagr_w:.1%}" if _cagr_severo
+                                      else f"{_k2_red} años consecutivos de reducción")
+                if _k2_fire:
                     killshots.append({
                         "codigo": "K2",
-                        "razon":  f"Recorte sistemático del dividendo ({' · '.join(_k2_partes)}) — "
+                        "razon":  f"Recorte sistemático del dividendo ({_k2_motivo}) — "
                                   f"tendencia estructural negativa incompatible con cartera de rentas",
                     })
 
