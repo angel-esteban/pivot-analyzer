@@ -12420,7 +12420,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _ks_yield_ttm = _sc_dividend_yield_ttm(info, dividends)
             if _ks_yield_ttm is not None and 0 < float(_ks_yield_ttm) < 0.025:
                 killshots.append({
-                    "tipo":   "soft",
+                    "tipo":   "aviso",   # #C: informativa (K3/K4 ya no degradan el veredicto)
                     "codigo": "K3",
                     "razon":  f"Yield {_ks_yield_ttm:.1%} (TTM) insuficiente para cartera de rentas "
                               f"(mínimo orientativo 2.5%) — empresa de calidad pero "
@@ -12437,7 +12437,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _ks_fcf_est = _fcf_estado_ks   # #6-B: fallback-aware (antes _sc_fcf_vs_div nativo)
             if _ks_anos < 7 and _ks_fcf_est == "ko":
                 killshots.append({
-                    "tipo":   "soft",
+                    "tipo":   "aviso",   # #C: informativa (K3/K4 ya no degradan el veredicto)
                     "codigo": "K4",
                     "razon":  f"Historial de {_ks_anos} {'año' if _ks_anos == 1 else 'años'} (mínimo 7) con FCF insuficiente — "
                               f"sin track record en ciclos completos y cobertura de caja comprometida. "
@@ -12607,18 +12607,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                           f"Señal informativa: no modifica el veredicto.",
             })
 
-        # Aplicar killshots
-        # Hard  (K1, K2, K5): fuerzan no_cumple + cap en 44
-        # Aviso degrade (K1-BPA, K1-Payout): si "cumple" → degrada a parcial + cap 69
-        # Soft degrade  (K3, K4): si "cumple" → degrada a parcial + cap 69
-        #   K3: yield < 2.5% — no apto para income por definición
-        #   K4: historial corto + FCF ko — doble riesgo (FCF-ko ya es condición de disparo)
-        # Aviso puro (K1-FCF): visible en UI, sin efecto sobre veredicto
+        # Aplicar killshots — pipeline de veredicto (#C):
+        #   Bloqueantes (→ No cumple): K2, K5, K10 (racha < 3).
+        #   Degradantes (cap → Parcial, sin tocar el score): K1-BPA, K1-Payout, K10 (3–4).
+        #   Informativas (NO mueven el veredicto, solo cabecera): K3, K4, K6, K7, K8, K9, K1-FCF.
+        # K3/K4 dejaron de degradar (#C): eran 'soft' y bajaban a Parcial; ahora son informativas,
+        # así la columna Motivo es coherente (un Parcial por score 69 ≠ un Parcial topado por veto).
         if puntuacion >= 70:   estado_global = "cumple"
         elif puntuacion >= 45: estado_global = "parcial"
         else:                  estado_global = "no_cumple"
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
-        _ks_soft          = [k for k in killshots if k.get("tipo") == "soft"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
                              and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10")]
@@ -12647,16 +12645,41 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 f"El score refleja la calidad del perfil dividendo; el veredicto "
                 f"se degrada por la señal cualitativa, no por los criterios individuales."
             )
-        elif _ks_soft and estado_global == "cumple":
-            _score_pre    = puntuacion
-            estado_global = "parcial"
-            puntuacion    = min(puntuacion, 69)
-            _kd_codes     = " + ".join(k["codigo"] for k in _ks_soft)
-            nota_degradacion = (
-                f"Score {_score_pre} — estado degradado a Parcial por señal {_kd_codes} activa. "
-                f"La puntuación refleja criterios individuales; la señal cualitativa "
-                f"prevalece sobre el score numérico en la determinación del estado final."
-            )
+
+        # #C — Motivo gobernante: qué restricción FIJA el veredicto (legibilidad score↔veredicto).
+        # Regla: No cumple → manda el veto más severo activo; Parcial → el cap más severo
+        # activo; si no hay veto/cap del tipo que corresponde, el veredicto lo fija la
+        # puntuación → "—" (p.ej. VID 69 Parcial por score, sin veto ni cap). Así un Parcial
+        # con cap activo (TEF/AMS) se distingue de un Parcial por puntuación (VID).
+        _ETIQ_MOTIVO = {
+            "K5":        ("free float < 20%",                "veto"),
+            "K2":        ("recorte sostenido del dividendo", "veto"),
+            "K10-veto":  ("historial < 3 años",              "veto"),
+            "K1-BPA":    ("BPA negativo",                     "cap"),
+            "K1-Payout": ("payout ≥ 85%",                     "cap"),
+            "K10-cap":   ("historial corto (3–4 a.)",        "cap"),
+        }
+        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap"]  # más severo primero
+        _activos_mot = []
+        for _k in killshots:
+            _cod, _tip = _k.get("codigo"), _k.get("tipo", "hard")
+            if _cod == "K10":                                 _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
+            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout"): _activos_mot.append(_cod)
+        motivo, motivo_tipo = "—", "score"
+        if estado_global == "no_cumple":
+            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "veto"]
+        elif estado_global == "parcial":
+            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "cap"]
+        else:
+            _pool = []
+        if _pool:
+            _gob = min(_pool, key=lambda m: _SEV_MOTIVO.index(m))
+            _lbl, motivo_tipo = _ETIQ_MOTIVO[_gob]
+            _cod_gob = "K10" if _gob.startswith("K10") else _gob
+            motivo = f"{_cod_gob} · {_lbl} · {motivo_tipo}"
+            _n_extra = len(_activos_mot) - 1
+            if _n_extra > 0:
+                motivo += f"  (+{_n_extra})"
 
         return {
             "ticker":                ticker,
@@ -12664,6 +12687,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "puntuacion":            puntuacion,
             "puntuacion_raw":        puntuacion_raw,
             "estado_global":         estado_global,
+            "motivo":                motivo,        # #C: restricción que fija el veredicto
+            "motivo_tipo":           motivo_tipo,   # "veto" | "cap" | "score"
             "criterios":             resultados_criterios,
             "n_na":                  n_na,
             "n_na_cap":              n_na_cap,
@@ -12866,29 +12891,38 @@ def _generar_pdf_screening(job: dict) -> bytes:
     # ── Tabla resumen tickers ──────────────────────────────────────────
     story.append(Paragraph("Resumen de valores", S_SECTION))
     hdr_style = {"fontName": "Helvetica-Bold", "fontSize": 8, "textColor": colors.white}
+    _MOT_HEX = {"veto": "#dc2626", "cap": "#d97706", "score": "#94a3b8"}
     tbl_data = [[
         p("<b>Ticker</b>",  **hdr_style),
         p("<b>Empresa</b>", **hdr_style),
         p("<b>Score</b>",   **hdr_style, alignment=TA_CENTER),
         p("<b>Estado</b>",  **hdr_style, alignment=TA_CENTER),
+        p("<b>Motivo</b>",  **hdr_style),
     ]]
     for r in resultado:
         eg    = r.get("estado_global", "error")
         ehex  = ESTADO_HEX.get(eg, "#94a3b8")
         elbl  = ESTADO_LABEL.get(eg, eg)
         score = r.get("puntuacion", 0)
-        nombre = (r.get("nombre") or r.get("ticker", ""))[:45]
+        nombre = (r.get("nombre") or r.get("ticker", ""))[:38]
+        # #C — Motivo: restricción que fija el veredicto (veto/cap), o "—" si por puntuación.
+        if r.get("no_apto"):       _mot, _mhex = "sin dividendo", "#94a3b8"
+        elif r.get("error"):       _mot, _mhex = "—", "#94a3b8"
+        else:
+            _mot  = r.get("motivo", "—")
+            _mhex = _MOT_HEX.get(r.get("motivo_tipo", "score"), "#94a3b8")
         tbl_data.append([
             p(f"<b>{r.get('ticker','')}</b>", fontSize=8),
             p(nombre, fontSize=8),
             p(f"<b>{score}</b>", fontSize=8, alignment=TA_CENTER),
             p(f"<font color='{ehex}'><b>{elbl}</b></font>", fontSize=8, alignment=TA_CENTER),
+            p(f"<font color='{_mhex}'>{_mot}</font>", fontSize=7),
         ])
     row_styles = []
     for i in range(1, len(tbl_data)):
         bg = colors.white if i % 2 == 1 else C_BG1
         row_styles.append(("BACKGROUND", (0, i), (-1, i), bg))
-    tbl = Table(tbl_data, colWidths=[2.5*cm, 8.5*cm, 2*cm, 2.5*cm], repeatRows=1)
+    tbl = Table(tbl_data, colWidths=[2.1*cm, 5.4*cm, 1.5*cm, 2.1*cm, 5.4*cm], repeatRows=1)
     tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (-1,0), C_DARK),
         ("GRID",          (0,0), (-1,-1), 0.25, C_BORDER),
@@ -12982,6 +13016,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
             p(f"<b>{ticker}</b>  <font color='#64748b'>{nombre}</font>  "
               f"| Score: <b>{score}/100</b>  "
               f"| <font color='{ehex}'><b>{elbl}</b></font>"
+              f" — determinado por <i>{r.get('motivo','—')}</i>"
               f"{_na_txt}{_inc_txt}",
               fontName="Helvetica-Bold", fontSize=9, textColor=C_DARK,
               spaceBefore=6, spaceAfter=2),
@@ -12993,6 +13028,11 @@ def _generar_pdf_screening(job: dict) -> bytes:
     # ── Pie ───────────────────────────────────────────────────────────
     story.append(Spacer(1, 0.8*cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER))
+    story.append(Paragraph(
+        "Motivo = restricción que fija el veredicto. <i>veto</i> fuerza No cumple; "
+        "<i>cap</i> limita a Parcial; “—” = el veredicto lo determina la puntuación.",
+        S_FOOT
+    ))
     story.append(Paragraph(
         "Generado por PivotAnalyzer. Solo uso formativo — no constituye asesoramiento de inversión.",
         S_FOOT
@@ -13093,8 +13133,12 @@ def _render_screening_resultados(job: dict):
         _suf_r  = (f" — {_n_ev_r} evaluables, {_n_na_r} sin datos"
                    if _n_na_r > 0 else "")
         _inc_r  = "  ⚠️ *Incompleto*" if r.get("evaluacion_incompleta") else ""
+        # #C — Motivo en la etiqueta: hace legible por qué un score alto puede tener veredicto
+        # limitado (veto/cap) frente a un Parcial por puntuación ("—" no se muestra).
+        _mot_r   = r.get("motivo", "—")
+        _mot_lbl = f"   |   {_mot_r}" if (_mot_r and _mot_r != "—") else ""
         label  = (f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
-                  f"{_suf_r}{_inc_r}")
+                  f"{_mot_lbl}{_suf_r}{_inc_r}")
 
         with st.expander(label, expanded=False):
             if r.get("error"):
