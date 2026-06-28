@@ -12577,6 +12577,20 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # Se dispara cuando un campo era inválido en vivo (rango o coherencia) y la BBDD
         # tampoco tiene un valor fiable (lo marcó la ingesta o no lo tiene). Aplica a todas
         # las carteras, por eso va fuera del bloque de dividendos.
+        # #E — Precedencia de la exclusión sectorial sobre K8: si un criterio es N/A por
+        # sector (banca/seguros/REIT), su campo NO debe disparar K8 aunque el dato subyacente
+        # faltara — sería N/A de todos modos. Caso CABK: payout sector-N/A pero el dato faltaba
+        # y emitía K8, incoherente con BBVA/MAP/SAN/UNI. Corta el "paso 4" para esos campos.
+        _id2campo_e = {c.get("id"): c.get("campo") for c in criterios}
+        _KNOWN_CAMPO_E = {"free_cash_flow": "freeCashflow"}   # criterios computados sin 'campo' nativo
+        _campos_sector_na = set()
+        for _rc in resultados_criterios:
+            if "(sector)" in str(_rc.get("valor_fmt", "")):
+                _cmp_e = _id2campo_e.get(_rc.get("id")) or _KNOWN_CAMPO_E.get(_rc.get("id"))
+                if _cmp_e:
+                    _campos_sector_na.add(_cmp_e)
+        if _campos_sector_na:
+            _campos_sin_calidad = [c for c in _campos_sin_calidad if c not in _campos_sector_na]
         # Coherencia con el fallback: si el payout se evaluó por DPA/BPA, no declararlo
         # "excluido por falta de valor de confianza" en K8 (se evaluó, no se excluyó).
         if info.get("payoutRatio") is not None and "payoutRatio" in _campos_sin_calidad:
