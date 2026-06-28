@@ -11797,6 +11797,36 @@ def _es_sector_sin_metricas_convencionales(info: dict) -> bool:
     return sector == "Financial Services" or industry.startswith("Insurance")
 
 
+# #8(c) — Penalización aditiva por KO, graduada por gravedad (job #33). El score base
+# (KO 0.15 << ~OK 0.60) ya baja con cada KO; esta penalización lo separa por gravedad para
+# que un KO crítico reste estrictamente más que uno leve y nadie empate por carga de KO.
+_PEN_GRAVEDAD = {"critico": 18, "grave": 12, "leve": 6}   # magnitudes de partida (calibrables)
+
+def _gravedad_ko(cid: str, valor_raw, info: dict) -> str:
+    """Gravedad ('critico'/'grave'/'leve') de un criterio en KO para penalizar el score."""
+    if cid == "payout_ratio":
+        _bpa = info.get("trailingEps")
+        if _bpa is not None and float(_bpa) < 0:                       return "critico"  # paga sin beneficio
+        if valor_raw is not None and float(valor_raw) > 1.0:           return "critico"  # >100%
+        return "grave"                                                                   # 85–100%
+    if cid == "free_cash_flow":
+        _sec = (info.get("sector") or "").lower()
+        _ind = (info.get("industry") or "").lower()
+        if "utilit" in _sec or "real estate" in _sec or _ind.startswith("reit"):
+            return "leve"                                                                # capex regulado (K6)
+        return "critico"                                                                 # déficit de caja sin coartada
+    if cid == "dividend_yield":          return "grave"   # yield bajo: invalida la tesis income
+    if cid == "ev_ebitda":               return "grave"   # margen de seguridad comprimido
+    if cid == "crecimiento_dividendo":   return "grave"   # erosión material de la renta
+    if cid == "deuda_equity":
+        _de = valor_raw
+        if _de is not None and float(_de) > 5:   _de = float(_de) / 100   # forma % -> ×
+        if _de is not None and float(_de) > 3.5: return "grave"           # apalancamiento extremo
+        return "leve"                                                     # alta pero no extrema
+    if cid == "free_float":              return "grave"   # K5 (de todos modos veta)
+    return "leve"   # liquidez, técnicos, historial y resto
+
+
 def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflow=None) -> dict:
     """Evalúa un criterio contra los datos del ticker. Devuelve {estado, valor_raw, valor_fmt, mensaje}."""
     cid      = crit.get("id", "")
@@ -12195,21 +12225,26 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 }
 
         resultados_criterios = []
-        puntos_total  = 0
-        puntos_max    = 0
+        puntos_total  = 0.0
+        puntos_max    = 0.0
+        _pen_ko       = 0     # #8(c): penalización aditiva por KO (graduada por gravedad)
 
         for crit in criterios:
             peso   = crit.get("peso", 1)
             res    = _evaluar_criterio(crit, info, hist, dividends, cashflow)
             estado = res["estado"]
 
-            if estado == "ok":          pts = peso * 2
-            elif estado == "warning":   pts = peso * 1
-            else:                       pts = 0
-
+            # #8(c) — Base de calidad con KO << ~OK (v: OK 1.0 · ~OK 0.6 · KO 0.15).
+            # Antes el KO valía 0 y el ~OK 0.5 (peso*1/peso*2): cerca del tramo medio un KO
+            # penalizaba casi como un ~OK y FER (2 KO) empataba con VID/ROVI (0 KO). Ahora la
+            # base baja con cada KO y, además, se suma la penalización aditiva por gravedad.
+            _v = {"ok": 1.0, "warning": 0.6, "ko": 0.15}.get(estado, 0.0)
             if estado not in ("manual", "sin_datos"):
-                puntos_max += peso * 2
-            puntos_total += pts
+                puntos_max   += peso * 1.0
+                puntos_total += peso * _v
+                if estado == "ko":
+                    _pen_ko += _PEN_GRAVEDAD[_gravedad_ko(crit.get("id", ""),
+                                                          res.get("valor_raw"), info)]
 
             resultados_criterios.append({
                 "id":        crit.get("id",""),
@@ -12231,14 +12266,16 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         n_na_sector = sum(1 for c in resultados_criterios
                           if "(sector)" in str(c.get("valor_fmt", "")))
         n_na_cap    = n_na - n_na_sector          # solo N/A por falta de dato penalizan
-        puntuacion_raw = round(puntos_total / puntos_max * 100) if puntos_max > 0 else 0
-        # Penalizacion: cada N/A por falta de dato resta 10 puntos al maximo alcanzable
-        puntuacion   = min(puntuacion_raw, max(0, 100 - n_na_cap * 10))
-        # #8(c) — Penalización explícita por KO: −5 puntos por cada criterio en KO, para que
-        # el score sea estrictamente monótono en nº de KO (guarda de regresión #8.4: añadir
-        # un KO SIEMPRE baja el score). Antes FER (2 KO) empataba a 69 con VID/ROVI (0 KO).
-        _n_ko_pen  = sum(1 for c in resultados_criterios if c.get("estado") == "ko")
-        puntuacion = max(0, puntuacion - 5 * _n_ko_pen)
+        # #8(c) — Score = base de calidad − penalización por KO (gravedad). El término
+        # aditivo garantiza monotonicidad estricta (añadir un KO baja la base Y suma pena) y
+        # separa por gravedad (crítico 18 > grave 12 > leve 6). Antes FER (2 KO) empataba a 69
+        # con VID/ROVI (0 KO). NOTA: magnitudes de partida — requiere calibrar con un cribado
+        # completo del índice junto a los umbrales de veredicto (Cumple≥70, Parcial≥45).
+        _base      = (puntos_total / puntos_max * 100) if puntos_max > 0 else 0
+        _score_raw = _base - _pen_ko                 # puede ser negativo: clave de orden en la cola
+        _techo_na  = max(0, 100 - n_na_cap * 10)     # #8(b): techo solo por N/A de falta de dato
+        puntuacion     = int(round(max(0, min(_score_raw, 100, _techo_na))))
+        puntuacion_raw = int(round(_score_raw))      # ranking interno (no clampeado en el suelo)
         evaluacion_incompleta = n_na_cap >= 3
 
         # ── Killshots: señales que fuerzan no_cumple independientemente del score ──
