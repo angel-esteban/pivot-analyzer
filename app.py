@@ -15130,14 +15130,6 @@ def pantalla_analisis():
         with st.spinner(f"Calculando beta vs {_indice_ref_nombre}..."):
             beta_calculada = calcular_beta_vs_indice(ticker_activo, _indice_ref_ticker)
 
-        # #UI — Dos capas del análisis técnico en pestañas: 'Ejecutivo' (precio → Diagnóstico
-        # Técnico) y 'Detallado' (Pivot Points en adelante). Se abre/cierra el contexto de cada
-        # pestaña en TRES puntos (aquí, en el límite Pivot y al final) para no reindentar las
-        # ~3000 líneas de render: __enter__/__exit__ es lo mismo que hace `with`, y como el flujo
-        # de render no tiene return tempranos (todos los return son de helpers anidados), es seguro.
-        # Cada widget conserva su comportamiento actual (iconos de ayuda, expanders, gráficos…).
-        _tab_ej, _tab_det = st.tabs(["📋 Ejecutivo", "🔬 Detallado"])
-        _tab_ej.__enter__()
         # ---- PRECIO ACTUAL ----
         col_p1, col_p2, col_p3, col_p4 = st.columns([2.2, 2.1, 1.4, 1.1])
         # Cambio diario: usar campos directos de yfinance (previousClose + regularMarketPrice)
@@ -15592,6 +15584,16 @@ def pantalla_analisis():
                      "Valor alto (0.50€): agrupa zonas más amplias."
             )
 
+        # #UI — Dos capas en pestañas. El HEADER de arriba (precio, gráfico, controles Sistema
+        # Pivot/Tolerancia) queda FUERA de las pestañas → así es visible en AMBAS (Ejecutivo y
+        # Detallado), que es lo pedido. No se puede duplicar dentro de cada pestaña: los controles
+        # tienen keys fijas (sistema_sel_key, tolerancia_key) y Streamlit abortaría por
+        # DuplicateWidgetID. Las pestañas dividen solo las secciones de análisis: Ejecutivo
+        # (Lectura Integrada → Diagnóstico Técnico) | Detallado (Pivot Points → resto). Se
+        # entra/sale del contexto en tres puntos (aquí, límite Pivot, fin) para no reindentar el
+        # render; el flujo no tiene return tempranos (los return son de helpers), así que es seguro.
+        _tab_ej, _tab_det = st.tabs(["📋 Ejecutivo", "🔬 Detallado"])
+        _tab_ej.__enter__()
         # ── Bloque 1: Lectura Integrada (arriba) + Semáforo (abajo) ─────────
         _sh("🔗 Lectura Integrada")
         _lectura_integrada(
