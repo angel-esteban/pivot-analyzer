@@ -15130,6 +15130,14 @@ def pantalla_analisis():
         with st.spinner(f"Calculando beta vs {_indice_ref_nombre}..."):
             beta_calculada = calcular_beta_vs_indice(ticker_activo, _indice_ref_ticker)
 
+        # #UI — Dos capas del análisis técnico en pestañas: 'Ejecutivo' (precio → Diagnóstico
+        # Técnico) y 'Detallado' (Pivot Points en adelante). Se abre/cierra el contexto de cada
+        # pestaña en TRES puntos (aquí, en el límite Pivot y al final) para no reindentar las
+        # ~3000 líneas de render: __enter__/__exit__ es lo mismo que hace `with`, y como el flujo
+        # de render no tiene return tempranos (todos los return son de helpers anidados), es seguro.
+        # Cada widget conserva su comportamiento actual (iconos de ayuda, expanders, gráficos…).
+        _tab_ej, _tab_det = st.tabs(["📋 Ejecutivo", "🔬 Detallado"])
+        _tab_ej.__enter__()
         # ---- PRECIO ACTUAL ----
         col_p1, col_p2, col_p3, col_p4 = st.columns([2.2, 2.1, 1.4, 1.1])
         # Cambio diario: usar campos directos de yfinance (previousClose + regularMarketPrice)
@@ -16000,6 +16008,11 @@ de debilidad a corto plazo.
 
         st.divider()
 
+        # #UI — Fin de la pestaña 'Ejecutivo' (hasta Diagnóstico Técnico) e inicio de
+        # 'Detallado' (Pivot Points en adelante). Ambos en el nivel de cuerpo (8 espacios),
+        # sin withs abiertos → el cierre/apertura de contexto es limpio.
+        _tab_ej.__exit__(None, None, None)
+        _tab_det.__enter__()
         # ── Bloque 2: Pivot Points (izq) | Confluencias (der) ────────────
         col_piv, col_conf = st.columns([3, 2])
 
@@ -18321,6 +18334,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                 st.button("✉️ Enviar por email", key="email_pdf_at_dis",
                                           disabled=True, use_container_width=True,
                                           help="Añade tu email en 👤 Mi Perfil")
+
+        # #UI — Cierre de la pestaña 'Detallado' (apertura en el límite Pivot Points).
+        # Último statement del cuerpo de _render_analisis, en el nivel de la función (8 espacios).
+        _tab_det.__exit__(None, None, None)
 
 
     # ---- RENDER TAB ANÁLISIS (función anidada para que los return no salgan de pantalla_analisis) ----
