@@ -6461,8 +6461,11 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           puntuacion_tec=None,
                           hist=None,
                           info: dict = None,
-                          div_ttm: float = None) -> str:
-    """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla)."""
+                          div_ttm: float = None,
+                          solo_ejecutivo: bool = False) -> str:
+    """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla).
+    solo_ejecutivo=True → informe corto: cabecera + capa ejecutiva (hasta Diagnóstico Técnico).
+    """
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
     sem_colors = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}
@@ -7586,6 +7589,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div>\n<div class="col-title">Volumen</div>\n{vol_html}\n</div>\n'
         f'</div>\n'
     )
+    # #UI — Capa EJECUTIVA del informe: hasta Diagnóstico Técnico (incluido). El DETALLE
+    # (Pivots, indicadores, confluencias, divergencias, huecos, fundamentales, alertas,
+    # valoración) solo se añade en el informe COMPLETO (solo_ejecutivo=False).
     _body_html = (
         (_li_section or "")
         + _fund_html_h
@@ -7594,15 +7600,18 @@ tr:nth-child(even) td { background:#f8fafc; }
         + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color)
         + f"</div>\n"
         + (_diag_section or "")
-        + _pivots_card_html
-        + _ind_card_html
-        + (_conv_section or "")
-        + (_divs_section or "")
-        + (_huecos_section or "")
-        + f"{fund_section}\n"
-        + _alertas_section_h
-        + _val_sem_section_h
     )
+    if not solo_ejecutivo:
+        _body_html += (
+            _pivots_card_html
+            + _ind_card_html
+            + (_conv_section or "")
+            + (_divs_section or "")
+            + (_huecos_section or "")
+            + f"{fund_section}\n"
+            + _alertas_section_h
+            + _val_sem_section_h
+        )
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
         f'<meta charset="UTF-8">'
@@ -8345,8 +8354,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 puntuacion_tec=None,
                 hist=None,
                 info: dict = None,
-                div_ttm: float = None):
-    """PDF con precio prominente + pivots multi-columna en paralelo."""
+                div_ttm: float = None,
+                solo_ejecutivo: bool = False):
+    """PDF con precio prominente + pivots multi-columna en paralelo.
+    solo_ejecutivo=True → informe corto: cabecera + capa ejecutiva (hasta Diagnóstico Técnico).
+    """
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
@@ -8842,6 +8854,13 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             historia.append(Spacer(1, 0.15*cm))
             historia.append(Paragraph(puntuacion_tec["texto"], _p(fontSize=7.5, textColor=_col_d)))
             historia.append(Spacer(1, 0.15*cm))
+
+    # #UI — Informe EJECUTIVO: hasta Diagnóstico Técnico. Si solo_ejecutivo, cerrar el PDF aquí
+    # (sin Fibonacci, Pivots, indicadores detallados, fundamentales…). La cabecera ya está en
+    # 'historia'. El informe COMPLETO continúa con todo el detalle.
+    if solo_ejecutivo:
+        doc.build(historia)
+        return buf.getvalue()
 
     # ── Fibonacci synthesis PDF ───────────────────────────────────────────
     if analisis_fibo:
@@ -16010,6 +16029,67 @@ de debilidad a corto plazo.
 
         st.divider()
 
+        # #UI — Exportar RESUMEN EJECUTIVO al final de Ejecutivo: cabecera + capa ejecutiva
+        # (hasta Diagnóstico Técnico). El informe COMPLETO está en la pestaña Detallado. Mismos
+        # generadores con solo_ejecutivo=True; keys propias (_ej) para no colisionar con el completo.
+        st.divider()
+        st.markdown("### 📥 Exportar resumen ejecutivo")
+        _ejx_c1, _ejx_c2 = st.columns([1, 3])
+        with _ejx_c1:
+            _fmt_ej = st.radio("Formato", ["HTML", "PDF"], horizontal=True, key="fmt_export_ej")
+        with _ejx_c2:
+            if st.button("⬇️ Generar resumen", type="primary", key="btn_export_ej"):
+                _ts_ej = datetime.now().strftime("%Y%m%d_%H%M")
+                if _fmt_ej == "HTML":
+                    with st.spinner("Generando resumen HTML..."):
+                        _html_ej = generar_informe_html(
+                            ticker=ticker_activo, nombre=nombre, tipo_activo=tipo_activo,
+                            precio=precio, cambio=cambio, cambio_pct=cambio_pct,
+                            h52=info.get("fiftyTwoWeekHigh"), l52=info.get("fiftyTwoWeekLow"),
+                            currency=info.get("currency", ""), sistema=sistema_activo,
+                            resultados_pivots=resultados_pivots, confluencias=confluencias,
+                            semaforo=color_sem, pct_semaforo=pct_sem, factores_semaforo=factores_sem,
+                            rsi_val=rsi_val, macd_val=macd_val, macd_señal=macd_señal,
+                            macd_hist_val=macd_hist_val, sar_val=sar_val, sar_tend=sar_tend,
+                            pct_b=pct_b, medias=medias, vol_data=vol_data, fundamentales=fundamentales,
+                            tolerancia=tol_activa, niveles_reforzados=niveles_reforzados,
+                            señales_dir=señales_dir, consenso_dir=consenso_dir,
+                            divergencias_tecnicas=divergencias_tecnicas, bb_sup=bb_sup,
+                            bb_med=bb_med, bb_inf=bb_inf, huecos=huecos_abiertos,
+                            analisis_ath=analisis_ath, analisis_sma200=analisis_sma200,
+                            analisis_resist=analisis_resist, analisis_fibo=analisis_fibo,
+                            analisis_rsi=analisis_rsi, analisis_vol=analisis_vol,
+                            puntuacion_tec=puntuacion_tec, hist=hist, info=info, div_ttm=div_ttm,
+                            solo_ejecutivo=True,
+                        )
+                    st.download_button("📄 Descargar resumen HTML",
+                        data=_html_ej.encode("utf-8"),
+                        file_name=f"{ticker_activo}_EJECUTIVO_{_ts_ej}.html",
+                        mime="text/html", key="dl_html_ej")
+                else:
+                    with st.spinner("Generando resumen PDF..."):
+                        _pdf_ej = generar_pdf(
+                            ticker=ticker_activo, precio=precio, sistema=sistema_activo,
+                            resultados_pivots=resultados_pivots, confluencias=confluencias,
+                            semaforo=color_sem, factores_semaforo=factores_sem, vol_data=vol_data,
+                            indicadores=indicadores_dict, fundamentales=fundamentales,
+                            nombre=nombre, tipo_activo=tipo_activo, cambio=cambio,
+                            cambio_pct=cambio_pct, h52=info.get("fiftyTwoWeekHigh"),
+                            l52=info.get("fiftyTwoWeekLow"), currency=info.get("currency", ""),
+                            pct_semaforo=pct_sem, niveles_reforzados=niveles_reforzados,
+                            señales_dir=señales_dir, consenso_dir=consenso_dir,
+                            divergencias_tecnicas=divergencias_tecnicas, huecos=huecos_abiertos,
+                            analisis_ath=analisis_ath, analisis_sma200=analisis_sma200,
+                            analisis_resist=analisis_resist, analisis_fibo=analisis_fibo,
+                            analisis_rsi=analisis_rsi, analisis_vol=analisis_vol,
+                            puntuacion_tec=puntuacion_tec, hist=hist, info=info, div_ttm=div_ttm,
+                            solo_ejecutivo=True,
+                        )
+                    st.download_button("📄 Descargar resumen PDF",
+                        data=_pdf_ej,
+                        file_name=f"{ticker_activo}_EJECUTIVO_{_ts_ej}.pdf",
+                        mime="application/pdf", key="dl_pdf_ej")
+
         # #UI — Fin de la pestaña 'Ejecutivo' (hasta Diagnóstico Técnico) e inicio de
         # 'Detallado' (Pivot Points en adelante). Ambos en el nivel de cuerpo (8 espacios),
         # sin withs abiertos → el cierre/apertura de contexto es limpio.
@@ -18208,8 +18288,8 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
         st.divider()
 
-        # Descarga informe
-        st.markdown("### 📥 Exportar informe")
+        # Descarga informe COMPLETO (pestaña Detallado): cabecera + todo el detalle del análisis.
+        st.markdown("### 📥 Exportar informe completo")
         col_fmt, col_btn = st.columns([1, 3])
         with col_fmt:
             fmt_sel = st.radio("Formato", ["HTML", "PDF"],
@@ -18338,7 +18418,6 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                           help="Añade tu email en 👤 Mi Perfil")
 
         # #UI — Cierre de la pestaña 'Detallado' (apertura en el límite Pivot Points).
-        # Último statement del cuerpo de _render_analisis, en el nivel de la función (8 espacios).
         _tab_det.__exit__(None, None, None)
 
 
