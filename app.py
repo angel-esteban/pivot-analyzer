@@ -6474,6 +6474,13 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
     sem_color  = sem_colors.get(semaforo, "#94a3b8")
     emoji_sem  = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
     var_color  = "#22c55e" if cambio_pct >= 0 else "#ef4444"
+    # #UI — Fallback 52W desde el histórico cuando yfinance no devuelve fiftyTwoWeekHigh/Low
+    # (frecuente en valores españoles, p.ej. REP.MC), igual que hace la pantalla.
+    if (not h52 or not l52) and hist is not None and len(hist):
+        try:
+            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min())
+        except Exception:
+            pass
     h52_str = f"{h52:.2f}" if h52 else "—"
     l52_str = f"{l52:.2f}" if l52 else "—"
 
@@ -8453,6 +8460,12 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
+    # #UI — Fallback 52W desde el histórico cuando yfinance no devuelve fiftyTwoWeekHigh/Low.
+    if (not h52 or not l52) and hist is not None and len(hist):
+        try:
+            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min())
+        except Exception:
+            pass
     h52_str = f"{l52:.2f} – {h52:.2f}" if h52 and l52 else "—"
     # Estilos exclusivos para la cabecera
     S_DLBL = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#93c5fd"))
@@ -8478,24 +8491,35 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
     ]))
 
+    # #UI — Volumen hoy y Beta como métricas DESTACADAS de la cabecera (igual que en pantalla).
+    try:
+        _vol_hoy_p = _fmt_numero(float(hist["Volume"].iloc[-1])) if (hist is not None and len(hist)) else "—"
+    except Exception:
+        _vol_hoy_p = "—"
+    _beta_p = (f"{beta_val:.2f}" if beta_val is not None
+               else (f"{info.get('beta'):.2f}" if (info and info.get('beta') is not None) else "—"))
     precio_cell = [Paragraph(f"PRECIO  {currency}", S_DLBL),
                    Paragraph(f"{precio:.4f}", S_DVAL)]
     cambio_cell = [Paragraph("VARIACIÓN", S_DLBL),
                    Paragraph(f"{cambio:+.4f}  ({cambio_pct:+.2f}%)", S_DVAL)]
     h52_cell    = [Paragraph("52 SEMANAS", S_DLBL),
                    Paragraph(h52_str, S_DVAL)]
+    vol_cell    = [Paragraph("VOLUMEN HOY", S_DLBL),
+                   Paragraph(_vol_hoy_p, S_DVAL)]
+    beta_cell   = [Paragraph("BETA vs ÍNDICE", S_DLBL),
+                   Paragraph(_beta_p, S_DVAL)]
 
     cab_t = Table(
-        [[info_inner, "", ""],
-         [precio_cell, cambio_cell, h52_cell]],
-        colWidths=[6*cm, 6*cm, 6*cm],
+        [[info_inner, "", "", "", ""],
+         [precio_cell, cambio_cell, h52_cell, vol_cell, beta_cell]],
+        colWidths=[3.6*cm, 3.6*cm, 3.6*cm, 3.6*cm, 3.6*cm],
         rowHeights=[1.8*cm, 1.8*cm]   # filas iguales en altura
     )
     cab_t.setStyle(TableStyle([
-        ("SPAN",          (0,0),  (2,0)),
+        ("SPAN",          (0,0),  (4,0)),
         ("BACKGROUND",    (0,0),  (-1,-1), CA),
         # fila superior: contenido centrado verticalmente
-        ("VALIGN",        (0,0),  (2,0),   "MIDDLE"),
+        ("VALIGN",        (0,0),  (4,0),   "MIDDLE"),
         # fila inferior: desde arriba
         ("VALIGN",        (0,1),  (-1,1),  "TOP"),
         ("LEFTPADDING",   (0,0),  (-1,-1), 10),
@@ -8508,16 +8532,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("BOTTOMPADDING", (0,1),  (-1,1),  10),
     ]))
     historia.append(cab_t)
-    # #UI — Volumen hoy y Beta en la cabecera del PDF (igualar la de pantalla).
-    try:
-        _vol_hoy_p = _fmt_numero(float(hist["Volume"].iloc[-1])) if (hist is not None and len(hist)) else "—"
-    except Exception:
-        _vol_hoy_p = "—"
-    _beta_p = (f"{beta_val:.2f}" if beta_val is not None
-               else (f"{info.get('beta'):.2f}" if (info and info.get('beta') is not None) else "—"))
     chips_t = Table(
-        [[Paragraph(f"Volumen hoy: {_vol_hoy_p}   ·   Beta: {_beta_p}   ·   "
-                    f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
+        [[Paragraph(f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
         colWidths=[18*cm]
     )
     chips_t.setStyle(TableStyle([
