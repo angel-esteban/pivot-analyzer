@@ -6326,8 +6326,12 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "Moneda": info.get("currency", "—"),
             "Capitalización": _fmt_numero(info.get("marketCap")),
             "Acciones emitidas": _fmt_numero(info.get("sharesOutstanding")),
+            # PA-C-01 — sanity-check: el free float es un % en (0, 100]. Un valor fuera de
+            # rango (p.ej. 103,5%) es un glitch de la fuente (Yahoo) y NO se pinta como dato
+            # firme; se marca [VERIFICAR] en lugar de propagar el número imposible.
             "Free Float": (
-                f"{info['floatShares'] / info['sharesOutstanding'] * 100:.1f}%"
+                (lambda _ffv: f"{_ffv:.1f}%" if 0 < _ffv <= 100 else "[VERIFICAR]")(
+                    info["floatShares"] / info["sharesOutstanding"] * 100)
                 if info.get("floatShares") and info.get("sharesOutstanding")
                 else "no disponible"
             ),
@@ -6344,7 +6348,13 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
                 if div_ttm and (info.get("currentPrice") or info.get("regularMarketPrice"))
                 else _fmt_pct(info.get("dividendYield"))
             ),
-            "Beta (Yahoo)": _fmt_ratio(info.get("beta")),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
+            # PA-A-04 — sanity-check: una beta fuera de [0, 3] es implausible (p.ej. −0,15 en
+            # una integrada) → probable glitch de fuente; se marca [VERIFICAR] con el valor crudo.
+            "Beta (Yahoo)": (
+                _fmt_ratio(info.get("beta"))
+                if (info.get("beta") is None or 0 <= float(info.get("beta")) <= 3)
+                else f"[VERIFICAR] ({float(info.get('beta')):.2f}x)"
+            ),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
             "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
             "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
             "Objetivo analistas": _fmt_precio(info.get("targetMeanPrice")),
