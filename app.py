@@ -5767,6 +5767,44 @@ def detectar_huecos(hist: "pd.DataFrame", n_dias: int = 252,
     return huecos
 
 
+# =============================================================================
+# CLASIFICADORES ÚNICOS DE INDICADORES (R-1) — fuente única de (categoría, dirección)
+# consumida por el Semáforo Global y por la Señal de Consenso, para que el mismo
+# valor no salga "positivo" en una sección y "bajista" en otra (PA-A-02, PA-A-03).
+# Las bandas reproducen las del Consenso vigente; el Diagnóstico ya usa 45-55 neutro.
+# Cortes de diseño [VERIFICAR]: RSI 45-55 neutro; %B 50 separa mitad alta/baja.
+# =============================================================================
+
+def clasificar_rsi(rsi):
+    """RSI(14) → (categoria, direccion). Categoría ∈ {sobrecomprado, sobrevendido,
+    alcista, neutro, bajista}; dirección ∈ {alcista, bajista, neutro}."""
+    if rsi is None:
+        return (None, None)
+    if rsi > 70:
+        return ("sobrecomprado", "bajista")
+    if rsi < 30:
+        return ("sobrevendido", "alcista")
+    if rsi >= 55:
+        return ("alcista", "alcista")
+    if rsi <= 45:
+        return ("bajista", "bajista")
+    return ("neutro", "neutro")
+
+
+def clasificar_bollinger_pctB(pct_b):
+    """Bollinger %B (en %) → (categoria, direccion). Categoría ∈ {sobrecomprado,
+    sobrevendido, mitad_alta, mitad_baja}; dirección ∈ {alcista, bajista}."""
+    if pct_b is None:
+        return (None, None)
+    if pct_b > 80:
+        return ("sobrecomprado", "bajista")
+    if pct_b < 20:
+        return ("sobrevendido", "alcista")
+    if pct_b >= 50:
+        return ("mitad_alta", "alcista")
+    return ("mitad_baja", "bajista")
+
+
 # CONVERGENCIA TÉCNICA — Pivots + Medias + Indicadores
 # =============================================================================
 
@@ -5819,18 +5857,13 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
     # ── 2. Señal direccional ─────────────────────────────────────────────────
     señales = []
 
-    # RSI
+    # RSI  (R-1: clasificador único)
     if rsi_val is not None:
-        if rsi_val > 70:
-            señales.append(("RSI 14", "🔴 Sobrecomprado", "bajista", rsi_val))
-        elif rsi_val < 30:
-            señales.append(("RSI 14", "🟢 Sobrevendido", "alcista", rsi_val))
-        elif rsi_val >= 55:
-            señales.append(("RSI 14", "🔵 Zona alcista", "alcista", rsi_val))
-        elif rsi_val <= 45:
-            señales.append(("RSI 14", "🟠 Zona bajista", "bajista", rsi_val))
-        else:
-            señales.append(("RSI 14", "⚪ Neutro", "neutro", rsi_val))
+        _rsi_cat, _rsi_dir = clasificar_rsi(rsi_val)
+        _RSI_LBL = {"sobrecomprado": "🔴 Sobrecomprado", "sobrevendido": "🟢 Sobrevendido",
+                    "alcista": "🔵 Zona alcista", "bajista": "🟠 Zona bajista",
+                    "neutro": "⚪ Neutro"}
+        señales.append(("RSI 14", _RSI_LBL[_rsi_cat], _rsi_dir, rsi_val))
 
     # MACD
     if macd_val is not None and macd_señal is not None:
@@ -5850,16 +5883,12 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
         else:
             señales.append(("SAR Parabólico", "🔴 Tendencia bajista", "bajista", None))
 
-    # Bollinger %B
+    # Bollinger %B  (R-1: clasificador único)
     if pct_b is not None:
-        if pct_b > 80:
-            señales.append(("Bollinger %B", f"🔴 Sobrecomprado ({pct_b:.0f}%)", "bajista", pct_b))
-        elif pct_b < 20:
-            señales.append(("Bollinger %B", f"🟢 Sobrevendido ({pct_b:.0f}%)", "alcista", pct_b))
-        elif pct_b >= 50:
-            señales.append(("Bollinger %B", f"🔵 Mitad alta ({pct_b:.0f}%)", "alcista", pct_b))
-        else:
-            señales.append(("Bollinger %B", f"🟠 Mitad baja ({pct_b:.0f}%)", "bajista", pct_b))
+        _bb_cat, _bb_dir = clasificar_bollinger_pctB(pct_b)
+        _BB_LBL = {"sobrecomprado": "🔴 Sobrecomprado", "sobrevendido": "🟢 Sobrevendido",
+                   "mitad_alta": "🔵 Mitad alta", "mitad_baja": "🟠 Mitad baja"}
+        señales.append(("Bollinger %B", f"{_BB_LBL[_bb_cat]} ({pct_b:.0f}%)", _bb_dir, pct_b))
 
     # Precio vs medias
     for periodo, (sma, ema) in sorted(medias.items()):
@@ -6145,18 +6174,19 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
         else:
             factores.append(("Precio vs PP Diario", "❌ Por debajo del PP", 0))
 
-    # 2. RSI
+    # 2. RSI  (R-1: misma clasificación que el Consenso; banda neutra 45-55)
     if rsi_val is not None:
-        if rsi_val < 30:
-            factores.append(("RSI", f"⚠️ Sobrevendido ({rsi_val})", 0.5))
-            puntos += 0.5
-        elif rsi_val > 70:
-            factores.append(("RSI", f"⚠️ Sobrecomprado ({rsi_val})", 0))
-        elif rsi_val >= 50:
-            factores.append(("RSI", f"✅ Positivo ({rsi_val})", 1))
-            puntos += 1
-        else:
-            factores.append(("RSI", f"❌ Débil ({rsi_val})", 0))
+        _rsi_cat, _ = clasificar_rsi(rsi_val)
+        _RSI_SEM = {
+            "sobrecomprado": ("⚠️ Sobrecomprado", 0),
+            "sobrevendido":  ("⚠️ Sobrevendido", 0.5),
+            "alcista":       ("✅ Positivo", 1),
+            "neutro":        ("⚪ Neutro", 0.5),
+            "bajista":       ("❌ Débil", 0),
+        }
+        _et_rsi, _pt_rsi = _RSI_SEM[_rsi_cat]
+        factores.append(("RSI", f"{_et_rsi} ({rsi_val})", _pt_rsi))
+        puntos += _pt_rsi
 
     # 3. MACD vs Señal
     if macd_val is not None and macd_señal is not None:
@@ -6166,18 +6196,19 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
         else:
             factores.append(("MACD", f"❌ MACD < Señal ({macd_val:.4f})", 0))
 
-    # 4. Bollinger %B
+    # 4. Bollinger %B  (R-1: misma dirección que el Consenso)
     if bb_sup is not None and bb_inf is not None and bb_sup != bb_inf:
         pct_b = (precio - bb_inf) / (bb_sup - bb_inf) * 100
-        if 20 <= pct_b <= 80:
-            factores.append(("Bollinger %B", f"✅ En zona central ({pct_b:.0f}%)", 1))
-            puntos += 1
-        elif pct_b < 20:
-            factores.append(("Bollinger %B", f"⚠️ Cerca de banda inferior ({pct_b:.0f}%)", 0.5))
-            puntos += 0.5
-        else:
-            factores.append(("Bollinger %B", f"⚠️ Cerca de banda superior ({pct_b:.0f}%)", 0.5))
-            puntos += 0.5
+        _bb_cat, _ = clasificar_bollinger_pctB(pct_b)
+        _BB_SEM = {
+            "mitad_alta":    ("✅ Mitad alta", 1),
+            "mitad_baja":    ("❌ Mitad baja", 0),
+            "sobrevendido":  ("⚠️ Cerca de banda inferior", 0.5),
+            "sobrecomprado": ("⚠️ Cerca de banda superior", 0.5),
+        }
+        _et_bb, _pt_bb = _BB_SEM[_bb_cat]
+        factores.append(("Bollinger %B", f"{_et_bb} ({pct_b:.0f}%)", _pt_bb))
+        puntos += _pt_bb
 
     # 5. Volumen
     if vol_data:
