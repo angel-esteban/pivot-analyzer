@@ -11607,6 +11607,13 @@ def _sc_cagr_dividendo_ventana(dividends, ventana: int) -> float | None:
         _ult = _cont.iloc[-min(int(ventana) + 1, len(_cont)):]
         if len(_ult) < 2:
             return None
+        # #G — Guard de base casi-cero: si algún punto de la ventana (sobre todo la base) es
+        # ≈0 (año suspendido / scrip / reanudación, que sigue siendo >0 y no rompe la racha),
+        # (fin/base)^(1/n) explota → CAGR no interpretable (IAG ~260%, UNI ~97%, SAN ~31%).
+        # Se devuelve None → n/d, en CUALQUIER longitud de racha (también ≥5).
+        _EPS_DPA = 0.01   # € de DPA; por debajo se considera suspensión / casi-cero
+        if float(_ult.min()) <= _EPS_DPA:
+            return None
         _ini, _fin = float(_ult.iloc[0]), float(_ult.iloc[-1])
         _n = len(_ult) - 1
         if _ini <= 0 or _n <= 0:
@@ -12020,12 +12027,16 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
             valor = _sc_dividend_yield_ttm(info, dividends)
 
     if valor is None:
-        # #D — CAGR sin ventana suficiente (racha < 3 años): n/d explícito, no un 5y cross-gap.
+        # #D/#G — CAGR n/d: por racha < 3 (ventana insuficiente) o por base no interpretable
+        # (año suspendido / ≈0 dentro de la ventana → la fórmula explotaría). Mensaje según causa.
         if cid == "crecimiento_dividendo":
+            _cagr_r = _sc_anos_dividendo(dividends) if dividends is not None else 0
+            _cagr_msg = ("CAGR n/d (histórico de dividendo < 3 años): ventana insuficiente "
+                         "para una tasa interpretable." if _cagr_r < 3 else
+                         "CAGR n/d (base de dividendo no interpretable: año suspendido o ≈0 "
+                         "en la ventana).")
             return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "n/d",
-                    "mensaje": "CAGR n/d (histórico de dividendo < 3 años): ventana "
-                               "insuficiente para una tasa interpretable.",
-                    "nombre": crit.get("nombre", "")}
+                    "mensaje": _cagr_msg, "nombre": crit.get("nombre", "")}
         # Mensaje específico por campo — diferencia "sin datos de yfinance" de "N/A por sector"
         _campo_sin_dato = crit.get("campo", "") or crit.get("funcion", "")
         _msg_sin_dato_map = {
