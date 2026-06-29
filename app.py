@@ -12782,9 +12782,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
 def _ejecutar_job_background(job_id: int, tickers: dict, tipo_cartera: str, usuario_id: int):
     """Se ejecuta en un hilo separado. Evalúa cada ticker y guarda progreso en BD."""
     import time
-    criterios = _cargar_criteria().get("carteras", {}).get(tipo_cartera, {}).get("criterios", [])
+    # Las carteras lanzan con tipo 'port_<estrategia>' (prefijo para separar su histórico del
+    # screener de índice), pero los criterios viven bajo '<estrategia>'. Normalizar el prefijo
+    # para reutilizar EXACTAMENTE el mismo motor y criterios que el screener de Estrategia
+    # (misma lógica K1-K10, score, Motivo, CAGR ventana, etc.) sobre los valores de la cartera.
+    _tipo_crit = tipo_cartera[5:] if tipo_cartera.startswith("port_") else tipo_cartera
+    criterios = _cargar_criteria().get("carteras", {}).get(_tipo_crit, {}).get("criterios", [])
     if not criterios:
-        _fallar_job(job_id, f"No se encontraron criterios para '{tipo_cartera}'")
+        _fallar_job(job_id, f"No se encontraron criterios para '{_tipo_crit}' (tipo: '{tipo_cartera}')")
         return
 
     resultados = []
