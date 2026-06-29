@@ -5643,6 +5643,46 @@ def detectar_divergencias(hist, n_sesiones=60):
 # HUECOS DE PRECIO
 # =============================================================================
 
+def _nivel_clave_mas_cercano(precio, niveles_reforzados=None, confluencias=None,
+                             resultados_pivots=None):
+    """PA-C-02 — Nivel clave de MENOR |nivel − precio| sobre el conjunto COMPLETO de candidatos:
+    pivots de todos los timeframes + confluencias (incluyen los niveles HH de confirmación/
+    invalidación) + niveles reforzados. Antes se elegía solo entre los reforzados, ignorando
+    pivots/confluencias más cercanos (caso REP: elegía R1 semanal a +1,6% en vez de la
+    confirmación a +0,24%). Devuelve dict {precio, tipo, fuente, dist_pct} o None."""
+    if not precio:
+        return None
+    cands = []
+    for n in (niveles_reforzados or []):
+        if n.get("precio") is None:
+            continue
+        _src = " + ".join(str(x) for x in (n.get("pivot"), n.get("media")) if x) or "reforzado"
+        cands.append({"precio": float(n["precio"]), "tipo": n.get("tipo", "PP"), "fuente": _src})
+    for c in (confluencias or []):
+        if c.get("precio") is None:
+            continue
+        _pc = float(c["precio"])
+        cands.append({"precio": _pc, "tipo": ("R" if _pc > precio else "S"),
+                      "fuente": f"Confluencia {c.get('estrellas', '')}".strip()})
+    for _tf, _niv in (resultados_pivots or {}).items():
+        if not isinstance(_niv, dict):
+            continue
+        for _clave, _pp in _niv.items():
+            if _clave.startswith("_") or _pp is None:
+                continue
+            try:
+                _pp = float(_pp)
+            except (TypeError, ValueError):
+                continue
+            _t = "R" if _clave.startswith("R") else ("S" if _clave.startswith("S") else "PP")
+            cands.append({"precio": _pp, "tipo": _t, "fuente": f"{_clave} {_tf}"})
+    if not cands:
+        return None
+    best = dict(min(cands, key=lambda x: abs(x["precio"] - precio)))
+    best["dist_pct"] = (best["precio"] - precio) / precio * 100
+    return best
+
+
 def detectar_huecos(hist: "pd.DataFrame", n_dias: int = 252,
                     min_pct: float = 0.3) -> list:
     """
@@ -8598,13 +8638,15 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     historia.append(Paragraph(_strip(f"SITUACIÓN: {_lip_tit}"), _p(fontSize=9, fontName="Helvetica-Bold", textColor=_lip_col)))
     historia.append(Spacer(1, 0.08*cm))
     historia.append(Paragraph(_strip(_lip_txt), _p(fontSize=8, textColor=_lip_col)))
-    if niveles_reforzados:
-        _lip_nr = min(niveles_reforzados, key=lambda x: abs(x["precio"] - precio))
-        _lip_nrd = (_lip_nr["precio"] - precio) / precio * 100
+    # PA-C-02 — nivel clave por mínima distancia sobre el conjunto completo (pivots de todos los
+    # timeframes + confluencias [HH confirmación/invalidación] + reforzados), no solo reforzados.
+    _lip_nr = _nivel_clave_mas_cercano(precio, niveles_reforzados, confluencias, resultados_pivots)
+    if _lip_nr:
         _lip_nrt = "Resistencia" if _lip_nr["tipo"] == "R" else ("Soporte" if _lip_nr["tipo"] == "S" else "Nivel")
         historia.append(Spacer(1, 0.08*cm))
         historia.append(Paragraph(
-            f"Nivel clave más cercano: {_lip_nr['precio']:.4f} ({_lip_nrd:+.1f}% — {_lip_nrt} reforzado)",
+            f"Nivel clave más cercano: {_lip_nr['precio']:.4f} "
+            f"({_lip_nr['dist_pct']:+.1f}% — {_lip_nrt} · {_lip_nr['fuente']})",
             _p(fontSize=7.5, fontName="Helvetica-Bold", textColor=_lip_col)
         ))
     _n_pos_p = sum(1 for _, _, s in (factores_semaforo or []) if s >= 0.75)
@@ -10174,6 +10216,8 @@ def _lectura_integrada(
     sector_yf: str = "",
     info: dict = None,
     div_ttm: float = None,
+    confluencias: list = None,        # PA-C-02: candidatos extra para "nivel más cercano"
+    resultados_pivots: dict = None,   # PA-C-02: pivots de todos los timeframes
 ) -> None:
     """Síntesis accionable: cruza estructura (Diagnóstico) con momento (Semáforo)
     y genera una lectura en lenguaje de inversor con implicación práctica.
@@ -10294,12 +10338,13 @@ def _lectura_integrada(
 
     # ── Nivel clave más relevante ──────────────────────────────────────────
     nivel_clave_html = ""
-    if niveles_reforzados:
-        # Nivel más cercano al precio actual (sea soporte o resistencia)
-        nr_cercano = min(niveles_reforzados, key=lambda x: abs(x["precio"] - precio))
-        dist_nr = (nr_cercano["precio"] - precio) / precio * 100
-        tipo_nr = "Resistencia reforzada" if nr_cercano["tipo"] == "R" else (
-                  "Soporte reforzado" if nr_cercano["tipo"] == "S" else "Pivot reforzado")
+    # PA-C-02 — nivel clave por MÍNIMA distancia sobre el conjunto completo (pivots de todos los
+    # timeframes + confluencias [incl. HH confirmación/invalidación] + reforzados), no solo reforzados.
+    nr_cercano = _nivel_clave_mas_cercano(precio, niveles_reforzados, confluencias, resultados_pivots)
+    if nr_cercano:
+        dist_nr = nr_cercano["dist_pct"]
+        tipo_nr = "Resistencia" if nr_cercano["tipo"] == "R" else (
+                  "Soporte" if nr_cercano["tipo"] == "S" else "Pivot")
         emoji_nr = "🔴" if nr_cercano["tipo"] == "R" else ("🟢" if nr_cercano["tipo"] == "S" else "🔵")
         nivel_clave_html = (
             f'<div style="margin-top:10px;padding:8px 12px;background:rgba(0,0,0,0.04);'
@@ -10309,7 +10354,7 @@ def _lectura_integrada(
             f'{emoji_nr} {nr_cercano["precio"]:.4f}'
             f'</span>'
             f'<span style="font-size:11px;color:#64748b;margin-left:8px">'
-            f'{dist_nr:+.1f}% · {tipo_nr} · {nr_cercano["pivot"]} + {nr_cercano["media"]}'
+            f'{dist_nr:+.1f}% · {tipo_nr} · {nr_cercano["fuente"]}'
             f'</span></div>'
         )
 
@@ -15676,6 +15721,8 @@ def pantalla_analisis():
             sector_yf=(info.get("sector") or "") if info else "",
             info=info,
             div_ttm=div_ttm,
+            confluencias=confluencias,            # PA-C-02
+            resultados_pivots=resultados_pivots,  # PA-C-02
         )
 
         # ── Capa Operativa ───────────────────────────────────────────────────
