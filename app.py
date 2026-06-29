@@ -6462,9 +6462,11 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
                           hist=None,
                           info: dict = None,
                           div_ttm: float = None,
+                          beta_val: float = None,
                           solo_ejecutivo: bool = False) -> str:
     """Informe HTML self-contained con layout multi-columna (mismo diseño que pantalla).
     solo_ejecutivo=True → informe corto: cabecera + capa ejecutiva (hasta Diagnóstico Técnico).
+    beta_val = beta calculada vs índice (la de pantalla); si None, se usa info['beta'] (Yahoo).
     """
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -7612,6 +7614,13 @@ tr:nth-child(even) td { background:#f8fafc; }
             + _alertas_section_h
             + _val_sem_section_h
         )
+    # #UI — Métricas extra de la cabecera para igualar la de pantalla: Volumen hoy y Beta.
+    try:
+        _vol_hoy_h = _fmt_numero(float(hist["Volume"].iloc[-1])) if (hist is not None and len(hist)) else "—"
+    except Exception:
+        _vol_hoy_h = "—"
+    _beta_h = (f"{beta_val:.2f}" if beta_val is not None
+               else (f"{info.get('beta'):.2f}" if (info and info.get('beta') is not None) else "—"))
     return (
         f'<!DOCTYPE html>\n<html lang="es">\n<head>\n'
         f'<meta charset="UTF-8">'
@@ -7631,6 +7640,8 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<div class="chips">\n'
         f'<span class="chip">52W m&#225;x: {h52_str}</span>\n'
         f'<span class="chip">52W m&#237;n: {l52_str}</span>\n'
+        f'<span class="chip">Volumen hoy: {_vol_hoy_h}</span>\n'
+        f'<span class="chip">Beta: {_beta_h}</span>\n'
         f'<span class="chip">{tipo_activo}</span>\n'
         f'<span class="chip">Sistema: {sistema}</span>\n'
         f'<span class="chip">Generado: {ahora}</span>\n'
@@ -8355,9 +8366,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 hist=None,
                 info: dict = None,
                 div_ttm: float = None,
+                beta_val: float = None,
                 solo_ejecutivo: bool = False):
     """PDF con precio prominente + pivots multi-columna en paralelo.
     solo_ejecutivo=True → informe corto: cabecera + capa ejecutiva (hasta Diagnóstico Técnico).
+    beta_val = beta calculada vs índice (la de pantalla); si None, se usa info['beta'] (Yahoo).
     """
 
     buf = io.BytesIO()
@@ -8495,8 +8508,16 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         ("BOTTOMPADDING", (0,1),  (-1,1),  10),
     ]))
     historia.append(cab_t)
+    # #UI — Volumen hoy y Beta en la cabecera del PDF (igualar la de pantalla).
+    try:
+        _vol_hoy_p = _fmt_numero(float(hist["Volume"].iloc[-1])) if (hist is not None and len(hist)) else "—"
+    except Exception:
+        _vol_hoy_p = "—"
+    _beta_p = (f"{beta_val:.2f}" if beta_val is not None
+               else (f"{info.get('beta'):.2f}" if (info and info.get('beta') is not None) else "—"))
     chips_t = Table(
-        [[Paragraph(f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
+        [[Paragraph(f"Volumen hoy: {_vol_hoy_p}   ·   Beta: {_beta_p}   ·   "
+                    f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
         colWidths=[18*cm]
     )
     chips_t.setStyle(TableStyle([
@@ -16060,7 +16081,7 @@ de debilidad a corto plazo.
                             analisis_resist=analisis_resist, analisis_fibo=analisis_fibo,
                             analisis_rsi=analisis_rsi, analisis_vol=analisis_vol,
                             puntuacion_tec=puntuacion_tec, hist=hist, info=info, div_ttm=div_ttm,
-                            solo_ejecutivo=True,
+                            beta_val=beta_calculada, solo_ejecutivo=True,
                         )
                     st.download_button("📄 Descargar resumen HTML",
                         data=_html_ej.encode("utf-8"),
@@ -16083,7 +16104,7 @@ de debilidad a corto plazo.
                             analisis_resist=analisis_resist, analisis_fibo=analisis_fibo,
                             analisis_rsi=analisis_rsi, analisis_vol=analisis_vol,
                             puntuacion_tec=puntuacion_tec, hist=hist, info=info, div_ttm=div_ttm,
-                            solo_ejecutivo=True,
+                            beta_val=beta_calculada, solo_ejecutivo=True,
                         )
                     st.download_button("📄 Descargar resumen PDF",
                         data=_pdf_ej,
@@ -18344,6 +18365,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             hist=hist,
                             info=info,
                             div_ttm=div_ttm,
+                            beta_val=beta_calculada,
                         )
                     st.download_button(
                         label="📄 Descargar HTML",
@@ -18388,6 +18410,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                             hist=hist,
                             info=info,
                             div_ttm=div_ttm,
+                            beta_val=beta_calculada,
                         )
                     _at_dl_c1, _at_dl_c2 = st.columns(2)
                     with _at_dl_c1:
