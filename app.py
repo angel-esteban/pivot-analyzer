@@ -7262,15 +7262,15 @@ tr:nth-child(even) td { background:#f8fafc; }
             _fn_h = ""
             if _ffa_h and _ffu_h:
                 _fn_h = (f"El precio tiene soporte Fibonacci en <b>{_ffa_h['precio']:,.4f}</b> "
-                         f"(nivel {_ffa_h['label']}%, a {_ffa_h['dist_pct']:.1f}% de distancia) "
+                         f"(nivel {_ffa_h['label']}, a {_ffa_h['dist_pct']:.1f}% de distancia) "
                          f"y resistencia en <b>{_ffu_h['precio']:,.4f}</b> "
-                         f"(nivel {_ffu_h['label']}%, a {_ffu_h['dist_pct']:.1f}% de distancia). ")
+                         f"(nivel {_ffu_h['label']}, a {_ffu_h['dist_pct']:.1f}% de distancia). ")
             elif _ffa_h:
                 _fn_h = (f"Soporte Fibonacci más cercano: <b>{_ffa_h['precio']:,.4f}</b> "
-                         f"(nivel {_ffa_h['label']}%, a {_ffa_h['dist_pct']:.1f}%). ")
+                         f"(nivel {_ffa_h['label']}, a {_ffa_h['dist_pct']:.1f}%). ")
             elif _ffu_h:
                 _fn_h = (f"Resistencia Fibonacci más cercana: <b>{_ffu_h['precio']:,.4f}</b> "
-                         f"(nivel {_ffu_h['label']}%, a {_ffu_h['dist_pct']:.1f}%). ")
+                         f"(nivel {_ffu_h['label']}, a {_ffu_h['dist_pct']:.1f}%). ")
             _fa_h = {
                 "extension_161": "Precio en extensión 161.8% del swing anual — no hay resistencias Fibonacci previas, camino despejado al alza. El Fibonacci no da señales de alarma si tienes posición.",
                 "extension_127": "Precio en extensión 127.2% — primer objetivo de proyección tras superar máximos. Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos.",
@@ -7646,7 +7646,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             f"El precio sube a corto plazo, pero la estructura de largo plazo es débil (score {_li_score_h:.1f}/10).",
             "Este tipo de rebote suele ser temporal. Históricamente son momentos en los que los inversores "
             "que ya tienen posición aprovechan para vender, no para comprar."),
-        ("bajo",   "amarillo"): ("#fef2f2", "#dc2626", "🔴", "Estructura debil y sin direccion",
+        ("bajo",   "amarillo"): ("#fef2f2", "#dc2626", "🔴", "Estructura débil y sin dirección",
             f"La estructura técnica de largo plazo es claramente negativa (score {_li_score_h:.1f}/10) y el momentum no muestra recuperación.",
             "Alto riesgo técnico. Si tienes posición, revisa tu stop-loss. "
             "Si estás fuera, no hay señal que justifique entrar."),
@@ -8677,7 +8677,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     _LIP_M = {
         ("alto",   "verde"):    (VE, "TODO EN VERDE: estructura y momento alineados",
             f"Posición estructural sólida (score {_lip_score:.1f}/10) y momentum acompañando. "
-            "Entorno técnico más favorable. Si tienes posicion, las senales respaldan mantenerla. "
+            "Entorno técnico más favorable. Si tienes posición, las señales respaldan mantenerla. "
             "Si no has entrado, busca zona de soporte cercana."),
         ("alto",   "amarillo"): (colors.HexColor("#ca8a04"), "BUENA ESTRUCTURA, PERO EL IMPULSO DUDA",
             f"Estructura fuerte (score {_lip_score:.1f}/10) pero momentum con señales contradictorias. "
@@ -8689,7 +8689,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             f"Momentum favorable a corto plazo, pero posición estructural neutral (score {_lip_score:.1f}/10). "
             "Cuidado: subidas sin estructura sólida pueden bajar igual de rápido."),
         ("medio",  "amarillo"): (colors.grey, "SIN SEÑAL CLARA EN NINGÚN SENTIDO",
-            f"Ni estructura (score {_lip_score:.1f}/10) ni momentum apuntan en direccion definida. "
+            f"Ni estructura (score {_lip_score:.1f}/10) ni momentum apuntan en dirección definida. "
             "Espera ruptura clara de un nivel relevante antes de actuar."),
         ("medio",  "rojo"):     (colors.HexColor("#ea580c"), "IMPULSO BAJISTA SIN BASE QUE AMORTIGÜE",
             f"Momentum deteriorado y posición estructural neutral (score {_lip_score:.1f}/10). "
@@ -8702,7 +8702,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             "Alto riesgo técnico. Revisa tu stop-loss si tienes posición."),
         ("bajo",   "rojo"):     (RO, "TODOS LOS INDICADORES EN CONTRA",
             f"Estructura negativa (score {_lip_score:.1f}/10) y momentum confirma presión bajista. "
-            "Entorno tecnico mas desfavorable. No hay señal técnica que justifique entrar."),
+            "Entorno técnico más desfavorable. No hay señal técnica que justifique entrar."),
     }
     _lip_col, _lip_tit, _lip_txt = _LIP_M.get(
         _lip_key, (colors.grey, "ANALISIS EN PROCESO", "Datos insuficientes.")
@@ -8902,7 +8902,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 if (_ca_d["escenario"].startswith("retroceso_")
                         and _ca_d.get("banda_label")):
                     _esc_d = f"Retroceso {_ca_d['banda_label']}"
-                _narr_d = _ca_d["texto"][:220] + "..." if len(_ca_d["texto"]) > 220 else _ca_d["texto"]
+                # PA-M-02: sin truncado — la celda (Paragraph) ajusta el texto a su ancho
+                # y la frase no se corta a mitad.
+                _narr_d = _ca_d["texto"]
                 _dt_rows.append([
                     Paragraph(_cn_d, _p(fontSize=7, fontName="Helvetica-Bold")),
                     Paragraph(_esc_d, S_NRM),
@@ -8934,9 +8936,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 
             _esc_labels_pdf = {
                 "subida_libre_establecida": "Superando ATH",
-                "en_ath":                   "En maximos historicos",
+                "en_ath":                   "En máximos históricos",
                 "aproximandose_cerca":      "Cerca ATH (1-3%)",
-                "aproximandose":            "Proximo ATH (3-8%)",
+                "aproximandose":            "Próximo ATH (3-8%)",
                 "referencia":               "Referencia ATH (8-25%)",
                 "lejos":                    "Muy lejos ATH (>25%)",
                 "giro_alcista_reciente":    "Giro alcista reciente",
@@ -9050,17 +9052,17 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         _fniveles_p = ""
         if _ffa_p and _ffu_p:
             _fniveles_p = (
-                f"Soporte Fibonacci: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}%, a {_ffa_p['dist_pct']:.1f}%). "
-                f"Resistencia Fibonacci: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}%, a {_ffu_p['dist_pct']:.1f}%). "
+                f"Soporte Fibonacci: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}, a {_ffa_p['dist_pct']:.1f}%). "
+                f"Resistencia Fibonacci: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}, a {_ffu_p['dist_pct']:.1f}%). "
             )
         elif _ffa_p:
-            _fniveles_p = f"Soporte Fibonacci mas cercano: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}%, a {_ffa_p['dist_pct']:.1f}%). "
+            _fniveles_p = f"Soporte Fibonacci más cercano: {_ffa_p['precio']:,.4f} (nivel {_ffa_p['label']}, a {_ffa_p['dist_pct']:.1f}%). "
         elif _ffu_p:
-            _fniveles_p = f"Resistencia Fibonacci mas cercana: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}%, a {_ffu_p['dist_pct']:.1f}%). "
+            _fniveles_p = f"Resistencia Fibonacci más cercana: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}, a {_ffu_p['dist_pct']:.1f}%). "
         _fib_accion_p = {
             "extension_161": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 161.8% del swing anual. "
-                "No hay resistencias Fibonacci previas — camino tecnicamente despejado al alza. El Fibonacci no da senales de alarma."
+                "No hay resistencias Fibonacci previas — camino técnicamente despejado al alza. El Fibonacci no da señales de alarma."
             ),
             "extension_127": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 127.2% — primer objetivo de proyeccion. "
@@ -9068,7 +9070,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             ),
             "en_maximo": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en el maximo del swing (100% Fibonacci). "
-                "Superar este nivel con volumen seria senal alcista importante. Sin romperlo puede corregir."
+                "Superar este nivel con volumen sería señal alcista importante. Sin romperlo puede corregir."
             ),
             "retroceso_236": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso solo del 23.6% — tendencia alcista muy intacta. "
@@ -9079,8 +9081,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 "Rebote con volumen en el soporte Fibonacci = tendencia alcista activa. Sin rebote, siguiente soporte en el nivel inferior."
             ),
             "retroceso_618": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Zona dorada (61.8%) — el retroceso mas seguido institucionalmente. "
-                "Ultimo soporte relevante antes de comprometer la estructura. Rebote aqui = posible entrada tecnica."
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Zona dorada (61.8%) — el retroceso más seguido institucionalmente. "
+                "Ultimo soporte relevante antes de comprometer la estructura. Rebote aquí = posible entrada técnica."
             ),
             "retroceso_786": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso muy profundo al 78.6% — estructura alcista debilitada. "
@@ -9111,7 +9113,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         hdr = [Paragraph(tf, S_MH)]
         if not datos_tf:
             return hdr + [Paragraph("Sin datos", S_NRM)]
-        filas = [["Nv", "Precio", "Distancia al precio"]]
+        filas = [["Nv", "Precio", "Dist.%"]]   # PA-M-04: cabecera corta para no desbordar la columna (27pt)
         tipos = []
         for nv in NIV:
             if nv not in datos_tf or nv.startswith("_"):
@@ -9371,7 +9373,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     "Que vigilar: mas divergencias o precio bajo SMA20 dan mas peso a la senal.")
         else:
             _sv_c = colors.HexColor("#ca8a04")
-            _sv_t = (f"[QUE SIGNIFICA PARA TI] Senales contradictorias: {_sv_n_alc} alcistas y {_sv_n_baj} bajistas. "
+            _sv_t = (f"[QUE SIGNIFICA PARA TI] Señales contradictorias: {_sv_n_alc} alcistas y {_sv_n_baj} bajistas. "
                 "Que vigilar: ruptura clara de soporte/resistencia antes de actuar.")
         historia.append(Spacer(1, 0.1*cm))
         historia.append(Paragraph(_strip(_sv_t), _p(fontSize=7.5, textColor=_sv_c)))
@@ -9567,7 +9569,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         _pdf_sh("📊 Huecos de Precio Abiertos", historia)
         historia.append(Spacer(1, 0.15*cm))
 
-        _hue_data = [["Tipo", "Zona", "Tamano", "Distancia", "Fecha", "Dias"]]
+        _hue_data = [["Tipo", "Zona", "Tamaño", "Distancia", "Fecha", "Días"]]
         for _h in huecos[:8]:
             _tipo_str = "Alcista [+]" if _h["tipo"] == "alcista" else "Bajista [-]"
             _zona_str = f'{_h["gap_low"]:.4f} - {_h["gap_high"]:.4f}'
@@ -9612,25 +9614,25 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         if _hc_tipo_p == "alcista":
             _hs_col_p = VE
             _hs_txt_p = (
-                f"[QUE SIGNIFICA PARA TI] El hueco mas cercano es alcista, "
+                f"[QUE SIGNIFICA PARA TI] El hueco más cercano es alcista, "
                 f"a un {abs(_hc_dist_p):.1f}% por debajo "
                 f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
                 "Actua como suelo natural: inversores que compraron antes del salto tienden a recomprar si el precio vuelve."
             )
             if _hc_size_p >= 2.0:
-                _hs_txt_p += f" Tamano relevante ({_hc_size_p:.1f}%) — mayor fuerza como soporte."
+                _hs_txt_p += f" Tamaño relevante ({_hc_size_p:.1f}%) — mayor fuerza como soporte."
             if _hc_baj_p:
                 _hs_txt_p += f" Encima hay {len(_hc_baj_p)} hueco(s) bajista(s) actuando como resistencia."
         else:
             _hs_col_p = RO
             _hs_txt_p = (
-                f"[QUE SIGNIFICA PARA TI] El hueco mas cercano es bajista, "
+                f"[QUE SIGNIFICA PARA TI] El hueco más cercano es bajista, "
                 f"a un {abs(_hc_dist_p):.1f}% por encima "
                 f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
                 "Actua como techo natural: inversores con perdidas tienden a vender al recuperar."
             )
             if _hc_size_p >= 2.0:
-                _hs_txt_p += f" Tamano relevante ({_hc_size_p:.1f}%) — mayor fuerza como resistencia."
+                _hs_txt_p += f" Tamaño relevante ({_hc_size_p:.1f}%) — mayor fuerza como resistencia."
             if _hc_alc_p:
                 _hs_txt_p += f" Debajo hay {len(_hc_alc_p)} hueco(s) alcista(s) actuando como soporte."
         historia.append(Spacer(1, 0.15*cm))
@@ -17948,19 +17950,19 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             if _fa and _fu:
                 _fib_niveles_txt = (
                     f"El precio tiene soporte Fibonacci en **{_fa['precio']:,.4f}** "
-                    f"(nivel {_fa['label']}%, a {_fa['dist_pct']:.1f}% de distancia) "
+                    f"(nivel {_fa['label']}, a {_fa['dist_pct']:.1f}% de distancia) "
                     f"y resistencia Fibonacci en **{_fu['precio']:,.4f}** "
-                    f"(nivel {_fu['label']}%, a {_fu['dist_pct']:.1f}% de distancia). "
+                    f"(nivel {_fu['label']}, a {_fu['dist_pct']:.1f}% de distancia). "
                 )
             elif _fa:
                 _fib_niveles_txt = (
                     f"El nivel Fibonacci más cercano por debajo actúa como soporte potencial: "
-                    f"**{_fa['precio']:,.4f}** (nivel {_fa['label']}%, a {_fa['dist_pct']:.1f}%). "
+                    f"**{_fa['precio']:,.4f}** (nivel {_fa['label']}, a {_fa['dist_pct']:.1f}%). "
                 )
             elif _fu:
                 _fib_niveles_txt = (
                     f"El nivel Fibonacci más cercano por encima actúa como resistencia potencial: "
-                    f"**{_fu['precio']:,.4f}** (nivel {_fu['label']}%, a {_fu['dist_pct']:.1f}%). "
+                    f"**{_fu['precio']:,.4f}** (nivel {_fu['label']}, a {_fu['dist_pct']:.1f}%). "
                 )
 
             # Texto de qué hacer según escenario
