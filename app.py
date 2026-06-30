@@ -7145,10 +7145,10 @@ tr:nth-child(even) td { background:#f8fafc; }
     _esc_labels_h = {
         "subida_libre_establecida": ("Superando ATH — subida libre",    "#16a34a", "#f0fdf4"),
         "en_ath":                   ("En máximos históricos",           "#16a34a", "#f0fdf4"),
-        "aproximandose_cerca":      ("Cerca del ATH (< 5%)",            "#15803d", "#f0fdf4"),
-        "aproximandose":            ("Próximo al ATH (5-15%)",          "#ca8a04", "#fefce8"),
-        "referencia":               ("Lejos del ATH (15-30%)",          "#ea580c", "#fff7ed"),
-        "lejos":                    ("Muy lejos del ATH (> 30%)",       "#dc2626", "#fef2f2"),
+        "aproximandose_cerca":      ("Cerca del ATH (1-3%)",            "#15803d", "#f0fdf4"),
+        "aproximandose":            ("Próximo al ATH (3-8%)",           "#ca8a04", "#fefce8"),
+        "referencia":               ("Referencia ATH (8-25%)",          "#ea580c", "#fff7ed"),
+        "lejos":                    ("Muy lejos del ATH (> 25%)",       "#dc2626", "#fef2f2"),
         "giro_alcista_reciente":    ("Giro alcista reciente",           "#16a34a", "#f0fdf4"),
         "tendencia_alcista":        ("Tendencia alcista confirmada",    "#16a34a", "#f0fdf4"),
         "plana":                    ("Media plana — sin tendencia",     "#64748b", "#f8fafc"),
@@ -8935,10 +8935,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _esc_labels_pdf = {
                 "subida_libre_establecida": "Superando ATH",
                 "en_ath":                   "En maximos historicos",
-                "aproximandose_cerca":      "Cerca ATH (<5%)",
-                "aproximandose":            "Proximo ATH (5-15%)",
-                "referencia":               "Lejos ATH (15-30%)",
-                "lejos":                    "Muy lejos ATH (>30%)",
+                "aproximandose_cerca":      "Cerca ATH (1-3%)",
+                "aproximandose":            "Proximo ATH (3-8%)",
+                "referencia":               "Referencia ATH (8-25%)",
+                "lejos":                    "Muy lejos ATH (>25%)",
                 "giro_alcista_reciente":    "Giro alcista reciente",
                 "tendencia_alcista":        "Tendencia alcista",
                 "plana":                    "Media plana",
@@ -16105,10 +16105,10 @@ de debilidad a corto plazo.
                 # ATH
                 "subida_libre_establecida": ("Superando ATH — subida libre",    9),
                 "en_ath":                   ("En máximos históricos",           8),
-                "aproximandose_cerca":      ("Cerca del ATH (< 5%)",            7),
-                "aproximandose":            ("Próximo al ATH (5-15%)",          6),
-                "referencia":               ("Lejos del ATH (15-30%)",          4),
-                "lejos":                    ("Muy lejos del ATH (> 30%)",       2),
+                "aproximandose_cerca":      ("Cerca del ATH (1-3%)",            7),
+                "aproximandose":            ("Próximo al ATH (3-8%)",           6),
+                "referencia":               ("Referencia ATH (8-25%)",          4),
+                "lejos":                    ("Muy lejos del ATH (> 25%)",       2),
                 # SMA200
                 "giro_alcista_reciente":    ("Giro alcista reciente",           9),
                 "tendencia_alcista":        ("Tendencia alcista confirmada",    7),
@@ -17488,7 +17488,7 @@ al ATH. Es un nivel de proyección, no una garantía.
 
 **Cómo interpretarlo:**
 - Precio cerca del ATH (< 5% de distancia): zona de máxima atención. La ruptura puede ser explosiva.
-- Precio muy por debajo del ATH (> 30%): el activo necesita recuperar mucho terreno antes de estar en «modo subida libre».
+- Precio muy por debajo del ATH (> 25%): el activo necesita recuperar mucho terreno antes de estar en «modo subida libre».
 """)
                 st.markdown("##### 📈 Componente 2 — Media Móvil 200 Sesiones (MM200)")
                 st.markdown("""
