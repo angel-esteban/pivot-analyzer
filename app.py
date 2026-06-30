@@ -2051,6 +2051,9 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
 
     # ── Distancia al ATH (negativa = precio por debajo) ──────────────────
     dist_pct = (precio - ath) / ath * 100
+    # PA-A-05: recorrido alcista potencial medido DESDE el precio actual,
+    # no desde el ATH: upside_% = (objetivo − precio) / precio.
+    upside_pct = (ath - precio) / precio * 100 if precio else 0.0
 
     # ── Escenario ────────────────────────────────────────────────────────
     if dist_pct > 0:
@@ -2138,7 +2141,7 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
     elif escenario == "referencia":
         texto = (
             f"{nombre_corto} presenta sus máximos históricos en los {ath_str} euros "
-            f"({abs(dist_pct):.1f}% de recorrido alcista potencial). "
+            f"({upside_pct:.1f}% de recorrido alcista potencial desde el precio actual). "
             f"Nivel de referencia clave si las subidas continúan."
         )
 
@@ -2507,6 +2510,19 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
         d = (fib_arriba[1] - precio) / precio * 100
         fib_arriba = {"label": fib_arriba[0], "precio": fib_arriba[1], "dist_pct": d}
 
+    # PA-A-01: retroceso REAL desde el máximo del swing (0% en máximo, 100% en mínimo)
+    # y etiqueta de la banda real en la que cae el precio (fib_abajo–fib_arriba),
+    # para que narrativa y etiqueta citen la misma banda que la pág. de niveles.
+    retroceso_max_pct = (swing_max - precio) / rango * 100
+    if fib_abajo and fib_arriba:
+        banda_label = f"{fib_abajo['label']}–{fib_arriba['label']}"
+    elif fib_abajo:
+        banda_label = fib_abajo["label"]
+    elif fib_arriba:
+        banda_label = fib_arriba["label"]
+    else:
+        banda_label = ""
+
     # ── Escenario ────────────────────────────────────────────────────────
     if pos_pct > 161.8:
         escenario = "extension_161"
@@ -2560,35 +2576,32 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
             f"Nivel de referencia crítico: la defensa o ruptura de este nivel determina "
             f"si el precio entra en territorio de extensión o inicia corrección.{arriba_str}"
         )
-    elif escenario == "retroceso_236":
+    elif escenario in ("retroceso_236", "retroceso_382", "retroceso_618", "retroceso_786"):
+        # PA-A-01: narrativa derivada de la banda REAL (fib_abajo–fib_arriba) y del
+        # retroceso real desde el máximo, no de la etiqueta fija del escenario.
+        if retroceso_max_pct < 23.6:
+            _tono = "pullback muy superficial; la tendencia alcista permanece intacta"
+        elif retroceso_max_pct < 38.2:
+            _tono = "pullback leve; retroceso normal dentro de una tendencia sana"
+        elif retroceso_max_pct < 50.0:
+            _tono = "retroceso estándar (38,2-50%); zona habitual de soporte de tendencia"
+        elif retroceso_max_pct < 61.8:
+            _tono = "retroceso en la 'zona dorada' (50-61,8%), el más relevante estadísticamente"
+        else:
+            _tono = "retroceso profundo (>61,8%); la estructura del swing queda debilitada"
+        if fib_abajo and fib_arriba:
+            _banda_txt = (f"entre el {fib_abajo['label']} ({fib_abajo['precio']:,.4f}, soporte) "
+                          f"y el {fib_arriba['label']} ({fib_arriba['precio']:,.4f}, resistencia)")
+        elif fib_abajo:
+            _banda_txt = f"sobre el {fib_abajo['label']} ({fib_abajo['precio']:,.4f}, soporte)"
+        elif fib_arriba:
+            _banda_txt = f"bajo el {fib_arriba['label']} ({fib_arriba['precio']:,.4f}, resistencia)"
+        else:
+            _banda_txt = "en la zona de retroceso del swing"
         texto = (
-            f"{nombre_c} se encuentra en el primer retroceso Fibonacci (23.6%) del swing "
-            f"{tipo_swing} ({s_min} → {s_max}). Pullback leve — posición {pos_s} del swing. "
-            f"Esta zona actúa como soporte dinámico en tendencias fuertes; la pérdida del 23.6% "
-            f"({niveles_precio['23.6%']:,.4f}) abriría el camino al 38.2%."
-        )
-    elif escenario == "retroceso_382":
-        texto = (
-            f"{nombre_c} cotiza en la zona de retroceso del 38.2-50% del swing {tipo_swing} "
-            f"({s_min} → {s_max}) — retroceso estándar. Posición actual: {pos_s} del swing. "
-            f"El nivel del 38.2% ({niveles_precio['38.2%']:,.4f}) es soporte de tendencia; "
-            f"el 50.0% ({niveles_precio['50.0%']:,.4f}) marca el punto medio del movimiento. "
-            f"La siguiente zona crítica al alza es el 61.8% (golden ratio)."
-        )
-    elif escenario == "retroceso_618":
-        texto = (
-            f"{nombre_c} cotiza en la 'zona dorada' de Fibonacci (50-61.8%) del swing {tipo_swing} "
-            f"({s_min} → {s_max}) — el retroceso estadísticamente más relevante. "
-            f"El nivel del 61.8% ({niveles_precio['61.8%']:,.4f}) es la referencia del Golden Ratio, "
-            f"donde la mayoría de tendencias válidas encuentran soporte. "
-            f"Posición actual: {pos_s} del swing."
-        )
-    elif escenario == "retroceso_786":
-        texto = (
-            f"{nombre_c} ha retrocedido al 78.6% del swing {tipo_swing} "
-            f"({s_min} → {s_max}) — retroceso profundo. La estructura del swing queda muy debilitada. "
-            f"Solo la defensa del nivel {niveles_precio['78.6%']:,.4f} mantiene técnicamente viva "
-            f"la estructura {tipo_swing}. Posición actual: {pos_s} del swing."
+            f"{nombre_c} cotiza {_banda_txt} del swing {tipo_swing} "
+            f"({s_min} → {s_max}) — {_tono}. Posición en el swing: {pos_s}; "
+            f"retroceso de {retroceso_max_pct:.1f}% desde el máximo."
         )
     else:  # swing_roto
         texto = (
@@ -2597,16 +2610,37 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
             f"El precio opera por debajo del nivel de 0% Fibonacci. Nueva estructura en formación."
         )
 
+    # PA-A-06: declarar el periodo/lookback del swing; el mínimo del swing puede
+    # diferir del mínimo de 52 semanas de la cabecera (ventana y método distintos).
+    try:
+        _sw_ini  = v.index[0].strftime("%d/%m/%Y")
+        _sw_fin  = v.index[-1].strftime("%d/%m/%Y")
+        _sw_fmin = idx_min.strftime("%d/%m/%Y")
+        _sw_fmax = idx_max.strftime("%d/%m/%Y")
+    except Exception:
+        _sw_ini = _sw_fin = _sw_fmin = _sw_fmax = ""
+    swing_periodo = (
+        f"Swing sobre las últimas {n} sesiones"
+        + (f" ({_sw_ini} – {_sw_fin})" if _sw_ini and _sw_fin else "")
+        + f". Mínimo {swing_min:,.4f}" + (f" del {_sw_fmin}" if _sw_fmin else "")
+        + f", máximo {swing_max:,.4f}" + (f" del {_sw_fmax}" if _sw_fmax else "")
+        + ". Puede diferir del mínimo de 52 semanas de la cabecera (ventana y método distintos)."
+    )
+
     return {
-        "swing_min":   swing_min,
-        "swing_max":   swing_max,
-        "bullish":     bullish,
-        "pos_pct":     pos_pct,
-        "niveles":     niveles_precio,
-        "fib_abajo":   fib_abajo,
-        "fib_arriba":  fib_arriba,
-        "escenario":   escenario,
-        "texto":       texto,
+        "swing_min":     swing_min,
+        "swing_max":     swing_max,
+        "bullish":       bullish,
+        "pos_pct":       pos_pct,
+        "niveles":       niveles_precio,
+        "fib_abajo":     fib_abajo,
+        "fib_arriba":    fib_arriba,
+        "escenario":     escenario,
+        "texto":         texto,
+        "retroceso_max_pct": retroceso_max_pct,
+        "banda_label":   banda_label,
+        "n_sesiones":    n,
+        "swing_periodo": swing_periodo,
     }
 
 
@@ -7181,6 +7215,10 @@ tr:nth-child(even) td { background:#f8fafc; }
                     continue
                 _esc_h2 = _cv_h.get("escenario","")
                 _lbl_h, _fc_h, _fbg_h = _esc_labels_h.get(_esc_h2, (_esc_h2.replace("_"," ").title(), "#64748b", "#f8fafc"))
+                # PA-A-01: la etiqueta del componente Fibonacci cita la banda real
+                if (_ck_h == "fibo" and analisis_fibo
+                        and _esc_h2.startswith("retroceso_") and analisis_fibo.get("banda_label")):
+                    _lbl_h = f"Retroceso {analisis_fibo['banda_label']}"
                 _pts_h = _cv_h.get("puntos", 5)
                 _mini_cards_h += (
                     f'<div style="background:{_fbg_h};border-radius:6px;padding:8px 10px;'
@@ -7238,12 +7276,17 @@ tr:nth-child(even) td { background:#f8fafc; }
                 "extension_127": "Precio en extensión 127.2% — primer objetivo de proyección tras superar máximos. Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos.",
                 "en_maximo": "Precio en el máximo del swing (100% Fibonacci). Superar este nivel con volumen sería señal alcista importante. Sin romperlo, puede corregir.",
                 "retroceso_236": "Retroceso solo del 23.6% — tendencia alcista muy intacta. Si el precio aguanta aquí, la probabilidad de continuar al alza es alta.",
-                "retroceso_382": "Zona de retroceso normal (38.2–50%) dentro de una tendencia alcista sana. Rebote con volumen aquí = tendencia activa. Sin rebote, siguiente soporte en 61.8%.",
+                "retroceso_382": "Retroceso intermedio dentro de una tendencia alcista sana. Rebote con volumen en el soporte Fibonacci = tendencia activa. Sin rebote, siguiente soporte en el nivel inferior.",
                 "retroceso_618": "Zona dorada (61.8%) — el retroceso más seguido institucionalmente. Último soporte relevante antes de comprometer la estructura. Rebote aquí = posible entrada técnica.",
                 "retroceso_786": "Retroceso muy profundo al 78.6% — estructura alcista muy debilitada. El nivel 0% (origen del swing) es la última defensa: perderlo invalida el swing.",
                 "swing_roto": "Swing alcista anual invalidado — precio por debajo del origen del movimiento. El análisis Fibonacci debe reconstruirse sobre el nuevo mínimo.",
             }.get(_fesc_h, "")
             if _fn_h or _fa_h:
+                _swp_h = analisis_fibo.get("swing_periodo", "")
+                _swp_div_h = (
+                    f'<div style="font-size:10px;color:#94a3b8;margin-top:8px">{_swp_h}</div>'
+                    if _swp_h else ""
+                )
                 _fib_synth_h = (
                     f'<div style="background:{_fsb_h};border:1px solid {_fbrd_h};'
                     f'border-radius:8px;padding:14px 16px;margin-top:12px">'
@@ -7251,6 +7294,7 @@ tr:nth-child(even) td { background:#f8fafc; }
                     f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
                     f'&#128208; Qué significa esto para ti — Fibonacci</div>'
                     f'<div style="font-size:12px;color:#1e293b;line-height:1.65">{_fn_h}{_fa_h}</div>'
+                    f'{_swp_div_h}'
                     f'</div>'
                 )
         _diag_section = (
@@ -8854,6 +8898,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         for _cn_d, _ca_d in _componentes_diag_pdf:
             if _ca_d and "escenario" in _ca_d and "texto" in _ca_d:
                 _esc_d = _ca_d["escenario"].replace("_", " ").title()
+                # PA-A-01: para Fibonacci, la etiqueta cita la banda real
+                if (_ca_d["escenario"].startswith("retroceso_")
+                        and _ca_d.get("banda_label")):
+                    _esc_d = f"Retroceso {_ca_d['banda_label']}"
                 _narr_d = _ca_d["texto"][:220] + "..." if len(_ca_d["texto"]) > 220 else _ca_d["texto"]
                 _dt_rows.append([
                     Paragraph(_cn_d, _p(fontSize=7, fontName="Helvetica-Bold")),
@@ -8952,6 +9000,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     continue
                 _esc_p = _cv_p.get("escenario","")
                 _lbl_p = _esc_labels_pdf.get(_esc_p, _esc_p.replace("_"," ").title())
+                # PA-A-01: el componente Fibonacci cita la banda real
+                if (_ck_p == "fibo" and analisis_fibo
+                        and _esc_p.startswith("retroceso_") and analisis_fibo.get("banda_label")):
+                    _lbl_p = f"Retr. {analisis_fibo['banda_label']}"
                 _pts_p = _cv_p.get("puntos", 5)
                 _fc_p  = _pts_color_pdf(_pts_p)
                 _mini_cells.append(Paragraph(
@@ -9023,8 +9075,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 "Si aguanta este nivel, la probabilidad de continuar al alza es alta."
             ),
             "retroceso_382": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso normal (38.2-50%) dentro de tendencia alcista sana. "
-                "Rebote con volumen aqui = tendencia alcista activa. Sin rebote, siguiente soporte en 61.8%."
+                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso intermedio dentro de tendencia alcista sana. "
+                "Rebote con volumen en el soporte Fibonacci = tendencia alcista activa. Sin rebote, siguiente soporte en el nivel inferior."
             ),
             "retroceso_618": (
                 "[QUE SIGNIFICA PARA TI - FIBONACCI] Zona dorada (61.8%) — el retroceso mas seguido institucionalmente. "
@@ -9042,6 +9094,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         if _fniveles_p or _fib_accion_p:
             historia.append(Spacer(1, 0.1*cm))
             historia.append(Paragraph(_strip(_fniveles_p + _fib_accion_p), _p(fontSize=7.5, textColor=_ffib_col_p)))
+            # PA-A-06: periodo/lookback del swing de Fibonacci
+            _swp_p = analisis_fibo.get("swing_periodo", "")
+            if _swp_p:
+                historia.append(Paragraph(_strip(_swp_p), _p(fontSize=6.5, textColor=GB)))
             historia.append(Spacer(1, 0.1*cm))
 
     _pdf_sh(f"📐 Pivot Points — Sistema {sistema}", historia)
@@ -17824,6 +17880,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 _esc_f,
                 ("#f8fafc", "#64748b", "📐", _esc_f.upper())
             )
+            # PA-A-01: la etiqueta del componente cita la banda real
+            if _esc_f.startswith("retroceso_") and _f.get("banda_label"):
+                _lab_f = f"RETROCESO {_f['banda_label']}"
             _fa = _f.get("fib_abajo")
             _fu = _f.get("fib_arriba")
             _c1_f, _c2_f, _c3_f = st.columns(3)
@@ -17867,6 +17926,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 f'</div>',
                 unsafe_allow_html=True
             )
+            # PA-A-06: periodo/lookback del swing
+            if _f.get("swing_periodo"):
+                st.caption(_f["swing_periodo"])
 
             # ── Síntesis contextual Fibonacci ─────────────────────────────
             _fib_escenarios_alcistas = {"extension_161", "extension_127", "en_maximo", "retroceso_236"}
