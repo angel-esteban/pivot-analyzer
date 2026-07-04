@@ -221,11 +221,19 @@ class ResumenIngesta:
     nivel: str
     log_id: int | None = None
     procesados: int = 0
-    ok: int = 0
-    fallidos: int = 0
+    ok: int = 0                                                  # cargados sin excepción (validos + no_validos)
+    fallidos: int = 0                                            # excepciones de carga (no_cargados + deuda_datos)
     detalle_fallidos: dict[str, str] = field(default_factory=dict)
     incidencias: dict[str, dict] = field(default_factory=dict)   # {ticker: {campo: motivo}}
     filas: list[dict] = field(default_factory=list)
+    # ── Desglose fino en 4 estados (aplica a estructural y fundamental) ──
+    validos: int = 0            # cargado y válido
+    no_validos: int = 0         # cargado, pero rechazado por saneamiento/coherencia (revisar dato)
+    no_cargados: int = 0        # fallo de carga PERO con respaldo válido previo en Neon (la caché cubre)
+    deuda_datos: int = 0        # fallo de carga y SIN respaldo válido (hueco real: reintentar hasta persistir)
+    detalle_no_validos: dict[str, str] = field(default_factory=dict)
+    detalle_no_cargados: dict[str, str] = field(default_factory=dict)
+    detalle_deuda: dict[str, str] = field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +292,20 @@ def _upsert(cur, tabla: str, columnas: list[str], conflicto: list[str], fila: di
 # ─────────────────────────────────────────────────────────────────────────────
 # Registro de auditoría
 # ─────────────────────────────────────────────────────────────────────────────
+def _hay_respaldo_valido(cur, tabla: str, ticker: str) -> bool:
+    """True si existe una fila previa marcada `valido` para el ticker en `tabla`.
+    Distingue un fallo de carga cubierto por caché (respaldo válido) de una DEUDA
+    DE DATOS (sin respaldo). Robusto: cualquier error -> False (se trata como deuda)."""
+    if cur is None:
+        return False
+    try:
+        cur.execute(f"SELECT valido FROM {tabla} WHERE ticker = %s", [ticker])
+        row = cur.fetchone()
+        return bool(row) and bool(row[0])
+    except Exception:                        # noqa: BLE001 — txn abortada / tabla sin fila
+        return False
+
+
 def _abrir_log(cur, nivel: str, disparado_por: str, fuente: str) -> int:
     cur.execute(
         "INSERT INTO ingesta_log (nivel, disparado_por, fuente) VALUES (%s, %s, %s) RETURNING id",
@@ -292,7 +314,14 @@ def _abrir_log(cur, nivel: str, disparado_por: str, fuente: str) -> int:
 
 
 def _cerrar_log(cur, log_id: int, r: ResumenIngesta) -> None:
-    detalle = {"fallidos": r.detalle_fallidos, "incidencias": r.incidencias}
+    detalle = {
+        "fallidos": r.detalle_fallidos, "incidencias": r.incidencias,
+        "no_validos": r.detalle_no_validos,
+        "no_cargados": r.detalle_no_cargados,
+        "deuda_datos": r.detalle_deuda,
+        "conteo": {"validos": r.validos, "no_validos": r.no_validos,
+                   "no_cargados": r.no_cargados, "deuda_datos": r.deuda_datos},
+    }
     cur.execute(
         "UPDATE ingesta_log SET fin = now(), tickers_procesados = %s, tickers_ok = %s, "
         "tickers_fallidos = %s, detalle_fallidos = %s::jsonb WHERE id = %s",
@@ -344,9 +373,25 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                                 {"ticker": ticker, "fecha_ex": fecha_ex,
                                  "importe": importe, "fuente": nombre_fuente})
             r.ok += 1
+            # Cargado sin excepción: válido si no hay incidencias; si las hay, es
+            # un fallo de VALIDACIÓN (dato traído pero rechazado — revisar dato).
+            if incidencias:
+                r.no_validos += 1
+                r.detalle_no_validos[ticker] = fila.get("motivo_invalidez") or "no válido"
+            else:
+                r.validos += 1
         except Exception as e:               # noqa: BLE001
             r.fallidos += 1
             r.detalle_fallidos[ticker] = str(e)
+            # Fallo de CARGA. Distinguir "no cargado" (hay respaldo válido: la caché
+            # cubre) de "DEUDA DE DATOS" (sin respaldo válido: hueco real a cerrar
+            # reintentando hasta que la fuente devuelva el dato y se persista bien).
+            if _hay_respaldo_valido(None if dry_run else cur, tabla, ticker):
+                r.no_cargados += 1
+                r.detalle_no_cargados[ticker] = str(e)
+            else:
+                r.deuda_datos += 1
+                r.detalle_deuda[ticker] = str(e)
 
     if not dry_run:
         _cerrar_log(cur, r.log_id, r)

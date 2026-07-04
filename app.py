@@ -9814,6 +9814,27 @@ def panel_admin():
                 _tickers_idx = list(_obtener_tickers_indice(_nom_idx).values())
                 st.caption(f"{len(_tickers_idx)} tickers en «{_nom_idx}».")
                 _disp = f"admin:{st.session_state.get('usuario', {}).get('username', '?')}"
+
+                def _mostrar_resumen_ingesta(_r, _nivel):
+                    # 4 estados (distinguen disponibilidad de fuente vs calidad de dato):
+                    #  válidos / no válidos (revisar) / no cargados (caché cubre) / deuda de datos (reintentar)
+                    st.success(
+                        f"{_nivel} · válidos {_r.validos} · no válidos {_r.no_validos} · "
+                        f"no cargados {_r.no_cargados} · deuda de datos {_r.deuda_datos} · log #{_r.log_id}"
+                    )
+                    if _r.detalle_no_validos:
+                        st.warning("**No válidos** — dato descargado pero rechazado por saneamiento/coherencia "
+                                   "(problema de calidad; revisar el dato de origen): "
+                                   + ", ".join(_r.detalle_no_validos))
+                    if _r.detalle_no_cargados:
+                        st.info("**No cargados** — yfinance no devolvió datos, pero hay respaldo válido en Neon "
+                                "(la caché cubre con el último valor; reintento rutinario): "
+                                + ", ".join(_r.detalle_no_cargados))
+                    if _r.detalle_deuda:
+                        st.error("**Deuda de datos** — no cargado y SIN respaldo válido previo (hueco real): "
+                                 "reintentar «Refrescar» hasta que la fuente lo devuelva y se persista por primera vez: "
+                                 + ", ".join(_r.detalle_deuda))
+
                 _ci1, _ci2 = st.columns(2)
                 with _ci1:
                     if st.button("Refrescar estructural", key="_adm_ing_estr", use_container_width=True):
@@ -9825,9 +9846,7 @@ def panel_admin():
                                     disparado_por=_disp)
                         finally:
                             release_db_connection(_conn)
-                        st.success(f"Estructural · ok {_r.ok} · fallidos {_r.fallidos} · log #{_r.log_id}")
-                        if _r.detalle_fallidos:
-                            st.warning("Fallidos: " + ", ".join(_r.detalle_fallidos))
+                        _mostrar_resumen_ingesta(_r, "Estructural")
                 with _ci2:
                     if st.button("Refrescar fundamental", key="_adm_ing_fund", use_container_width=True):
                         _conn = get_db_connection()
@@ -9838,9 +9857,7 @@ def panel_admin():
                                     disparado_por=_disp)
                         finally:
                             release_db_connection(_conn)
-                        st.success(f"Fundamental · ok {_r.ok} · fallidos {_r.fallidos} · log #{_r.log_id}")
-                        if _r.detalle_fallidos:
-                            st.warning("Fallidos: " + ", ".join(_r.detalle_fallidos))
+                        _mostrar_resumen_ingesta(_r, "Fundamental")
         except Exception as _e:
             st.error(f"No se pudo preparar la ingesta: {_e}")
 
