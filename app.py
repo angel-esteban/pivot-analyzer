@@ -9836,8 +9836,9 @@ def _admin_refresco():
                         _o = {}
                 return _o
 
-            def _bloque_nivel(_nivel_key, _nivel_label, _ingerir_fn, _mapa):
+            def _bloque_nivel(_nivel_key, _nivel_label, _ingerir_fn, _mapa, _cols_ocultas=frozenset()):
                 _cols_par = [m.col for m in _mapa]
+                _cols_vis = [c for c in _cols_par if c not in _cols_ocultas]
                 # ── Refrescar ──
                 if st.button(f"🔄 Refrescar {_nivel_label.lower()}",
                              key=f"_adm_ref_{_nivel_key}", use_container_width=True):
@@ -9860,11 +9861,17 @@ def _admin_refresco():
                     if not _filas:
                         st.info("No hay filas cargadas. Pulsa «Refrescar» primero.")
                         return
+                    if _cols_ocultas:
+                        _fijas = []
+                        for _c in [c for c in _cols_par if c in _cols_ocultas]:
+                            _vals = {str(_f.get(_c)) for _f in _filas if _f.get(_c) is not None}
+                            _fijas.append(f"**{_c}**: {next(iter(_vals)) if len(_vals) == 1 else 'varios'}")
+                        st.caption("Fijos (no editables): " + " · ".join(_fijas))
                     _rows = []
                     for _f in _filas:
                         _org = _origen_dict(_f)
                         _row = {"ticker": _f.get("ticker")}
-                        for _c in _cols_par:
+                        for _c in _cols_vis:
                             _row[_c] = _f.get(_c)
                         _row["·válido"] = "✓" if _f.get("valido") else "✗"
                         _man = [k for k, v in _org.items() if v == "manual"]
@@ -9884,7 +9891,7 @@ def _admin_refresco():
                             for _i in range(len(_ed)):
                                 _tk = _ed.iloc[_i]["ticker"]
                                 _cambios = {}
-                                for _c in _cols_par:
+                                for _c in _cols_vis:
                                     _nv, _ov = _ed.iloc[_i][_c], _df0.iloc[_i][_c]
                                     if _pd_ed.isna(_nv) and _pd_ed.isna(_ov):
                                         continue
@@ -9909,7 +9916,8 @@ def _admin_refresco():
             _t_estr, _t_fund = st.tabs(["🏛️ Estructural", "📊 Fundamental"])
             with _t_estr:
                 _bloque_nivel("estructural", "Estructural",
-                              _ingesta.ingerir_estructural, _ingesta.MAPA_ESTRUCTURAL)
+                              _ingesta.ingerir_estructural, _ingesta.MAPA_ESTRUCTURAL,
+                              _cols_ocultas={"divisa", "mercado", "tipo_activo", "es_ucits"})
             with _t_fund:
                 _bloque_nivel("fundamental", "Fundamental",
                               _ingesta.ingerir_fundamental, _ingesta.MAPA_FUNDAMENTAL)
