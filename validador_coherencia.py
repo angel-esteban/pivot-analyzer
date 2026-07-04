@@ -57,7 +57,13 @@ def _precio(info: dict) -> float | None:
 # ── Comprobaciones relacionales ──────────────────────────────────────────────
 # Cada check devuelve (estado, mensaje|None): estado en {'ok','flag','n/a'}.
 def _c_market_cap(info: dict) -> tuple[str, str | None]:
-    mcap, precio, shares = _num(info.get("marketCap")), _precio(info), _num(info.get("sharesOutstanding"))
+    mcap, precio = _num(info.get("marketCap")), _precio(info)
+    # impliedSharesOutstanding refleja el capital TOTAL (todas las clases) y es lo
+    # coherente con marketCap. sharesOutstanding puede ser solo la clase cotizada:
+    # en emisores de doble clase (p.ej. GRF, PUIG) rompe el ratio sin que el dato
+    # esté mal. Preferimos impliedSharesOutstanding; caemos a sharesOutstanding solo
+    # si no está disponible.
+    shares = _num(info.get("impliedSharesOutstanding")) or _num(info.get("sharesOutstanding"))
     if not mcap or not precio or not shares:
         return "n/a", None
     esperado = precio * shares
@@ -81,31 +87,47 @@ def _c_free_float(info: dict) -> tuple[str, str | None]:
 
 
 def _c_yield(info: dict) -> tuple[str, str | None]:
-    drate, precio = _num(info.get("dividendRate")), _precio(info)
+    # Canónico para rentas: yield TRAILING (lo realmente pagado). NO marcar por
+    # diferencia forward/trailing (dividendRate/precio vs TADY): eso es un cambio de
+    # dividendo, no un error. Marcar SOLO por implausibilidad ABSOLUTA: negativo, o
+    # por encima de un techo dependiente de sector (REIT/SOCIMI admiten más).
     tady = _num(info.get("trailingAnnualDividendYield"))
-    if not drate or not precio or not tady or tady <= 0:
+    if tady is None:
         return "n/a", None
-    y_calc = drate / precio
-    d = _div_rel(y_calc, tady)
-    if d > 0.25:
-        return "flag", (f"yield por dividendRate/precio ({y_calc:.2%}) discrepa del "
-                        f"trailingAnnualDividendYield ({tady:.2%}, dif {d:.0%}) — posible problema de unidad")
+    if tady < 0:
+        return "flag", f"trailingAnnualDividendYield negativo ({tady:.2%}) — imposible"
+    sector = (info.get("sector") or "").strip().lower()
+    techo = 0.20 if "real estate" in sector else 0.15
+    if tady > techo:
+        return "flag", (f"trailingAnnualDividendYield ({tady:.2%}) supera el techo de "
+                        f"plausibilidad ({techo:.0%}) para el sector — verificar")
     return "ok", None
 
 
 def _c_payout(info: dict) -> tuple[str, str | None]:
-    payout, drate, eps = _num(info.get("payoutRatio")), _num(info.get("dividendRate")), _num(info.get("trailingEps"))
-    if payout is None or not drate or eps is None:
+    # Recompute HOMOGÉNEO (trailing/trailing): dividendo TTM / BPA TTM, comparado con
+    # payoutRatio de Yahoo (que ya es trailing). NO usar dividendRate (forward): mezclar
+    # forward y trailing sobre-marca cuando el dividendo cambió (bug de método anterior).
+    payout = _num(info.get("payoutRatio"))
+    tdiv   = _num(info.get("trailingAnnualDividendRate"))   # dividendo TTM por acción
+    eps    = _num(info.get("trailingEps"))                  # BPA TTM
+    if payout is None or eps is None:
         return "n/a", None
     if eps <= 0:
+        # Payout sobre BPA≤0 no es interpretable (regla Polaris, coincide con corrección #5).
         if payout > 0:
             return "flag", f"payoutRatio {payout:.0%} con BPA≤0 ({eps}) — payout contable no significativo"
         return "n/a", None
-    p_calc = drate / eps
-    d = _div_rel(payout, p_calc)
-    if d > 0.25:
-        return "flag", (f"payoutRatio ({payout:.0%}) discrepa del recalculado dividendRate/BPA "
-                        f"({p_calc:.0%}, dif {d:.0%})")
+    if not tdiv:
+        return "n/a", None
+    p_calc = tdiv / eps
+    d_rel = _div_rel(payout, p_calc)
+    d_abs = abs(payout - p_calc)          # payout en ratio (0.60 = 60 %); 5 pp = 0.05
+    # Incoherente solo si diverge en relativo Y en absoluto: el suelo de 5 pp evita
+    # sobre-marcar payouts bajos donde el relativo se dispara (p.ej. 2 % vs 4 %).
+    if d_rel > 0.25 and d_abs > 0.05:
+        return "flag", (f"payoutRatio ({payout:.0%}) discrepa del recalculado dividendo-TTM/BPA "
+                        f"({p_calc:.0%}, dif rel {d_rel:.0%}, {d_abs*100:.0f} pp)")
     return "ok", None
 
 

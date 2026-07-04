@@ -56,6 +56,9 @@ class FieldSpec:
     nullable: bool = True
     rango_valido: tuple[float, float] | None = None   # (min, max) inclusive; None = sin chequeo
     cero_sospechoso: bool = False            # True si 0 casi siempre significa "sin dato"
+    bloqueante: bool = True                  # False: un SOSPECHOSO es aviso informativo,
+                                             # NO invalida el registro (p.ej. pegRatio,
+                                             # métrica derivada y ruidosa — regla Polaris)
 
 
 @dataclass
@@ -73,8 +76,9 @@ class ResultadoRegistro:
     ticker: str
     valores: dict[str, Any] = field(default_factory=dict)         # {campo: valor_saneado}
     resultados: dict[str, ResultadoCampo] = field(default_factory=dict)
-    valido: bool = True                                            # False si hay algún SOSPECHOSO
+    valido: bool = True                                            # False si hay SOSPECHOSO bloqueante
     motivo_invalidez: str | None = None
+    avisos: list[str] = field(default_factory=list)               # SOSPECHOSO no bloqueante (informativo)
 
     def para_bd(self) -> dict[str, Any]:
         """Devuelve el dict listo para el UPSERT: valores + valido + motivo_invalidez."""
@@ -186,8 +190,12 @@ def validar_registro(ticker: str, datos_crudos: dict[str, Any],
         res.resultados[campo] = rc
         res.valores[campo] = rc.valor
         if rc.estado is Estado.SOSPECHOSO:
-            res.valido = False
-            motivos.append(f"{campo}: {rc.motivo}")
+            if spec.bloqueante:
+                res.valido = False
+                motivos.append(f"{campo}: {rc.motivo}")
+            else:
+                # No invalida el registro: métrica derivada/ruidosa (p.ej. pegRatio).
+                res.avisos.append(f"{campo}: {rc.motivo}")
 
     res.motivo_invalidez = "; ".join(motivos) if motivos else None
     return res
@@ -227,7 +235,8 @@ DEFAULT_SPECS: dict[str, FieldSpec] = {
     "operatingMargins":  FieldSpec("operatingMargins", "fundamental", "porcentaje", rango_valido=(-2, 2)),
     "returnOnEquity":    FieldSpec("returnOnEquity", "fundamental", "porcentaje", rango_valido=(-2, 2)),
     "pegRatio":          FieldSpec("pegRatio", "fundamental", "ratio",
-                                   rango_valido=(-10, 50), cero_sospechoso=True),
+                                   rango_valido=(-10, 50), cero_sospechoso=True,
+                                   bloqueante=False),   # PEG derivado/ruidoso: aviso, no invalida (Polaris)
     "earningsGrowth":    FieldSpec("earningsGrowth", "fundamental", "porcentaje", rango_valido=(-5, 5)),
     "marketCap":         FieldSpec("marketCap", "fundamental", "moneda",
                                    rango_valido=(0, 5e13), cero_sospechoso=True),
