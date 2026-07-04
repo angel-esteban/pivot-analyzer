@@ -9786,19 +9786,9 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 # PANEL DE ADMINISTRACIÓN — GESTIÓN DE USUARIOS
 # =============================================================================
 
-def panel_admin():
-    """Panel de administración: lista de usuarios → perfil editable (estilo Mi Perfil)."""
-    _sel_id = st.session_state.get("_adm_sel_uid")
-
-    try:
-        usuarios = db_select("usuarios")
-        usuarios.sort(key=lambda x: x.get("creado_en", ""))
-    except Exception as e:
-        st.error(f"Error al obtener usuarios: {e}")
-        return
-
-    # ── Datos del screener: ingesta a Neon (estructural / fundamental) ──────────
-    with st.expander("🗄️ Datos del screener — refrescar desde yfinance"):
+def _admin_refresco():
+    """Sub-página de Administración: refresco de datos del screener desde yfinance."""
+    with st.expander("🗄️ Datos del screener — refrescar desde yfinance", expanded=True):
         st.caption(
             "Rellena las tablas de Neon (instrumento / fundamental / dividendos) con datos "
             "validados (nivel 0). Estructural: cambia raramente. Fundamental: tras resultados."
@@ -9861,8 +9851,10 @@ def panel_admin():
         except Exception as _e:
             st.error(f"No se pudo preparar la ingesta: {_e}")
 
-    # ── Monitor de calidad de datos (solo lectura: cobertura, frescura, degradación) ──
-    with st.expander("📊 Monitor de calidad de datos"):
+
+def _admin_calidad():
+    """Sub-página de Administración: monitor de calidad de datos (solo lectura)."""
+    with st.expander("📊 Monitor de calidad de datos", expanded=True):
         st.caption("Vigila el proceso: cobertura por campo, frescura y degradación de la "
                    "fuente. No modifica datos.")
         if st.button("Calcular monitor", key="_adm_monitor_btn"):
@@ -9899,6 +9891,29 @@ def panel_admin():
                     st.write(", ".join(f"{_k}: {_v}" for _k, _v in _inf.incidencias_tendencia.items()))
             except Exception as _e:
                 st.error(f"No se pudo calcular el monitor: {_e}")
+
+
+def panel_admin():
+    """Panel de administración con sub-menú (segundo nivel del nav):
+    Gestión de Usuarios (por defecto) · Refresco de datos · Calidad de datos."""
+    _sel_id = st.session_state.get("_adm_sel_uid")
+
+    try:
+        usuarios = db_select("usuarios")
+        usuarios.sort(key=lambda x: x.get("creado_en", ""))
+    except Exception as e:
+        st.error(f"Error al obtener usuarios: {e}")
+        return
+
+    # ── Sub-menú de Administración (segundo nivel del nav): enruta a la sub-página ──
+    _adm_sub = st.session_state.get("_adm_sub_sel", "👥 Gestión de Usuarios")
+    if _adm_sub == "🗄️ Refresco de datos del screener":
+        _admin_refresco()
+        return
+    if _adm_sub == "📊 Calidad de datos":
+        _admin_calidad()
+        return
+    # Por defecto (👥 Gestión de Usuarios): continúa con la gestión de usuarios.
 
     # ══════════════════════════════════════════════════════════════════════════
     # VISTA A: PERFIL DEL USUARIO SELECCIONADO
@@ -15214,6 +15229,18 @@ def pantalla_analisis():
             "nav", _nav_items, index=0,
             label_visibility="collapsed", key="nav_sidebar"
         )
+        # Segundo nivel del nav: sub-menú de Administración (solo si está activa)
+        if _nav_sel == "⚙️ Administración":
+            st.markdown(
+                "<div style='margin:4px 0 2px 10px;font-size:0.7rem;color:#64748b;"
+                "text-transform:uppercase;letter-spacing:0.04em'>Administración</div>",
+                unsafe_allow_html=True
+            )
+            st.radio(
+                "admin_sub",
+                ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener", "📊 Calidad de datos"],
+                label_visibility="collapsed", key="_adm_sub_sel",
+            )
 
     # Aliases para compatibilidad (ya no son objetos de tab, son condiciones)
     _on_analisis    = _nav_sel == "📈 Análisis Técnico"
