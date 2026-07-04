@@ -194,6 +194,16 @@ def validar_registro(ticker: str, datos_crudos: dict[str, Any],
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Rangos de plausibilidad reutilizables como FUENTE ÚNICA (R-2). Los consumen a la
+# vez la validación de ingesta (DEFAULT_SPECS, abajo) y los guards de presentación
+# en app.py (PA-C-01 free float, PA-A-04 beta). Cambiar aquí cambia AMBAS capas.
+# El valor concreto es criterio de diseño/financiero [VERIFICAR].
+# ─────────────────────────────────────────────────────────────────────────────
+RANGO_BETA_PLAUSIBLE = (0.0, 3.0)      # equity-céntrico: beta < 0 o > 3 = glitch de fuente
+RANGO_FREE_FLOAT_PCT = (0.0, 100.0)    # free float = % de acciones en circulación libre
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Specs por defecto (campos reales del screener)
 # Rangos según DISENO_Persistencia_Datos_Screener.md §3.2 — afinar con datos reales.
 # Unidades canónicas: ratios y porcentajes en decimal (0.75 = 75 %).
@@ -202,7 +212,7 @@ DEFAULT_SPECS: dict[str, FieldSpec] = {
     # ── Nivel 1: estructural ──
     "sector":      FieldSpec("sector", "estructural", "texto", nullable=False),
     "free_float_pct": FieldSpec("free_float_pct", "estructural", "porcentaje",
-                                rango_valido=(0, 100)),
+                                rango_valido=RANGO_FREE_FLOAT_PCT),
     "annualReportExpenseRatio": FieldSpec("annualReportExpenseRatio", "estructural",
                                           "ratio", rango_valido=(0, 0.05), cero_sospechoso=True),
     "totalAssets": FieldSpec("totalAssets", "estructural", "moneda",
@@ -222,7 +232,7 @@ DEFAULT_SPECS: dict[str, FieldSpec] = {
     "marketCap":         FieldSpec("marketCap", "fundamental", "moneda",
                                    rango_valido=(0, 5e13), cero_sospechoso=True),
     "beta":              FieldSpec("beta", "fundamental", "ratio",
-                                   rango_valido=(-5, 5), cero_sospechoso=True),
+                                   rango_valido=RANGO_BETA_PLAUSIBLE, cero_sospechoso=True),
     "bpa":               FieldSpec("bpa", "fundamental", "moneda", rango_valido=(-1e4, 1e4)),
     "fcf_yield":         FieldSpec("fcf_yield", "fundamental", "porcentaje", rango_valido=(-1, 1)),
     "cagr_dividendo_5y": FieldSpec("cagr_dividendo_5y", "fundamental", "porcentaje", rango_valido=(-1, 5)),

@@ -30,6 +30,11 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import psycopg2
 import psycopg2.extras
 
+# Validación de saneamiento nivel 0 — FUENTE ÚNICA de rangos de plausibilidad (R-2):
+# los guards de presentación (PA-C-01 free float, PA-A-04 beta) leen estos rangos,
+# los mismos que usa la ingesta a Neon, para no tener dos verdades sobre el mismo dato.
+import validador_nivel0 as _v0
+
 # HTTP para ECB Statistical Data Warehouse (sin API key)
 import requests
 import json as _json_mod
@@ -6435,7 +6440,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             # rango (p.ej. 103,5%) es un glitch de la fuente (Yahoo) y NO se pinta como dato
             # firme; se marca [VERIFICAR] en lugar de propagar el número imposible.
             "Free Float": (
-                (lambda _ffv: f"{_ffv:.1f}%" if 0 < _ffv <= 100 else "[VERIFICAR]")(
+                (lambda _ffv, _lo=_v0.RANGO_FREE_FLOAT_PCT[0], _hi=_v0.RANGO_FREE_FLOAT_PCT[1]:
+                    f"{_ffv:.1f}%" if _lo < _ffv <= _hi else "[VERIFICAR]")(
                     info["floatShares"] / info["sharesOutstanding"] * 100)
                 if info.get("floatShares") and info.get("sharesOutstanding")
                 else "no disponible"
@@ -6457,7 +6463,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             # una integrada) → probable glitch de fuente; se marca [VERIFICAR] con el valor crudo.
             "Beta (Yahoo)": (
                 _fmt_ratio(info.get("beta"))
-                if (info.get("beta") is None or 0 <= float(info.get("beta")) <= 3)
+                if (info.get("beta") is None
+                    or _v0.RANGO_BETA_PLAUSIBLE[0] <= float(info.get("beta")) <= _v0.RANGO_BETA_PLAUSIBLE[1])
                 else f"[VERIFICAR] ({float(info.get('beta')):.2f}x)"
             ),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
             "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
