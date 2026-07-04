@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
-from validador_nivel0 import (Estado, FieldSpec, cargar_specs_desde_criteria,
-                              validar_campo)
+from validador_nivel0 import (DEFAULT_SPECS, Estado, FieldSpec,
+                              cargar_specs_desde_criteria, validar_campo)
 from validador_coherencia import validar_coherencia
 from normalizador import normalizar_info
 
@@ -205,10 +205,10 @@ MAPA_FUNDAMENTAL: list[Mapa] = [
 ]
 
 _COLS_INSTRUMENTO = ([m.col for m in MAPA_ESTRUCTURAL] +
-                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias"])
+                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias", "origen"])
 _COLS_FUNDAMENTAL = ([m.col for m in MAPA_FUNDAMENTAL] +
-                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias"])
-_COLS_JSONB = {"incidencias"}
+                     ["ticker", "fuente", "valido", "motivo_invalidez", "incidencias", "origen"])
+_COLS_JSONB = {"incidencias", "origen"}   # origen: {col: 'yfinance'|'manual'|'eodhd'|'fmp'}
 
 _SPEC_PERMISIVA = FieldSpec("?", tipo_valor="ratio", rango_valido=None)
 
@@ -289,6 +289,19 @@ def _upsert(cur, tabla: str, columnas: list[str], conflicto: list[str], fila: di
     cur.execute(_sql_upsert(tabla, columnas, conflicto), [fila.get(c) for c in columnas])
 
 
+def _leer_fila_actual(cur, tabla: str, ticker: str) -> dict | None:
+    """Lee la fila actual como dict {columna: valor}. None si no existe o error."""
+    try:
+        cur.execute(f"SELECT * FROM {tabla} WHERE ticker = %s", [ticker])
+        row = cur.fetchone()
+        if not row:
+            return None
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
+    except Exception:                        # noqa: BLE001 — tabla/columna ausente, txn abortada
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Registro de auditoría
 # ─────────────────────────────────────────────────────────────────────────────
@@ -354,11 +367,33 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
             dividendos = fuente.dividendos(ticker) if (con_dividendos or nivel == "fundamental") else []
 
             fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs)
+
+            # Protección de ediciones manuales: un campo con origen="manual" NO se
+            # sobrescribe con yfinance (si no, se perdería la corrección en cada refresco).
+            # Se conserva su valor y se descarta su incidencia (ya pasó validación al editarse).
+            _prev = None if dry_run else _leer_fila_actual(cur, tabla, ticker)
+            _prev_origen = (_prev or {}).get("origen") or {}
+            if isinstance(_prev_origen, str):
+                try:
+                    _prev_origen = json.loads(_prev_origen)
+                except Exception:            # noqa: BLE001
+                    _prev_origen = {}
+            _origen: dict[str, str] = {}
+            for m in mapa:
+                if _prev is not None and _prev_origen.get(m.col) == "manual":
+                    fila[m.col] = _prev.get(m.col)
+                    _origen[m.col] = "manual"
+                    if m.spec_key:
+                        incidencias.pop(m.spec_key, None)
+                elif fila.get(m.col) is not None:
+                    _origen[m.col] = nombre_fuente
+
             fila.update(
                 ticker=ticker, fuente=nombre_fuente,
                 valido=not incidencias,
                 motivo_invalidez=("; ".join(f"{k}: {v}" for k, v in incidencias.items()) or None),
                 incidencias=(json.dumps(incidencias, ensure_ascii=False) if incidencias else None),
+                origen=json.dumps(_origen, ensure_ascii=False),
             )
             r.filas.append(fila)
             if incidencias:
@@ -407,3 +442,83 @@ def ingerir_estructural(tickers, conn, **kw) -> ResumenIngesta:
 def ingerir_fundamental(tickers, conn, **kw) -> ResumenIngesta:
     return _ingerir("fundamental", "fundamental", _COLS_FUNDAMENTAL, MAPA_FUNDAMENTAL,
                     tickers, conn, con_dividendos=True, **kw)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Edición manual (panel Administración): leer todo y guardar overrides manuales.
+# ─────────────────────────────────────────────────────────────────────────────
+def _cfg_nivel(nivel: str):
+    """Devuelve (tabla, mapa, columnas) según el nivel."""
+    if nivel == "estructural":
+        return "instrumento", MAPA_ESTRUCTURAL, _COLS_INSTRUMENTO
+    return "fundamental", MAPA_FUNDAMENTAL, _COLS_FUNDAMENTAL
+
+
+def _spec_de_columna(col: str, spec_key: str | None, specs: dict) -> FieldSpec:
+    """Resuelve el spec de validación en unidad de BBDD: primero por nombre de columna
+    (p.ej. free_float_pct = %), luego por spec_key del mapa, luego permisivo."""
+    return DEFAULT_SPECS.get(col) or (specs.get(spec_key) if spec_key else None) or _SPEC_PERMISIVA
+
+
+def leer_filas(conn, nivel: str) -> list[dict]:
+    """Todas las filas de la tabla del nivel, como lista de dicts (para el editor)."""
+    tabla, _, _ = _cfg_nivel(nivel)
+    cur = conn.cursor()
+    cur.execute(f"SELECT * FROM {tabla} ORDER BY ticker")
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def guardar_manual(conn, nivel: str, ticker: str, valores_editados: dict,
+                   criteria_path: str = "criteria.json") -> dict[str, str]:
+    """Persiste ediciones MANUALES de un ticker. Cada campo editado se VALIDA (formato,
+    nivel 0); si pasa, se guarda con origen='manual' (protegido de futuros refrescos).
+    Recalcula `valido`/`motivo_invalidez` (solo formato — la coherencia es de yfinance).
+    Devuelve {col: motivo} de los campos que NO pasaron validación (no se guardan)."""
+    tabla, mapa, columnas = _cfg_nivel(nivel)
+    specs = cargar_specs_desde_criteria(criteria_path)
+    cur = conn.cursor()
+    existing = _leer_fila_actual(cur, tabla, ticker) or {"ticker": ticker}
+    origen = existing.get("origen") or {}
+    if isinstance(origen, str):
+        try:
+            origen = json.loads(origen)
+        except Exception:                    # noqa: BLE001
+            origen = {}
+    fila = {c: existing.get(c) for c in columnas}
+    _spec_col = {m.col: m.spec_key for m in mapa}
+    errores: dict[str, str] = {}
+
+    for col, val in valores_editados.items():
+        if col not in _spec_col:
+            continue
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            fila[col] = None                 # vaciar campo (queda manual/ausente)
+            origen[col] = "manual"
+            continue
+        rc = validar_campo(val, _spec_de_columna(col, _spec_col[col], specs))
+        if rc.estado is Estado.SOSPECHOSO:
+            errores[col] = rc.motivo          # no pasa formato -> no se persiste
+            continue
+        fila[col] = rc.valor
+        origen[col] = "manual"
+
+    # Recalcular validez de la fila (formato de todos los campos con spec)
+    incid: dict[str, str] = {}
+    for m in mapa:
+        if m.spec_key is None:
+            continue
+        rc = validar_campo(fila.get(m.col), _spec_de_columna(m.col, m.spec_key, specs))
+        if rc.estado is Estado.SOSPECHOSO:
+            incid[m.spec_key] = f"nivel0: {rc.motivo}"
+
+    fila.update(
+        ticker=ticker, fuente="manual",
+        valido=not incid,
+        motivo_invalidez=("; ".join(f"{k}: {v}" for k, v in incid.items()) or None),
+        incidencias=(json.dumps(incid, ensure_ascii=False) if incid else None),
+        origen=json.dumps(origen, ensure_ascii=False),
+    )
+    _upsert(cur, tabla, columnas, ["ticker"], fila)
+    conn.commit()
+    return errores

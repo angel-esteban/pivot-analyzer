@@ -9787,8 +9787,12 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 # =============================================================================
 
 def _admin_refresco():
-    """Sub-página de Administración: refresco de datos del screener desde yfinance."""
-    with st.expander("🗄️ Datos del screener — refrescar desde yfinance", expanded=True):
+    """Sub-página de Administración: refresco de datos del screener (yfinance) y
+    edición manual. Dos pestañas (Estructural / Fundamental); cada una con Refrescar
+    y Editar. Los cambios manuales se marcan origen='manual' y se protegen de refrescos."""
+    import json as _json_ed
+    import pandas as _pd_ed
+    with st.expander("🗄️ Datos del screener — refrescar / editar", expanded=True):
         st.caption(
             "Rellena las tablas de Neon (instrumento / fundamental / dividendos) con datos "
             "validados (nivel 0). Estructural: cambia raramente. Fundamental: tras resultados."
@@ -9798,56 +9802,117 @@ def _admin_refresco():
             _idx_opts = list(_cargar_todos_indices().keys())
             if not _idx_opts:
                 st.info("No hay índices configurados en la base de datos.")
-            else:
-                _idx_sel = st.selectbox("Índice a refrescar", _idx_opts, key="_adm_ingesta_idx")
-                _nom_idx = _cargar_todos_indices()[_idx_sel]["nombre"]
-                _tickers_idx = list(_obtener_tickers_indice(_nom_idx).values())
-                st.caption(f"{len(_tickers_idx)} tickers en «{_nom_idx}».")
-                _disp = f"admin:{st.session_state.get('usuario', {}).get('username', '?')}"
+                return
+            _idx_def = _idx_opts.index("ibex35") if "ibex35" in _idx_opts else 0
+            _idx_sel = st.selectbox("Índice a refrescar", _idx_opts, index=_idx_def,
+                                    key="_adm_ingesta_idx")
+            _nom_idx = _cargar_todos_indices()[_idx_sel]["nombre"]
+            _tickers_idx = list(_obtener_tickers_indice(_nom_idx).values())
+            st.caption(f"{len(_tickers_idx)} tickers en «{_nom_idx}».")
+            _disp = f"admin:{st.session_state.get('usuario', {}).get('username', '?')}"
 
-                def _mostrar_resumen_ingesta(_r, _nivel):
-                    # 4 estados (distinguen disponibilidad de fuente vs calidad de dato):
-                    #  válidos / no válidos (revisar) / no cargados (caché cubre) / deuda de datos (reintentar)
-                    st.success(
-                        f"{_nivel} · válidos {_r.validos} · no válidos {_r.no_validos} · "
-                        f"no cargados {_r.no_cargados} · deuda de datos {_r.deuda_datos} · log #{_r.log_id}"
+            def _mostrar_resumen_ingesta(_r, _nivel):
+                # 4 estados: válidos / no válidos (revisar) / no cargados (caché cubre) / deuda de datos
+                st.success(
+                    f"{_nivel} · válidos {_r.validos} · no válidos {_r.no_validos} · "
+                    f"no cargados {_r.no_cargados} · deuda de datos {_r.deuda_datos} · log #{_r.log_id}"
+                )
+                if _r.detalle_no_validos:
+                    st.warning("**No válidos** — dato descargado pero rechazado por saneamiento/coherencia "
+                               "(revisar el dato de origen): " + ", ".join(_r.detalle_no_validos))
+                if _r.detalle_no_cargados:
+                    st.info("**No cargados** — yfinance no respondió, pero hay respaldo válido en Neon "
+                            "(la caché cubre; reintento rutinario): " + ", ".join(_r.detalle_no_cargados))
+                if _r.detalle_deuda:
+                    st.error("**Deuda de datos** — no cargado y SIN respaldo válido previo: reintentar "
+                             "«Refrescar» hasta persistirlo por primera vez: " + ", ".join(_r.detalle_deuda))
+
+            def _origen_dict(_f):
+                _o = _f.get("origen") or {}
+                if isinstance(_o, str):
+                    try:
+                        _o = _json_ed.loads(_o)
+                    except Exception:            # noqa: BLE001
+                        _o = {}
+                return _o
+
+            def _bloque_nivel(_nivel_key, _nivel_label, _ingerir_fn, _mapa):
+                _cols_par = [m.col for m in _mapa]
+                # ── Refrescar ──
+                if st.button(f"🔄 Refrescar {_nivel_label.lower()}",
+                             key=f"_adm_ref_{_nivel_key}", use_container_width=True):
+                    _conn = get_db_connection()
+                    try:
+                        with st.spinner(f"Extrayendo {len(_tickers_idx)} tickers de yfinance…"):
+                            _r = _ingerir_fn(_tickers_idx, _conn, criteria_path="criteria.json",
+                                             disparado_por=_disp)
+                    finally:
+                        release_db_connection(_conn)
+                    _mostrar_resumen_ingesta(_r, _nivel_label)
+                st.divider()
+                # ── Editar (ver y modificar a mano lo cargado) ──
+                if st.checkbox(f"✏️ Editar datos ({_nivel_label.lower()})", key=f"_adm_edit_{_nivel_key}"):
+                    _conn = get_db_connection()
+                    try:
+                        _filas = _ingesta.leer_filas(_conn, _nivel_key)
+                    finally:
+                        release_db_connection(_conn)
+                    if not _filas:
+                        st.info("No hay filas cargadas. Pulsa «Refrescar» primero.")
+                        return
+                    _rows = []
+                    for _f in _filas:
+                        _org = _origen_dict(_f)
+                        _row = {"ticker": _f.get("ticker")}
+                        for _c in _cols_par:
+                            _row[_c] = _f.get(_c)
+                        _row["·válido"] = "✓" if _f.get("valido") else "✗"
+                        _man = [k for k, v in _org.items() if v == "manual"]
+                        _row["·manual"] = ", ".join(_man) if _man else "—"
+                        _rows.append(_row)
+                    _df0 = _pd_ed.DataFrame(_rows)
+                    st.caption("Edita cualquier celda. Al guardar, los cambios se marcan origen=manual "
+                               "(validados en formato) y quedan protegidos de futuros refrescos.")
+                    _ed = st.data_editor(
+                        _df0, key=f"_adm_de_{_nivel_key}", use_container_width=True,
+                        hide_index=True, disabled=["ticker", "·válido", "·manual"],
                     )
-                    if _r.detalle_no_validos:
-                        st.warning("**No válidos** — dato descargado pero rechazado por saneamiento/coherencia "
-                                   "(problema de calidad; revisar el dato de origen): "
-                                   + ", ".join(_r.detalle_no_validos))
-                    if _r.detalle_no_cargados:
-                        st.info("**No cargados** — yfinance no devolvió datos, pero hay respaldo válido en Neon "
-                                "(la caché cubre con el último valor; reintento rutinario): "
-                                + ", ".join(_r.detalle_no_cargados))
-                    if _r.detalle_deuda:
-                        st.error("**Deuda de datos** — no cargado y SIN respaldo válido previo (hueco real): "
-                                 "reintentar «Refrescar» hasta que la fuente lo devuelva y se persista por primera vez: "
-                                 + ", ".join(_r.detalle_deuda))
+                    if st.button(f"💾 Guardar cambios ({_nivel_label.lower()})", key=f"_adm_save_{_nivel_key}"):
+                        _n_ok, _errs = 0, {}
+                        _conn = get_db_connection()
+                        try:
+                            for _i in range(len(_ed)):
+                                _tk = _ed.iloc[_i]["ticker"]
+                                _cambios = {}
+                                for _c in _cols_par:
+                                    _nv, _ov = _ed.iloc[_i][_c], _df0.iloc[_i][_c]
+                                    if _pd_ed.isna(_nv) and _pd_ed.isna(_ov):
+                                        continue
+                                    if str(_nv) != str(_ov):
+                                        _cambios[_c] = None if _pd_ed.isna(_nv) else _nv
+                                if _cambios:
+                                    _e = _ingesta.guardar_manual(_conn, _nivel_key, _tk, _cambios)
+                                    if _e:
+                                        _errs[_tk] = _e
+                                    else:
+                                        _n_ok += 1
+                        finally:
+                            release_db_connection(_conn)
+                        if _n_ok:
+                            st.success(f"{_n_ok} ticker(s) guardados a mano (origen=manual, protegidos de refrescos).")
+                        for _tk, _e in _errs.items():
+                            st.error(f"{_tk} (no guardado — no pasa formato): "
+                                     + "; ".join(f"{_c}: {_m}" for _c, _m in _e.items()))
+                        if not _n_ok and not _errs:
+                            st.info("Sin cambios que guardar.")
 
-                _ci1, _ci2 = st.columns(2)
-                with _ci1:
-                    if st.button("Refrescar estructural", key="_adm_ing_estr", use_container_width=True):
-                        _conn = get_db_connection()
-                        try:
-                            with st.spinner(f"Extrayendo {len(_tickers_idx)} tickers de yfinance…"):
-                                _r = _ingesta.ingerir_estructural(
-                                    _tickers_idx, _conn, criteria_path="criteria.json",
-                                    disparado_por=_disp)
-                        finally:
-                            release_db_connection(_conn)
-                        _mostrar_resumen_ingesta(_r, "Estructural")
-                with _ci2:
-                    if st.button("Refrescar fundamental", key="_adm_ing_fund", use_container_width=True):
-                        _conn = get_db_connection()
-                        try:
-                            with st.spinner(f"Extrayendo {len(_tickers_idx)} tickers (fundamental + dividendos)…"):
-                                _r = _ingesta.ingerir_fundamental(
-                                    _tickers_idx, _conn, criteria_path="criteria.json",
-                                    disparado_por=_disp)
-                        finally:
-                            release_db_connection(_conn)
-                        _mostrar_resumen_ingesta(_r, "Fundamental")
+            _t_estr, _t_fund = st.tabs(["🏛️ Estructural", "📊 Fundamental"])
+            with _t_estr:
+                _bloque_nivel("estructural", "Estructural",
+                              _ingesta.ingerir_estructural, _ingesta.MAPA_ESTRUCTURAL)
+            with _t_fund:
+                _bloque_nivel("fundamental", "Fundamental",
+                              _ingesta.ingerir_fundamental, _ingesta.MAPA_FUNDAMENTAL)
         except Exception as _e:
             st.error(f"No se pudo preparar la ingesta: {_e}")
 
