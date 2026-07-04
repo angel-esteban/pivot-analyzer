@@ -293,6 +293,7 @@ def cargar_specs_desde_criteria(ruta: str | Path) -> dict[str, FieldSpec]:
                     nullable=cr.get("nullable", True),
                     rango_valido=tuple(rango) if rango else None,
                     cero_sospechoso=cr.get("cero_sospechoso", False),
+                    bloqueante=cr.get("bloqueante", True),   # config puede marcar un campo no bloqueante
                 )
             elif clave in DEFAULT_SPECS:                      # default conocido
                 specs[clave] = DEFAULT_SPECS[clave]

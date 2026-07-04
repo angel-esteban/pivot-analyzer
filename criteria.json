@@ -639,6 +639,7 @@
           "tolerancia_obsolescencia_dias": 120,
           "criticidad": "scoring",
           "cero_sospechoso": true,
+          "bloqueante": false,
           "operador": "lte",
           "umbral_ok": 2.0,
           "umbral_warning": 3.0,
