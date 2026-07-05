@@ -362,6 +362,8 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
 
     for ticker in tickers:
         r.procesados += 1
+        if not dry_run:
+            cur.execute("SAVEPOINT sp_ticker")   # aísla el fallo de un ticker del resto del lote
         try:
             info = fuente.info(ticker)
             if not info:
@@ -410,6 +412,7 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                                 ["ticker", "fecha_ex", "importe", "fuente"], ["ticker", "fecha_ex"],
                                 {"ticker": ticker, "fecha_ex": fecha_ex,
                                  "importe": importe, "fuente": nombre_fuente})
+                cur.execute("RELEASE SAVEPOINT sp_ticker")
             r.ok += 1
             # Cargado sin excepción: válido si no hay incidencias; si las hay, es
             # un fallo de VALIDACIÓN (dato traído pero rechazado — revisar dato).
@@ -419,6 +422,14 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
             else:
                 r.validos += 1
         except Exception as e:               # noqa: BLE001
+            if not dry_run:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT sp_ticker")   # revierte solo este ticker
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
             r.fallidos += 1
             r.detalle_fallidos[ticker] = str(e)
             # Fallo de CARGA. Distinguir "no cargado" (hay respaldo válido: la caché
