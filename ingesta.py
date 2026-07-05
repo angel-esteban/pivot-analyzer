@@ -354,7 +354,8 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
     specs = specs or cargar_specs_desde_criteria(criteria_path)
     r = ResumenIngesta(nivel=nivel)
     cur = conn.cursor()
-    umbrales.actuales(conn)   # refresca umbrales configurables desde Neon antes de validar
+    # (los umbrales configurables se cargan en caché aparte, con conexión aislada;
+    #  aquí NO se consulta Neon de umbrales para no entrelazar con la transacción de ingesta.)
 
     if not dry_run:
         r.log_id = _abrir_log(cur, nivel, disparado_por, nombre_fuente)
@@ -478,8 +479,7 @@ def guardar_manual(conn, nivel: str, ticker: str, valores_editados: dict,
     Recalcula `valido`/`motivo_invalidez` (solo formato — la coherencia es de yfinance).
     Devuelve {col: motivo} de los campos que NO pasaron validación (no se guardan)."""
     tabla, mapa, columnas = _cfg_nivel(nivel)
-    umbrales.actuales(conn)   # umbrales configurables frescos para la validación de formato
-    specs = cargar_specs_desde_criteria(criteria_path)
+    specs = cargar_specs_desde_criteria(criteria_path)   # umbrales desde caché (cargada aparte)
     cur = conn.cursor()
     existing = _leer_fila_actual(cur, tabla, ticker) or {"ticker": ticker}
     origen = existing.get("origen") or {}

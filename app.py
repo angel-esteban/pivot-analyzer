@@ -12582,7 +12582,6 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             import validador_coherencia as _vcoh
             _conn = get_db_connection()
             try:
-                umbrales.actuales(_conn)   # refresca umbrales configurables antes de validar
                 _info_neon, _frescura, _db_invalidos = _repo.componer_info(ticker, _conn)
             finally:
                 release_db_connection(_conn)
@@ -15005,6 +15004,18 @@ def pantalla_analisis():
     uid = usuario["id"]  # shorthand usado en la función
     es_admin = usuario.get("rol") in ("superadmin", "admin")
     es_superadmin = usuario.get("rol") == "superadmin"
+
+    # Umbrales configurables → caché de proceso, con conexión AISLADA. Nunca comparte
+    # transacción con ingesta/screener, así que su SELECT (aunque falle) no puede
+    # dejarlas en "transaction aborted". Los validadores leen luego de la caché.
+    try:
+        _cu_umb = get_db_connection()
+        try:
+            umbrales.actuales(_cu_umb)
+        finally:
+            release_db_connection(_cu_umb)
+    except Exception:
+        pass
 
     # ── Overlay "Cargando Datos" — detecta estado running de Streamlit ────
     _st_components.html("""
