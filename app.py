@@ -862,6 +862,7 @@ def get_db_connection():
                 continue
             # Ping activo: detecta conexiones muertas por idle timeout del servidor
             conn.cursor().execute("SELECT 1")
+            conn.rollback()   # cierra la txn del ping y limpia cualquier estado (incl. abortado) heredado
             return conn
         except Exception:
             # Conexión muerta — descartarla del pool y reintentar
@@ -873,8 +874,13 @@ def get_db_connection():
     return psycopg2.connect(st.secrets["DATABASE_URL"])
 
 def release_db_connection(conn):
-    """Devuelve la conexión al pool (no la cierra)."""
+    """Devuelve la conexión al pool (no la cierra). Rollback previo: nunca devolver
+    una conexión con transacción abierta o abortada (envenenaría al siguiente uso)."""
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         _get_db_pool().putconn(conn)
     except Exception:
         try:
