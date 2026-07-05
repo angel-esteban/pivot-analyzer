@@ -15578,9 +15578,9 @@ def pantalla_analisis():
                 f"Beta > 1: más volátil que el índice. "
                 f"Beta < 1: menos volátil. Beta < 0: correlación inversa. "
                 f"Puede diferir de la Beta (Yahoo) mostrada en Datos Fundamentales, "
-                f"que usa el S\&P 500 como benchmark."
+                f"que usa el S&P 500 como benchmark."
                 if beta_calculada is not None else
-                f"Beta de Yahoo Finance (benchmark: S\&P 500). "
+                f"Beta de Yahoo Finance (benchmark: S&P 500). "
                 f"No disponible beta calculada contra {_indice_ref_nombre}."
             )
             st.metric(_beta_label, _beta_str, help=_beta_help)

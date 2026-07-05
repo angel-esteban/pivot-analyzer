@@ -75,7 +75,12 @@ def actuales(conn: Any = None) -> dict[str, float]:
             if clave in DEFAULTS and valor is not None:
                 vals[clave] = float(valor)
     except Exception:                        # noqa: BLE001 — tabla ausente / sin conexión -> defaults
-        pass
+        # CRÍTICO: hacer rollback para no dejar la conexión del pool en estado
+        # "transaction aborted" (envenenaría las siguientes queries del caller).
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     _cache = vals
     return dict(vals)
 
@@ -123,6 +128,10 @@ def guardar(conn, clave: str, valor: Any, usuario: str) -> str | None:
             [clave, float(valor), usuario])
         conn.commit()
     except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return f"error al guardar: {e}"
     invalidar_cache()
     return None
@@ -135,6 +144,10 @@ def restaurar_default(conn, clave: str) -> str | None:
         cur.execute("DELETE FROM umbrales_coherencia WHERE clave = %s", [clave])
         conn.commit()
     except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return f"error al restaurar: {e}"
     invalidar_cache()
     return None
