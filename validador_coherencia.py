@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+import umbrales   # fuente única de tolerancias (Configuración › Umbrales de coherencia)
+
 
 @dataclass
 class ResultadoCoherencia:
@@ -68,7 +70,7 @@ def _c_market_cap(info: dict) -> tuple[str, str | None]:
         return "n/a", None
     esperado = precio * shares
     d = _div_rel(mcap, esperado)
-    if d > 0.10:
+    if d > umbrales.actuales()["market_cap_tol"]:
         return "flag", (f"marketCap ({mcap:,.0f}) no cuadra con precio×acciones "
                         f"({esperado:,.0f}, dif {d:.0%}) — precio o nº de acciones desfasado")
     return "ok", None
@@ -97,7 +99,8 @@ def _c_yield(info: dict) -> tuple[str, str | None]:
     if tady < 0:
         return "flag", f"trailingAnnualDividendYield negativo ({tady:.2%}) — imposible"
     sector = (info.get("sector") or "").strip().lower()
-    techo = 0.20 if "real estate" in sector else 0.15
+    _u = umbrales.actuales()
+    techo = _u["yield_techo_reit"] if "real estate" in sector else _u["yield_techo"]
     if tady > techo:
         return "flag", (f"trailingAnnualDividendYield ({tady:.2%}) supera el techo de "
                         f"plausibilidad ({techo:.0%}) para el sector — verificar")
@@ -123,9 +126,10 @@ def _c_payout(info: dict) -> tuple[str, str | None]:
     p_calc = tdiv / eps
     d_rel = _div_rel(payout, p_calc)
     d_abs = abs(payout - p_calc)          # payout en ratio (0.60 = 60 %); 5 pp = 0.05
-    # Incoherente solo si diverge en relativo Y en absoluto: el suelo de 5 pp evita
+    # Incoherente solo si diverge en relativo Y en absoluto: el suelo de pp evita
     # sobre-marcar payouts bajos donde el relativo se dispara (p.ej. 2 % vs 4 %).
-    if d_rel > 0.25 and d_abs > 0.05:
+    _u = umbrales.actuales()
+    if d_rel > _u["payout_tol_rel"] and d_abs > _u["payout_tol_abs"]:
         return "flag", (f"payoutRatio ({payout:.0%}) discrepa del recalculado dividendo-TTM/BPA "
                         f"({p_calc:.0%}, dif rel {d_rel:.0%}, {d_abs*100:.0f} pp)")
     return "ok", None
@@ -138,7 +142,7 @@ def _c_ev_ebitda(info: dict) -> tuple[str, str | None]:
         return "n/a", None
     calc = ev / ebitda
     d = _div_rel(ev_eb, calc)
-    if d > 0.20:
+    if d > umbrales.actuales()["ev_ebitda_tol"]:
         return "flag", (f"enterpriseToEbitda ({ev_eb:.1f}) discrepa de enterpriseValue/EBITDA "
                         f"({calc:.1f}, dif {d:.0%})")
     return "ok", None

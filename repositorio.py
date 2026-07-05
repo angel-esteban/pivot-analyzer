@@ -20,6 +20,8 @@ import datetime
 import json
 from typing import Any
 
+import umbrales   # fuente única del SLA de frescura (Configuración)
+
 # Columna en BD -> clave de yfinance que esperan los criterios de criteria.json
 MAP_INSTRUMENTO = {
     "sector": "sector",
@@ -41,8 +43,17 @@ MAP_FUNDAMENTAL = {
     "beta":              "beta",
 }
 
-# Tolerancia de obsolescencia por nivel (coincide con criteria.meta.niveles_dato)
+# Tolerancia de obsolescencia por nivel (fallback; el valor vigente se lee de umbrales)
 TOLERANCIA_DIAS = {"estructural": 365, "fundamental": 120}
+_SLA_KEY = {"estructural": "sla_estructural_dias", "fundamental": "sla_fundamental_dias"}
+
+
+def _tolerancia_dias(nivel: str) -> int:
+    """SLA de frescura vigente para el nivel (Configuración › Umbrales), con fallback."""
+    try:
+        return int(umbrales.actuales()[_SLA_KEY[nivel]])
+    except Exception:                        # noqa: BLE001
+        return TOLERANCIA_DIAS.get(nivel, 365)
 
 try:
     import psycopg2.extras as _extras
@@ -121,7 +132,7 @@ def componer_info(ticker: str, conn, ahora: datetime.datetime | None = None
         db_invalidos.update(inc.keys())
         frescura[nivel] = {
             "estado": _estado_frescura(fila.get("actualizado_en"),
-                                       TOLERANCIA_DIAS[nivel], ahora, fila.get("valido")),
+                                       _tolerancia_dias(nivel), ahora, fila.get("valido")),
             "actualizado_en": fila.get("actualizado_en"),
             "valido": fila.get("valido"),
         }

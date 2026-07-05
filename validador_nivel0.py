@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+import umbrales   # fuente única de rangos de plausibilidad (Configuración)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -307,6 +309,16 @@ def cargar_specs_desde_criteria(ruta: str | Path) -> dict[str, FieldSpec]:
     # Completa con cualquier default no referenciado en criteria.json.
     for clave, spec in DEFAULT_SPECS.items():
         specs.setdefault(clave, spec)
+
+    # Overlay de umbrales configurables (FUENTE ÚNICA): beta y free float leen su
+    # rango de Configuración. Defaults idénticos, así que sin cambio si nadie edita.
+    _u = umbrales.actuales()
+    for _k in ("beta",):
+        if _k in specs:
+            specs[_k] = replace(specs[_k], rango_valido=(_u["beta_min"], _u["beta_max"]))
+    for _k in ("free_float_pct", "free_float"):
+        if _k in specs and specs[_k].rango_valido is not None:
+            specs[_k] = replace(specs[_k], rango_valido=(_u["free_float_min"], _u["free_float_max"]))
     return specs
 
 

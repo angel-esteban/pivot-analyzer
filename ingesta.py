@@ -23,6 +23,7 @@ from validador_nivel0 import (DEFAULT_SPECS, Estado, FieldSpec,
                               cargar_specs_desde_criteria, validar_campo)
 from validador_coherencia import validar_coherencia
 from normalizador import normalizar_info
+import umbrales   # fuente única de umbrales configurables
 
 # Mapea el nombre del check de coherencia a la clave de campo (alineada con spec_key)
 COHERENCIA_A_CAMPO = {
@@ -353,6 +354,7 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
     specs = specs or cargar_specs_desde_criteria(criteria_path)
     r = ResumenIngesta(nivel=nivel)
     cur = conn.cursor()
+    umbrales.actuales(conn)   # refresca umbrales configurables desde Neon antes de validar
 
     if not dry_run:
         r.log_id = _abrir_log(cur, nivel, disparado_por, nombre_fuente)
@@ -476,6 +478,7 @@ def guardar_manual(conn, nivel: str, ticker: str, valores_editados: dict,
     Recalcula `valido`/`motivo_invalidez` (solo formato — la coherencia es de yfinance).
     Devuelve {col: motivo} de los campos que NO pasaron validación (no se guardan)."""
     tabla, mapa, columnas = _cfg_nivel(nivel)
+    umbrales.actuales(conn)   # umbrales configurables frescos para la validación de formato
     specs = cargar_specs_desde_criteria(criteria_path)
     cur = conn.cursor()
     existing = _leer_fila_actual(cur, tabla, ticker) or {"ticker": ticker}

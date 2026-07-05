@@ -34,6 +34,7 @@ import psycopg2.extras
 # los guards de presentación (PA-C-01 free float, PA-A-04 beta) leen estos rangos,
 # los mismos que usa la ingesta a Neon, para no tener dos verdades sobre el mismo dato.
 import validador_nivel0 as _v0
+import umbrales   # fuente única de umbrales (Configuración › Umbrales de coherencia)
 
 # HTTP para ECB Statistical Data Warehouse (sin API key)
 import requests
@@ -5819,13 +5820,14 @@ def clasificar_rsi(rsi):
     alcista, neutro, bajista}; dirección ∈ {alcista, bajista, neutro}."""
     if rsi is None:
         return (None, None)
-    if rsi > 70:
+    _u = umbrales.actuales()
+    if rsi > _u["rsi_sobrecompra"]:
         return ("sobrecomprado", "bajista")
-    if rsi < 30:
+    if rsi < _u["rsi_sobreventa"]:
         return ("sobrevendido", "alcista")
-    if rsi >= 55:
+    if rsi >= _u["rsi_alcista"]:
         return ("alcista", "alcista")
-    if rsi <= 45:
+    if rsi <= _u["rsi_bajista"]:
         return ("bajista", "bajista")
     return ("neutro", "neutro")
 
@@ -5835,11 +5837,12 @@ def clasificar_bollinger_pctB(pct_b):
     sobrevendido, mitad_alta, mitad_baja}; dirección ∈ {alcista, bajista}."""
     if pct_b is None:
         return (None, None)
-    if pct_b > 80:
+    _u = umbrales.actuales()
+    if pct_b > _u["bb_alto"]:
         return ("sobrecomprado", "bajista")
-    if pct_b < 20:
+    if pct_b < _u["bb_bajo"]:
         return ("sobrevendido", "alcista")
-    if pct_b >= 50:
+    if pct_b >= _u["bb_medio"]:
         return ("mitad_alta", "alcista")
     return ("mitad_baja", "bajista")
 
@@ -6440,7 +6443,7 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             # rango (p.ej. 103,5%) es un glitch de la fuente (Yahoo) y NO se pinta como dato
             # firme; se marca [VERIFICAR] en lugar de propagar el número imposible.
             "Free Float": (
-                (lambda _ffv, _lo=_v0.RANGO_FREE_FLOAT_PCT[0], _hi=_v0.RANGO_FREE_FLOAT_PCT[1]:
+                (lambda _ffv, _lo=umbrales.actuales()["free_float_min"], _hi=umbrales.actuales()["free_float_max"]:
                     f"{_ffv:.1f}%" if _lo < _ffv <= _hi else "[VERIFICAR]")(
                     info["floatShares"] / info["sharesOutstanding"] * 100)
                 if info.get("floatShares") and info.get("sharesOutstanding")
@@ -6464,7 +6467,7 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "Beta (Yahoo)": (
                 _fmt_ratio(info.get("beta"))
                 if (info.get("beta") is None
-                    or _v0.RANGO_BETA_PLAUSIBLE[0] <= float(info.get("beta")) <= _v0.RANGO_BETA_PLAUSIBLE[1])
+                    or umbrales.actuales()["beta_min"] <= float(info.get("beta")) <= umbrales.actuales()["beta_max"])
                 else f"[VERIFICAR] ({float(info.get('beta')):.2f}x)"
             ),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
             "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
@@ -9966,9 +9969,73 @@ def _admin_calidad():
                 st.error(f"No se pudo calcular el monitor: {_e}")
 
 
+def _admin_umbrales():
+    """Sub-página de Administración: umbrales de coherencia (fuente única). Ver/editar
+    con validación de input y auditoría (usuario+fecha). Defaults = valores desplegados."""
+    import pandas as _pd_u
+    with st.expander("🎚️ Umbrales de coherencia — fuente única", expanded=True):
+        st.caption("Umbrales, tolerancias y rangos que LEEN los validadores. Editarlos cambia qué se "
+                   "marca como inválido/sospechoso. Cambios validados y auditados (usuario + fecha). "
+                   "Los 'default' son los valores desplegados; si no editas nada, el comportamiento no cambia.")
+        _conn = get_db_connection()
+        try:
+            _vig = umbrales.actuales(_conn)
+        finally:
+            release_db_connection(_conn)
+        _rows = []
+        for _k in umbrales.DEFAULTS:
+            _lo, _hi = umbrales.RANGOS_INPUT.get(_k, (None, None))
+            _rows.append({
+                "clave": _k,
+                "valor": float(_vig[_k]),
+                "default": float(umbrales.DEFAULTS[_k]),
+                "admisible": f"[{_lo:g}, {_hi:g}]" if _lo is not None else "",
+            })
+        _df0 = _pd_u.DataFrame(_rows)
+        _ed = st.data_editor(
+            _df0, key="_adm_umbrales_de", use_container_width=True, hide_index=True,
+            disabled=["clave", "default", "admisible"],
+        )
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            if st.button("💾 Guardar umbrales", key="_adm_umb_save", use_container_width=True):
+                _usr = st.session_state.get("usuario", {}).get("username", "?")
+                _errs, _n = {}, 0
+                _conn = get_db_connection()
+                try:
+                    for _i in range(len(_ed)):
+                        _k = _ed.iloc[_i]["clave"]
+                        _nv, _ov = _ed.iloc[_i]["valor"], _df0.iloc[_i]["valor"]
+                        if str(_nv) != str(_ov):
+                            _e = umbrales.guardar(_conn, _k, _nv, f"admin:{_usr}")
+                            _errs[_k] = _e if _e else _errs.get(_k)
+                            _n += 0 if _e else 1
+                    umbrales.actuales(_conn)   # recargar caché tras editar
+                finally:
+                    release_db_connection(_conn)
+                if _n:
+                    st.success(f"{_n} umbral(es) actualizados y auditados.")
+                for _k, _e in _errs.items():
+                    if _e:
+                        st.error(f"{_k}: {_e} (no guardado)")
+                if not _n and not any(_errs.values()):
+                    st.info("Sin cambios que guardar.")
+        with _c2:
+            if st.button("↩️ Restaurar todo a default", key="_adm_umb_reset", use_container_width=True):
+                _conn = get_db_connection()
+                try:
+                    for _k in umbrales.DEFAULTS:
+                        umbrales.restaurar_default(_conn, _k)
+                    umbrales.actuales(_conn)
+                finally:
+                    release_db_connection(_conn)
+                st.success("Umbrales restaurados a los valores por defecto.")
+                st.rerun()
+
+
 def panel_admin():
     """Panel de administración con sub-menú (segundo nivel del nav):
-    Gestión de Usuarios (por defecto) · Refresco de datos · Calidad de datos."""
+    Gestión de Usuarios (por defecto) · Refresco de datos · Calidad de datos · Umbrales."""
     _sel_id = st.session_state.get("_adm_sel_uid")
 
     try:
@@ -9985,6 +10052,9 @@ def panel_admin():
         return
     if _adm_sub == "📊 Calidad de datos":
         _admin_calidad()
+        return
+    if _adm_sub == "🎚️ Umbrales de coherencia":
+        _admin_umbrales()
         return
     # Por defecto (👥 Gestión de Usuarios): continúa con la gestión de usuarios.
 
@@ -12506,6 +12576,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             import validador_coherencia as _vcoh
             _conn = get_db_connection()
             try:
+                umbrales.actuales(_conn)   # refresca umbrales configurables antes de validar
                 _info_neon, _frescura, _db_invalidos = _repo.componer_info(ticker, _conn)
             finally:
                 release_db_connection(_conn)
@@ -15311,7 +15382,8 @@ def pantalla_analisis():
             )
             st.radio(
                 "admin_sub",
-                ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener", "📊 Calidad de datos"],
+                ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener",
+                 "📊 Calidad de datos", "🎚️ Umbrales de coherencia"],
                 label_visibility="collapsed", key="_adm_sub_sel",
             )
 
