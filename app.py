@@ -9931,7 +9931,9 @@ def _admin_refresco():
                 _bloque_nivel("fundamental", "Fundamental",
                               _ingesta.ingerir_fundamental, _ingesta.MAPA_FUNDAMENTAL)
         except Exception as _e:
+            import traceback as _tb_ing
             st.error(f"No se pudo preparar la ingesta: {_e}")
+            st.code(_tb_ing.format_exc(), language="text")   # DIAGNÓSTICO: consulta exacta que aborta
 
 
 def _admin_calidad():
