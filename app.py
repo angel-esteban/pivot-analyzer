@@ -15243,6 +15243,20 @@ def pantalla_analisis():
         align-items: center !important;
         position: relative !important;   /* referencia para el título centrado de la cabecera */
     }
+    /* Logo (columna 1): que ocupe toda la altura de la barra y centre su contenido,
+       y neutralizar el espaciado propio de los contenedores de Streamlit. Así
+       "PivotAnalyzer" queda a la MISMA altura (centro del bloque) que el título centrado. */
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) {
+        display: flex !important;
+        align-items: center !important;
+        align-self: stretch !important;
+    }
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) > div,
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) [data-testid="stElementContainer"],
+    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) [data-testid="stMarkdownContainer"] {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
     /* Alinear a la derecha las columnas de botones (campana + usuario) */
     [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) {
         display: flex !important;
@@ -15345,15 +15359,18 @@ def pantalla_analisis():
             '<span style="color:#fff;font-size:0.95rem;font-weight:800;'
             f'letter-spacing:-0.02em;white-space:nowrap">{_titulo_hdr}</span></div>'
         ) if _titulo_hdr else ""
+        # IMPORTANTE: HTML en UNA sola línea concatenada. Si se deja {_overlay_hdr} en su
+        # propia línea y va vacío (p.ej. al hacer login, antes de que el nav tenga valor),
+        # queda una línea en blanco que CIERRA el bloque HTML de Markdown y el resto se
+        # renderiza como texto crudo. Concatenando en una línea se evita por completo.
         st.markdown(
-            f'''<span id="__pivot_hdr_logo" style="display:none"></span>
-            {_overlay_hdr}
-            <div style="display:flex;align-items:center;gap:8px;padding:4px 0;position:relative;z-index:1">
-              <div style="background:rgba(255,255,255,0.12);border-radius:6px;
-                          padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
-              <div style="color:#fff;font-size:0.95rem;font-weight:800;
-                          letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>
-            </div>''',
+            f'<span id="__pivot_hdr_logo" style="display:none"></span>{_overlay_hdr}'
+            '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;position:relative;z-index:1">'
+            '<div style="background:rgba(255,255,255,0.12);border-radius:6px;'
+            'padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>'
+            '<div style="color:#fff;font-size:0.95rem;font-weight:800;'
+            'letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>'
+            '</div>',
             unsafe_allow_html=True
         )
     with _hdr_spin:
