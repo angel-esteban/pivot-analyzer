@@ -6429,12 +6429,25 @@ def _alertas_fundamentales(info: dict, div_ttm: float = None) -> list:
 
     return alertas
 
-def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
+def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None, hist=None):
     """
     Retorna dict con datos fundamentales según tipo (accion / etf).
     """
     if not info:
         return {}
+
+    # 52W con fallback al histórico (misma lógica que la cabecera HTML/PDF): cuando
+    # yfinance no devuelve fiftyTwoWeekHigh/Low (frecuente en .MC), se calcula del
+    # histórico de 1 año ya disponible. Evita la incoherencia de que la cabecera muestre
+    # el rango y esta tabla enseñe "—" para el MISMO dato. NO se acota a 252 sesiones a
+    # propósito: replica la ventana de 1 año de calendario de Yahoo (fuente primaria).
+    _h52, _l52 = info.get("fiftyTwoWeekHigh"), info.get("fiftyTwoWeekLow")
+    if (not _h52 or not _l52) and hist is not None and len(hist):
+        try:
+            _h52 = _h52 or float(hist["High"].max())
+            _l52 = _l52 or float(hist["Low"].min())
+        except Exception:
+            pass
 
     if tipo == "accion":
         return {
@@ -6476,8 +6489,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
                     or umbrales.actuales()["beta_min"] <= float(info.get("beta")) <= umbrales.actuales()["beta_max"])
                 else f"[VERIFICAR] ({float(info.get('beta')):.2f}x)"
             ),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
-            "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
-            "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
+            "52W Max": _fmt_precio(_h52),
+            "52W Min": _fmt_precio(_l52),
             "Objetivo analistas": _fmt_precio(info.get("targetMeanPrice")),
             "Nº analistas": str(info.get("numberOfAnalystOpinions", "—")),
         }
@@ -6489,8 +6502,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "Moneda": info.get("currency", "—"),
             "Patrimonio": _fmt_numero(info.get("totalAssets")),
             "TER (expense ratio)": _fmt_pct(info.get("annualReportExpenseRatio") or info.get("expenseRatio")),
-            "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
-            "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
+            "52W Max": _fmt_precio(_h52),
+            "52W Min": _fmt_precio(_l52),
             "Rentab. dividendo": _fmt_pct(info.get("dividendYield")),
             "Beta": _fmt_ratio(info.get("beta3Year") or info.get("beta")),
         }
@@ -6565,6 +6578,27 @@ def _sem_interp_html(color_sem: str, pct_sem: float,
         f'border-radius:0 8px 8px 0;padding:12px 16px;margin-top:12px;' 
         f'font-size:12px;line-height:1.6;color:#374151">{interp_html}</div>\n'
     )
+
+
+def _sello_datos(info: dict, hist=None) -> str:
+    """Hora de corte HONESTA del dato de mercado: `regularMarketTime` de Yahoo
+    (epoch UTC) convertido a la zona horaria del propio mercado. Es la hora del
+    DATO, no la de generación del informe ni la del reloj local. Fallback: fecha
+    de la última sesión del histórico. Devuelve '—' si no hay nada fiable."""
+    try:
+        import datetime as _dtm, zoneinfo as _zi
+        rmt = (info or {}).get("regularMarketTime")
+        tzname = (info or {}).get("exchangeTimezoneName") or "Europe/Madrid"
+        if isinstance(rmt, (int, float)) and rmt > 0:
+            return _dtm.datetime.fromtimestamp(int(rmt), _zi.ZoneInfo(tzname)).strftime("%d/%m/%Y %H:%M %Z")
+    except Exception:
+        pass
+    try:
+        if hist is not None and len(hist):
+            return hist.index[-1].strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    return "—"
 
 
 def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: float,
@@ -7792,6 +7826,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<span class="chip">Beta: {_beta_h}</span>\n'
         f'<span class="chip">{tipo_activo}</span>\n'
         f'<span class="chip">Sistema: {sistema}</span>\n'
+        f'<span class="chip">Datos: {_sello_datos(info, hist)}</span>\n'
         f'<span class="chip">Generado: {ahora}</span>\n'
         f'</div>\n</div>\n'
 
@@ -8674,7 +8709,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     ]))
     historia.append(cab_t)
     chips_t = Table(
-        [[Paragraph(f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
+        [[Paragraph(f"Generado: {ahora}   ·   Datos a: {_sello_datos(info, hist)}   ·   ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
         colWidths=[18*cm]
     )
     chips_t.setStyle(TableStyle([
@@ -15565,10 +15600,10 @@ def pantalla_analisis():
         currency = info.get("currency", "")
         curr_str = f" {currency}" if currency else ""
 
-        # Timestamp de carga del dato
-        from datetime import datetime as _dt
-        import zoneinfo as _zi
-        ts_str = _dt.now(_zi.ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M")
+        # Hora de corte HONESTA del dato (regularMarketTime de Yahoo en la zona del
+        # mercado), no la del reloj local. Alimenta también el chip "Datos:" del
+        # informe de estrategia (se pasa como 'ts'). Fallback: última sesión del histórico.
+        ts_str = _sello_datos(info, hist)
 
         with col_p1:
             st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
@@ -15608,7 +15643,7 @@ def pantalla_analisis():
             f'<p style="margin:6px 0 0 0">'
             f'<span style="font-size:1.25rem;font-weight:700;color:#1e3a5f">{nombre}</span>'
             f'<span style="font-size:0.85rem;color:#64748b"> · {tipo_activo.upper()} · '
-            f'Datos cargados: <b>{ts_str}</b> · Retraso ~15 min</span></p>',
+            f'Datos a: <b>{ts_str}</b> · Retraso Yahoo ~15 min</span></p>',
             unsafe_allow_html=True
         )
 
@@ -15939,7 +15974,7 @@ def pantalla_analisis():
 
             # ---- FUNDAMENTALES ----
             div_ttm = calcular_div_ttm(ticker_activo)
-            fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm)
+            fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm, hist=hist)
 
             # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
             st.session_state["estrategia_data"] = {
