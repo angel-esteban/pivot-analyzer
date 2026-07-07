@@ -9830,6 +9830,52 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 # PANEL DE ADMINISTRACIÓN — GESTIÓN DE USUARIOS
 # =============================================================================
 
+def _df_a_xlsx(df, sheet: str = "datos") -> bytes:
+    """DataFrame -> bytes .xlsx (motor openpyxl). Para descargas del panel de admin."""
+    import io as _io
+    import pandas as _pd
+    _buf = _io.BytesIO()
+    with _pd.ExcelWriter(_buf, engine="openpyxl") as _w:
+        df.to_excel(_w, index=False, sheet_name=(sheet[:31] or "datos"))
+    return _buf.getvalue()
+
+
+def _df_a_pdf(df, titulo: str) -> bytes:
+    """DataFrame -> bytes PDF (tabla en A4 apaisado, columnas repartidas y con ajuste
+    de texto). Para descargas del panel de admin."""
+    import io as _io
+    import pandas as _pd
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors as _col
+    from reportlab.lib.units import cm as _cm
+    from reportlab.platypus import (SimpleDocTemplate, Table as _T, TableStyle as _TS,
+                                    Paragraph as _P, Spacer as _S)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle as _PS
+    _buf = _io.BytesIO()
+    _pw, _ph = landscape(A4)
+    _doc = SimpleDocTemplate(_buf, pagesize=landscape(A4), topMargin=1*_cm,
+                             bottomMargin=1*_cm, leftMargin=1*_cm, rightMargin=1*_cm)
+    _ss = getSampleStyleSheet()
+    _hdr = _PS("h", parent=_ss["BodyText"], fontSize=6, leading=7, textColor=_col.white)
+    _cel = _PS("c", parent=_ss["BodyText"], fontSize=6, leading=7)
+    _cols = [str(c) for c in df.columns]
+    _data = [[_P(c, _hdr) for c in _cols]]
+    for _, _r in df.iterrows():
+        _data.append([_P("" if _pd.isna(_v) else str(_v), _cel) for _v in _r.tolist()])
+    _avail = _pw - 2*_cm
+    _cw = _avail / max(1, len(_cols))
+    _tbl = _T(_data, colWidths=[_cw]*len(_cols), repeatRows=1)
+    _tbl.setStyle(_TS([
+        ("BACKGROUND", (0, 0), (-1, 0), _col.HexColor("#0f2f4f")),
+        ("GRID", (0, 0), (-1, -1), 0.3, _col.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_col.white, _col.HexColor("#f1f5f9")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+    ]))
+    _doc.build([_P(titulo, _ss["Title"]), _S(1, 6), _tbl])
+    return _buf.getvalue()
+
+
 def _admin_refresco():
     """Sub-página de Administración: refresco de datos del screener (yfinance) y
     edición manual. Dos pestañas (Estructural / Fundamental); cada una con Refrescar
@@ -9922,11 +9968,30 @@ def _admin_refresco():
                         _row["·manual"] = ", ".join(_man) if _man else "—"
                         _rows.append(_row)
                     _df0 = _pd_ed.DataFrame(_rows)
+                    # ── Descargas del snapshot cargado: Excel (.xlsx) y PDF ──
+                    _fname_dl = f"{_nivel_key}_{_idx_sel}"
+                    _c_xls, _c_pdf = st.columns(2)
+                    with _c_xls:
+                        st.download_button(
+                            "⬇️ Excel (.xlsx)", data=_df_a_xlsx(_df0, _nivel_key),
+                            file_name=f"{_fname_dl}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"_adm_dl_xls_{_nivel_key}", use_container_width=True)
+                    with _c_pdf:
+                        st.download_button(
+                            "⬇️ PDF", data=_df_a_pdf(_df0, f"{_nivel_label} — {_nom_idx}"),
+                            file_name=f"{_fname_dl}.pdf", mime="application/pdf",
+                            key=f"_adm_dl_pdf_{_nivel_key}", use_container_width=True)
                     st.caption("Edita cualquier celda. Al guardar, los cambios se marcan origen=manual "
                                "(validados en formato) y quedan protegidos de futuros refrescos.")
+                    # Altura suficiente para todas las filas: el scroll vertical pasa a la página
+                    # (queda FUERA de la tabla) y se deja un margen inferior para que el scroll
+                    # horizontal no se solape con la última fila de datos.
+                    _h_editor = min((len(_df0) + 1) * 35 + 40, 2000)
                     _ed = st.data_editor(
                         _df0, key=f"_adm_de_{_nivel_key}", use_container_width=True,
                         hide_index=True, disabled=["ticker", "·válido", "·manual"],
+                        height=_h_editor,
                     )
                     if st.button(f"💾 Guardar cambios ({_nivel_label.lower()})", key=f"_adm_save_{_nivel_key}"):
                         _n_ok, _errs = 0, {}
@@ -15275,8 +15340,8 @@ def pantalla_analisis():
         _titulo_hdr = (_p_nav[1] if (len(_p_nav) == 2 and _p_nav[0][:1] and not _p_nav[0][:1].isalnum())
                        else _sel_hdr).strip()
         _overlay_hdr = (
-            '<div class="pa-hdr-center" style="position:absolute;left:0;right:0;top:0;bottom:0;display:flex;'
-            'align-items:center;justify-content:center;pointer-events:none;z-index:0">'
+            '<div class="pa-hdr-center" style="position:absolute;top:50%;left:50%;'
+            'transform:translate(-50%,-50%);pointer-events:none;z-index:0">'
             '<span style="color:#fff;font-size:0.95rem;font-weight:800;'
             f'letter-spacing:-0.02em;white-space:nowrap">{_titulo_hdr}</span></div>'
         ) if _titulo_hdr else ""
