@@ -15176,6 +15176,7 @@ def pantalla_analisis():
         margin: -1rem -1.25rem 0.5rem !important;
         box-shadow: 0 2px 12px rgba(0,0,0,0.18) !important;
         align-items: center !important;
+        position: relative !important;   /* referencia para el título centrado de la cabecera */
     }
     /* Alinear a la derecha las columnas de botones (campana + usuario) */
     [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) {
@@ -15214,6 +15215,9 @@ def pantalla_analisis():
     /* Cabecera móvil — Streamlit colapsa st.columns a vertical en móvil,
        hay que forzar flex-direction:row para mantener todo en una línea */
     @media (max-width: 768px) {
+        /* En móvil la cabecera va muy comprimida: ocultar el título centrado
+           para que no se solape con el logo/iconos. */
+        .pa-hdr-center { display: none !important; }
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
             display: flex !important;
             flex-direction: row !important;
@@ -15259,9 +15263,27 @@ def pantalla_analisis():
     # ── Cabecera: logo | spinner (fragment auto-refresh) | bell | user ─────────
     _hdr_left, _hdr_spin, _hdr_bell, _hdr_user = st.columns([10, 0.8, 1, 1.3])
     with _hdr_left:
+        # Título centrado en la cabecera = opción de menú actualmente elegida, con el
+        # MISMO color/formato que "PivotAnalyzer". Se lee de session_state porque la
+        # cabecera se pinta antes del radio del nav (en el primer render puede ir vacío).
+        # Se elimina el emoji inicial de la etiqueta del nav (p.ej. "⚙️ Administración").
+        _nav_actual = st.session_state.get("nav_sidebar", "") or ""
+        # Muestra la SUBOPCIÓN activa si la hay (submenú de Administración); si no, la opción.
+        _sel_hdr = (st.session_state.get("_adm_sub_sel") or _nav_actual) \
+            if _nav_actual == "⚙️ Administración" else _nav_actual
+        _p_nav = _sel_hdr.split(" ", 1)
+        _titulo_hdr = (_p_nav[1] if (len(_p_nav) == 2 and _p_nav[0][:1] and not _p_nav[0][:1].isalnum())
+                       else _sel_hdr).strip()
+        _overlay_hdr = (
+            '<div class="pa-hdr-center" style="position:absolute;left:0;right:0;top:0;bottom:0;display:flex;'
+            'align-items:center;justify-content:center;pointer-events:none;z-index:0">'
+            '<span style="color:#fff;font-size:0.95rem;font-weight:800;'
+            f'letter-spacing:-0.02em;white-space:nowrap">{_titulo_hdr}</span></div>'
+        ) if _titulo_hdr else ""
         st.markdown(
-            '''<span id="__pivot_hdr_logo" style="display:none"></span>
-            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+            f'''<span id="__pivot_hdr_logo" style="display:none"></span>
+            {_overlay_hdr}
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0;position:relative;z-index:1">
               <div style="background:rgba(255,255,255,0.12);border-radius:6px;
                           padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
               <div style="color:#fff;font-size:0.95rem;font-weight:800;
