@@ -9969,7 +9969,7 @@ def _admin_refresco():
                         _rows.append(_row)
                     _df0 = _pd_ed.DataFrame(_rows)
                     # ── Descargas del snapshot cargado: Excel (.xlsx) y PDF ──
-                    _fname_dl = f"{_nivel_key}_{_idx_sel}"
+                    _fname_dl = f"{_nivel_key}_{_idx_sel}_{datetime.now().strftime('%Y%m%d_%H%M')}"
                     _c_xls, _c_pdf = st.columns(2)
                     with _c_xls:
                         st.download_button(
@@ -20039,7 +20039,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         st.download_button(
                             label="⬇️ Descargar",
                             data=_df.read(),
-                            file_name="Screener_Dividendos_Manual_Reglas_v1.docx",
+                            file_name=f"Screener_Dividendos_Manual_Reglas_v1_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
                             mime="application/vnd.openxmlformats-officedocument"
                                   ".wordprocessingml.document",
                             use_container_width=True,
