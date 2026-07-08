@@ -73,6 +73,18 @@ class FuenteYFinance:
                 time.sleep(self.espera)
         return []
 
+    def cashflow(self, ticker: str):
+        """Estado de flujos anual (DataFrame de yfinance) o None. Fuente del FCF de
+        respaldo cuando `info.freeCashflow` no viene (frecuente en valores .MC)."""
+        for _ in range(self.reintentos):
+            try:
+                cf = self._ticker(ticker).cashflow
+                if cf is not None and getattr(cf, "empty", True) is False:
+                    return cf
+            except Exception:             # noqa: BLE001
+                time.sleep(self.espera)
+        return None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers de cálculo (autónomos)
@@ -85,6 +97,45 @@ def _fcf_yield(info: dict, _div) -> float | None:
         return float(fcf) / float(mcap)
     except (TypeError, ZeroDivisionError, ValueError):
         return None
+
+
+# Sectores donde el FCF convencional NO es interpretable (regla financiera POLARIS):
+#  - Financial Services (bancos y seguros): no hay FCF/capex en sentido industrial.
+#  - Real Estate (SOCIMIs/REITs): el FCF está distorsionado por revalorizaciones y
+#    rotación de activos; se valoran por NAV/FFO. NO se les deriva FCF de respaldo.
+SECTORES_SIN_FCF = {"Financial Services", "Real Estate"}
+
+
+def _fcf_desde_cashflow(cashflow) -> float | None:
+    """FCF anual (último ejercicio) desde el estado de flujos, como respaldo cuando
+    `info.freeCashflow` falta. Usa la fila 'Free Cash Flow' si existe; si no,
+    'Operating Cash Flow' + 'Capital Expenditure' (capex viene en negativo)."""
+    if cashflow is None or getattr(cashflow, "empty", True):
+        return None
+    try:
+        col = cashflow.columns[0]                      # periodo más reciente
+        _idx = {str(i).strip().lower(): i for i in cashflow.index}
+
+        def _fila(*nombres):
+            for n in nombres:
+                k = _idx.get(n.lower())
+                if k is not None:
+                    v = cashflow.loc[k, col]
+                    if v is not None and v == v:       # descarta NaN
+                        return float(v)
+            return None
+
+        fcf = _fila("Free Cash Flow")
+        if fcf is not None:
+            return fcf
+        ocf = _fila("Operating Cash Flow", "Total Cash From Operating Activities",
+                    "Cash Flow From Continuing Operating Activities")
+        capex = _fila("Capital Expenditure", "Capital Expenditures")
+        if ocf is not None and capex is not None:
+            return ocf + capex                         # capex negativo -> resta
+    except Exception:                                  # noqa: BLE001
+        return None
+    return None
 
 
 def _anos_div_consecutivos(_info, dividendos: list[tuple[Any, float]]) -> int | None:
@@ -370,6 +421,17 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                 raise ValueError("yfinance no devolvió datos (.info vacío)")
             info, _ = normalizar_info(info)   # unidades canónicas antes de validar
             dividendos = fuente.dividendos(ticker) if (con_dividendos or nivel == "fundamental") else []
+
+            # Fallback FCF (nivel fundamental): si yfinance no da `freeCashflow`, derivarlo
+            # del estado de flujos (operativo − capex). NO se hace en sectores donde el FCF
+            # no es interpretable (financieras, SOCIMIs/REITs): ahí queda ausente a propósito
+            # (regla POLARIS), no es un hueco a rellenar.
+            if (nivel == "fundamental" and info.get("freeCashflow") in (None, "")
+                    and (info.get("sector") or "").strip() not in SECTORES_SIN_FCF
+                    and hasattr(fuente, "cashflow")):
+                _fcf_cf = _fcf_desde_cashflow(fuente.cashflow(ticker))
+                if _fcf_cf is not None:
+                    info["freeCashflow"] = _fcf_cf
 
             fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs)
 
