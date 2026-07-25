@@ -12392,7 +12392,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         if any(_sectores_na_match(s) for s in _sectores_na):
             _msg_na = crit.get("sectores_na_mensaje",
                                "Métrica no aplicable a este sector — excluida del score.")
-            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
                     "mensaje": _msg_na, "nombre": crit.get("nombre", "")}
 
     # ── Obtener valor raw ───────────────────────────────────────────────
@@ -12406,7 +12406,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
         if campo == "debtToEquity" and _es_sector_sin_metricas_convencionales(info):
-            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
                     "mensaje": ("Deuda/Equity convencional no es métrica válida para bancos y "
                                 "aseguradoras — el apalancamiento se evalúa mediante ratios "
                                 "regulatorios (CET1, Tier 1, Solvencia II) no disponibles en "
@@ -12472,7 +12472,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         elif funcion == "verificar_tendencia_sma":      valor = _sc_tendencia_sma(info)
         elif funcion == "calcular_fcf_yield_vs_div_yield":
             if _es_sector_sin_metricas_convencionales(info):
-                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
+                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
                         "mensaje": ("FCF convencional (flujo operativo−capex) no es métrica válida "
                                     "para bancos y aseguradoras — los flujos operativos incluyen "
                                     "variaciones en créditos, depósitos, primas y siniestros que "
@@ -12806,6 +12806,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "valor_fmt": res["valor_fmt"],
                 "mensaje":   res["mensaje"],
                 "peso":      peso,
+                "na_sector": bool(res.get("na_sector")),   # N/A por sector/industria (no penaliza techo)
             })
 
         n_na        = sum(1 for c in resultados_criterios if c["estado"] in ("manual", "sin_datos"))
@@ -12816,8 +12817,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # 4 N/A sectoriales de un banco capaban el score a 60 y SAN (yield ~OK + K3) empataba
         # con BBVA (limpio). Ahora el score se calcula desde los criterios evaluables y el cap
         # sectorial deja de aplastar la calidad relativa. (Decisión Polaris: techo fuera.)
-        n_na_sector = sum(1 for c in resultados_criterios
-                          if "(sector)" in str(c.get("valor_fmt", "")))
+        n_na_sector = sum(1 for c in resultados_criterios if c.get("na_sector"))
         n_na_cap    = n_na - n_na_sector          # solo N/A por falta de dato penalizan
         # #8(c) — Score = base de calidad − penalización por KO (gravedad). El término
         # aditivo garantiza monotonicidad estricta (añadir un KO baja la base Y suma pena) y
@@ -13104,7 +13104,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _KNOWN_CAMPO_E = {"free_cash_flow": "freeCashflow"}   # criterios computados sin 'campo' nativo
         _campos_sector_na = set()
         for _rc in resultados_criterios:
-            if "(sector)" in str(_rc.get("valor_fmt", "")):
+            if _rc.get("na_sector"):
                 _cmp_e = _id2campo_e.get(_rc.get("id")) or _KNOWN_CAMPO_E.get(_rc.get("id"))
                 if _cmp_e:
                     _campos_sector_na.add(_cmp_e)
@@ -13597,6 +13597,10 @@ def _generar_pdf_screening(job: dict) -> bytes:
     story.append(Spacer(1, 0.8*cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER))
     story.append(Paragraph(
+        "<b>N/A**</b>: No Aplica a ese sector o industria.",
+        S_FOOT
+    ))
+    story.append(Paragraph(
         "Motivo = restricción que fija el veredicto. <i>veto</i> fuerza No cumple; "
         "<i>cap</i> limita a Parcial; “—” = el veredicto lo determina la puntuación.",
         S_FOOT
@@ -13630,6 +13634,9 @@ def _render_screening_resultados(job: dict):
 
     # Ordenar alfabéticamente por ticker
     resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
+
+    # Nota al pie de datos para la marca N/A** que aparece en las tablas de criterios.
+    st.caption("N/A\\*\\* — No Aplica a ese sector o industria (métrica excluida del score).")
 
     # Métricas resumen — una sola línea
     n_cumple   = sum(1 for r in resultado if r.get("estado_global") == "cumple")
