@@ -12849,6 +12849,71 @@ def _yf_info_con_retry(ticker: str, max_intentos: int = 3) -> dict:
 
 # ── Evaluador de un ticker completo ─────────────────────────────────────────
 
+@st.cache_data(ttl=300)
+def _extras_curados() -> dict:
+    """{ticker: set(ex_date_iso)} de dividendos VIGENTES clasificados como extraordinario/scrip
+    en el golden record. Una sola query, cacheada 5 min. Vacío mientras no haya curación
+    -> el filtro de la Lente A (D-002/D-003) es un NO-OP y no cambia veredictos."""
+    out: dict = {}
+    try:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT ticker, ex_date FROM dividendo_clasificado "
+                        "WHERE estado='vigente' AND tipo IN ('extraordinario','scrip')")
+            for tk, exd in cur.fetchall():
+                out.setdefault(tk, set()).add(exd.isoformat() if hasattr(exd, "isoformat") else str(exd)[:10])
+        finally:
+            release_db_connection(conn)
+    except Exception:                                   # noqa: BLE001 — sin tabla/conexión -> {}
+        pass
+    return out
+
+
+def _dividendos_ordinarios(dividends, ticker: str):
+    """Serie de dividendos con las fechas ex clasificadas extraordinario/scrip (curadas)
+    RETIRADAS -> solo ordinario (D-002 yield K3 / D-003 CAGR K2). No-op sin curación."""
+    try:
+        extras = _extras_curados().get(ticker)
+        if not extras or dividends is None or len(dividends) == 0:
+            return dividends
+        mask = [(ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]) not in extras
+                for ts in dividends.index]
+        return dividends[mask]
+    except Exception:                                   # noqa: BLE001
+        return dividends
+
+
+def _calc_lente_a(div_raw, ticker: str, info: dict) -> dict | None:
+    """Lente A (renta por año natural) para el bloque 'Renta' del informe. Usa la serie CRUDA
+    (con extraordinarios) para el total, y la clasificación curada para separar el ordinario.
+    El yield ORDINARIO es el que evalúa K3 (D-002); el CAGR lleva la guarda de base suspendida."""
+    try:
+        import lente
+        if div_raw is None or len(div_raw) == 0:
+            return None
+        ev = [(ts.date() if hasattr(ts, "date") else ts, float(v)) for ts, v in div_raw.items()]
+        clas = {d: "extraordinario" for d in _extras_curados().get(ticker, set())}
+        por = lente.renta_por_ano(ev, clas)
+        if not por:
+            return None
+        precio = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
+        import datetime as _dt
+        anos = sorted(por); _hoy = _dt.date.today().year
+        cerr = [a for a in anos if a < _hoy]; ref = cerr[-1] if cerr else anos[-1]
+        return {
+            "ano_ref":        ref,
+            "renta_total":    por[ref]["total"],
+            "renta_ordinaria": por[ref]["ordinario"],
+            "yield_total":    lente.yield_actual(por, precio, "total"),
+            "yield_ordinario": lente.yield_actual(por, precio, "ordinario"),
+            "cagr":           lente.cagr_ordinario(por),
+            "tiene_extra":    any(por[a]["extraordinario"] > 0 or por[a]["scrip"] > 0 for a in por),
+        }
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
 def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     """Descarga datos y evalúa todos los criterios. Devuelve el resultado completo."""
     import yfinance as yf
@@ -12921,6 +12986,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         necesita_cashflow = any(c.get("id") == "free_cash_flow" for c in criterios)
         hist      = t.history(period="6mo")    if necesita_hist else None
         dividends = t.dividends                if necesita_div  else None
+        _div_raw  = dividends                           # serie cruda (con extraordinarios) para la Lente A
+        if dividends is not None:                       # D-002/D-003: solo ordinario (excluye
+            dividends = _dividendos_ordinarios(dividends, ticker)   # extraordinarios curados; no-op sin curación)
+        _lente_a  = _calc_lente_a(_div_raw, ticker, info) if necesita_div else None
         cashflow  = None
         if necesita_cashflow:
             try:
@@ -13448,6 +13517,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "evaluacion_incompleta": evaluacion_incompleta,
             "killshots":             killshots,
             "nota_degradacion":      nota_degradacion,
+            "lente_a":               _lente_a,
             "error":                 False,
         }
     except Exception as e:
@@ -13941,6 +14011,31 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
+                # ── Bloque "Renta" (Lente A) — yield ordinario (K3), renta año natural, CAGR con guarda ──
+                _la = r.get("lente_a")
+                if _la:
+                    _y_ord = _la.get("yield_ordinario"); _y_tot = _la.get("yield_total")
+                    _cagr = _la.get("cagr"); _renta = _la.get("renta_total"); _ano = _la.get("ano_ref")
+                    _y_ord_s = f"{_y_ord:.2%}" if _y_ord is not None else "—"
+                    _cagr_s = f"{_cagr:+.1%}" if _cagr is not None else "n/d"
+                    _renta_s = f"{_renta:.2f}€" if _renta is not None else "—"
+                    _tot_s = (f' · total {_y_tot:.2%}'
+                              if (_y_tot is not None and _y_ord is not None and abs(_y_tot - _y_ord) > 1e-9) else "")
+                    _badge_x = ('<span style="background:#fef9c3;color:#854d0e;border-radius:10px;'
+                                'padding:1px 7px;font-size:0.68rem;font-weight:700;margin-left:4px">extraordinario</span>'
+                                if _la.get("tiene_extra") else "")
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;'
+                        f'padding:6px 12px;margin-bottom:6px;background:#f0f9ff;border:1px solid #bae6fd;'
+                        f'border-left:4px solid #0ea5e9;border-radius:6px;font-size:0.78rem;color:#0c4a6e">'
+                        f'<b>💰 Renta (Lente A)</b>'
+                        f'<span>Yield <b>{_y_ord_s}</b>{_tot_s}</span>'
+                        f'<span>Renta {_ano}: <b>{_renta_s}</b></span>'
+                        f'<span>CAGR ordinario: <b>{_cagr_s}</b></span>'
+                        f'{_badge_x}'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
                 _nota_deg = r.get("nota_degradacion")
                 if _nota_deg:
                     st.markdown(
