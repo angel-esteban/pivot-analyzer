@@ -378,6 +378,9 @@ st.markdown("""
     }
 
     /* ── SELECTBOX ──────────────────────────────────────────────── */
+    [data-testid="stSelectbox"] div[data-baseweb="select"] {
+        background: #ffffff !important; border-radius: 7px !important;
+    }
     [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         border-radius: 7px !important; border: 1.5px solid #e2e8f0 !important;
         background: #ffffff !important; font-size: 0.88rem !important;
@@ -10479,27 +10482,35 @@ def _admin_curacion_dividendos():
                                      ["(todos)"] + _tks_bor, key="_cur_bor_filtro")
                 _bors_v = _bors if _f_tk == "(todos)" else [b for b in _bors if b["ticker"] == _f_tk]
                 st.caption(f"Mostrando {len(_bors_v)} de {len(_bors)}.")
-                st.dataframe(_pd.DataFrame(_bors_v)[["id", "ticker", "ex_date", "importe_eur", "tipo",
-                             "con_cargo_a_ejercicio", "confianza"]], hide_index=True, use_container_width=True)
                 st.caption("⚠️ Revisa `con_cargo_a_ejercicio` (la heurística puede fallar en cierres "
-                           "no-diciembre como LOG/ITX) y `tipo` antes de promover. Promover pasa el "
-                           "borrador a **vigente** y lo hace visible al motor.")
-                _sel = st.multiselect("Promover a vigente (por id):",
-                                      [str(b["id"]) for b in _bors_v], key="_cur_promo_sel")
+                           "no-diciembre como LOG/ITX) y `tipo`. Marca la casilla **Promover** de los que "
+                           "quieras pasar a **vigente** (sueltos o en bloque) y pulsa el botón.")
+                _df_bor = _pd.DataFrame(_bors_v)[["id", "ticker", "ex_date", "importe_eur", "tipo",
+                                                  "con_cargo_a_ejercicio", "confianza"]].copy()
+                _df_bor.insert(0, "Promover", False)
+                _edit = st.data_editor(
+                    _df_bor, hide_index=True, use_container_width=True,
+                    key=f"_cur_bor_editor_{_f_tk}",
+                    column_config={"Promover": st.column_config.CheckboxColumn(
+                        "Promover", help="Marca los dividendos a promover a vigente", default=False)},
+                    disabled=["id", "ticker", "ex_date", "importe_eur", "tipo",
+                              "con_cargo_a_ejercicio", "confianza"])
+                _ids_marcados = [int(r["id"]) for _, r in _edit.iterrows() if r["Promover"]]
                 _cp1, _cp2 = st.columns(2)
-                if _cp1.button("✅ Promover seleccionados", disabled=not _sel, key="_cur_promo_btn"):
+                if _cp1.button(f"✅ Promover marcados ({len(_ids_marcados)})",
+                               disabled=not _ids_marcados, key="_cur_promo_btn", use_container_width=True):
                     _n = 0
-                    for _idb in _sel:
+                    for _idb in _ids_marcados:
                         try:
-                            curacion.promover_dividendo(conn, int(_idb), _user); _n += 1
+                            curacion.promover_dividendo(conn, _idb, _user); _n += 1
                         except Exception as _ex:
                             st.error(f"id {_idb}: {_ex}")
                     if _n:
-                        st.success(f"{_n} dividendo(s) promovidos a vigente.")
+                        st.session_state["_cur_ref_msg"] = f"✅ {_n} dividendo(s) promovidos a vigente."
                         st.rerun()
                 _lbl_all = ("todos los mostrados" if _f_tk == "(todos)" else f"todos los de {_f_tk}")
                 if _cp2.button(f"✅ Promover {_lbl_all} ({len(_bors_v)})",
-                               disabled=not _bors_v, key="_cur_promo_all"):
+                               disabled=not _bors_v, key="_cur_promo_all", use_container_width=True):
                     _n = 0
                     for _b in _bors_v:
                         try:
@@ -10507,7 +10518,7 @@ def _admin_curacion_dividendos():
                         except Exception as _ex:
                             st.error(f"id {_b['id']}: {_ex}")
                     if _n:
-                        st.success(f"{_n} dividendo(s) promovidos a vigente.")
+                        st.session_state["_cur_ref_msg"] = f"✅ {_n} dividendo(s) promovidos a vigente."
                         st.rerun()
     finally:
         release_db_connection(conn)
