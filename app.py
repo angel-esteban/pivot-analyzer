@@ -386,9 +386,12 @@ st.markdown("""
         background: #ffffff !important; font-size: 0.88rem !important;
         transition: border-color 0.15s ease !important;
     }
-    [data-testid="stSelectbox"] div[data-baseweb="select"] span,
-    [data-testid="stSelectbox"] div[data-baseweb="select"] div {
+    [data-testid="stSelectbox"] div[data-baseweb="select"] span {
         font-size: 0.88rem !important;
+    }
+    /* fondo blanco en TODOS los div internos del control (el gris venía de aquí) */
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div {
+        font-size: 0.88rem !important; background-color: #ffffff !important;
     }
 
     /* ── EXPANDERS ──────────────────────────────────────────────── */
