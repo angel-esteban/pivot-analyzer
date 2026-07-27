@@ -378,21 +378,24 @@ st.markdown("""
     }
 
     /* ── SELECTBOX ──────────────────────────────────────────────── */
-    [data-testid="stSelectbox"] div[data-baseweb="select"] {
-        background: #ffffff !important; border-radius: 7px !important;
+    /* SIN cualificar la etiqueta: en algunas versiones [data-baseweb="select"] NO es
+       un <div>, así que "div[data-baseweb=select]" no casaba y quedaba gris. El catch-all
+       "* " fuerza blanco en todo el control (la lista desplegable se estila aparte). */
+    [data-testid="stSelectbox"] [data-baseweb="select"],
+    [data-testid="stSelectbox"] [data-baseweb="select"] *,
+    [data-testid="stSelectbox"] [data-baseweb="base-input"],
+    [data-testid="stSelectbox"] [data-baseweb="input"] {
+        background-color: #ffffff !important;
     }
-    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    [data-testid="stSelectbox"] [data-baseweb="select"] {
+        border-radius: 7px !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div {
         border-radius: 7px !important; border: 1.5px solid #e2e8f0 !important;
-        background: #ffffff !important; font-size: 0.88rem !important;
         transition: border-color 0.15s ease !important;
     }
-    [data-testid="stSelectbox"] div[data-baseweb="select"] span {
+    [data-testid="stSelectbox"] [data-baseweb="select"] span {
         font-size: 0.88rem !important;
-    }
-    /* fondo blanco en TODOS los div internos del control (el gris venía de aquí) */
-    [data-testid="stSelectbox"] div[data-baseweb="select"] div,
-    [data-testid="stSelectbox"] div[data-baseweb="select"] input {
-        font-size: 0.88rem !important; background-color: #ffffff !important;
     }
     /* lista desplegable (se renderiza en un portal, fuera del stSelectbox) */
     div[data-baseweb="popover"] [role="listbox"],
