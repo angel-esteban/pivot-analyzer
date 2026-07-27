@@ -10447,24 +10447,29 @@ def _admin_curacion_dividendos():
                               key="_cur_ref_run"):
                 try:
                     _res = refresco_masivo_dividendos(conn, IBEX_35, desde_ano=int(_desde))
-                    st.success(f"Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} saltados "
-                               f"(desde {int(_desde)}).")
+                    _m = (f"✅ Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} saltados "
+                          f"(desde {int(_desde)}).")
                     if _res["sin_ficha"]:
-                        st.warning("Sin ficha de empresa (no se pudieron sembrar): " + ", ".join(_res["sin_ficha"]))
+                        _m += " Sin ficha: " + ", ".join(_res["sin_ficha"])
                     if _res.get("errores"):
-                        st.error("Errores reales (primeros): " + " · ".join(_res["errores"]))
+                        _m += " | ⚠️ ERRORES: " + " · ".join(_res["errores"])
+                    st.session_state["_cur_ref_msg"] = _m
                 except Exception as _ex:
-                    st.error(f"Error en el refresco: {_ex}")
+                    st.session_state["_cur_ref_msg"] = f"❌ Error en el refresco: {_ex}"
+                st.rerun()
             if _c_ref2.button("🧹 Vaciar todos los borradores (re-sembrar limpio)",
                               key="_cur_ref_vaciar"):
                 try:
                     _nb = curacion.vaciar_borradores_dividendo(conn)
-                    st.success(f"{_nb} borradores eliminados. No afecta a 'vigente' (el motor no lo lee).")
-                    st.rerun()
+                    st.session_state["_cur_ref_msg"] = (f"🧹 {_nb} borradores eliminados. "
+                                                        "No afecta a 'vigente' (el motor no lo lee).")
                 except Exception as _ex:
-                    st.error(f"Error vaciando borradores: {_ex}")
+                    st.session_state["_cur_ref_msg"] = f"❌ Error vaciando borradores: {_ex}"
+                st.rerun()
             _c_ref2.caption("Vaciar es seguro: los borradores no los ve el motor. Úsalo para "
                             "quitar el historial masivo y re-sembrar solo los años que vas a curar.")
+            if st.session_state.get("_cur_ref_msg"):
+                st.info(st.session_state.pop("_cur_ref_msg"))
             st.divider()
             _bors = curacion.leer_borradores_dividendo(conn)
             st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")

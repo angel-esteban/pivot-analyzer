@@ -190,10 +190,12 @@ def heuristica_con_cargo(ex_date, cierre: str = "12-31") -> str:
 
 
 def existe_dividendo(conn, ticker: str, ex_date, tipo: str) -> bool:
-    """True si ya hay una fila no descartada para (ticker, ex_date, tipo) — evita duplicar."""
+    """True si ya hay un BORRADOR o un VIGENTE para (ticker, ex_date, tipo) — evita duplicar
+    y no re-siembra lo ya curado. Un 'retirado' (versión histórica) NO bloquea: tras vaciar
+    borradores debe poder re-sembrarse."""
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM dividendo_clasificado WHERE ticker=%s AND ex_date=%s AND tipo=%s "
-                "AND estado <> 'descartado' LIMIT 1", [ticker, ex_date, tipo])
+                "AND estado IN ('borrador','vigente') LIMIT 1", [ticker, ex_date, tipo])
     return cur.fetchone() is not None
 
 
