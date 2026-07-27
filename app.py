@@ -10174,6 +10174,75 @@ def _reconciliar_bpa_yf(conn, ticker, ejercicio, bpa):
     return payout_calc, payout_yf, rev, conf, delta
 
 
+_CIERRE_ESPECIAL = {"LOG.MC": ("09-30", True), "ITX.MC": ("01-31", True)}   # cierres no-diciembre conocidos
+
+
+def sembrar_fichas_ibex35(conn) -> dict:
+    """Crea (UPSERT, solo las que falten) las fichas de empresa del IBEX-35: nombre de IBEX_35,
+    sector de yfinance, cierre conocido (LOG 30-sep, ITX 31-ene; resto 31-dic a confirmar) y
+    clase_exclusion inferida del sector. Es dimensión (no ciclo borrador). El curador debe
+    REVISAR sector/clase y confirmar el cierre. No sobrescribe fichas ya existentes."""
+    import curacion
+    import yfinance as yf
+    existentes = {e["ticker"] for e in curacion.leer_empresas(conn)}
+    creadas = saltadas = 0
+    errores = []
+    for nombre, ticker in IBEX_35.items():
+        if ticker in existentes:
+            saltadas += 1
+            continue
+        try:
+            try:
+                _info = yf.Ticker(ticker).info
+            except Exception:                            # noqa: BLE001
+                _info = {}
+            _sec = _info.get("sector")
+            _ind = (_info.get("industry") or "").strip().lower()
+            _sl = (_sec or "").strip().lower()
+            _clase = ("banca_seguros" if "financial" in _sl
+                      else "reit_socimi" if (_sl == "real estate" and _ind.startswith("reit"))
+                      else "estandar")
+            _cie, _conf = _CIERRE_ESPECIAL.get(ticker, ("12-31", False))
+            curacion.guardar_empresa(conn, {
+                "ticker": ticker, "nombre": nombre, "cierre_ejercicio": _cie,
+                "cierre_confirmado": _conf, "sector": _sec, "clase_exclusion": _clase,
+                "notas": "Ficha sembrada automáticamente — revisar sector/clase y confirmar cierre."},
+                "siembra_auto")
+            creadas += 1
+        except Exception as ex:                          # noqa: BLE001
+            errores.append(f"{ticker}: {ex}")
+    return {"creadas": creadas, "saltadas": saltadas, "errores": errores}
+
+
+def refresco_masivo_dividendos(conn, tickers_nombres: dict) -> dict:
+    """Auto-1: siembra en BORRADOR los eventos de dividendo del IBEX-35 desde yfinance
+    (importe + ex-date) con `con_cargo` heurístico. NO toca vigente; requiere ficha de empresa
+    (FK). El curador revisa y promueve. Devuelve resumen {nuevos, saltados, sin_ficha}."""
+    import curacion, lente, datetime as _dt
+    hoy = _dt.date.today().isoformat()
+    cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in curacion.leer_empresas(conn)}
+    n_nuevos = n_saltados = 0
+    sin_ficha = []
+    for _nombre, ticker in tickers_nombres.items():
+        if ticker not in cierres:
+            sin_ficha.append(ticker); continue
+        for exd, imp in lente.eventos_yfinance(ticker):
+            if imp is None or imp <= 0:
+                continue
+            _ex = exd if hasattr(exd, "year") else _dt.date.fromisoformat(str(exd)[:10])
+            d = {"ticker": ticker, "ex_date": _ex.isoformat(), "importe_eur": round(float(imp), 6),
+                 "tipo": "ordinario", "con_cargo_a_ejercicio": curacion.heuristica_con_cargo(_ex, cierres[ticker]),
+                 "fuente": "yfinance (evento observado)", "fecha_verificacion": hoy, "verificado_por": "refresco_auto"}
+            try:
+                if curacion.guardar_dividendo_borrador(conn, d, "refresco_auto"):
+                    n_nuevos += 1
+                else:
+                    n_saltados += 1
+            except Exception:                            # noqa: BLE001
+                n_saltados += 1
+    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha}
+
+
 def _admin_curacion_dividendos():
     """Curación del golden record de dividendos (spec DosLentes v1). Escribe a Neon vía
     curacion.py (modo una-persona: directo a vigente, con versionado)."""
@@ -10183,9 +10252,20 @@ def _admin_curacion_dividendos():
     st.markdown("### 📝 Curación de dividendos — golden record")
     st.caption("El motor solo lee filas **vigentes**. Editar crea una versión nueva (no sobrescribe). "
                "Sin **fuente** no se guarda. Ausente = N/A (nada de placeholders).")
+    # ── Icono/ayuda: guía didáctica de curación (ejemplo Naturgy) ──
+    with st.expander("📖 Guía de curación — cómo y por qué (ejemplo Naturgy)", expanded=False):
+        try:
+            import os as _os
+            _ruta_guia = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                       "guia_curacion_dividendos.md")
+            with open(_ruta_guia, "r", encoding="utf-8") as _f:
+                st.markdown(_f.read())
+        except Exception:
+            st.info("Guía no disponible (falta `guia_curacion_dividendos.md` en el repositorio).")
     conn = get_db_connection()
     try:
-        _t_emp, _t_bpa, _t_div = st.tabs(["🏢 Ficha de empresa", "📊 BPA por ejercicio", "💸 Dividendos"])
+        _t_emp, _t_bpa, _t_div, _t_ref = st.tabs(
+            ["🏢 Ficha de empresa", "📊 BPA por ejercicio", "💸 Dividendos", "🔄 Refresco masivo"])
 
         with _t_emp:
             with st.form("_cur_emp", clear_on_submit=False):
@@ -10322,6 +10402,56 @@ def _admin_curacion_dividendos():
                     st.dataframe(_pd.DataFrame(_divs)[["ticker", "ex_date", "pay_date", "importe_eur",
                                  "tipo", "con_cargo_a_ejercicio", "confianza", "version"]],
                                  hide_index=True, use_container_width=True)
+
+        with _t_ref:
+            st.markdown("**Paso 1 — Fichas de empresa** (prerrequisito para colgar los dividendos)")
+            if st.button("🏢 Sembrar las 35 fichas del IBEX-35 (solo las que falten)",
+                         use_container_width=True, key="_cur_seed_fichas"):
+                with st.spinner("Creando fichas (sector desde yfinance)…"):
+                    try:
+                        _rf = sembrar_fichas_ibex35(conn)
+                        st.success(f"{_rf['creadas']} fichas creadas · {_rf['saltadas']} ya existían.")
+                        if _rf["errores"]:
+                            st.warning("Con errores: " + "; ".join(_rf["errores"][:6]))
+                        st.caption("⚠️ Revisa **sector/clase** de cada ficha (pestaña Ficha de empresa) y "
+                                   "**confirma el cierre** — se han sembrado con valores heurísticos.")
+                    except Exception as _ex:
+                        st.error(f"Error sembrando fichas: {_ex}")
+            st.divider()
+            st.markdown("**Paso 2 — Dividendos**")
+            st.caption("Siembra en **borrador** los eventos de dividendo del IBEX-35 desde yfinance "
+                       "(importe + ex-date) con `con_cargo` heurístico. **No toca 'vigente'**: revisa y "
+                       "promueve abajo. Requiere ficha de empresa por ticker.")
+            if st.button("🔄 Refrescar dividendos del IBEX-35 (a borrador)", use_container_width=True,
+                         key="_cur_ref_run"):
+                try:
+                    _res = refresco_masivo_dividendos(conn, IBEX_35)
+                    st.success(f"Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} ya existían.")
+                    if _res["sin_ficha"]:
+                        st.warning("Sin ficha de empresa (no se pudieron sembrar): " + ", ".join(_res["sin_ficha"]))
+                except Exception as _ex:
+                    st.error(f"Error en el refresco: {_ex}")
+            st.divider()
+            _bors = curacion.leer_borradores_dividendo(conn)
+            st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")
+            if _bors:
+                st.dataframe(_pd.DataFrame(_bors)[["id", "ticker", "ex_date", "importe_eur", "tipo",
+                             "con_cargo_a_ejercicio", "confianza"]], hide_index=True, use_container_width=True)
+                st.caption("⚠️ Revisa `con_cargo_a_ejercicio` (la heurística puede fallar en cierres "
+                           "no-diciembre como LOG/ITX) y `tipo` antes de promover. Promover pasa el "
+                           "borrador a **vigente** y lo hace visible al motor.")
+                _sel = st.multiselect("Promover a vigente (por id):",
+                                      [str(b["id"]) for b in _bors], key="_cur_promo_sel")
+                if st.button("✅ Promover seleccionados", disabled=not _sel, key="_cur_promo_btn"):
+                    _n = 0
+                    for _idb in _sel:
+                        try:
+                            curacion.promover_dividendo(conn, int(_idb), _user); _n += 1
+                        except Exception as _ex:
+                            st.error(f"id {_idb}: {_ex}")
+                    if _n:
+                        st.success(f"{_n} dividendo(s) promovidos a vigente.")
+                        st.rerun()
     finally:
         release_db_connection(conn)
 

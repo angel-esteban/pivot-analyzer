@@ -177,6 +177,68 @@ def retirar(conn, tabla, id_fila, motivo, usuario):
     conn.commit()
 
 
+# ── Auto-1: refresco masivo (siembra en BORRADOR) + promoción ────────────────
+def heuristica_con_cargo(ex_date, cierre: str = "12-31") -> str:
+    """Heurística de 'con cargo a ejercicio' para el refresco masivo (BORRADOR; el curador
+    la confirma). Cierre 31-dic: pagos hasta mayo = complementario del ejercicio ANTERIOR;
+    resto = año en curso (verificado con Naturgy: abr->FY-1, jul/nov->FY, mar->FY-1). Otros
+    cierres: conservador (año del pago) -> a revisar a mano. NUNCA es la verdad, solo semilla."""
+    y, m = ex_date.year, ex_date.month
+    if (cierre or "12-31") == "12-31":
+        return f"FY{y - 1}" if m <= 5 else f"FY{y}"
+    return f"FY{y}"
+
+
+def existe_dividendo(conn, ticker: str, ex_date, tipo: str) -> bool:
+    """True si ya hay una fila no descartada para (ticker, ex_date, tipo) — evita duplicar."""
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM dividendo_clasificado WHERE ticker=%s AND ex_date=%s AND tipo=%s "
+                "AND estado <> 'descartado' LIMIT 1", [ticker, ex_date, tipo])
+    return cur.fetchone() is not None
+
+
+def guardar_dividendo_borrador(conn, d, usuario, confianza: str = "media"):
+    """Inserta un dividendo en estado 'borrador' (refresco masivo). NO toca vigente. Salta
+    (devuelve None) si ya existe fila para (ticker, ex_date, tipo). Devuelve True si insertó."""
+    e, _a = validar_dividendo(d)
+    if e:
+        raise ValueError("; ".join(e))
+    tipo = _s(d.get("tipo")) or "ordinario"
+    if existe_dividendo(conn, d["ticker"], d["ex_date"], tipo):
+        return None
+    pay_aprox = not _s(d.get("pay_date"))
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO dividendo_clasificado (ticker,ex_date,pay_date,pay_date_aprox,importe_eur,tipo,"
+        "con_cargo_a_ejercicio,fuente,url,fecha_verificacion,estado,version,creado_por,"
+        "revision_requerida,confianza) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'borrador',1,%s,true,%s)",
+        [d["ticker"], d["ex_date"], d.get("pay_date"), pay_aprox, d["importe_eur"], tipo,
+         d.get("con_cargo_a_ejercicio"), d["fuente"], d.get("url"), d["fecha_verificacion"],
+         usuario, confianza])
+    conn.commit()
+    return True
+
+
+def promover_dividendo(conn, id_borrador, usuario):
+    """Promueve un BORRADOR a vigente: retira la vigente anterior de su (ticker,ex_date,tipo)
+    e incrementa la versión. Devuelve la versión nueva."""
+    cur = conn.cursor()
+    cur.execute("SELECT ticker, ex_date, tipo FROM dividendo_clasificado WHERE id=%s AND estado='borrador'",
+                [id_borrador])
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("borrador no encontrado")
+    tk, exd, tipo = row
+    ver = _siguiente_version(cur, "dividendo_clasificado", "ticker=%s AND ex_date=%s AND tipo=%s",
+                             [tk, exd, tipo])
+    cur.execute("UPDATE dividendo_clasificado SET estado='retirado', valid_to=now() "
+                "WHERE ticker=%s AND ex_date=%s AND tipo=%s AND estado='vigente'", [tk, exd, tipo])
+    cur.execute("UPDATE dividendo_clasificado SET estado='vigente', version=%s, valid_from=now(), "
+                "revisado_por=%s, revision_requerida=false WHERE id=%s", [ver, usuario, id_borrador])
+    conn.commit()
+    return ver
+
+
 # ── Lecturas para el formulario ──────────────────────────────────────────────
 def _dicts(cur):
     cols = [c[0] for c in cur.description]
@@ -197,6 +259,15 @@ def leer_dividendos(conn, ticker=None, solo_vigente=True):
     cur = conn.cursor()
     q = "SELECT * FROM dividendo_clasificado WHERE 1=1"; p = []
     if solo_vigente: q += " AND estado='vigente'"
+    if ticker: q += " AND ticker=%s"; p.append(ticker)
+    q += " ORDER BY ticker, ex_date"
+    cur.execute(q, p); return _dicts(cur)
+
+
+def leer_borradores_dividendo(conn, ticker=None):
+    """Dividendos en estado 'borrador' (pendientes de revisar/promover — refresco masivo)."""
+    cur = conn.cursor()
+    q = "SELECT * FROM dividendo_clasificado WHERE estado='borrador'"; p = []
     if ticker: q += " AND ticker=%s"; p.append(ticker)
     q += " ORDER BY ticker, ex_date"
     cur.execute(q, p); return _dicts(cur)
