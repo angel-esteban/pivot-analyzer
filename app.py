@@ -390,8 +390,29 @@ st.markdown("""
         font-size: 0.88rem !important;
     }
     /* fondo blanco en TODOS los div internos del control (el gris venía de aquí) */
-    [data-testid="stSelectbox"] div[data-baseweb="select"] div {
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] input {
         font-size: 0.88rem !important; background-color: #ffffff !important;
+    }
+    /* lista desplegable (se renderiza en un portal, fuera del stSelectbox) */
+    div[data-baseweb="popover"] [role="listbox"],
+    div[data-baseweb="popover"] [role="option"],
+    div[data-baseweb="popover"] ul,
+    div[data-baseweb="popover"] li {
+        background-color: #ffffff !important;
+    }
+    div[data-baseweb="popover"] [role="option"]:hover {
+        background-color: #eff6ff !important;
+    }
+
+    /* ── DATAFRAME / DATA_EDITOR — encabezados más resaltados ─────── */
+    [data-testid="stDataFrame"], [data-testid="stDataFrameResizable"],
+    [data-testid="stDataEditor"], [data-testid="stDataEditorResizable"],
+    [data-testid="stDataFrameGlideDataEditor"], .glideDataEditor {
+        --gdg-text-header: #0f172a !important;
+        --gdg-text-header-selected: #0f172a !important;
+        --gdg-header-font-style: 700 13px !important;
+        --gdg-font-family: inherit !important;
     }
 
     /* ── EXPANDERS ──────────────────────────────────────────────── */
