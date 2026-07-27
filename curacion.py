@@ -192,7 +192,12 @@ def heuristica_con_cargo(ex_date, cierre: str = "12-31") -> str:
 def existe_dividendo(conn, ticker: str, ex_date, tipo: str) -> bool:
     """True si ya hay un BORRADOR o un VIGENTE para (ticker, ex_date, tipo) — evita duplicar
     y no re-siembra lo ya curado. Un 'retirado' (versión histórica) NO bloquea: tras vaciar
-    borradores debe poder re-sembrarse."""
+    borradores debe poder re-sembrarse. `rollback` previo: snapshot fresco del pool para VER
+    lo insertado en una pasada anterior (si no, dejaba de detectar duplicados)."""
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM dividendo_clasificado WHERE ticker=%s AND ex_date=%s AND tipo=%s "
                 "AND estado IN ('borrador','vigente') LIMIT 1", [ticker, ex_date, tipo])

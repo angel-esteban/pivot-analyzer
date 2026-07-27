@@ -378,23 +378,17 @@ st.markdown("""
     }
 
     /* ── SELECTBOX ──────────────────────────────────────────────── */
-    /* SIN cualificar la etiqueta: en algunas versiones [data-baseweb="select"] NO es
-       un <div>, así que "div[data-baseweb=select]" no casaba y quedaba gris. El catch-all
-       "* " fuerza blanco en todo el control (la lista desplegable se estila aparte). */
-    [data-testid="stSelectbox"] [data-baseweb="select"],
-    [data-testid="stSelectbox"] [data-baseweb="select"] *,
-    [data-testid="stSelectbox"] [data-baseweb="base-input"],
-    [data-testid="stSelectbox"] [data-baseweb="input"] {
+    /* NUCLEAR: blanco en CUALQUIER div del selectbox, sin depender de [data-baseweb].
+       El gris venía de un div interno que los selectores anteriores no alcanzaban. */
+    [data-testid="stSelectbox"] div {
         background-color: #ffffff !important;
     }
-    [data-testid="stSelectbox"] [data-baseweb="select"] {
-        border-radius: 7px !important;
-    }
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
     [data-testid="stSelectbox"] [data-baseweb="select"] > div {
         border-radius: 7px !important; border: 1.5px solid #e2e8f0 !important;
         transition: border-color 0.15s ease !important;
     }
-    [data-testid="stSelectbox"] [data-baseweb="select"] span {
+    [data-testid="stSelectbox"] span {
         font-size: 0.88rem !important;
     }
     /* lista desplegable (se renderiza en un portal, fuera del stSelectbox) */
@@ -409,9 +403,13 @@ st.markdown("""
     }
 
     /* ── DATAFRAME / DATA_EDITOR — encabezados más resaltados ─────── */
-    [data-testid="stDataFrame"], [data-testid="stDataFrameResizable"],
-    [data-testid="stDataEditor"], [data-testid="stDataEditorResizable"],
-    [data-testid="stDataFrameGlideDataEditor"], .glideDataEditor {
+    /* glide-data-grid es un canvas: solo se estila con sus variables --gdg-*.
+       Se aplican también a los descendientes por si Streamlit las fija en el propio grid. */
+    [data-testid="stDataFrame"], [data-testid="stDataFrame"] *,
+    [data-testid="stDataFrameResizable"], [data-testid="stDataFrameResizable"] *,
+    [data-testid="stDataEditor"], [data-testid="stDataEditor"] *,
+    [data-testid="stDataEditorResizable"], [data-testid="stDataEditorResizable"] *,
+    [data-testid="stDataFrameGlideDataEditor"], .glideDataEditor, .glideDataEditor * {
         --gdg-text-header: #0f172a !important;
         --gdg-text-header-selected: #0f172a !important;
         --gdg-header-font-style: 700 13px !important;
