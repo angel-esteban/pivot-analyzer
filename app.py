@@ -10469,20 +10469,38 @@ def _admin_curacion_dividendos():
             _bors = curacion.leer_borradores_dividendo(conn)
             st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")
             if _bors:
-                st.dataframe(_pd.DataFrame(_bors)[["id", "ticker", "ex_date", "importe_eur", "tipo",
+                _tks_bor = sorted({b["ticker"] for b in _bors})
+                _f_tk = st.selectbox(f"Filtrar por ticker ({len(_tks_bor)} con borradores):",
+                                     ["(todos)"] + _tks_bor, key="_cur_bor_filtro")
+                _bors_v = _bors if _f_tk == "(todos)" else [b for b in _bors if b["ticker"] == _f_tk]
+                st.caption(f"Mostrando {len(_bors_v)} de {len(_bors)}.")
+                st.dataframe(_pd.DataFrame(_bors_v)[["id", "ticker", "ex_date", "importe_eur", "tipo",
                              "con_cargo_a_ejercicio", "confianza"]], hide_index=True, use_container_width=True)
                 st.caption("⚠️ Revisa `con_cargo_a_ejercicio` (la heurística puede fallar en cierres "
                            "no-diciembre como LOG/ITX) y `tipo` antes de promover. Promover pasa el "
                            "borrador a **vigente** y lo hace visible al motor.")
                 _sel = st.multiselect("Promover a vigente (por id):",
-                                      [str(b["id"]) for b in _bors], key="_cur_promo_sel")
-                if st.button("✅ Promover seleccionados", disabled=not _sel, key="_cur_promo_btn"):
+                                      [str(b["id"]) for b in _bors_v], key="_cur_promo_sel")
+                _cp1, _cp2 = st.columns(2)
+                if _cp1.button("✅ Promover seleccionados", disabled=not _sel, key="_cur_promo_btn"):
                     _n = 0
                     for _idb in _sel:
                         try:
                             curacion.promover_dividendo(conn, int(_idb), _user); _n += 1
                         except Exception as _ex:
                             st.error(f"id {_idb}: {_ex}")
+                    if _n:
+                        st.success(f"{_n} dividendo(s) promovidos a vigente.")
+                        st.rerun()
+                _lbl_all = ("todos los mostrados" if _f_tk == "(todos)" else f"todos los de {_f_tk}")
+                if _cp2.button(f"✅ Promover {_lbl_all} ({len(_bors_v)})",
+                               disabled=not _bors_v, key="_cur_promo_all"):
+                    _n = 0
+                    for _b in _bors_v:
+                        try:
+                            curacion.promover_dividendo(conn, int(_b["id"]), _user); _n += 1
+                        except Exception as _ex:
+                            st.error(f"id {_b['id']}: {_ex}")
                     if _n:
                         st.success(f"{_n} dividendo(s) promovidos a vigente.")
                         st.rerun()
