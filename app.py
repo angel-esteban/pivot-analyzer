@@ -10210,19 +10210,26 @@ def sembrar_fichas_ibex35(conn) -> dict:
                 "siembra_auto")
             creadas += 1
         except Exception as ex:                          # noqa: BLE001
+            try:
+                conn.rollback()                          # evita cascada "transaction aborted"
+            except Exception:
+                pass
             errores.append(f"{ticker}: {ex}")
     return {"creadas": creadas, "saltadas": saltadas, "errores": errores}
 
 
-def refresco_masivo_dividendos(conn, tickers_nombres: dict) -> dict:
+def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | None = None) -> dict:
     """Auto-1: siembra en BORRADOR los eventos de dividendo del IBEX-35 desde yfinance
     (importe + ex-date) con `con_cargo` heurístico. NO toca vigente; requiere ficha de empresa
-    (FK). El curador revisa y promueve. Devuelve resumen {nuevos, saltados, sin_ficha}."""
+    (FK). El curador revisa y promueve. `desde_ano` acota a eventos con ex_date.year >= desde_ano
+    (yfinance devuelve décadas de historial; para curar bastan los años recientes).
+    Devuelve resumen {nuevos, saltados, sin_ficha, errores}."""
     import curacion, lente, datetime as _dt
     hoy = _dt.date.today().isoformat()
     cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in curacion.leer_empresas(conn)}
     n_nuevos = n_saltados = 0
     sin_ficha = []
+    errores = []
     for _nombre, ticker in tickers_nombres.items():
         if ticker not in cierres:
             sin_ficha.append(ticker); continue
@@ -10230,6 +10237,8 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict) -> dict:
             if imp is None or imp <= 0:
                 continue
             _ex = exd if hasattr(exd, "year") else _dt.date.fromisoformat(str(exd)[:10])
+            if desde_ano and _ex.year < desde_ano:
+                continue
             d = {"ticker": ticker, "ex_date": _ex.isoformat(), "importe_eur": round(float(imp), 6),
                  "tipo": "ordinario", "con_cargo_a_ejercicio": curacion.heuristica_con_cargo(_ex, cierres[ticker]),
                  "fuente": "yfinance (evento observado)", "fecha_verificacion": hoy, "verificado_por": "refresco_auto"}
@@ -10238,9 +10247,15 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict) -> dict:
                     n_nuevos += 1
                 else:
                     n_saltados += 1
-            except Exception:                            # noqa: BLE001
+            except Exception as ex:                      # noqa: BLE001
+                try:
+                    conn.rollback()                      # evita cascada "transaction aborted"
+                except Exception:
+                    pass
                 n_saltados += 1
-    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha}
+                if len(errores) < 6:
+                    errores.append(f"{ticker} {d.get('ex_date')}: {ex}")
+    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha, "errores": errores}
 
 
 def _admin_curacion_dividendos():
@@ -10422,15 +10437,34 @@ def _admin_curacion_dividendos():
             st.caption("Siembra en **borrador** los eventos de dividendo del IBEX-35 desde yfinance "
                        "(importe + ex-date) con `con_cargo` heurístico. **No toca 'vigente'**: revisa y "
                        "promueve abajo. Requiere ficha de empresa por ticker.")
-            if st.button("🔄 Refrescar dividendos del IBEX-35 (a borrador)", use_container_width=True,
-                         key="_cur_ref_run"):
+            _ano_actual = datetime.now().year
+            _c_ref1, _c_ref2 = st.columns([1, 2])
+            _desde = _c_ref1.number_input("Sembrar desde el año", min_value=2000, max_value=_ano_actual,
+                                          value=_ano_actual - 6, step=1, key="_cur_ref_desde",
+                                          help="yfinance devuelve décadas; acota a los años que vas a curar "
+                                               "(cubre la ventana de CAGR ~5 años + el ejercicio actual).")
+            if _c_ref1.button("🔄 Refrescar dividendos (a borrador)", use_container_width=True,
+                              key="_cur_ref_run"):
                 try:
-                    _res = refresco_masivo_dividendos(conn, IBEX_35)
-                    st.success(f"Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} ya existían.")
+                    _res = refresco_masivo_dividendos(conn, IBEX_35, desde_ano=int(_desde))
+                    st.success(f"Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} saltados "
+                               f"(desde {int(_desde)}).")
                     if _res["sin_ficha"]:
                         st.warning("Sin ficha de empresa (no se pudieron sembrar): " + ", ".join(_res["sin_ficha"]))
+                    if _res.get("errores"):
+                        st.error("Errores reales (primeros): " + " · ".join(_res["errores"]))
                 except Exception as _ex:
                     st.error(f"Error en el refresco: {_ex}")
+            if _c_ref2.button("🧹 Vaciar todos los borradores (re-sembrar limpio)",
+                              key="_cur_ref_vaciar"):
+                try:
+                    _nb = curacion.vaciar_borradores_dividendo(conn)
+                    st.success(f"{_nb} borradores eliminados. No afecta a 'vigente' (el motor no lo lee).")
+                    st.rerun()
+                except Exception as _ex:
+                    st.error(f"Error vaciando borradores: {_ex}")
+            _c_ref2.caption("Vaciar es seguro: los borradores no los ve el motor. Úsalo para "
+                            "quitar el historial masivo y re-sembrar solo los años que vas a curar.")
             st.divider()
             _bors = curacion.leer_borradores_dividendo(conn)
             st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")

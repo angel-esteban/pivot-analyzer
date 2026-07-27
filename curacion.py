@@ -266,8 +266,24 @@ def leer_dividendos(conn, ticker=None, solo_vigente=True):
 
 def leer_borradores_dividendo(conn, ticker=None):
     """Dividendos en estado 'borrador' (pendientes de revisar/promover — refresco masivo)."""
+    try:
+        conn.rollback()                     # snapshot fresco (pool): evita leer una vista vieja
+    except Exception:
+        pass
     cur = conn.cursor()
     q = "SELECT * FROM dividendo_clasificado WHERE estado='borrador'"; p = []
     if ticker: q += " AND ticker=%s"; p.append(ticker)
     q += " ORDER BY ticker, ex_date"
     cur.execute(q, p); return _dicts(cur)
+
+
+def vaciar_borradores_dividendo(conn, ticker=None) -> int:
+    """Elimina TODOS los dividendos en estado 'borrador' (no toca vigente/retirado). Seguro:
+    el motor solo lee 'vigente'. Devuelve el nº de filas borradas. Permite re-sembrar limpio."""
+    cur = conn.cursor()
+    q = "DELETE FROM dividendo_clasificado WHERE estado='borrador'"; p = []
+    if ticker: q += " AND ticker=%s"; p.append(ticker)
+    cur.execute(q, p)
+    n = cur.rowcount
+    conn.commit()
+    return n
