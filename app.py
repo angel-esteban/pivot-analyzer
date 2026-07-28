@@ -13749,6 +13749,15 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _div_ord_ej = _por_v2[_ult_v2]["ordinario"] if _ult_v2 else None
                 _ords6 = [_por_v2[a]["ordinario"] for a in _cerr_v2[-6:] if _por_v2[a]["ordinario"] > 0]
                 _base_susp_v2 = bool(_ords6) and min(_ords6) <= 0.01
+                # hueco de serie: dividendo INTERRUMPIDO que aún no re-acredita historial sólido.
+                # = hay pagos fuera de la racha continua (hubo corte/reanudación) Y la racha < 7
+                # (si ya lleva ≥7 continuos, el corte es antiguo y K10/K4 lo dan por acreditado).
+                # No confundir con empresa JOVEN (racha corta pero sin interrupción): esa la capa K10.
+                _pagos_v2 = [a for a in _cerr_v2 if _por_v2[a]["ordinario"] > 0]
+                _racha_v2, _yy_v2 = 0, (_cerr_v2[-1] if _cerr_v2 else None)
+                while _yy_v2 in _por_v2 and _por_v2[_yy_v2]["ordinario"] > 0:
+                    _racha_v2 += 1; _yy_v2 -= 1
+                _hueco_v2 = (len(_pagos_v2) > _racha_v2) and (_racha_v2 < 7)
                 _ctx_v2 = {
                     "payout_campo":            info.get("payoutRatio"),
                     "dividendo_ord_ejercicio": _div_ord_ej,
@@ -13760,8 +13769,12 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     "tiene_extraordinario":    _lente_a.get("tiene_extra"),   # clave real de _calc_lente_a
                     "salto_yoy_ordinario":     None,   # diferido (ver banderas.py): evita fatiga de alertas
                     "base_suspendida":         _base_susp_v2,
+                    "hueco_serie":             _hueco_v2,   # historial -> B3 (interrupción del dividendo)
                     "fuente_rancia":           False,
-                    "sector_financiero":       "financial" in (info.get("sector") or "").strip().lower(),
+                    # payout N/A estructural: banca/seguros Y SOCIMIs (Real Estate + industria REIT)
+                    "payout_na":               (("financial" in (info.get("sector") or "").strip().lower())
+                                                or ("real estate" in (info.get("sector") or "").strip().lower()
+                                                    and (info.get("industry") or "").strip().lower().startswith("reit"))),
                     "payout_vigente":          None,
                 }
                 _res_v2 = _bnd.evaluar_banderas(_ctx_v2)

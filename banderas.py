@@ -22,11 +22,9 @@ import hashlib
 
 # ── Umbrales §4 [VERIFICAR] ──────────────────────────────────────────────────
 B1_DIVERGENCIA_PP   = 0.10          # payout: |Δ| entre estimadores > 10 pp
-B2_PAYOUT_LO        = 0.75          # zona gris payout 75%–105%
-B2_PAYOUT_HI        = 1.05
-B2_YIELD_UMBRAL     = 0.025         # umbral K3
-B2_YIELD_BANDA      = 0.003         # ±0,3 pp alrededor de 2,5%
-B2_HIST_GRIS        = (2, 3, 6, 7, 8)   # cerca del KO<3 y del mínimo 7
+# Suelo del payout = cap K1-Payout (85%) − tolerancia B1 (10 pp) = 75%. Techo 110% (Pólaris D-006).
+B2_PAYOUT_LO        = 0.85 - B1_DIVERGENCIA_PP   # = 0.75
+B2_PAYOUT_HI        = 1.10
 B2_EVEBITDA_LO      = 20.0          # cerca del KO 22×
 B2_EVEBITDA_HI      = 24.0
 B2_FREEFLOAT_LO     = 0.18          # cerca del veto 20%
@@ -97,12 +95,15 @@ def evaluar_banderas(ctx: dict) -> dict:
     est = estimadores_payout(ctx.get("payout_campo"),
                              ctx.get("dividendo_ord_ejercicio"), ctx.get("eps"))
     e1, e2 = est["E1_campo"], est["E2_dpa_bpa"]
-    fin = bool(ctx.get("sector_financiero"))
+    # payout N/A estructural: banca/seguros Y SOCIMIs (spec §8). Inhibe B1, B2-payout y B2-EV/EBITDA
+    # (métricas no válidas para ese modelo de negocio). yield/historial/free-float SÍ aplican.
+    pna = bool(ctx.get("payout_na") if ctx.get("payout_na") is not None
+               else ctx.get("sector_financiero"))
     banderas = []
 
     # ── B1 — Divergencia entre estimadores automáticos (payout) ──────────────
     # (Vía por la que se caza Logista: campo ~72% vs cálculo/parser ~99%.)
-    if not fin and e1 is not None and e2 is not None and abs(e1 - e2) > B1_DIVERGENCIA_PP:
+    if not pna and e1 is not None and e2 is not None and abs(e1 - e2) > B1_DIVERGENCIA_PP:
         banderas.append({
             "codigo": "B1", "tipo": "capa",
             "motivo": f"Divergencia de payout entre estimadores: campo {_pct(e1)} vs DPA/BPA {_pct(e2)} "
@@ -111,22 +112,16 @@ def evaluar_banderas(ctx: dict) -> dict:
             "huella": _huella("B1", e1, e2),
         })
 
-    # ── B2 — Zona gris cerca de un umbral de veredicto ───────────────────────
+    # ── B2 — Zona gris cerca de un umbral, SOLO métricas con ruido real (Pólaris D-006):
+    # payout, EV/EBITDA y free float. yield (poco ruidoso) e historial (recuento, no ruido)
+    # NO van en B2 — el historial pasa a B3 como "hueco de serie".
     motivos_b2, vals_b2 = [], {}
     payout_ref = e2 if e2 is not None else e1     # el más informativo disponible
-    if not fin and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI:
+    if not pna and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI:
         motivos_b2.append(f"payout {_pct(payout_ref)} en zona gris ({int(B2_PAYOUT_LO*100)}–{int(B2_PAYOUT_HI*100)}%)")
         vals_b2["payout"] = round(payout_ref, 4)
-    _y = ctx.get("yield_ordinario")
-    if _y is not None and abs(float(_y) - B2_YIELD_UMBRAL) <= B2_YIELD_BANDA:
-        motivos_b2.append(f"yield {_pct(_y)} rozando el umbral {int(B2_YIELD_UMBRAL*1000)/10:.1f}%")
-        vals_b2["yield"] = round(float(_y), 4)
-    _r = ctx.get("racha_anios")
-    if _r is not None and int(_r) in B2_HIST_GRIS:
-        motivos_b2.append(f"historial {int(_r)} años (cerca de un umbral: KO<3 / mín. 7)")
-        vals_b2["racha"] = int(_r)
     _ev = ctx.get("ev_ebitda")
-    if not fin and _ev is not None and B2_EVEBITDA_LO <= float(_ev) <= B2_EVEBITDA_HI:
+    if not pna and _ev is not None and B2_EVEBITDA_LO <= float(_ev) <= B2_EVEBITDA_HI:
         motivos_b2.append(f"EV/EBITDA {float(_ev):.1f}× (cerca del KO 22×)")
         vals_b2["ev_ebitda"] = round(float(_ev), 2)
     _ff = ctx.get("free_float")
@@ -154,6 +149,9 @@ def evaluar_banderas(ctx: dict) -> dict:
     if ctx.get("base_suspendida"):
         motivos_b3.append("base de dividendo suspendida/reanudada (≈0)")
         vals_b3["base_susp"] = True
+    if ctx.get("hueco_serie"):
+        motivos_b3.append("hueco en la serie de dividendo (interrupción/año sin pago)")
+        vals_b3["hueco_serie"] = True
     if ctx.get("fuente_rancia"):
         motivos_b3.append("fuente nula o rancia")
         vals_b3["fuente_rancia"] = True
