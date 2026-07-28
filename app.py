@@ -10289,6 +10289,63 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
             "errores": errores, "eventos": eventos_total}
 
 
+def _admin_bandeja_avisos(conn, _user, _pd):
+    """Bandeja de avisos v2 (Spec v2 · D-006): valores marcados por el motor de banderas en el
+    último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
+    mantenimiento rutinario — aquí solo se atienden anomalías, al ritmo del usuario."""
+    import avisos as _av
+    st.markdown("#### 🔎 Bandeja de avisos — atención por excepción")
+    st.caption("El motor carga todo en automático y marca solo lo que puede voltear un veredicto "
+               "(divergencia entre estimadores, zona gris de umbral, anomalía). Un valor marcado "
+               "**nunca sale 'Cumple'** hasta resolverse. «Revisado y aceptado» silencia el aviso "
+               "**mientras el dato no cambie** (si cambia, la huella cambia y vuelve).")
+    try:
+        filas = _av.leer_avisos_ultimo(conn, solo_capa=True)
+        _acu = _av.acuses_activos(conn)
+    except Exception as _ex:
+        st.error(f"No se pudo leer la bandeja (¿ejecutaste migracion_avisos_v2_neon.sql?): {_ex}")
+        return
+    if not filas:
+        st.success("✅ Sin avisos en el último run. Lanza un screening de dividendos (Estrategia) "
+                   "para poblar la bandeja.")
+        return
+    st.markdown(f"**{len(filas)} valor(es) marcados** en el último screening registrado.")
+    for f in filas:
+        tk = f["ticker"]; nruns = int(f.get("runs_marcado", 1) or 1)
+        e1, e2 = f.get("payout_e1"), f.get("payout_e2")
+        _bnds = f.get("banderas") or []
+        for b in _bnds:
+            b["_ya"] = (tk, b.get("codigo"), b.get("huella")) in _acu
+        _pend = [b for b in _bnds if b.get("tipo") == "capa" and not b["_ya"]]
+        _e1s = f"{float(e1)*100:.1f}%" if e1 is not None else "n/d"
+        _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
+        _deriva = f"  ·  ⏳ {nruns} runs marcado" if nruns >= 2 else ""
+        _estado = f"{len(_pend)} pendiente(s)" if _pend else "✅ resuelto (se irá en el próximo run)"
+        with st.expander(f"🔎 {tk} — {_estado} · payout campo {_e1s} / DPA-BPA {_e2s}{_deriva}"):
+            _q = tk.replace(".MC", "")
+            st.markdown(f"[🔗 Buscar fuente (CNMV / IR) de {tk}]"
+                        f"(https://www.google.com/search?q={_q}+CNMV+informe+financiero+anual+dividendo)")
+            for b in _bnds:
+                _cod, _hue = b.get("codigo"), b.get("huella")
+                _tipo = b.get("tipo"); _ya = b["_ya"]
+                _c1, _c2 = st.columns([6, 1])
+                _pre = "✅ " if (_ya and _tipo == "capa") else ("ℹ️ " if _tipo != "capa" else "⚠️ ")
+                _c1.markdown(f"{_pre}**{_cod}** — {b.get('motivo','')}")
+                if _tipo == "capa" and not _ya:
+                    if _c2.button("Aceptar", key=f"_acu_{tk}_{_cod}_{_hue}"):
+                        try:
+                            _av.guardar_acuse(conn, tk, _cod, _hue, _user)
+                            st.rerun()
+                        except Exception as _ex:
+                            st.error(f"Error guardando acuse: {_ex}")
+                elif _tipo == "capa" and _ya:
+                    if _c2.button("Reactivar", key=f"_rea_{tk}_{_cod}_{_hue}"):
+                        try:
+                            _av.borrar_acuse(conn, tk, _cod, _hue); st.rerun()
+                        except Exception as _ex:
+                            st.error(f"Error: {_ex}")
+
+
 def _admin_curacion_dividendos():
     """Curación del golden record de dividendos (spec DosLentes v1). Escribe a Neon vía
     curacion.py (modo una-persona: directo a vigente, con versionado)."""
@@ -10310,8 +10367,12 @@ def _admin_curacion_dividendos():
             st.info("Guía no disponible (falta `guia_curacion_dividendos.md` en el repositorio).")
     conn = get_db_connection()
     try:
-        _t_emp, _t_bpa, _t_div, _t_ref = st.tabs(
-            ["🏢 Ficha de empresa", "📊 BPA por ejercicio", "💸 Dividendos", "🔄 Refresco masivo"])
+        _t_avi, _t_emp, _t_bpa, _t_div, _t_ref = st.tabs(
+            ["🔎 Bandeja de avisos", "🏢 Ficha de empresa", "📊 BPA por ejercicio",
+             "💸 Dividendos", "🔄 Refresco masivo"])
+
+        with _t_avi:
+            _admin_bandeja_avisos(conn, _user, _pd)
 
         with _t_emp:
             with st.form("_cur_emp", clear_on_submit=False):
@@ -13779,13 +13840,38 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 }
                 _res_v2 = _bnd.evaluar_banderas(_ctx_v2)
                 banderas_v2 = _res_v2["banderas"]
-                if _res_v2["capa_veredicto"]:
-                    if estado_global == "cumple":
-                        estado_global = "parcial"          # nunca Cumple con bandera activa
-                    if estado_global != "no_cumple":
-                        revisar = True
-                        _cods_v2 = " + ".join(b["codigo"] for b in banderas_v2 if b["tipo"] == "capa")
-                        motivo_revisar = f"revisar · {_cods_v2}"
+                try:
+                    import avisos as _av_v2
+                    _cx_v2 = get_db_connection()
+                    try:
+                        _acu_v2 = _av_v2.acuses_activos(_cx_v2, ticker)   # acuses vigentes (por huella)
+                        for _b in banderas_v2:
+                            _b["acusada"] = (ticker, _b.get("codigo"), _b.get("huella")) in _acu_v2
+                        # capa efectiva: banderas-capa NO acusadas (un acuse por huella deja de capar)
+                        _capa_ef = any(_b["tipo"] == "capa" and not _b.get("acusada") for _b in banderas_v2)
+                        if _capa_ef:
+                            if estado_global == "cumple":
+                                estado_global = "parcial"          # nunca Cumple con bandera activa
+                            if estado_global != "no_cumple":
+                                revisar = True
+                                _cods_v2 = " + ".join(_b["codigo"] for _b in banderas_v2
+                                                      if _b["tipo"] == "capa" and not _b.get("acusada"))
+                                motivo_revisar = f"revisar · {_cods_v2}"
+                        _av_v2.registrar_log(_cx_v2, ticker, _res_v2["estimadores"],
+                                             banderas_v2, _capa_ef, estado_global)   # log de auditoría
+                    finally:
+                        release_db_connection(_cx_v2)
+                except Exception:
+                    # sin BBDD (acuse/log no disponibles): capa por defecto con TODA bandera (seguro)
+                    for _b in banderas_v2:
+                        _b.setdefault("acusada", False)
+                    if _res_v2["capa_veredicto"]:
+                        if estado_global == "cumple":
+                            estado_global = "parcial"
+                        if estado_global != "no_cumple":
+                            revisar = True
+                            _cods_v2 = " + ".join(_b["codigo"] for _b in banderas_v2 if _b["tipo"] == "capa")
+                            motivo_revisar = f"revisar · {_cods_v2}"
             except Exception:
                 banderas_v2, revisar, motivo_revisar = [], False, None
 
