@@ -10307,12 +10307,23 @@ def _explicar_bandera(cod, valores, ticker):
 
     if cod == "B1":
         e1, e2 = v.get("E1_campo"), v.get("E2_dpa_bpa")
-        delta = abs((e1 or 0) - (e2 or 0)) * 100
+        if e1 is None or e2 is None:
+            return {
+                "titular": "Cobertura (payout) marcada, pero faltan los estimadores en este registro.",
+                "detectado": f"El registro de {ticker} no guardó las dos vías del payout (es de un run "
+                             f"anterior a la mejora del log). **Relanza el screening** para ver las cifras.",
+                "importa": "Sin las dos cifras no se puede mostrar la divergencia; el capado sigue por seguridad.",
+                "mirar": "Relanza el screening de dividendos y vuelve a abrir este aviso.",
+                "donde_url": url_cnmv, "donde_txt": "Cuentas anuales — CNMV",
+                "resolver": resolver, "tecnico": "B1 · estimadores no persistidos (run antiguo).",
+            }
+        delta = abs(e1 - e2) * 100
         return {
-            "titular": f"Cobertura (payout) no fiable: **{pc(e1)}** por una vía y **{pc(e2)}** por otra "
-                       f"(**{delta:.0f} pp** de diferencia).",
+            "titular": f"Cobertura (payout) no fiable: **{pc(e1)}** (campo yfinance) vs **{pc(e2)}** "
+                       f"(dividendo÷beneficio) — **{delta:.0f} pp** de diferencia.",
             "detectado": f"He calculado el payout de {ticker} por dos vías —campo del proveedor "
-                         f"({pc(e1)}) y dividendo÷beneficio ({pc(e2)})— y difieren {delta:.0f} puntos.",
+                         f"(**yfinance**): {pc(e1)}, y dividendo÷beneficio (BPA propio): {pc(e2)}— y "
+                         f"difieren {delta:.0f} puntos.",
             "importa": "Un payout tan distinto cambia si el valor **cumple la cobertura o queda capado**: "
                        "si el bueno es el alto, el dividendo consume casi todo el beneficio → **Parcial, no Cumple**.",
             "mirar": "El **beneficio por acción** del último ejercicio cerrado y el **dividendo ordinario** "
@@ -10320,7 +10331,7 @@ def _explicar_bandera(cod, valores, ticker):
                      "**continuadas vs discontinuadas**, básico vs diluido).",
             "donde_url": url_cnmv, "donde_txt": "Cuentas anuales — CNMV",
             "resolver": resolver,
-            "tecnico": f"B1 · métrica payout · umbral divergencia 10 pp · estimadores E1={pc(e1)}, E2={pc(e2)}.",
+            "tecnico": f"B1 · métrica payout · umbral divergencia 10 pp · E1 (yfinance)={pc(e1)}, E2 (DPA/BPA)={pc(e2)}.",
         }
 
     if cod == "B2":
@@ -10447,14 +10458,20 @@ def _admin_bandeja_avisos(conn, _user, _pd):
         _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
         _deriva = f"  ·  ⏳ {nruns} runs marcado" if nruns >= 2 else ""
         _estado = f"{len(_pend)} pendiente(s)" if _pend else "✅ resuelto (se irá en el próximo run)"
-        with st.expander(f"🔎 {tk} — {_estado} · payout campo {_e1s} / DPA-BPA {_e2s}{_deriva}"):
+        with st.expander(f"🔎 {tk} — {_estado} · payout yfinance {_e1s} / DPA-BPA {_e2s}{_deriva}"):
             _q = tk.replace(".MC", "")
             st.markdown(f"[🔗 Buscar fuente (CNMV / IR) de {tk}]"
                         f"(https://www.google.com/search?q={_q}+CNMV+informe+financiero+anual+dividendo)")
             for b in _bnds:
                 _cod, _hue = b.get("codigo"), b.get("huella")
                 _tipo = b.get("tipo"); _ya = b["_ya"]
-                _ex = _explicar_bandera(_cod, b.get("valores"), tk)   # explicación llana, cifras reales
+                _vals = dict(b.get("valores") or {})   # backfill de E1/E2 desde columnas del log (runs viejos)
+                if _cod in ("B1", "B2", "B-soft"):
+                    if _vals.get("E1_campo") is None and e1 is not None:
+                        _vals["E1_campo"] = float(e1)
+                    if _vals.get("E2_dpa_bpa") is None and e2 is not None:
+                        _vals["E2_dpa_bpa"] = float(e2)
+                _ex = _explicar_bandera(_cod, _vals, tk)   # explicación llana, cifras reales
                 _c1, _cinfo, _c2 = st.columns([5, 1, 1])
                 _pre = "✅ " if (_ya and _tipo == "capa") else ("ℹ️ " if _tipo != "capa" else "⚠️ ")
                 _c1.markdown(f"{_pre}{_ex['titular']}")   # LENGUAJE LLANO, nunca el código
