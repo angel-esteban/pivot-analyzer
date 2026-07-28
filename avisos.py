@@ -51,6 +51,7 @@ def registrar_log(conn, ticker: str, estimadores: dict, banderas: list, capa: bo
     cur = conn.cursor()
     _b = json.dumps([{"codigo": b.get("codigo"), "tipo": b.get("tipo"),
                       "huella": b.get("huella"), "motivo": b.get("motivo"),
+                      "valores": b.get("valores"),          # cifras reales -> explicación llana en la bandeja
                       "acusada": bool(b.get("acusada"))} for b in banderas], ensure_ascii=False)
     cur.execute(
         "INSERT INTO aviso_log (run_id, ticker, payout_e1, payout_e2, payout_e3, banderas, capa, veredicto) "

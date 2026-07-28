@@ -10289,6 +10289,132 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
             "errores": errores, "eventos": eventos_total}
 
 
+def _explicar_bandera(cod, valores, ticker):
+    """Explicación en lenguaje LLANO de un aviso, rellena con las CIFRAS REALES del valor
+    (spec Pólaris v1). 5 elementos: qué he detectado · por qué importa · qué mirar · dónde ·
+    cómo se resuelve. El código (B1/B2/B3) NO va en el mensaje, solo en 'tecnico'. Puro."""
+    v = valores or {}
+    q = ticker.replace(".MC", "")
+    url_cnmv = f"https://www.google.com/search?q={q}+CNMV+informe+financiero+anual+cuentas"
+    url_ir = f"https://www.google.com/search?q={q}+relación+inversores+dividendo+estructura+accionarial"
+
+    def pc(x):
+        return f"{float(x)*100:.1f}%" if x is not None else "n/d"
+
+    resolver = ("**Confirmar** el valor (botón *Aceptar*, si el dato es correcto) · "
+                "**Corregir** a mano en la pestaña *BPA por ejercicio* / *Dividendos* (override vigente) · "
+                "**Marcar explicable** (*Aceptar*: silencia por huella hasta que el dato cambie).")
+
+    if cod == "B1":
+        e1, e2 = v.get("E1_campo"), v.get("E2_dpa_bpa")
+        delta = abs((e1 or 0) - (e2 or 0)) * 100
+        return {
+            "titular": f"Cobertura (payout) no fiable: **{pc(e1)}** por una vía y **{pc(e2)}** por otra "
+                       f"(**{delta:.0f} pp** de diferencia).",
+            "detectado": f"He calculado el payout de {ticker} por dos vías —campo del proveedor "
+                         f"({pc(e1)}) y dividendo÷beneficio ({pc(e2)})— y difieren {delta:.0f} puntos.",
+            "importa": "Un payout tan distinto cambia si el valor **cumple la cobertura o queda capado**: "
+                       "si el bueno es el alto, el dividendo consume casi todo el beneficio → **Parcial, no Cumple**.",
+            "mirar": "El **beneficio por acción** del último ejercicio cerrado y el **dividendo ordinario** "
+                     "pagado; comprueba cuál de las dos cifras es la correcta (ojo: consolidado vs individual, "
+                     "**continuadas vs discontinuadas**, básico vs diluido).",
+            "donde_url": url_cnmv, "donde_txt": "Cuentas anuales — CNMV",
+            "resolver": resolver,
+            "tecnico": f"B1 · métrica payout · umbral divergencia 10 pp · estimadores E1={pc(e1)}, E2={pc(e2)}.",
+        }
+
+    if cod == "B2":
+        det, imp, mir, tec = [], [], [], []
+        if "payout" in v:
+            det.append(f"el **payout** es **{pc(v['payout'])}**, cerca del cap de riesgo (85%)")
+            imp.append("por encima del 85% el dividendo consume casi todo el beneficio y el valor se capa a Parcial")
+            mir.append("el **beneficio** y el **dividendo ordinario** del último ejercicio (payout = div ÷ BPA): "
+                       "por debajo del 85% → Cumple; por encima → el cap es correcto")
+            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, cap 85%)")
+        if "ev_ebitda" in v:
+            det.append(f"el **EV/EBITDA** es **{float(v['ev_ebitda']):.1f}×**, cerca del KO (22×)")
+            imp.append("por encima de 22× la valoración se marca incompatible con un yield atractivo")
+            mir.append("el **EBITDA** y la **deuda neta** del último ejercicio (el EV/EBITDA de fuentes "
+                       "automáticas varía según la definición)")
+            tec.append(f"ev_ebitda={float(v['ev_ebitda']):.1f}x (banda 20–24, KO 22)")
+        if "free_float" in v:
+            det.append(f"el **free float** es **{pc(v['free_float'])}**, cerca del veto por concentración (20%)")
+            imp.append("por debajo del 20% se veta por concentración accionarial")
+            mir.append("el **free float declarado y su base de cálculo** (en sociedades con varias clases de "
+                       "acción cambia mucho según se mida sobre el capital total o solo la clase cotizada)")
+            tec.append(f"free_float={pc(v['free_float'])} (banda 18–22%, veto 20%)")
+        titular = "Métrica en zona gris: " + "; ".join(det) + "."
+        return {
+            "titular": titular, "detectado": titular,
+            "importa": "Cerca del umbral la **precisión del dato decide** el veredicto — " + "; ".join(imp) + ".",
+            "mirar": "  ".join(f"{i+1}) {m}." for i, m in enumerate(mir)),
+            "donde_url": (url_ir if "free_float" in v else url_cnmv),
+            "donde_txt": "IR / cuentas — CNMV",
+            "resolver": resolver,
+            "tecnico": "B2 · " + " · ".join(tec),
+        }
+
+    if cod == "B3":
+        det, imp, mir, tec = [], [], [], []
+        if v.get("extra"):
+            det.append("ha pagado un **dividendo extraordinario** en la ventana")
+            imp.append("los extraordinarios inflan yield, payout y CAGR y no son renta recurrente")
+            mir.append("separar el **dividendo ordinario del extraordinario** en la política de dividendos; "
+                       "el ordinario es el que gobierna la sostenibilidad")
+            tec.append("extraordinario presente")
+        if v.get("hueco_serie"):
+            det.append("**falta un pago esperado** en la secuencia (hueco de serie)")
+            imp.append("la racha de años consecutivos puede estar rota por un dato ausente y no por una "
+                       "interrupción real — afecta al criterio de historial (K10)")
+            mir.append("si la empresa **pagó dividendo ese año** (dato ausente vs interrupción real) y en "
+                       "qué año cortó/reanudó")
+            tec.append("hueco de serie (pagos fuera de la racha, racha<7)")
+        if v.get("base_susp"):
+            det.append("el **año base del crecimiento (CAGR) tiene el dividendo ≈0** (suspendido)")
+            imp.append("una base ≈0 dispara una tasa de crecimiento artificial; se trata como n/d")
+            mir.append("el **año de reanudación** del dividendo y el DPA real de cada año")
+            tec.append("base suspendida (≈0)")
+        if v.get("salto_yoy") is not None:
+            det.append(f"el dividendo ordinario **cambió {float(v['salto_yoy'])*100:+.0f}%** de un año a otro "
+                       f"sin extraordinario que lo explique")
+            imp.append("puede ser un recorte/subida real, un especial mal clasificado o un error de datos")
+            mir.append("la **serie de dividendos por año** y si hubo algún pago especial")
+            tec.append(f"salto YoY {float(v['salto_yoy'])*100:+.0f}%")
+        if v.get("fuente_rancia"):
+            det.append("la **fuente del dato es nula o rancia**")
+            imp.append("sin dato fiable no se puede afirmar la cobertura")
+            mir.append("recuperar el dato de la **fuente oficial** más reciente")
+            tec.append("fuente nula/rancia")
+        titular = "Anomalía en la serie: " + "; ".join(det) + "."
+        return {
+            "titular": titular, "detectado": titular,
+            "importa": ("; ".join(imp)[:1].upper() + "; ".join(imp)[1:] + ".") if imp else "",
+            "mirar": "  ".join(f"{i+1}) {m}." for i, m in enumerate(mir)),
+            "donde_url": url_ir, "donde_txt": "Histórico de dividendos — IR / CNMV",
+            "resolver": resolver,
+            "tecnico": "B3 · " + " · ".join(tec),
+        }
+
+    if cod == "B-soft":
+        e2, pv = v.get("E2_dpa_bpa"), v.get("payout_vigente")
+        return {
+            "titular": f"El dato curado puede estar **obsoleto**: el estimador ({pc(e2)}) se ha separado "
+                       f"del payout curado vigente ({pc(pv)}).",
+            "detectado": f"El estimador automático da {pc(e2)} y el payout curado vigente es {pc(pv)}.",
+            "importa": "No cambia el veredicto (manda el dato curado), pero sugiere que el curado quedó "
+                       "desfasado (reformulación o nuevo ejercicio cerrado).",
+            "mirar": "compara el **BPA/dividendo curado** con las **últimas cuentas** publicadas.",
+            "donde_url": url_cnmv, "donde_txt": "Últimas cuentas — CNMV",
+            "resolver": "Refresca la curación en la pestaña *BPA por ejercicio* / *Dividendos* si hay nuevo "
+                        "ejercicio o reformulación.",
+            "tecnico": f"B-soft · E2={pc(e2)} vs vigente={pc(pv)} (umbral 15 pp)",
+        }
+
+    return {"titular": "Aviso sin plantilla de explicación.", "detectado": "", "importa": "",
+            "mirar": "", "donde_url": url_cnmv, "donde_txt": "CNMV", "resolver": resolver,
+            "tecnico": f"{cod} · valores={v}"}
+
+
 def _admin_bandeja_avisos(conn, _user, _pd):
     """Bandeja de avisos v2 (Spec v2 · D-006): valores marcados por el motor de banderas en el
     último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
@@ -10328,9 +10454,25 @@ def _admin_bandeja_avisos(conn, _user, _pd):
             for b in _bnds:
                 _cod, _hue = b.get("codigo"), b.get("huella")
                 _tipo = b.get("tipo"); _ya = b["_ya"]
-                _c1, _c2 = st.columns([6, 1])
+                _ex = _explicar_bandera(_cod, b.get("valores"), tk)   # explicación llana, cifras reales
+                _c1, _cinfo, _c2 = st.columns([5, 1, 1])
                 _pre = "✅ " if (_ya and _tipo == "capa") else ("ℹ️ " if _tipo != "capa" else "⚠️ ")
-                _c1.markdown(f"{_pre}**{_cod}** — {b.get('motivo','')}")
+                _c1.markdown(f"{_pre}{_ex['titular']}")   # LENGUAJE LLANO, nunca el código
+                with _cinfo:
+                    def _render_ayuda(_ex=_ex, _cod=_cod, _hue=_hue, _tk=tk, _nruns=nruns):
+                        st.markdown(f"**Qué he detectado.** {_ex['detectado']}")
+                        st.markdown(f"**Por qué importa.** {_ex['importa']}")
+                        st.markdown(f"**Qué mirar para confirmar.** {_ex['mirar']}")
+                        st.markdown(f"**Dónde mirarlo.** [{_ex['donde_txt']}]({_ex['donde_url']})")
+                        st.markdown(f"**Cómo se resuelve.** {_ex['resolver']}")
+                        if hasattr(st, "toggle") and st.toggle(
+                                "🔧 Ver detalle técnico", key=f"_tec_{_tk}_{_cod}_{_hue}"):
+                            st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  ⏳ {_nruns} run(s) marcado.")
+                    if hasattr(st, "popover"):
+                        with st.popover("ℹ️"):
+                            _render_ayuda()
+                    elif st.checkbox("ℹ️", key=f"_ay_{tk}_{_cod}_{_hue}"):
+                        _render_ayuda()
                 if _tipo == "capa" and not _ya:
                     if _c2.button("Aceptar", key=f"_acu_{tk}_{_cod}_{_hue}"):
                         try:
