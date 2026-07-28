@@ -13138,6 +13138,7 @@ def _calc_lente_a(div_raw, ticker: str, info: dict) -> dict | None:
             "yield_ordinario": lente.yield_actual(por, precio, "ordinario"),
             "cagr":           lente.cagr_ordinario(por),
             "tiene_extra":    any(por[a]["extraordinario"] > 0 or por[a]["scrip"] > 0 for a in por),
+            "por_ano":        por,          # v2: base de los estimadores/banderas (E2, base suspendida)
         }
     except Exception:                                   # noqa: BLE001
         return None
@@ -13756,7 +13757,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     "racha_anios":             _sc_anos_dividendo(dividends) if dividends is not None else None,
                     "ev_ebitda":               info.get("enterpriseToEbitda"),
                     "free_float":              _sc_free_float(info),
-                    "tiene_extraordinario":    _lente_a.get("tiene_extraordinario"),
+                    "tiene_extraordinario":    _lente_a.get("tiene_extra"),   # clave real de _calc_lente_a
                     "salto_yoy_ordinario":     None,   # diferido (ver banderas.py): evita fatiga de alertas
                     "base_suspendida":         _base_susp_v2,
                     "fuente_rancia":           False,
@@ -14004,13 +14005,17 @@ def _generar_pdf_screening(job: dict) -> bytes:
     ]]
     for r in resultado:
         eg    = r.get("estado_global", "error")
-        ehex  = ESTADO_HEX.get(eg, "#94a3b8")
-        elbl  = ESTADO_LABEL.get(eg, eg)
+        if r.get("revisar"):                       # v2: capado por bandera (nunca Cumple)
+            ehex, elbl = "#b45309", "Revisar"
+        else:
+            ehex  = ESTADO_HEX.get(eg, "#94a3b8")
+            elbl  = ESTADO_LABEL.get(eg, eg)
         score = r.get("puntuacion", 0)
         nombre = (r.get("nombre") or r.get("ticker", ""))[:38]
         # #C — Motivo: restricción que fija el veredicto (veto/cap), o "—" si por puntuación.
         if r.get("no_apto"):       _mot, _mhex = "sin dividendo", "#94a3b8"
         elif r.get("error"):       _mot, _mhex = "—", "#94a3b8"
+        elif r.get("revisar"):     _mot, _mhex = (r.get("motivo_revisar") or "revisar"), "#b45309"
         else:
             _mot  = r.get("motivo", "—")
             _mhex = _MOT_HEX.get(r.get("motivo_tipo", "score"), "#94a3b8")
