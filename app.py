@@ -10256,12 +10256,14 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
     hoy = _dt.date.today().isoformat()
     cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in curacion.leer_empresas(conn)}
     n_nuevos = n_saltados = 0
+    eventos_total = 0
     sin_ficha = []
     errores = []
     for _nombre, ticker in tickers_nombres.items():
         if ticker not in cierres:
             sin_ficha.append(ticker); continue
         for exd, imp in lente.eventos_yfinance(ticker):
+            eventos_total += 1
             if imp is None or imp <= 0:
                 continue
             _ex = exd if hasattr(exd, "year") else _dt.date.fromisoformat(str(exd)[:10])
@@ -10283,7 +10285,8 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
                 n_saltados += 1
                 if len(errores) < 6:
                     errores.append(f"{ticker} {d.get('ex_date')}: {ex}")
-    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha, "errores": errores}
+    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha,
+            "errores": errores, "eventos": eventos_total}
 
 
 def _admin_curacion_dividendos():
@@ -10476,7 +10479,10 @@ def _admin_curacion_dividendos():
                 try:
                     _res = refresco_masivo_dividendos(conn, IBEX_35, desde_ano=int(_desde))
                     _m = (f"✅ Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} saltados "
-                          f"(desde {int(_desde)}).")
+                          f"· eventos yfinance: {_res.get('eventos', 0)} (desde {int(_desde)}).")
+                    if _res.get("eventos", 0) == 0:
+                        _m = ("⚠️ yfinance no devolvió NINGÚN evento (0). Probable límite de Yahoo por IP "
+                              "tras muchas descargas — reintenta en unos minutos. No es un fallo de datos.")
                     if _res["sin_ficha"]:
                         _m += " Sin ficha: " + ", ".join(_res["sin_ficha"])
                     if _res.get("errores"):
@@ -13724,12 +13730,60 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             if _n_extra > 0:
                 motivo += f"  (+{_n_extra})"
 
+        # ── v2 · Motor de avisos por excepción (banderas B1/B2/B3) — Spec v2 ──
+        # Estimadores del payout AL VUELO + banderas. Si hay bandera-capa, el veredicto NO
+        # puede ser "Cumple": se capa a Parcial y se marca 'revisar' (tercer estado D-001,
+        # score intacto). En zona segura (sin bandera) el veredicto fluye normal (puede Cumple).
+        # Los KO (BPA<0, recorte) ya los gobierna el motor (K1-BPA/K2): no se duplican aquí.
+        # Silencio por acuse/override -> Paso 4-5 (aún no); por defecto toda bandera capa (seguro).
+        banderas_v2, revisar, motivo_revisar = [], False, None
+        if _es_cartera_div and _lente_a is not None:
+            try:
+                import banderas as _bnd
+                import datetime as _dt_v2
+                _por_v2  = _lente_a.get("por_ano", {}) or {}
+                _hoy_v2  = _dt_v2.date.today().year
+                _cerr_v2 = sorted(a for a in _por_v2 if a < _hoy_v2)
+                _ult_v2  = _cerr_v2[-1] if _cerr_v2 else None
+                _div_ord_ej = _por_v2[_ult_v2]["ordinario"] if _ult_v2 else None
+                _ords6 = [_por_v2[a]["ordinario"] for a in _cerr_v2[-6:] if _por_v2[a]["ordinario"] > 0]
+                _base_susp_v2 = bool(_ords6) and min(_ords6) <= 0.01
+                _ctx_v2 = {
+                    "payout_campo":            info.get("payoutRatio"),
+                    "dividendo_ord_ejercicio": _div_ord_ej,
+                    "eps":                     info.get("trailingEps"),
+                    "yield_ordinario":         _lente_a.get("yield_ordinario"),
+                    "racha_anios":             _sc_anos_dividendo(dividends) if dividends is not None else None,
+                    "ev_ebitda":               info.get("enterpriseToEbitda"),
+                    "free_float":              _sc_free_float(info),
+                    "tiene_extraordinario":    _lente_a.get("tiene_extraordinario"),
+                    "salto_yoy_ordinario":     None,   # diferido (ver banderas.py): evita fatiga de alertas
+                    "base_suspendida":         _base_susp_v2,
+                    "fuente_rancia":           False,
+                    "sector_financiero":       "financial" in (info.get("sector") or "").strip().lower(),
+                    "payout_vigente":          None,
+                }
+                _res_v2 = _bnd.evaluar_banderas(_ctx_v2)
+                banderas_v2 = _res_v2["banderas"]
+                if _res_v2["capa_veredicto"]:
+                    if estado_global == "cumple":
+                        estado_global = "parcial"          # nunca Cumple con bandera activa
+                    if estado_global != "no_cumple":
+                        revisar = True
+                        _cods_v2 = " + ".join(b["codigo"] for b in banderas_v2 if b["tipo"] == "capa")
+                        motivo_revisar = f"revisar · {_cods_v2}"
+            except Exception:
+                banderas_v2, revisar, motivo_revisar = [], False, None
+
         return {
             "ticker":                ticker,
             "nombre":                nombre,
             "puntuacion":            puntuacion,
             "puntuacion_raw":        puntuacion_raw,
             "estado_global":         estado_global,
+            "revisar":               revisar,         # v2: capado por bandera (nunca Cumple)
+            "banderas_v2":           banderas_v2,      # v2: [{codigo,tipo,motivo,valores,huella}]
+            "motivo_revisar":        motivo_revisar,   # v2: banderas que gobiernan el "revisar"
             "motivo":                motivo,        # #C: restricción que fija el veredicto
             "motivo_tipo":           motivo_tipo,   # "veto" | "cap" | "score"
             "criterios":             resultados_criterios,
@@ -14183,7 +14237,7 @@ def _render_screening_resultados(job: dict):
         score  = r.get("puntuacion", 0)
         nombre = r.get("nombre", r.get("ticker", ""))
         ticker = r.get("ticker", "")
-        icono   = ICONO_GLOBAL.get(eg, "💥")
+        icono   = "🔎" if r.get("revisar") else ICONO_GLOBAL.get(eg, "💥")
         _n_na_r = r.get("n_na", 0)
         _n_ev_r = r.get("n_evaluados", r.get("n_total_criterios", 0))
         _suf_r  = (f" — {_n_ev_r} evaluables, {_n_na_r} sin datos"
@@ -14191,7 +14245,7 @@ def _render_screening_resultados(job: dict):
         _inc_r  = "  ⚠️ *Incompleto*" if r.get("evaluacion_incompleta") else ""
         # #C — Motivo en la etiqueta: hace legible por qué un score alto puede tener veredicto
         # limitado (veto/cap) frente a un Parcial por puntuación ("—" no se muestra).
-        _mot_r   = r.get("motivo", "—")
+        _mot_r   = (r.get("motivo_revisar") if r.get("revisar") else r.get("motivo", "—"))
         _mot_lbl = f"   |   {_mot_r}" if (_mot_r and _mot_r != "—") else ""
         label  = (f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
                   f"{_mot_lbl}{_suf_r}{_inc_r}")
@@ -14208,7 +14262,8 @@ def _render_screening_resultados(job: dict):
                     unsafe_allow_html=True
                 )
             else:
-                _badge_eg = ("✅ Cumple" if eg=="cumple"
+                _badge_eg = ("🔎 Revisar (nunca Cumple)" if r.get("revisar")
+                             else "✅ Cumple" if eg=="cumple"
                              else "⚠️ Cumple parcialmente" if eg=="parcial"
                              else "❌ No cumple")
                 _n_na_exp = r.get("n_na", 0)
@@ -14234,6 +14289,23 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
+                # ── v2 · Banderas de aviso (por qué "revisar") ──
+                _bnds = r.get("banderas_v2") or []
+                if _bnds:
+                    _items = "".join(
+                        f'<li><b>{b.get("codigo")}</b> — {b.get("motivo","")}</li>' for b in _bnds)
+                    _cap = any(b.get("tipo") == "capa" for b in _bnds)
+                    _col = "#b45309" if _cap else "#0369a1"
+                    _bg  = "#fffbeb" if _cap else "#f0f9ff"
+                    _hdr = ('🔎 Avisos v2 — capan el veredicto bajo «Cumple» hasta revisar'
+                            if _cap else 'ℹ️ Aviso v2 (informativo) — no cambia el veredicto')
+                    st.markdown(
+                        f'<div style="padding:8px 12px;margin-bottom:8px;background:{_bg};'
+                        f'border-left:4px solid {_col};border-radius:6px;font-size:0.78rem;color:{_col}">'
+                        f'<b>{_hdr}</b>'
+                        f'<ul style="margin:4px 0 0 16px;padding:0">{_items}</ul>'
+                        f'</div>',
+                        unsafe_allow_html=True)
                 # ── Bloque "Renta" (Lente A) — yield ordinario (K3), renta año natural, CAGR con guarda ──
                 _la = r.get("lente_a")
                 if _la:
