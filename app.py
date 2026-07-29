@@ -10396,6 +10396,17 @@ def _explicar_bandera(cod, valores, ticker):
             imp.append("sin dato fiable no se puede afirmar la cobertura")
             mir.append("recuperar el dato de la **fuente oficial** más reciente")
             tec.append("fuente nula/rancia")
+        if not det:
+            return {
+                "titular": "Anomalía en la serie marcada, pero sin detalle en este registro.",
+                "detectado": f"El registro de {ticker} no guardó el tipo de anomalía (es de un run "
+                             f"anterior a la mejora del log). **Relanza el screening** para ver qué la "
+                             f"provoca (extraordinario, hueco de serie, base suspendida…).",
+                "importa": "El capado sigue vigente por seguridad hasta reevaluar.",
+                "mirar": "Relanza el screening de dividendos y vuelve a abrir este aviso.",
+                "donde_url": url_ir, "donde_txt": "Histórico de dividendos — IR / CNMV",
+                "resolver": resolver, "tecnico": "B3 · anomalía no persistida (run antiguo).",
+            }
         titular = "Anomalía en la serie: " + "; ".join(det) + "."
         return {
             "titular": titular, "detectado": titular,
@@ -10663,11 +10674,16 @@ def _admin_curacion_dividendos():
                                 st.success(f"Dividendo {_d_tk} {_d_ex.isoformat()} ({_d_tipo}) guardado (v{ver}).")
                             except Exception as ex:
                                 st.error(f"Error al guardar: {ex}")
-                _divs = curacion.leer_dividendos(conn)
+                st.markdown(f"**Dividendos vigentes curados de {_d_tk}:**")
+                _divs = curacion.leer_dividendos(conn, ticker=_d_tk)   # filtra por el ticker seleccionado
                 if _divs:
                     st.dataframe(_pd.DataFrame(_divs)[["ticker", "ex_date", "pay_date", "importe_eur",
                                  "tipo", "con_cargo_a_ejercicio", "confianza", "version"]],
                                  hide_index=True, use_container_width=True)
+                else:
+                    st.caption(f"Sin dividendos curados a mano para {_d_tk}. (Los eventos automáticos "
+                               "viven en «Refresco masivo» y en la «Bandeja de avisos»; esta pestaña es "
+                               "solo para altas/correcciones manuales que mandan sobre el estimador.)")
 
         with _t_ref:
             st.markdown("**Paso 1 — Fichas de empresa** (prerrequisito para colgar los dividendos)")
