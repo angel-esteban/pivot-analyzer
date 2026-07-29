@@ -10374,12 +10374,23 @@ def _explicar_bandera(cod, valores, ticker):
                        "el ordinario es el que gobierna la sostenibilidad")
             tec.append("extraordinario presente")
         if v.get("hueco_serie"):
-            det.append("**falta un pago esperado** en la secuencia (hueco de serie)")
-            imp.append("la racha de años consecutivos puede estar rota por un dato ausente y no por una "
-                       "interrupción real — afecta al criterio de historial (K10)")
-            mir.append("si la empresa **pagó dividendo ese año** (dato ausente vs interrupción real) y en "
-                       "qué año cortó/reanudó")
-            tec.append("hueco de serie (pagos fuera de la racha, racha<7)")
+            _hs = v["hueco_serie"]
+            _anos = list(_hs) if isinstance(_hs, (list, tuple)) else []
+            _anos_txt = ", ".join(str(a) for a in _anos)
+            _pandemia = any(a in (2020, 2021) for a in _anos)
+            det.append(f"**falta el pago esperado de {_anos_txt}**" if _anos
+                       else "**falta un pago esperado** en la secuencia (hueco de serie)")
+            if _pandemia:
+                imp.append("el hueco cae en **2020/2021 (pandemia)** — casi con seguridad una suspensión "
+                           "conocida por COVID, no un error de datos: **no hace falta investigar mucho más**")
+                mir.append(f"basta confirmar que el corte fue en **{_anos_txt}** (año COVID) y cuándo reanudó; "
+                           "si es así, **Aceptar** (interrupción real y conocida)")
+            else:
+                imp.append("la racha de años consecutivos puede estar rota por un **dato ausente** y no por "
+                           "una interrupción real — afecta al criterio de historial (K10)")
+                mir.append(f"si la empresa **pagó dividendo en {_anos_txt or 'el año del hueco'}** "
+                           "(dato ausente vs corte real) y en qué año reanudó")
+            tec.append(f"hueco de serie · años {_anos_txt or 'n/d'} (pagos fuera de la racha, racha<7)")
         if v.get("base_susp"):
             det.append("el **año base del crecimiento (CAGR) tiene el dividendo ≈0** (suspendido)")
             imp.append("una base ≈0 dispara una tasa de crecimiento artificial; se trata como n/d")
@@ -13996,7 +14007,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 _racha_v2, _yy_v2 = 0, (_cerr_v2[-1] if _cerr_v2 else None)
                 while _yy_v2 in _por_v2 and _por_v2[_yy_v2]["ordinario"] > 0:
                     _racha_v2 += 1; _yy_v2 -= 1
-                _hueco_v2 = (len(_pagos_v2) > _racha_v2) and (_racha_v2 < 7)
+                _es_hueco = (len(_pagos_v2) > _racha_v2) and (_racha_v2 < 7)
+                # años del hueco = años SIN pago entre el primero y el último con pago (la 'fecha esperada')
+                _hueco_v2 = ([a for a in range(min(_pagos_v2), max(_pagos_v2) + 1) if a not in _pagos_v2]
+                             if (_es_hueco and _pagos_v2) else [])
                 _ctx_v2 = {
                     "payout_campo":            info.get("payoutRatio"),
                     "dividendo_ord_ejercicio": _div_ord_ej,

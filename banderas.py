@@ -149,9 +149,12 @@ def evaluar_banderas(ctx: dict) -> dict:
     if ctx.get("base_suspendida"):
         motivos_b3.append("base de dividendo suspendida/reanudada (≈0)")
         vals_b3["base_susp"] = True
-    if ctx.get("hueco_serie"):
-        motivos_b3.append("hueco en la serie de dividendo (interrupción/año sin pago)")
-        vals_b3["hueco_serie"] = True
+    _hs = ctx.get("hueco_serie")
+    if _hs:
+        _anos_hs = ", ".join(str(a) for a in _hs) if isinstance(_hs, (list, tuple)) else ""
+        motivos_b3.append(f"hueco en la serie de dividendo ({_anos_hs})" if _anos_hs
+                          else "hueco en la serie de dividendo (interrupción/año sin pago)")
+        vals_b3["hueco_serie"] = list(_hs) if isinstance(_hs, (list, tuple)) else True
     if ctx.get("fuente_rancia"):
         motivos_b3.append("fuente nula o rancia")
         vals_b3["fuente_rancia"] = True
