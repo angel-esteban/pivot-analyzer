@@ -10639,7 +10639,11 @@ def _admin_curacion_dividendos():
                 _b_rep = c6.number_input("Beneficio reportado (M€, opcional)",
                                          value=None, step=1.0, format="%.2f", key="_bpa_rep")
                 c7, c8 = st.columns(2)
-                _b_na = c7.number_input("Nº de acciones (>0)", value=None, step=1.0, format="%.0f", key="_bpa_na")
+                _b_na_m = c7.number_input("Nº de acciones (en MILLONES, p. ej. 261,99)",
+                                          value=None, step=1.0, format="%.4f", key="_bpa_na",
+                                          help="En millones, coherente con el beneficio en M€ "
+                                               "(Enagás ≈ 261,99). La app lo convierte a absoluto para guardar.")
+                _b_na = _b_na_m * 1_000_000 if _b_na_m is not None else None
                 _b_dpa = c8.number_input("Dividendo por acción con cargo (€)",
                                          value=None, step=0.01, format="%.4f", key="_bpa_dpa")
                 # ── Derivados (solo lectura, calculados en vivo) ──
@@ -10653,12 +10657,16 @@ def _admin_curacion_dividendos():
                 else:
                     _pay_s = "—"
                 _cap85 = (_calc["payout"] is not None and _calc["payout"] >= 0.85)
+                # sanidad de unidades: un BPA fuera de rango razonable suele ser acciones mal escaladas
+                _bpa_raro = _calc["bpa"] is not None and (abs(_calc["bpa"]) > 200 or 0 < abs(_calc["bpa"]) < 0.01)
                 st.markdown(
                     f'<div style="padding:8px 12px;margin:4px 0;border-radius:6px;'
-                    f'background:{"#fffbeb" if _cap85 else "#f0f9ff"};'
-                    f'border-left:4px solid {"#b45309" if _cap85 else "#0ea5e9"};font-size:0.85rem">'
+                    f'background:{"#fee2e2" if _bpa_raro else ("#fffbeb" if _cap85 else "#f0f9ff")};'
+                    f'border-left:4px solid {"#dc2626" if _bpa_raro else ("#b45309" if _cap85 else "#0ea5e9")};font-size:0.85rem">'
                     f'📐 <b>Derivados (solo lectura)</b> — BPA: <b>{_bpa_s}</b> · Dividendo total: {_dt_s} · '
-                    f'Payout: <b>{_pay_s}</b>{" ⚠️ ≥85% → cap K1-Payout (Parcial)" if _cap85 else ""}</div>',
+                    f'Payout: <b>{_pay_s}</b>'
+                    f'{" ⚠️ ≥85% → cap K1-Payout (Parcial)" if (_cap85 and not _bpa_raro) else ""}'
+                    f'{" 🚩 BPA implausible — revisa el nº de acciones (en MILLONES)" if _bpa_raro else ""}</div>',
                     unsafe_allow_html=True)
                 c9, c10, c11 = st.columns(3)
                 _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", key="_bpa_fte")
