@@ -10180,11 +10180,11 @@ _SECTORES_CURACION = [
 def _reconciliar_bpa_yf(conn, ticker, ejercicio, bpa):
     """Payout con dividendos ordinarios curados del ejercicio vs payoutRatio de yfinance (R1).
     Degrada con gracia: si falta algo, confianza media y sin reconciliación (no bloquea)."""
-    import curacion
+    import verificacion
     payout_calc = None
     try:
         if bpa and float(bpa) != 0:
-            divs = curacion.leer_dividendos(conn, ticker)
+            divs = verificacion.leer_dividendos(conn, ticker)
             _sum = sum(float(d["importe_eur"]) for d in divs
                        if d.get("tipo") == "ordinario" and d.get("con_cargo_a_ejercicio") == ejercicio
                        and d.get("importe_eur") is not None)
@@ -10198,7 +10198,7 @@ def _reconciliar_bpa_yf(conn, ticker, ejercicio, bpa):
         payout_yf = yf.Ticker(ticker).info.get("payoutRatio")
     except Exception:
         payout_yf = None
-    rev, conf, delta = curacion.reconciliar_payout(payout_calc, payout_yf)
+    rev, conf, delta = verificacion.reconciliar_payout(payout_calc, payout_yf)
     return payout_calc, payout_yf, rev, conf, delta
 
 
@@ -10210,9 +10210,9 @@ def sembrar_fichas_ibex35(conn) -> dict:
     sector de yfinance, cierre conocido (LOG 30-sep, ITX 31-ene; resto 31-dic a confirmar) y
     clase_exclusion inferida del sector. Es dimensión (no ciclo borrador). El curador debe
     REVISAR sector/clase y confirmar el cierre. No sobrescribe fichas ya existentes."""
-    import curacion
+    import verificacion
     import yfinance as yf
-    existentes = {e["ticker"] for e in curacion.leer_empresas(conn)}
+    existentes = {e["ticker"] for e in verificacion.leer_empresas(conn)}
     creadas = saltadas = 0
     errores = []
     for nombre, ticker in IBEX_35.items():
@@ -10231,7 +10231,7 @@ def sembrar_fichas_ibex35(conn) -> dict:
                       else "reit_socimi" if (_sl == "real estate" and _ind.startswith("reit"))
                       else "estandar")
             _cie, _conf = _CIERRE_ESPECIAL.get(ticker, ("12-31", False))
-            curacion.guardar_empresa(conn, {
+            verificacion.guardar_empresa(conn, {
                 "ticker": ticker, "nombre": nombre, "cierre_ejercicio": _cie,
                 "cierre_confirmado": _conf, "sector": _sec, "clase_exclusion": _clase,
                 "notas": "Ficha sembrada automáticamente — revisar sector/clase y confirmar cierre."},
@@ -10252,9 +10252,9 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
     (FK). El curador revisa y promueve. `desde_ano` acota a eventos con ex_date.year >= desde_ano
     (yfinance devuelve décadas de historial; para curar bastan los años recientes).
     Devuelve resumen {nuevos, saltados, sin_ficha, errores}."""
-    import curacion, lente, datetime as _dt
+    import verificacion, lente, datetime as _dt
     hoy = _dt.date.today().isoformat()
-    cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in curacion.leer_empresas(conn)}
+    cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in verificacion.leer_empresas(conn)}
     n_nuevos = n_saltados = 0
     eventos_total = 0
     sin_ficha = []
@@ -10270,10 +10270,10 @@ def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | Non
             if desde_ano and _ex.year < desde_ano:
                 continue
             d = {"ticker": ticker, "ex_date": _ex.isoformat(), "importe_eur": round(float(imp), 6),
-                 "tipo": "ordinario", "con_cargo_a_ejercicio": curacion.heuristica_con_cargo(_ex, cierres[ticker]),
+                 "tipo": "ordinario", "con_cargo_a_ejercicio": verificacion.heuristica_con_cargo(_ex, cierres[ticker]),
                  "fuente": "yfinance (evento observado)", "fecha_verificacion": hoy, "verificado_por": "refresco_auto"}
             try:
-                if curacion.guardar_dividendo_borrador(conn, d, "refresco_auto"):
+                if verificacion.guardar_dividendo_borrador(conn, d, "refresco_auto"):
                     n_nuevos += 1
                 else:
                     n_saltados += 1
@@ -10555,8 +10555,8 @@ def _periodo_desde_cierre(ejercicio: str, cierre: str) -> str:
 
 def _admin_curacion_dividendos():
     """Verificación del golden record de dividendos (spec DosLentes v1 + rediseño BPA 2026-07-29).
-    Escribe a Neon vía curacion.py (modo una-persona: directo a vigente, con versionado)."""
-    import curacion
+    Escribe a Neon vía verificacion.py (modo una-persona: directo a vigente, con versionado)."""
+    import verificacion
     import pandas as _pd
     _user = st.session_state.get("usuario", {}).get("username", "admin")
     st.markdown("### 📝 Verificación de dividendos — golden record")
@@ -10587,7 +10587,7 @@ def _admin_curacion_dividendos():
                 _e_ticker = c1.text_input("Ticker (XXX.MC)").strip().upper()
                 _e_nombre = c2.text_input("Nombre")
                 c3, c4, c5 = st.columns(3)
-                _e_cierre_k = c3.selectbox("Cierre de ejercicio", list(curacion.CIERRES.keys()), index=0)
+                _e_cierre_k = c3.selectbox("Cierre de ejercicio", list(verificacion.CIERRES.keys()), index=0)
                 _e_conf = c4.checkbox("Cierre confirmado (IR)")
                 _e_clase = c5.selectbox("Clase exclusión", ["estandar", "banca_seguros", "reit_socimi"])
                 _e_sector = st.selectbox("Sector", _SECTORES_CURACION)
@@ -10598,9 +10598,9 @@ def _admin_curacion_dividendos():
                     st.warning(f"E6: para el sector «{_e_sector}» lo habitual es clase «{_sug}». Revísalo.")
                 if st.form_submit_button("💾 Guardar ficha", use_container_width=True):
                     try:
-                        curacion.guardar_empresa(conn, {
+                        verificacion.guardar_empresa(conn, {
                             "ticker": _e_ticker, "nombre": _e_nombre,
-                            "cierre_ejercicio": curacion.CIERRES[_e_cierre_k],
+                            "cierre_ejercicio": verificacion.CIERRES[_e_cierre_k],
                             "cierre_confirmado": _e_conf, "sector": _e_sector,
                             "clase_exclusion": _e_clase, "notas": _e_notas}, _user)
                         st.success(f"Ficha de {_e_ticker} guardada.")
@@ -10608,14 +10608,14 @@ def _admin_curacion_dividendos():
                         st.error(str(ex))
                     except Exception as ex:
                         st.error(f"Error al guardar: {ex}")
-            _emps = curacion.leer_empresas(conn)
+            _emps = verificacion.leer_empresas(conn)
             if _emps:
                 st.dataframe(_pd.DataFrame(_emps)[["ticker", "nombre", "cierre_ejercicio",
                              "cierre_confirmado", "sector", "clase_exclusion"]],
                              hide_index=True, use_container_width=True)
 
         with _t_bpa:
-            _empresas = {e["ticker"]: e for e in curacion.leer_empresas(conn)}
+            _empresas = {e["ticker"]: e for e in verificacion.leer_empresas(conn)}
             _tickers = list(_empresas.keys())
             if not _tickers:
                 st.info("Crea antes al menos una Ficha de empresa.")
@@ -10643,7 +10643,7 @@ def _admin_curacion_dividendos():
                 _b_dpa = c8.number_input("Dividendo por acción con cargo (€)",
                                          value=None, step=0.01, format="%.4f", key="_bpa_dpa")
                 # ── Derivados (solo lectura, calculados en vivo) ──
-                _calc = curacion.calcular_bpa_payout(_b_rec, _b_na, _b_dpa)
+                _calc = verificacion.calcular_bpa_payout(_b_rec, _b_na, _b_dpa)
                 _bpa_s = f"{_calc['bpa']:.4f} €/acc" if _calc["bpa"] is not None else "—"
                 _dt_s = f"{_calc['dividendo_total_meur']:.1f} M€" if _calc["dividendo_total_meur"] is not None else "—"
                 if _calc["payout"] is not None:
@@ -10672,7 +10672,7 @@ def _admin_curacion_dividendos():
                           "dividendo_por_accion_eur": _b_dpa, "fuente": _b_fte, "url": _b_url or None,
                           "fecha_verificacion": date.today().isoformat(), "verificado_por": _b_vp,
                           "cierre_no_dic": _cierre_no_dic}
-                    _err, _avi = curacion.validar_bpa(_d)
+                    _err, _avi = verificacion.validar_bpa(_d)
                     for _a in _avi:
                         st.warning(_a)
                     if _err:
@@ -10692,7 +10692,7 @@ def _admin_curacion_dividendos():
                             _rev = _delta > 10
                         _conf_final = "baja" if (_rev or _b_conf == "baja") else _b_conf
                         try:
-                            ver = curacion.publicar_bpa(conn, _d, _user,
+                            ver = verificacion.publicar_bpa(conn, _d, _user,
                                                         revision_requerida=_rev, confianza=_conf_final)
                             st.success(f"BPA {_b_tk} {_b_ej} guardado (v{ver}) — BPA {_bpa_s}, "
                                        f"payout {_pay_s}, confianza {_conf_final}.")
@@ -10703,7 +10703,7 @@ def _admin_curacion_dividendos():
                         except Exception as ex:
                             st.error(f"Error al guardar: {ex}")
                 st.markdown(f"**BPA vigentes verificados de {_b_tk}:**")
-                _bpas = curacion.leer_bpa(conn, ticker=_b_tk)
+                _bpas = verificacion.leer_bpa(conn, ticker=_b_tk)
                 if _bpas:
                     _cols_bpa = [c for c in ["ejercicio", "base_beneficio", "beneficio_recurrente_meur",
                                  "numero_acciones", "dividendo_por_accion_eur", "bpa_auditado",
@@ -10714,7 +10714,7 @@ def _admin_curacion_dividendos():
                     st.caption(f"Sin BPA verificado para {_b_tk}.")
 
         with _t_div:
-            _tickers = [e["ticker"] for e in curacion.leer_empresas(conn)]
+            _tickers = [e["ticker"] for e in verificacion.leer_empresas(conn)]
             if not _tickers:
                 st.info("Crea antes al menos una Ficha de empresa.")
             else:
@@ -10742,7 +10742,7 @@ def _admin_curacion_dividendos():
                               "importe_eur": _d_imp, "tipo": _d_tipo,
                               "con_cargo_a_ejercicio": _d_cc or None, "fuente": _d_fte, "url": _d_url or None,
                               "fecha_verificacion": _d_fv.isoformat(), "verificado_por": _d_vp}
-                        _err, _avi = curacion.validar_dividendo(_d)
+                        _err, _avi = verificacion.validar_dividendo(_d)
                         for _a in _avi:
                             st.warning(_a)
                         if _err:
@@ -10750,12 +10750,12 @@ def _admin_curacion_dividendos():
                                 st.error(_e)
                         else:
                             try:
-                                ver = curacion.publicar_dividendo(conn, _d, _user, confianza=_d_conf)
+                                ver = verificacion.publicar_dividendo(conn, _d, _user, confianza=_d_conf)
                                 st.success(f"Dividendo {_d_tk} {_d_ex.isoformat()} ({_d_tipo}) guardado (v{ver}).")
                             except Exception as ex:
                                 st.error(f"Error al guardar: {ex}")
                 st.markdown(f"**Dividendos vigentes verificados de {_d_tk}:**")
-                _divs = curacion.leer_dividendos(conn, ticker=_d_tk)   # filtra por el ticker seleccionado
+                _divs = verificacion.leer_dividendos(conn, ticker=_d_tk)   # filtra por el ticker seleccionado
                 if _divs:
                     st.dataframe(_pd.DataFrame(_divs)[["ticker", "ex_date", "pay_date", "importe_eur",
                                  "tipo", "con_cargo_a_ejercicio", "confianza", "version"]],
@@ -10810,7 +10810,7 @@ def _admin_curacion_dividendos():
             if _c_ref2.button("🧹 Vaciar todos los borradores (re-sembrar limpio)",
                               key="_cur_ref_vaciar"):
                 try:
-                    _nb = curacion.vaciar_borradores_dividendo(conn)
+                    _nb = verificacion.vaciar_borradores_dividendo(conn)
                     st.session_state["_cur_ref_msg"] = (f"🧹 {_nb} borradores eliminados. "
                                                         "No afecta a 'vigente' (el motor no lo lee).")
                 except Exception as _ex:
@@ -10821,7 +10821,7 @@ def _admin_curacion_dividendos():
             if st.session_state.get("_cur_ref_msg"):
                 st.info(st.session_state.pop("_cur_ref_msg"))
             st.divider()
-            _bors = curacion.leer_borradores_dividendo(conn)
+            _bors = verificacion.leer_borradores_dividendo(conn)
             st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")
             if _bors:
                 _tks_bor = sorted({b["ticker"] for b in _bors})
@@ -10849,7 +10849,7 @@ def _admin_curacion_dividendos():
                     _n = 0
                     for _idb in _ids_marcados:
                         try:
-                            curacion.promover_dividendo(conn, _idb, _user); _n += 1
+                            verificacion.promover_dividendo(conn, _idb, _user); _n += 1
                         except Exception as _ex:
                             st.error(f"id {_idb}: {_ex}")
                     if _n:
@@ -10861,7 +10861,7 @@ def _admin_curacion_dividendos():
                     _n = 0
                     for _b in _bors_v:
                         try:
-                            curacion.promover_dividendo(conn, int(_b["id"]), _user); _n += 1
+                            verificacion.promover_dividendo(conn, int(_b["id"]), _user); _n += 1
                         except Exception as _ex:
                             st.error(f"id {_b['id']}: {_ex}")
                     if _n:

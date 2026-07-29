@@ -1,12 +1,12 @@
-# 📖 Guía de curación de dividendos — con ejemplo de Naturgy
+# 📖 Guía de verificación de dividendos — con ejemplo de Naturgy
 
-Esta guía explica **cómo curar a mano** los datos de dividendo del *golden record* y **por qué** se hace así. La usamos como referencia cada vez que damos de alta o corregimos un valor.
+Esta guía explica **cómo verificar a mano** los datos de dividendo del *golden record* y **por qué** se hace así. La usamos como referencia cada vez que damos de alta o corregimos un valor.
 
 ---
 
 ## 1. La idea en una frase
 
-El screening de dividendos necesita saber **cuánto renta un valor** y **si ese dividendo es sostenible**. Esas dos preguntas se responden con **dos lentes** distintas, y ambas se apoyan en datos que hay que **curar a mano desde fuentes oficiales**, porque el proveedor automático (yfinance) no los da bien o no los distingue.
+El screening de dividendos necesita saber **cuánto renta un valor** y **si ese dividendo es sostenible**. Esas dos preguntas se responden con **dos lentes** distintas, y ambas se apoyan en datos que hay que **verificar a mano desde fuentes oficiales**, porque el proveedor automático (yfinance) no los da bien o no los distingue.
 
 - **Lente A — Renta:** ¿cuánto me da al año? → por **año natural**.
 - **Lente B — Cobertura (payout):** ¿es sostenible? → por **ejercicio contable**.
@@ -21,13 +21,13 @@ El screening de dividendos necesita saber **cuánto renta un valor** y **si ese 
 
 > No confundas **dividendo** con **BPA**. El "1,77 €/acción de 2025" de Naturgy es el **dividendo**, no el beneficio por acción. El payout = dividendo ÷ BPA.
 >
-> Y se cura **el último ejercicio cerrado y auditado**: a julio de 2026 es **FY2025** (cerrado el 31-dic-2025, cuentas publicadas en febrero de 2026), no 2024.
+> Y se verifica **el último ejercicio cerrado y auditado**: a julio de 2026 es **FY2025** (cerrado el 31-dic-2025, cuentas publicadas en febrero de 2026), no 2024.
 
 ---
 
 ## 3. El flujo
 
-**Formulario en pantalla → validación → Neon (fuente del motor).** Tú rellenas los formularios de *Administración → Curación dividendos*; al guardar, se valida y se escribe **directo a "vigente"** con versionado. Editar un dato **no lo sobrescribe**: crea una versión nueva y retira la anterior (así un run antiguo sigue siendo reproducible).
+**Formulario en pantalla → validación → Neon (fuente del motor).** Rellenas los formularios de *Administración → Verificación de dividendos*; al guardar, se valida y se escribe **directo a "vigente"** con versionado. Editar un dato **no lo sobrescribe**: crea una versión nueva y retira la anterior (así un run antiguo sigue siendo reproducible).
 
 ---
 
@@ -39,10 +39,25 @@ Identidad del emisor. Campos clave:
 - `cierre_ejercicio`: la fecha de cierre contable. **No todas cierran en diciembre** (Logista 30-sep, Inditex 31-ene). Naturgy: **31-dic**.
 - `clase_exclusion`: `estandar` (métricas normales) · `banca_seguros` (payout/EV-EBITDA/D-E no aplican) · `reit_socimi` (FCF/EV-EBITDA no aplican).
 
-### 4.2. BPA por ejercicio (el eslabón débil)
-- `bpa_auditado`: beneficio **por acción** del ejercicio, del **informe anual / CNMV**. Se permite **negativo** (Telefónica lo tiene).
+### 4.2. BPA por ejercicio — se introducen CIFRAS CRUDAS (rediseño 2026-07-29)
+No se teclea un BPA ya cocinado ("el BPA del informe" es ambiguo: individual vs consolidado, reportado vs recurrente — ahí se cometen los errores). Se copian del informe las cifras **tal cual aparecen** y la app calcula el BPA y el payout:
+
+**Entrada** (lo que copias del informe):
+- `base_beneficio`: `consolidado` (recomendado, atribuido a la dominante) o `individual`.
+- `beneficio_recurrente_meur`: beneficio **recurrente atribuido**, en **M€** (como en los informes). **Negativo permitido** (Telefónica). Es el denominador del payout.
+- `beneficio_reportado_meur` (opcional): beneficio **reportado**, en M€. Sirve de contraste: si difiere mucho del recurrente, suele haber extraordinarios.
+- `numero_acciones`: nº de acciones ( > 0 ). Es el puente entre M€ y €/acción.
+- `dividendo_por_accion_eur`: DPA con cargo al ejercicio, en € (puede venir de la pestaña Dividendos).
 - `fuente`: obligatoria y oficial. Se rechaza `yfinance` o "estimación".
-- Al guardar, se muestra la **reconciliación**: el payout que resultaría vs el `payoutRatio` de yfinance. Si divergen más de **10 puntos**, se marca `[VERIFICAR]` y baja la confianza (no bloquea, pero avisa).
+
+**Derivados** (los calcula y muestra la app, no se teclean):
+- `BPA` (€/acción) = `beneficio_recurrente_meur × 1.000.000 ÷ numero_acciones`.
+- `dividendo_total` (M€) = `dividendo_por_accion_eur × numero_acciones ÷ 1.000.000`.
+- `payout` (%) = `dividendo_total ÷ beneficio_recurrente_meur`. Si el beneficio ≤ 0, el payout sale **no interpretable** (KO), no error.
+
+Al guardar, se muestra la **reconciliación**: el payout resultante vs el `payoutRatio` de yfinance. Si divergen más de **10 puntos**, se marca `[VERIFICAR]` y baja la confianza (no bloquea, pero avisa).
+
+> Técnica: el BPA "de manual" usa acciones **medias ponderadas**; para verificar, las acciones a cierre valen como aproximación — anótalo si procede.
 
 ### 4.3. Clasificación de dividendos
 - Los **importes y fechas** salen de los eventos observados (yfinance); tú añades la **clasificación**:
@@ -72,11 +87,15 @@ Son dos ventanas distintas, **a propósito**:
 | sector | Utilities |
 | clase_exclusion | `estandar` |
 
-### Paso 2 · BPA FY2025 (el último ejercicio cerrado y auditado)
-- A julio de 2026 el ejercicio a curar es **FY2025** (cerrado el 31-dic-2025; cuentas publicadas en febrero de 2026). Curar 2024 sería meter un dato viejo.
-- Beneficio neto 2025 de Naturgy: **2.023 M€** (récord). Con ~969,6 M de acciones sale **≈ 2,09 €/acción**.
-- ⚠️ Ese ≈2,09 € es un **cálculo de sanity check**, no la cifra auditada. Coge el **"Beneficio por acción"** exacto del **Informe Financiero Anual 2025 (CNMV)** (puede ser **mayor**: en 2025 Naturgy hizo una autoopa que reduce el nº de acciones y sube el BPA).
-- `fuente`: *Naturgy — Informe Financiero Anual 2025 (CNMV)* · `confianza`: alta.
+### Paso 2 · BPA FY2025 — cifras crudas del informe (el último ejercicio cerrado y auditado)
+- A julio de 2026 el ejercicio a verificar es **FY2025** (cerrado el 31-dic-2025; cuentas publicadas en febrero de 2026). Verificar 2024 sería meter un dato viejo.
+- Copia del informe:
+  - `base_beneficio` = **consolidado** (atribuido).
+  - `beneficio_recurrente_meur` = **2.023 M€** (beneficio neto récord 2025).
+  - `numero_acciones` = **≈ 969,6 M** (⚠️ en 2025 Naturgy amortizó acciones por la autoopa: coge el nº exacto del informe, que reduce las acciones y **sube** el BPA).
+  - `dividendo_por_accion_eur` = **1,77 €** (con cargo a FY2025; ver Paso 3).
+  - `fuente`: *Naturgy — Informe Financiero Anual 2025 (CNMV)* · `confianza`: alta.
+- La app calcula: **BPA ≈ 2,09 €/acción** (2.023 M€ ÷ 969,6 M) · **dividendo total ≈ 1.716 M€** · **payout ≈ 85%**.
 
 ### Paso 3 · Dividendos con cargo a 2025
 - El dividendo **con cargo a 2025** es **1,77 €/acción**, todo **ordinario**, en tres pagos:
@@ -87,7 +106,7 @@ Son dos ventanas distintas, **a propósito**:
 - 👀 El complementario se **paga en 2026** pero es **con cargo a 2025** — justo el concepto de la §5: la **renta** lo contaría en 2026; el **payout**, en 2025.
 
 ### Resultado — Lente B
-**Payout ordinario FY2025 = 1,77 ÷ ≈2,09 ≈ 85%.** Está **justo en el borde** del cap K1-Payout (85–100%): aquí el **BPA exacto decide** si Naturgy queda "Cumple" o "Parcial". Es el mejor ejemplo de por qué el BPA se cura del informe auditado y no se aproxima. (Comparación: Logista ~99% sí se degrada a "Parcial".)
+**Payout ordinario FY2025 ≈ 85%.** Está **justo en el borde** del cap K1-Payout (85% en adelante): aquí el **BPA exacto decide** si Naturgy queda "Cumple" o "Parcial". Es el mejor ejemplo de por qué el BPA se calcula de cifras auditadas y no se aproxima. (Comparación: Logista ~99% sí se degrada a "Parcial".)
 
 ### Paso 3 (detalle) · Las ex-dates reales y una trampa
 
@@ -113,20 +132,20 @@ Son cifras distintas **a propósito**: 1,80 € es la caja del año natural; 1,7
 
 ## 7. Qué hace el motor con esto (los tres estados del payout)
 
-- **`ok`** → payout = ordinario con cargo ÷ BPA auditado. Gobierna la sostenibilidad (cap K1-Payout).
-- **`no_interpretable`** → BPA ≤ 0 (p. ej. Telefónica): el payout no es interpretable → KO, no un error.
-- **`n/a` (transitorio)** → aún sin BPA curado. **No penaliza la nota**, pero **impide el veredicto "Cumple"** ("Parcial · evaluación incompleta"). Distinto del **N/A estructural** de banca/SOCIMIs, que sí puede ser "Cumple" porque el criterio genuinamente no aplica.
+- **`ok`** → payout = dividendo ordinario con cargo ÷ BPA calculado. Gobierna la sostenibilidad (cap K1-Payout).
+- **`no_interpretable`** → beneficio ≤ 0 (p. ej. Telefónica): el payout no es interpretable → KO, no un error.
+- **`n/a` (transitorio)** → aún sin BPA verificado. **No penaliza la nota**, pero **impide el veredicto "Cumple"** ("Parcial · evaluación incompleta"). Distinto del **N/A estructural** de banca/SOCIMIs, que sí puede ser "Cumple" porque el criterio genuinamente no aplica.
 
 ---
 
-## 8. Checklist rápido al curar un valor
+## 8. Checklist rápido al verificar un valor
 
 - [ ] Ficha de empresa creada, con el **cierre de ejercicio correcto**.
-- [ ] BPA del ejercicio, del **informe anual/CNMV**, con fuente y fecha.
+- [ ] BPA del ejercicio: cifras crudas del **informe anual/CNMV** (beneficio recurrente M€, nº acciones, DPA), con fuente y fecha. La app calcula BPA y payout.
 - [ ] Reconciliación revisada (si `[VERIFICAR]`, confirmar contra el informe antes de promover).
 - [ ] Dividendos clasificados (ordinario/extra/scrip) con su `con_cargo_a_ejercicio`.
 - [ ] Nada de placeholders: lo que no esté verificado, se deja sin crear.
 
 ---
 
-*Fuentes del ejemplo Naturgy: nota de resultados 2025 (beneficio neto 2.023 M€) y página de dividendos de Naturgy (naturgy.com); verifica siempre el BPA en el Informe Financiero Anual en la CNMV.*
+*Fuentes del ejemplo Naturgy: nota de resultados 2025 (beneficio neto 2.023 M€) y página de dividendos de Naturgy (naturgy.com); verifica siempre el beneficio, las acciones y el dividendo en el Informe Financiero Anual en la CNMV.*

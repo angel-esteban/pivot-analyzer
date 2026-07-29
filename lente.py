@@ -4,7 +4,7 @@ lente.py — Lente A (renta) y Lente B (payout) del golden record de dividendos 
 
 Principio: los importes se obtienen SUMANDO eventos observados (yfinance), NUNCA de un
 campo-resumen del proveedor. La clasificación (ordinario/extraordinario/scrip) y el BPA
-auditado vienen del golden record CURADO en Neon (vía curacion.leer_*). Sin BPA curado
+auditado vienen del golden record CURADO en Neon (vía verificacion.leer_*). Sin BPA curado
 -> payout N/A "evaluación incompleta" (nunca un número supuesto).
 
   · Lente A (renta): agrupa por AÑO NATURAL; yield del último año cerrado; CAGR sobre
@@ -18,9 +18,9 @@ from __future__ import annotations
 import datetime
 
 try:
-    import curacion
-except Exception:                        # noqa: BLE001 — testeable sin curacion
-    curacion = None
+    import verificacion
+except Exception:                        # noqa: BLE001 — testeable sin verificacion
+    verificacion = None
 
 TIPOS_RENTA = ("ordinario", "extraordinario", "scrip")
 
@@ -43,10 +43,10 @@ def clasificacion_neon(conn, ticker: str) -> dict[str, str]:
     """{ex_date_iso: tipo} desde dividendo_clasificado VIGENTE (curado). Los eventos que
     no estén curados se tratan como 'ordinario' por defecto (regla de la spec)."""
     out: dict[str, str] = {}
-    if conn is None or curacion is None:
+    if conn is None or verificacion is None:
         return out
     try:
-        for d in curacion.leer_dividendos(conn, ticker):
+        for d in verificacion.leer_dividendos(conn, ticker):
             exd = d.get("ex_date")
             if exd is not None:
                 k = exd.isoformat() if hasattr(exd, "isoformat") else str(exd)[:10]
@@ -151,9 +151,9 @@ def payout_ordinario(conn, ticker: str, ejercicio: str) -> dict:
       'n/a'             -> sin BPA vigente curado o sin dividendos ordinarios con cargo
                            -> "evaluación incompleta" (NUNCA un número supuesto).
     """
-    if conn is None or curacion is None:
+    if conn is None or verificacion is None:
         return {"payout": None, "estado": "n/a", "motivo": "sin acceso al golden record", "confianza": "baja"}
-    bpas = [b for b in curacion.leer_bpa(conn, ticker) if b.get("ejercicio") == ejercicio]
+    bpas = [b for b in verificacion.leer_bpa(conn, ticker) if b.get("ejercicio") == ejercicio]
     if not bpas or bpas[0].get("bpa_auditado") is None:
         return {"payout": None, "estado": "n/a", "motivo": "sin BPA auditado vigente", "confianza": "baja"}
     b = bpas[0]
@@ -161,7 +161,7 @@ def payout_ordinario(conn, ticker: str, ejercicio: str) -> dict:
     if bpa <= 0:
         return {"payout": None, "estado": "no_interpretable", "bpa": bpa,
                 "motivo": "BPA<=0 (payout no interpretable)", "confianza": b.get("confianza", "media")}
-    div_ord = sum(float(d["importe_eur"]) for d in curacion.leer_dividendos(conn, ticker)
+    div_ord = sum(float(d["importe_eur"]) for d in verificacion.leer_dividendos(conn, ticker)
                   if d.get("tipo") == "ordinario" and d.get("con_cargo_a_ejercicio") == ejercicio
                   and d.get("importe_eur") is not None)
     if div_ord <= 0:
@@ -176,7 +176,7 @@ def payout_total(conn, ticker: str, ejercicio: str) -> dict:
     base = payout_ordinario(conn, ticker, ejercicio)
     if base.get("estado") != "ok":
         return base
-    div_tot = sum(float(d["importe_eur"]) for d in curacion.leer_dividendos(conn, ticker)
+    div_tot = sum(float(d["importe_eur"]) for d in verificacion.leer_dividendos(conn, ticker)
                   if d.get("tipo") in ("ordinario", "extraordinario")
                   and d.get("con_cargo_a_ejercicio") == ejercicio and d.get("importe_eur") is not None)
     return {**base, "payout_total": div_tot / base["bpa"], "div_total": div_tot}
