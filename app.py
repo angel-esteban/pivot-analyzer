@@ -10337,17 +10337,22 @@ def _explicar_bandera(cod, valores, ticker):
     if cod == "B2":
         det, imp, mir, tec = [], [], [], []
         if "payout" in v:
-            det.append(f"el **payout** es **{pc(v['payout'])}**, cerca del cap de riesgo (85%)")
-            imp.append("por encima del 85% el dividendo consume casi todo el beneficio y el valor se capa a Parcial")
+            det.append(f"el **payout** es **{pc(v['payout'])}**, cerca del **85%** —el nivel a partir del "
+                       f"cual el dividendo se considera en riesgo")
+            imp.append("por encima del 85% la empresa reparte casi todo el beneficio (poco colchón): si el "
+                       "beneficio baja, peligra el dividendo, y por eso el veredicto se **limita a Parcial** "
+                       "(no puede ser Cumple)")
             mir.append("el **beneficio** y el **dividendo ordinario** del último ejercicio (payout = div ÷ BPA): "
-                       "por debajo del 85% → Cumple; por encima → el cap es correcto")
-            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, cap 85%)")
+                       "por debajo del 85% puede Cumplir; por encima, la limitación es correcta")
+            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, umbral/cap 85%)")
         if "ev_ebitda" in v:
-            det.append(f"el **EV/EBITDA** es **{float(v['ev_ebitda']):.1f}×**, cerca del KO (22×)")
-            imp.append("por encima de 22× la valoración se marca incompatible con un yield atractivo")
+            det.append(f"el **EV/EBITDA** es **{float(v['ev_ebitda']):.1f}×**, cerca del **límite de 22×** "
+                       f"a partir del cual la valoración se considera demasiado cara")
+            imp.append("por encima de 22× la empresa cotiza tan cara que un dividendo atractivo deja de ser "
+                       "compatible con esa valoración")
             mir.append("el **EBITDA** y la **deuda neta** del último ejercicio (el EV/EBITDA de fuentes "
                        "automáticas varía según la definición)")
-            tec.append(f"ev_ebitda={float(v['ev_ebitda']):.1f}x (banda 20–24, KO 22)")
+            tec.append(f"ev_ebitda={float(v['ev_ebitda']):.1f}x (banda 20–24, umbral/KO 22)")
         if "free_float" in v:
             det.append(f"el **free float** es **{pc(v['free_float'])}**, cerca del veto por concentración (20%)")
             imp.append("por debajo del 20% se veta por concentración accionarial")
