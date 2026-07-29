@@ -10659,14 +10659,24 @@ def _admin_curacion_dividendos():
                 _cap85 = (_calc["payout"] is not None and _calc["payout"] >= 0.85)
                 # sanidad de unidades: un BPA fuera de rango razonable suele ser acciones mal escaladas
                 _bpa_raro = _calc["bpa"] is not None and (abs(_calc["bpa"]) > 200 or 0 < abs(_calc["bpa"]) < 0.01)
+                _col_d = "#dc2626" if _bpa_raro else ("#b45309" if _cap85 else "#0369a1")
+                _bg_d = "#fee2e2" if _bpa_raro else ("#fffbeb" if _cap85 else "#eff6ff")
+                _nota_d = ""
+                if _bpa_raro:
+                    _nota_d = ('<div style="color:#dc2626;font-size:0.85rem;margin-top:6px;font-weight:600">'
+                               '🚩 BPA implausible — revisa el nº de acciones (en MILLONES)</div>')
+                elif _cap85:
+                    _nota_d = ('<div style="color:#b45309;font-size:0.85rem;margin-top:6px;font-weight:600">'
+                               '⚠️ Payout ≥ 85% → activa el cap K1-Payout (veredicto Parcial, nunca Cumple)</div>')
                 st.markdown(
-                    f'<div style="padding:8px 12px;margin:4px 0;border-radius:6px;'
-                    f'background:{"#fee2e2" if _bpa_raro else ("#fffbeb" if _cap85 else "#f0f9ff")};'
-                    f'border-left:4px solid {"#dc2626" if _bpa_raro else ("#b45309" if _cap85 else "#0ea5e9")};font-size:0.85rem">'
-                    f'📐 <b>Derivados (solo lectura)</b> — BPA: <b>{_bpa_s}</b> · Dividendo total: {_dt_s} · '
-                    f'Payout: <b>{_pay_s}</b>'
-                    f'{" ⚠️ ≥85% → cap K1-Payout (Parcial)" if (_cap85 and not _bpa_raro) else ""}'
-                    f'{" 🚩 BPA implausible — revisa el nº de acciones (en MILLONES)" if _bpa_raro else ""}</div>',
+                    f'<div style="padding:14px 18px;margin:8px 0;border-radius:10px;background:{_bg_d};'
+                    f'border-left:6px solid {_col_d}">'
+                    f'<div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;text-transform:uppercase;'
+                    f'letter-spacing:0.5px">📐 Derivados (solo lectura, calculados por la app)</div>'
+                    f'<span style="font-size:1.7rem;font-weight:800;color:{_col_d}">BPA {_bpa_s}</span>'
+                    f'<span style="font-size:1.7rem;font-weight:800;color:{_col_d};margin-left:24px">Payout {_pay_s}</span>'
+                    f'<span style="font-size:0.9rem;color:#475569;margin-left:24px">· Dividendo total {_dt_s}</span>'
+                    f'{_nota_d}</div>',
                     unsafe_allow_html=True)
                 c9, c10, c11 = st.columns(3)
                 _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", key="_bpa_fte")
@@ -21047,6 +21057,6 @@ if "usuario" not in st.session_state:
             st.session_state["usuario"] = _user_restored
 
 if "usuario" not in st.session_state:
-    pantalla_login()
+    _ = pantalla_login()
 else:
-    pantalla_analisis()
+    _ = pantalla_analisis()   # descartar retorno: evita que el 'magic' de Streamlit pinte un DeltaGenerator
