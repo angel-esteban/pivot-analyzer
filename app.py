@@ -10458,8 +10458,10 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                    "para poblar la bandeja.")
         return
     st.markdown(f"**{len(filas)} valor(es) marcados** en el último screening registrado.")
+    _NOM = {v: k for k, v in IBEX_35.items()}   # ticker -> nombre (para identificar el valor)
     for f in filas:
         tk = f["ticker"]; nruns = int(f.get("runs_marcado", 1) or 1)
+        _nom = _NOM.get(tk, tk)
         e1, e2 = f.get("payout_e1"), f.get("payout_e2")
         _bnds = f.get("banderas") or []
         for b in _bnds:
@@ -10469,7 +10471,7 @@ def _admin_bandeja_avisos(conn, _user, _pd):
         _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
         _deriva = f"  ·  ⏳ {nruns} runs marcado" if nruns >= 2 else ""
         _estado = f"{len(_pend)} pendiente(s)" if _pend else "✅ resuelto (se irá en el próximo run)"
-        with st.expander(f"🔎 {tk} — {_estado} · payout yfinance {_e1s} / DPA-BPA {_e2s}{_deriva}"):
+        with st.expander(f"🔎 {tk} · {_nom} — {_estado} · payout yfinance {_e1s} / DPA-BPA {_e2s}{_deriva}"):
             _q = tk.replace(".MC", "")
             st.markdown(f"[🔗 Buscar fuente (CNMV / IR) de {tk}]"
                         f"(https://www.google.com/search?q={_q}+CNMV+informe+financiero+anual+dividendo)")
@@ -10483,37 +10485,38 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                     if _vals.get("E2_dpa_bpa") is None and e2 is not None:
                         _vals["E2_dpa_bpa"] = float(e2)
                 _ex = _explicar_bandera(_cod, _vals, tk)   # explicación llana, cifras reales
-                _c1, _cinfo, _c2 = st.columns([5, 1, 1])
+                _c1, _c2 = st.columns([6, 1])
                 _pre = "✅ " if (_ya and _tipo == "capa") else ("ℹ️ " if _tipo != "capa" else "⚠️ ")
                 _c1.markdown(f"{_pre}{_ex['titular']}")   # LENGUAJE LLANO, nunca el código
-                with _cinfo:
-                    def _render_ayuda(_ex=_ex, _cod=_cod, _hue=_hue, _tk=tk, _nruns=nruns):
-                        st.markdown(f"**Qué he detectado.** {_ex['detectado']}")
-                        st.markdown(f"**Por qué importa.** {_ex['importa']}")
-                        st.markdown(f"**Qué mirar para confirmar.** {_ex['mirar']}")
-                        st.markdown(f"**Dónde mirarlo.** [{_ex['donde_txt']}]({_ex['donde_url']})")
-                        st.markdown(f"**Cómo se resuelve.** {_ex['resolver']}")
-                        if hasattr(st, "toggle") and st.toggle(
-                                "🔧 Ver detalle técnico", key=f"_tec_{_tk}_{_cod}_{_hue}"):
-                            st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  ⏳ {_nruns} run(s) marcado.")
-                    if hasattr(st, "popover"):
-                        with st.popover("ℹ️"):
-                            _render_ayuda()
-                    elif st.checkbox("ℹ️", key=f"_ay_{tk}_{_cod}_{_hue}"):
-                        _render_ayuda()
                 if _tipo == "capa" and not _ya:
                     if _c2.button("Aceptar", key=f"_acu_{tk}_{_cod}_{_hue}"):
                         try:
-                            _av.guardar_acuse(conn, tk, _cod, _hue, _user)
-                            st.rerun()
-                        except Exception as _ex:
-                            st.error(f"Error guardando acuse: {_ex}")
+                            _av.guardar_acuse(conn, tk, _cod, _hue, _user); st.rerun()
+                        except Exception as _ex2:
+                            st.error(f"Error guardando acuse: {_ex2}")
                 elif _tipo == "capa" and _ya:
                     if _c2.button("Reactivar", key=f"_rea_{tk}_{_cod}_{_hue}"):
                         try:
                             _av.borrar_acuse(conn, tk, _cod, _hue); st.rerun()
-                        except Exception as _ex:
-                            st.error(f"Error: {_ex}")
+                        except Exception as _ex2:
+                            st.error(f"Error: {_ex2}")
+                # Detalle EN LÍNEA (se despliega en la página, no flota encima → no hay que arrastrar nada)
+                _abrir = (st.toggle("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}")
+                          if hasattr(st, "toggle")
+                          else st.checkbox("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}"))
+                if _abrir:
+                    st.markdown(f"##### {tk} · {_nom}")
+                    st.markdown(f"**Qué he detectado.** {_ex['detectado']}")
+                    st.markdown(f"**Por qué importa.** {_ex['importa']}")
+                    st.markdown(f"**Qué mirar para confirmar.** {_ex['mirar']}")
+                    st.markdown(f"**Dónde mirarlo.** [{_ex['donde_txt']}]({_ex['donde_url']})")
+                    st.markdown(f"**Cómo se resuelve.** {_ex['resolver']}")
+                    _vtec = (st.toggle("🔧 detalle técnico", key=f"_tec_{tk}_{_cod}_{_hue}")
+                             if hasattr(st, "toggle")
+                             else st.checkbox("🔧 detalle técnico", key=f"_tec_{tk}_{_cod}_{_hue}"))
+                    if _vtec:
+                        st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  ⏳ {nruns} run(s) marcado.")
+                st.divider()
 
 
 def _admin_curacion_dividendos():
