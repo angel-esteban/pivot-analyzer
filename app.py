@@ -10436,14 +10436,14 @@ def _explicar_bandera(cod, valores, ticker):
     if cod == "B-soft":
         e2, pv = v.get("E2_dpa_bpa"), v.get("payout_vigente")
         return {
-            "titular": f"El dato curado puede estar **obsoleto**: el estimador ({pc(e2)}) se ha separado "
-                       f"del payout curado vigente ({pc(pv)}).",
-            "detectado": f"El estimador automático da {pc(e2)} y el payout curado vigente es {pc(pv)}.",
-            "importa": "No cambia el veredicto (manda el dato curado), pero sugiere que el curado quedó "
+            "titular": f"El dato verificado puede estar **obsoleto**: el estimador ({pc(e2)}) se ha separado "
+                       f"del payout verificado vigente ({pc(pv)}).",
+            "detectado": f"El estimador automático da {pc(e2)} y el payout verificado vigente es {pc(pv)}.",
+            "importa": "No cambia el veredicto (manda el dato verificado), pero sugiere que quedó "
                        "desfasado (reformulación o nuevo ejercicio cerrado).",
-            "mirar": "compara el **BPA/dividendo curado** con las **últimas cuentas** publicadas.",
+            "mirar": "compara el **BPA/dividendo verificado** con las **últimas cuentas** publicadas.",
             "donde_url": url_cnmv, "donde_txt": "Últimas cuentas — CNMV",
-            "resolver": "Refresca la curación en la pestaña *BPA por ejercicio* / *Dividendos* si hay nuevo "
+            "resolver": "Refresca la verificación en la pestaña *BPA por ejercicio* / *Dividendos* si hay nuevo "
                         "ejercicio o reformulación.",
             "tecnico": f"B-soft · E2={pc(e2)} vs vigente={pc(pv)} (umbral 15 pp)",
         }
@@ -10485,7 +10485,7 @@ def _admin_bandeja_avisos(conn, _user, _pd):
         _pend = [b for b in _bnds if b.get("tipo") == "capa" and not b["_ya"]]
         _e1s = f"{float(e1)*100:.1f}%" if e1 is not None else "n/d"
         _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
-        _deriva = f"  ·  ⏳ {nruns} runs marcado" if nruns >= 2 else ""
+        _deriva = f"  ·  ⏳ marcado en los últimos {nruns} cribados seguidos" if nruns >= 2 else ""
         _estado = f"{len(_pend)} pendiente(s)" if _pend else "✅ resuelto (se irá en el próximo run)"
         with st.expander(f"🔎 {tk} · {_nom} — {_estado} · payout yfinance {_e1s} / DPA-BPA {_e2s}{_deriva}"):
             _q = tk.replace(".MC", "")
@@ -10531,21 +10531,39 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                              if hasattr(st, "toggle")
                              else st.checkbox("🔧 detalle técnico", key=f"_tec_{tk}_{_cod}_{_hue}"))
                     if _vtec:
-                        st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  ⏳ {nruns} run(s) marcado.")
+                        st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  "
+                                   f"⏳ marcado en {nruns} cribado(s) seguido(s).")
                 st.divider()
 
 
+def _periodo_desde_cierre(ejercicio: str, cierre: str) -> str:
+    """Sugiere el rango de fechas del ejercicio (B4) a partir de FYaaaa y el cierre 'MM-DD'.
+    Cierre 31-dic → 01/01–31/12; 30-sep → 01/10 (año-1)–30/09; 31-ene → 01/02 (año-1)–31/01."""
+    import re as _re, datetime as _dt
+    m = _re.match(r"FY(\d{4})", (ejercicio or "").strip().upper())
+    if not m:
+        return ""
+    y = int(m.group(1))
+    try:
+        mm, dd = (int(cierre.split("-")[0]), int(cierre.split("-")[1])) if (cierre and "-" in cierre) else (12, 31)
+        fin = _dt.date(y, mm, dd)
+        ini = _dt.date(y - 1, mm, dd) + _dt.timedelta(days=1)
+        return f"{ini.strftime('%d/%m/%Y')}–{fin.strftime('%d/%m/%Y')}"
+    except Exception:
+        return ""
+
+
 def _admin_curacion_dividendos():
-    """Curación del golden record de dividendos (spec DosLentes v1). Escribe a Neon vía
-    curacion.py (modo una-persona: directo a vigente, con versionado)."""
+    """Verificación del golden record de dividendos (spec DosLentes v1 + rediseño BPA 2026-07-29).
+    Escribe a Neon vía curacion.py (modo una-persona: directo a vigente, con versionado)."""
     import curacion
     import pandas as _pd
     _user = st.session_state.get("usuario", {}).get("username", "admin")
-    st.markdown("### 📝 Curación de dividendos — golden record")
+    st.markdown("### 📝 Verificación de dividendos — golden record")
     st.caption("El motor solo lee filas **vigentes**. Editar crea una versión nueva (no sobrescribe). "
                "Sin **fuente** no se guarda. Ausente = N/A (nada de placeholders).")
     # ── Icono/ayuda: guía didáctica de curación (ejemplo Naturgy) ──
-    with st.expander("📖 Guía de curación — cómo y por qué (ejemplo Naturgy)", expanded=False):
+    with st.expander("📖 Guía de verificación — cómo y por qué (ejemplo Naturgy)", expanded=False):
         try:
             import os as _os
             _ruta_guia = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
@@ -10597,60 +10615,103 @@ def _admin_curacion_dividendos():
                              hide_index=True, use_container_width=True)
 
         with _t_bpa:
-            _tickers = [e["ticker"] for e in curacion.leer_empresas(conn)]
+            _empresas = {e["ticker"]: e for e in curacion.leer_empresas(conn)}
+            _tickers = list(_empresas.keys())
             if not _tickers:
                 st.info("Crea antes al menos una Ficha de empresa.")
             else:
-                with st.form("_cur_bpa", clear_on_submit=False):
-                    c1, c2, c3 = st.columns(3)
-                    _b_tk = c1.selectbox("Ticker", _tickers)
-                    _b_ej = c2.text_input("Ejercicio (FY2025)").strip().upper()
-                    _b_per = c3.text_input("Periodo (opcional)")
-                    c4, c5 = st.columns(2)
-                    _b_bpa = c4.number_input("BPA auditado (€/acción, negativo permitido)",
-                                             value=None, step=0.01, format="%.4f")
-                    _b_bn = c5.number_input("Beneficio neto (€, opcional)", value=None, step=1.0)
-                    c6, c7 = st.columns(2)
-                    _b_fte = c6.text_input("Fuente (CNMV/informe anual/IR)")
-                    _b_url = c7.text_input("URL (opcional)")
-                    c8, c9, c10 = st.columns(3)
-                    _b_fv = c8.date_input("Fecha verificación", value=date.today())
-                    _b_vp = c9.text_input("Verificado por", value=_user)
-                    _b_conf = c10.selectbox("Confianza", ["alta", "media", "baja"], index=1)
-                    if st.form_submit_button("💾 Guardar BPA (vigente)", use_container_width=True):
-                        _d = {"ticker": _b_tk, "ejercicio": _b_ej, "periodo": _b_per or None,
-                              "bpa_auditado": _b_bpa, "beneficio_neto": _b_bn,
-                              "fuente": _b_fte, "url": _b_url or None,
-                              "fecha_verificacion": _b_fv.isoformat(), "verificado_por": _b_vp}
-                        _err, _avi = curacion.validar_bpa(_d)
-                        for _a in _avi:
-                            st.warning(_a)
-                        if _err:
-                            for _e in _err:
-                                st.error(_e)
-                        else:
-                            pc, py, rev, conf, delta = _reconciliar_bpa_yf(conn, _b_tk, _b_ej, _b_bpa)
-                            _conf_final = "baja" if (rev or _b_conf == "baja") else _b_conf
-                            try:
-                                ver = curacion.publicar_bpa(conn, _d, _user,
-                                                            revision_requerida=rev, confianza=_conf_final)
-                                st.success(f"BPA {_b_tk} {_b_ej} guardado (v{ver}, confianza {_conf_final}).")
-                                if pc is not None and py is not None:
-                                    _m = f"Reconciliación: payout calculado {pc:.0%} vs yfinance {py:.0%} (Δ {delta} pp)."
-                                    if rev:
-                                        st.error(_m + " [VERIFICAR] — divergencia >10pp, marcado revisión.")
-                                    else:
-                                        st.info(_m)
-                                elif py is not None:
-                                    st.caption(f"Contraste yfinance payoutRatio: {py:.0%} "
-                                               f"(sin dividendos ordinarios curados para calcular el payout).")
-                            except Exception as ex:
-                                st.error(f"Error al guardar: {ex}")
-                _bpas = curacion.leer_bpa(conn)
+                st.caption("Introduce las **cifras crudas del informe** (beneficio recurrente en **M€**, "
+                           "nº de acciones, DPA en **€**); la app calcula el **BPA** y el **payout** como "
+                           "derivados. No teclees un BPA ya cocinado (individual vs consolidado, reportado "
+                           "vs recurrente → ahí se cometen los errores).")
+                c1, c2, c3 = st.columns(3)
+                _b_tk = c1.selectbox("Ticker", _tickers, key="_bpa_tk")
+                _b_ej = c2.text_input("Ejercicio (FY2025)", key="_bpa_ej").strip().upper()
+                _cierre = (_empresas.get(_b_tk) or {}).get("cierre_ejercicio") or "12-31"
+                _cierre_no_dic = _cierre != "12-31"
+                _per_sug = _periodo_desde_cierre(_b_ej, _cierre)
+                _b_per = c3.text_input("Periodo del ejercicio" + (" — OBLIGATORIO" if _cierre_no_dic else " (opcional)"),
+                                       value=_per_sug, key=f"_bpa_per_{_b_tk}_{_b_ej}")
+                c4, c5, c6 = st.columns(3)
+                _b_base = c4.selectbox("Base del beneficio", ["consolidado", "individual"], key="_bpa_base")
+                _b_rec = c5.number_input("Beneficio recurrente (M€, negativo permitido)",
+                                         value=None, step=1.0, format="%.2f", key="_bpa_rec")
+                _b_rep = c6.number_input("Beneficio reportado (M€, opcional)",
+                                         value=None, step=1.0, format="%.2f", key="_bpa_rep")
+                c7, c8 = st.columns(2)
+                _b_na = c7.number_input("Nº de acciones (>0)", value=None, step=1.0, format="%.0f", key="_bpa_na")
+                _b_dpa = c8.number_input("Dividendo por acción con cargo (€)",
+                                         value=None, step=0.01, format="%.4f", key="_bpa_dpa")
+                # ── Derivados (solo lectura, calculados en vivo) ──
+                _calc = curacion.calcular_bpa_payout(_b_rec, _b_na, _b_dpa)
+                _bpa_s = f"{_calc['bpa']:.4f} €/acc" if _calc["bpa"] is not None else "—"
+                _dt_s = f"{_calc['dividendo_total_meur']:.1f} M€" if _calc["dividendo_total_meur"] is not None else "—"
+                if _calc["payout"] is not None:
+                    _pay_s = f"{_calc['payout']*100:.1f}%"
+                elif _b_rec is not None and _b_rec <= 0:
+                    _pay_s = "no interpretable (beneficio ≤ 0)"
+                else:
+                    _pay_s = "—"
+                _cap85 = (_calc["payout"] is not None and _calc["payout"] >= 0.85)
+                st.markdown(
+                    f'<div style="padding:8px 12px;margin:4px 0;border-radius:6px;'
+                    f'background:{"#fffbeb" if _cap85 else "#f0f9ff"};'
+                    f'border-left:4px solid {"#b45309" if _cap85 else "#0ea5e9"};font-size:0.85rem">'
+                    f'📐 <b>Derivados (solo lectura)</b> — BPA: <b>{_bpa_s}</b> · Dividendo total: {_dt_s} · '
+                    f'Payout: <b>{_pay_s}</b>{" ⚠️ ≥85% → cap K1-Payout (Parcial)" if _cap85 else ""}</div>',
+                    unsafe_allow_html=True)
+                c9, c10, c11 = st.columns(3)
+                _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", key="_bpa_fte")
+                _b_url = c10.text_input("URL (opcional)", key="_bpa_url")
+                _b_conf = c11.selectbox("Confianza", ["alta", "media", "baja"], index=1, key="_bpa_conf")
+                _b_vp = st.text_input("Verificado por", value=_user, key="_bpa_vp")
+                if st.button("💾 Guardar BPA (vigente)", use_container_width=True, key="_bpa_save"):
+                    _d = {"ticker": _b_tk, "ejercicio": _b_ej, "periodo": _b_per or None,
+                          "base_beneficio": _b_base, "beneficio_recurrente_meur": _b_rec,
+                          "beneficio_reportado_meur": _b_rep, "numero_acciones": _b_na,
+                          "dividendo_por_accion_eur": _b_dpa, "fuente": _b_fte, "url": _b_url or None,
+                          "fecha_verificacion": date.today().isoformat(), "verificado_por": _b_vp,
+                          "cierre_no_dic": _cierre_no_dic}
+                    _err, _avi = curacion.validar_bpa(_d)
+                    for _a in _avi:
+                        st.warning(_a)
+                    if _err:
+                        for _e in _err:
+                            st.error(_e)
+                    else:
+                        # Reconciliación R1: payout DERIVADO vs payoutRatio de yfinance
+                        _py_yf = None
+                        try:
+                            import yfinance as _yf
+                            _py_yf = _yf.Ticker(_b_tk).info.get("payoutRatio")
+                        except Exception:
+                            _py_yf = None
+                        _rev, _delta = False, None
+                        if _calc["payout"] is not None and _py_yf is not None:
+                            _delta = round(abs(_calc["payout"] - float(_py_yf)) * 100, 1)
+                            _rev = _delta > 10
+                        _conf_final = "baja" if (_rev or _b_conf == "baja") else _b_conf
+                        try:
+                            ver = curacion.publicar_bpa(conn, _d, _user,
+                                                        revision_requerida=_rev, confianza=_conf_final)
+                            st.success(f"BPA {_b_tk} {_b_ej} guardado (v{ver}) — BPA {_bpa_s}, "
+                                       f"payout {_pay_s}, confianza {_conf_final}.")
+                            if _delta is not None:
+                                _m = (f"Reconciliación: payout calculado {_calc['payout']:.0%} vs "
+                                      f"yfinance {float(_py_yf):.0%} (Δ {_delta} pp).")
+                                st.error(_m + " [VERIFICAR] — divergencia >10pp, marcado revisión.") if _rev else st.info(_m)
+                        except Exception as ex:
+                            st.error(f"Error al guardar: {ex}")
+                st.markdown(f"**BPA vigentes verificados de {_b_tk}:**")
+                _bpas = curacion.leer_bpa(conn, ticker=_b_tk)
                 if _bpas:
-                    st.dataframe(_pd.DataFrame(_bpas)[["ticker", "ejercicio", "bpa_auditado", "confianza",
-                                 "revision_requerida", "fuente", "version"]],
-                                 hide_index=True, use_container_width=True)
+                    _cols_bpa = [c for c in ["ejercicio", "base_beneficio", "beneficio_recurrente_meur",
+                                 "numero_acciones", "dividendo_por_accion_eur", "bpa_auditado",
+                                 "confianza", "revision_requerida", "fuente", "version"]
+                                 if c in (_bpas[0].keys())]
+                    st.dataframe(_pd.DataFrame(_bpas)[_cols_bpa], hide_index=True, use_container_width=True)
+                else:
+                    st.caption(f"Sin BPA verificado para {_b_tk}.")
 
         with _t_div:
             _tickers = [e["ticker"] for e in curacion.leer_empresas(conn)]
@@ -10693,14 +10754,14 @@ def _admin_curacion_dividendos():
                                 st.success(f"Dividendo {_d_tk} {_d_ex.isoformat()} ({_d_tipo}) guardado (v{ver}).")
                             except Exception as ex:
                                 st.error(f"Error al guardar: {ex}")
-                st.markdown(f"**Dividendos vigentes curados de {_d_tk}:**")
+                st.markdown(f"**Dividendos vigentes verificados de {_d_tk}:**")
                 _divs = curacion.leer_dividendos(conn, ticker=_d_tk)   # filtra por el ticker seleccionado
                 if _divs:
                     st.dataframe(_pd.DataFrame(_divs)[["ticker", "ex_date", "pay_date", "importe_eur",
                                  "tipo", "con_cargo_a_ejercicio", "confianza", "version"]],
                                  hide_index=True, use_container_width=True)
                 else:
-                    st.caption(f"Sin dividendos curados a mano para {_d_tk}. (Los eventos automáticos "
+                    st.caption(f"Sin dividendos verificados a mano para {_d_tk}. (Los eventos automáticos "
                                "viven en «Refresco masivo» y en la «Bandeja de avisos»; esta pestaña es "
                                "solo para altas/correcciones manuales que mandan sobre el estimador.)")
 
@@ -10833,7 +10894,7 @@ def panel_admin():
     if _adm_sub == "🎚️ Umbrales de coherencia":
         _admin_umbrales()
         return
-    if _adm_sub == "📝 Curación dividendos":
+    if _adm_sub == "📝 Verificación dividendos":
         _admin_curacion_dividendos()
         return
     # Por defecto (👥 Gestión de Usuarios): continúa con la gestión de usuarios.
@@ -16428,7 +16489,7 @@ def pantalla_analisis():
                 "admin_sub",
                 ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener",
                  "📊 Calidad de datos", "🎚️ Umbrales de coherencia",
-                 "📝 Curación dividendos"],
+                 "📝 Verificación dividendos"],
                 label_visibility="collapsed", key="_adm_sub_sel",
             )
 

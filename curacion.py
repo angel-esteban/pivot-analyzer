@@ -48,25 +48,69 @@ def _proc_bloquea(d, e):   # T1 + T5 — procedencia obligatoria para PUBLICAR u
             if datetime.date.fromisoformat(fv[:10]) > _hoy(): e.append("T5: fecha_verificacion no puede ser futura")
         except ValueError: e.append("T5: fecha_verificacion no es fecha ISO (AAAA-MM-DD)")
 
+def calcular_bpa_payout(beneficio_recurrente_meur, numero_acciones, dividendo_por_accion_eur):
+    """Derivados del BPA (Spec §2.2), a partir de cifras CRUDAS del informe:
+        bpa (€/acc)        = beneficio_recurrente_meur × 1.000.000 ÷ numero_acciones
+        div_total (M€)     = dividendo_por_accion_eur × numero_acciones ÷ 1.000.000
+        payout (fracción)  = div_total ÷ beneficio_recurrente_meur
+    payout None si beneficio ≤ 0 (no interpretable) o falta algún dato. Puro."""
+    out = {"bpa": None, "dividendo_total_meur": None, "payout": None}
+    def _f(x):
+        try:
+            return float(x) if x not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    br, na, dpa = _f(beneficio_recurrente_meur), _f(numero_acciones), _f(dividendo_por_accion_eur)
+    if br is not None and na and na > 0:
+        out["bpa"] = br * 1_000_000.0 / na
+    if dpa is not None and na and na > 0:
+        out["dividendo_total_meur"] = dpa * na / 1_000_000.0
+    if out["dividendo_total_meur"] is not None and br is not None and br > 0:
+        out["payout"] = out["dividendo_total_meur"] / br      # ≤0 -> no interpretable (queda None)
+    return out
+
+
 def validar_bpa(d: dict) -> tuple[list[str], list[str]]:
+    """Reglas §2 (rediseño 2026-07-29): se validan las cifras CRUDAS del informe; el BPA es
+    derivado, no se teclea. bpa_auditado admite override manual excepcional (no obligatorio)."""
     e, a = [], []
     if not _RE_TICKER.match(_s(d.get("ticker"))): e.append("B1: ticker inválido")
     if not _RE_EJERCICIO.match(_s(d.get("ejercicio"))): e.append("B3: ejercicio con formato FYaaaa (p.ej. FY2025)")
-    bpa = d.get("bpa_auditado")
-    if bpa is None or _s(bpa) == "":
-        e.append("B5: bpa_auditado requerido para publicar (negativo permitido)")
+    # B4 — periodo obligatorio si el cierre no es 31-dic (el form pasa 'cierre_no_dic')
+    if d.get("cierre_no_dic") and not _s(d.get("periodo")):
+        e.append("B4: 'periodo' (rango del ejercicio) obligatorio si el cierre no es 31-dic")
+    # B5 — base del beneficio
+    if _s(d.get("base_beneficio")) not in ("consolidado", "individual"):
+        e.append("B5: 'base_beneficio' debe ser 'consolidado' o 'individual'")
+    # B6 — beneficio recurrente (M€), negativo permitido (TEF), requerido
+    br = d.get("beneficio_recurrente_meur")
+    if br in (None, ""):
+        e.append("B6: 'beneficio_recurrente_meur' (M€) requerido — negativo permitido")
     else:
-        try: float(bpa)                                     # B5: negativo permitido; no se bloquea por signo
-        except (TypeError, ValueError): e.append("B5: bpa_auditado no numérico")
-    fte = _s(d.get("fuente"))
-    if fte and _FUENTE_PROHIBIDA.search(fte): e.append("B7: la fuente del BPA no puede ser yfinance/estimación")
-    _proc_bloquea(d, e)
-    bn = d.get("beneficio_neto")
-    if bn not in (None, "") and bpa not in (None, ""):      # B6 AVISA
+        try: float(br)
+        except (TypeError, ValueError): e.append("B6: 'beneficio_recurrente_meur' no numérico")
+    # B8 — nº de acciones > 0 (puente M€ ↔ €/acción)
+    na = d.get("numero_acciones")
+    if na in (None, ""):
+        e.append("B8: 'numero_acciones' requerido (> 0)")
+    else:
         try:
-            if (float(bn) < 0) != (float(bpa) < 0):
-                a.append("B6: el signo de beneficio_neto no coincide con el de bpa_auditado")
-        except (TypeError, ValueError): pass
+            if float(na) <= 0: e.append("B8: 'numero_acciones' debe ser > 0")
+        except (TypeError, ValueError): e.append("B8: 'numero_acciones' no numérico")
+    # B10 — fuente oficial; yfinance/estimación rechazados
+    fte = _s(d.get("fuente"))
+    if fte and _FUENTE_PROHIBIDA.search(fte): e.append("B10: la fuente del BPA no puede ser yfinance/estimación")
+    _proc_bloquea(d, e)                                     # T1/T5 procedencia
+    # B9 (AVISA) — sin DPA el payout de este ejercicio sale N/A
+    if d.get("dividendo_por_accion_eur") in (None, ""):
+        a.append("B9: sin DPA con cargo al ejercicio → el payout saldrá N/A hasta completarlo")
+    # B7 (AVISA) — reportado vs recurrente muy divergente ⇒ posible extraordinario
+    rep = d.get("beneficio_reportado_meur")
+    if rep not in (None, "") and br not in (None, ""):
+        try:
+            if float(br) != 0 and abs(float(rep) - float(br)) / abs(float(br)) > 0.30:
+                a.append("B7: el beneficio reportado difiere >30% del recurrente (posible extraordinario)")
+        except (TypeError, ValueError, ZeroDivisionError): pass
     return e, a
 
 def validar_dividendo(d: dict) -> tuple[list[str], list[str]]:
@@ -127,21 +171,28 @@ def guardar_empresa(conn, d, usuario):
     conn.commit()
 
 def publicar_bpa(conn, d, usuario, revision_requerida=False, confianza="media"):
-    """Retira la versión vigente anterior (si hay) e inserta una nueva versión vigente."""
+    """Retira la versión vigente anterior (si hay) e inserta una nueva versión vigente.
+    Guarda las cifras crudas y el BPA DERIVADO en bpa_auditado (override manual excepcional
+    si d['bpa_auditado'] viene informado). El motor sigue leyendo bpa_auditado sin cambios."""
     e, _a = validar_bpa(d)
     if e: raise ValueError("; ".join(e))
+    calc = calcular_bpa_payout(d.get("beneficio_recurrente_meur"), d.get("numero_acciones"),
+                               d.get("dividendo_por_accion_eur"))
+    bpa_val = d.get("bpa_auditado") if d.get("bpa_auditado") not in (None, "") else calc["bpa"]
     cur = conn.cursor()
     ver = _siguiente_version(cur, "bpa_ejercicio", "ticker=%s AND ejercicio=%s",
                              [d["ticker"], d["ejercicio"]])
     cur.execute("UPDATE bpa_ejercicio SET estado='retirado', valid_to=now() "
                 "WHERE ticker=%s AND ejercicio=%s AND estado='vigente'", [d["ticker"], d["ejercicio"]])
     cur.execute(
-        "INSERT INTO bpa_ejercicio (ticker,ejercicio,periodo,bpa_auditado,beneficio_neto,fuente,url,"
+        "INSERT INTO bpa_ejercicio (ticker,ejercicio,periodo,base_beneficio,beneficio_recurrente_meur,"
+        "beneficio_reportado_meur,numero_acciones,dividendo_por_accion_eur,bpa_auditado,fuente,url,"
         "fecha_verificacion,estado,version,valid_from,creado_por,revisado_por,revision_requerida,confianza) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'vigente',%s,now(),%s,%s,%s,%s)",
-        [d["ticker"], d["ejercicio"], d.get("periodo"), d["bpa_auditado"], d.get("beneficio_neto"),
-         d["fuente"], d.get("url"), d["fecha_verificacion"], ver, usuario, usuario,
-         bool(revision_requerida), confianza])
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'vigente',%s,now(),%s,%s,%s,%s)",
+        [d["ticker"], d["ejercicio"], d.get("periodo"), _s(d.get("base_beneficio")) or None,
+         d.get("beneficio_recurrente_meur"), d.get("beneficio_reportado_meur"), d.get("numero_acciones"),
+         d.get("dividendo_por_accion_eur"), bpa_val, d["fuente"], d.get("url"), d["fecha_verificacion"],
+         ver, usuario, usuario, bool(revision_requerida), confianza])
     conn.commit()
     return ver
 
