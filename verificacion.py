@@ -345,3 +345,180 @@ def vaciar_borradores_dividendo(conn, ticker=None) -> int:
     n = cur.rowcount
     conn.commit()
     return n
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# COBERTURA DEL DIVIDENDO POR CAPITAL REGULATORIO (banca/seguros) — extensión v1
+# (Pólaris 2026-07-24 · §2/§4/§9). En financieras el dividendo no lo limita el
+# beneficio contable sino el capital que sobra sobre el mínimo regulatorio:
+#   · Banco       -> distancia al MDA = (CET1_fully_loaded − requisito_CET1) × 100 bps
+#   · Aseguradora -> ratio de Solvencia II (%)
+# Tabla cobertura_capital (migracion_cobertura_capital_neon.sql). Mismo ciclo
+# borrador→vigente y procedencia obligatoria que BPA/Dividendos.
+# ═════════════════════════════════════════════════════════════════════════════
+
+SUBTIPOS_CAPITAL = {"banco", "aseguradora"}
+
+# Umbrales orientativos (§4) — [VERIFICAR] contra la banda propia de cada entidad.
+# Son PARÁMETROS DE DISEÑO del motor, no verdad cerrada. La verdad financiera es de Pólaris.
+UMBRAL_MDA_HOLGADO_BPS   = 300.0   # > 300 bps -> colchón holgado (OK)
+UMBRAL_MDA_AJUSTADO_BPS  = 150.0   # 150–300 -> ajustado (~OK) · < 150 -> estrecho (KO/cap) · ≤0 -> veto
+UMBRAL_SOLV_HOLGADO_PCT  = 200.0   # > 200% -> holgado (OK)
+UMBRAL_SOLV_AJUSTADO_PCT = 150.0   # 150–200 -> adecuado (~OK) · < 150 -> vigilar (KO)
+SOLVENCIA_MINIMA_PCT     = 100.0   # mínimo regulatorio Solvencia II (veto si <)
+
+
+def calcular_distancia_mda(cet1_fully_loaded_pct, requisito_cet1_total_pct):
+    """DERIVADO (§9.4): distancia al gatillo MDA en puntos básicos.
+        distancia_mda_bps = (cet1_fully_loaded − requisito_cet1_total) × 100
+    None si falta algún dato. Puro."""
+    def _f(x):
+        try:
+            return float(x) if x not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    c, r = _f(cet1_fully_loaded_pct), _f(requisito_cet1_total_pct)
+    if c is None or r is None:
+        return None
+    return round((c - r) * 100.0, 2)
+
+
+def estado_cobertura_banco(distancia_mda_bps):
+    """Estado del colchón de un banco a partir de la distancia al MDA (§4.1). Tokens:
+      'ok' (holgado, no penaliza) · 'ajustado' (~ok, informativo) ·
+      'estrecho' (ko -> cap a Parcial) · 'veto' (MDA incumplido, ≤0 -> No cumple).
+    None si no hay dato (el motor lo trata como N/A transitorio)."""
+    if distancia_mda_bps is None:
+        return None
+    d = float(distancia_mda_bps)
+    if d <= 0:
+        return "veto"
+    if d < UMBRAL_MDA_AJUSTADO_BPS:
+        return "estrecho"
+    if d < UMBRAL_MDA_HOLGADO_BPS:
+        return "ajustado"
+    return "ok"
+
+
+def estado_cobertura_aseguradora(ratio_solvencia_ii_pct):
+    """Estado del colchón de una aseguradora a partir del ratio de Solvencia II (§4.2). Tokens:
+      'ok' (>200%) · 'ajustado' (150–200%) · 'estrecho' (mínimo–150%, cap) ·
+      'veto' (< mínimo regulatorio 100%). None si no hay dato."""
+    if ratio_solvencia_ii_pct in (None, ""):
+        return None
+    try:
+        s = float(ratio_solvencia_ii_pct)
+    except (TypeError, ValueError):
+        return None
+    if s < SOLVENCIA_MINIMA_PCT:
+        return "veto"
+    if s < UMBRAL_SOLV_AJUSTADO_PCT:
+        return "estrecho"
+    if s < UMBRAL_SOLV_HOLGADO_PCT:
+        return "ajustado"
+    return "ok"
+
+
+def estado_cobertura(d: dict):
+    """Estado de cobertura de una fila (banco o aseguradora), según su subtipo. Devuelve el token
+    ('ok'/'ajustado'/'estrecho'/'veto'/None) que el motor mapea a no-penaliza/informativo/cap/veto."""
+    sub = _s(d.get("subtipo"))
+    if sub == "banco":
+        dist = d.get("distancia_mda_bps")
+        if dist in (None, ""):
+            dist = calcular_distancia_mda(d.get("cet1_fully_loaded_pct"), d.get("requisito_cet1_total_pct"))
+        return estado_cobertura_banco(dist)
+    if sub == "aseguradora":
+        return estado_cobertura_aseguradora(d.get("ratio_solvencia_ii_pct"))
+    return None
+
+
+def validar_cobertura(d: dict) -> tuple[list[str], list[str]]:
+    """Reglas §9 para una fila de cobertura de capital. (errores_BLOQUEA, avisos_AVISA)."""
+    e, a = [], []
+    if not _RE_TICKER.match(_s(d.get("ticker"))):
+        e.append("C0: ticker inválido (formato XXX.MC)")
+    sub = _s(d.get("subtipo"))
+    if sub not in SUBTIPOS_CAPITAL:
+        e.append("C-sub: 'subtipo' debe ser 'banco' o 'aseguradora'")
+    if not _s(d.get("periodo")):
+        e.append("C-per: 'periodo' requerido (trimestre del banco / cierre de la aseguradora)")
+    if sub == "banco":
+        for campo, cod in (("cet1_fully_loaded_pct", "C1"), ("requisito_cet1_total_pct", "C2")):
+            v = d.get(campo)
+            if v in (None, ""):
+                e.append(f"{cod}: '{campo}' (%) requerido para un banco")
+            else:
+                try:
+                    fv = float(v)
+                    if fv < 0 or fv > 100:
+                        e.append(f"{cod}: '{campo}' fuera de rango 0–100")
+                except (TypeError, ValueError):
+                    e.append(f"{cod}: '{campo}' no numérico")
+        if not _s(d.get("politica_reparto")):
+            a.append("C3: sin política de reparto declarada (contexto recomendado)")
+    elif sub == "aseguradora":
+        s = d.get("ratio_solvencia_ii_pct")
+        if s in (None, ""):
+            e.append("S1: 'ratio_solvencia_ii_pct' (%) requerido para una aseguradora")
+        else:
+            try:
+                if float(s) <= 0:
+                    e.append("S1: 'ratio_solvencia_ii_pct' debe ser > 0")
+            except (TypeError, ValueError):
+                e.append("S1: 'ratio_solvencia_ii_pct' no numérico")
+        if not _s(d.get("rango_objetivo_declarado")):
+            a.append("S2: sin banda objetivo declarada (contexto recomendado)")
+    fte = _s(d.get("fuente"))
+    if fte and _FUENTE_PROHIBIDA.search(fte):
+        e.append("T1: la fuente de cobertura no puede ser yfinance/estimación")
+    _proc_bloquea(d, e)     # T1/T5 procedencia
+    return e, a
+
+
+def publicar_cobertura(conn, d, usuario, revision_requerida=False, confianza="media"):
+    """Retira la versión vigente anterior de (ticker, periodo) e inserta una nueva vigente.
+    Calcula y guarda distancia_mda_bps (bancos). El motor lee solo la vigente."""
+    e, _a = validar_cobertura(d)
+    if e:
+        raise ValueError("; ".join(e))
+    sub = _s(d.get("subtipo"))
+    dist = None
+    if sub == "banco":
+        dist = calcular_distancia_mda(d.get("cet1_fully_loaded_pct"), d.get("requisito_cet1_total_pct"))
+    cur = conn.cursor()
+    ver = _siguiente_version(cur, "cobertura_capital", "ticker=%s AND periodo=%s",
+                             [d["ticker"], d["periodo"]])
+    cur.execute("UPDATE cobertura_capital SET estado='retirado', valid_to=now() "
+                "WHERE ticker=%s AND periodo=%s AND estado='vigente'", [d["ticker"], d["periodo"]])
+    cur.execute(
+        "INSERT INTO cobertura_capital (ticker,subtipo,periodo,cet1_fully_loaded_pct,"
+        "requisito_cet1_total_pct,distancia_mda_bps,politica_reparto,generacion_capital_bps_anual,"
+        "ratio_solvencia_ii_pct,rango_objetivo_declarado,fuente,url,fecha_verificacion,"
+        "estado,version,valid_from,creado_por,revisado_por,revision_requerida,confianza) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'vigente',%s,now(),%s,%s,%s,%s)",
+        [d["ticker"], sub, d["periodo"],
+         d.get("cet1_fully_loaded_pct") or None, d.get("requisito_cet1_total_pct") or None, dist,
+         d.get("politica_reparto"), d.get("generacion_capital_bps_anual") or None,
+         d.get("ratio_solvencia_ii_pct") or None, d.get("rango_objetivo_declarado"),
+         d["fuente"], d.get("url"), d["fecha_verificacion"], ver, usuario, usuario,
+         bool(revision_requerida), confianza])
+    conn.commit()
+    return ver
+
+
+def leer_cobertura(conn, ticker=None, solo_vigente=True):
+    cur = conn.cursor()
+    q = "SELECT * FROM cobertura_capital WHERE 1=1"; p = []
+    if solo_vigente:
+        q += " AND estado='vigente'"
+    if ticker:
+        q += " AND ticker=%s"; p.append(ticker)
+    q += " ORDER BY ticker, periodo"
+    cur.execute(q, p); return _dicts(cur)
+
+
+def cobertura_vigente(conn, ticker):
+    """Fila de cobertura VIGENTE más reciente (por periodo) de un ticker, o None. Para el motor."""
+    filas = leer_cobertura(conn, ticker, solo_vigente=True)
+    return filas[-1] if filas else None

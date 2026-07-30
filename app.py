@@ -10718,9 +10718,9 @@ def _admin_curacion_dividendos():
             st.info("Guía no disponible (falta `guia_curacion_dividendos.md` en el repositorio).")
     conn = get_db_connection()
     try:
-        _t_avi, _t_emp, _t_bpa, _t_div, _t_ref = st.tabs(
+        _t_avi, _t_emp, _t_bpa, _t_div, _t_cap, _t_ref = st.tabs(
             ["🔎 Bandeja de avisos", "🏢 Ficha de empresa", "📊 BPA por ejercicio",
-             "💸 Dividendos", "🔄 Refresco masivo"])
+             "💸 Dividendos", "🏦 Cobertura de capital", "🔄 Refresco masivo"])
 
         with _t_avi:
             _admin_bandeja_avisos(conn, _user, _pd)
@@ -10974,6 +10974,97 @@ def _admin_curacion_dividendos():
                     st.caption(f"Sin dividendos verificados a mano para {_d_tk}. (Los eventos automáticos "
                                "viven en «Refresco masivo» y en la «Bandeja de avisos»; esta pestaña es "
                                "solo para altas/correcciones manuales que mandan sobre el estimador.)")
+
+        with _t_cap:
+            st.caption("Cobertura del dividendo por **capital regulatorio** (solo banca/seguros). En estas "
+                       "financieras el payout contable no aplica: lo que limita el dividendo es el capital "
+                       "que sobra sobre el mínimo del regulador. Introduce el **dato crudo** de la "
+                       "presentación de resultados; la app calcula la distancia al MDA y el estado. "
+                       "Cadencia: **trimestral** (bancos) / anual-semestral (aseguradoras).")
+            _emps_fin = [e for e in verificacion.leer_empresas(conn)
+                         if e.get("clase_exclusion") == "banca_seguros"]
+            _tk_fin = [e["ticker"] for e in _emps_fin]
+            if not _tk_fin:
+                st.info("No hay fichas de clase «banca_seguros». Ajusta la Ficha de empresa "
+                        "(p. ej. BBVA, CABK, SAN, UNI, MAP) para habilitar esta pestaña.")
+            else:
+                _c_tk = st.selectbox("Ticker (clase banca_seguros)", _tk_fin, key="_cap_tk")
+                _sub_def = "aseguradora" if _c_tk.upper().startswith("MAP") else "banco"
+                _c_sub = st.radio("Subtipo", ["banco", "aseguradora"],
+                                  index=(1 if _sub_def == "aseguradora" else 0),
+                                  horizontal=True, key=f"_cap_sub_{_c_tk}")
+                with st.form("_cur_cap", clear_on_submit=False):
+                    _c_periodo = st.text_input(
+                        "Periodo (banco: trimestre p.ej. 2025-Q4 · aseguradora: cierre p.ej. 2025-12-31)",
+                        key=f"_cap_per_{_c_tk}")
+                    _c_cet1 = _c_req = _c_pol = _c_gen = _c_solv = _c_rango = None
+                    if _c_sub == "banco":
+                        cc1, cc2 = st.columns(2)
+                        _c_cet1 = cc1.number_input("CET1 fully loaded (%)", value=None, step=0.01, format="%.2f",
+                                                   help="De la presentación de resultados. Definición CRR común (comparable).")
+                        _c_req = cc2.number_input("Requisito CET1 total = gatillo MDA (%)", value=None, step=0.01,
+                                                  format="%.2f", help="Del SREP del BCE / IR. Específico de cada banco.")
+                        cc3, cc4 = st.columns(2)
+                        _c_pol = cc3.text_input("Política de reparto (contexto)")
+                        _c_gen = cc4.number_input("Generación capital anual (bps, opcional)", value=None,
+                                                  step=1.0, format="%.1f")
+                        _dist_prev = verificacion.calcular_distancia_mda(_c_cet1, _c_req)
+                        if _dist_prev is not None:
+                            _est_prev = verificacion.estado_cobertura_banco(_dist_prev)
+                            st.markdown(f"<div style='font-size:.9rem;color:#334155'>📐 Distancia al MDA: "
+                                        f"<b>{_dist_prev:.0f} bps</b> · estado <b>{_est_prev}</b> "
+                                        f"<span style='color:#94a3b8'>(umbral holgado &gt;{verificacion.UMBRAL_MDA_HOLGADO_BPS:.0f} · "
+                                        f"estrecho &lt;{verificacion.UMBRAL_MDA_AJUSTADO_BPS:.0f} bps [VERIFICAR])</span></div>",
+                                        unsafe_allow_html=True)
+                    else:
+                        _c_solv = st.number_input("Ratio de Solvencia II (%)", value=None, step=0.1,
+                                                  format="%.1f", help="Del informe SFCR / IR.")
+                        _c_rango = st.text_input("Banda objetivo declarada (contexto)")
+                        if _c_solv is not None:
+                            _est_prev = verificacion.estado_cobertura_aseguradora(_c_solv)
+                            st.markdown(f"<div style='font-size:.9rem;color:#334155'>📐 Solvencia II "
+                                        f"<b>{_c_solv:.1f}%</b> · estado <b>{_est_prev}</b> "
+                                        f"<span style='color:#94a3b8'>(holgado &gt;{verificacion.UMBRAL_SOLV_HOLGADO_PCT:.0f}% · "
+                                        f"vigilar &lt;{verificacion.UMBRAL_SOLV_AJUSTADO_PCT:.0f}% [VERIFICAR])</span></div>",
+                                        unsafe_allow_html=True)
+                    cf1, cf2 = st.columns(2)
+                    _c_fte = cf1.text_input("Fuente (resultados/IR/SREP)")
+                    _c_url = cf2.text_input("URL (opcional)")
+                    cf3, cf4, cf5 = st.columns(3)
+                    _c_fv = cf3.date_input("Fecha verificación", value=date.today())
+                    _c_vp = cf4.text_input("Verificado por", value=_user)
+                    _c_conf = cf5.selectbox("Confianza", ["alta", "media", "baja"], index=1)
+                    if st.form_submit_button("💾 Guardar cobertura (vigente)", use_container_width=True):
+                        _d = {"ticker": _c_tk, "subtipo": _c_sub, "periodo": (_c_periodo or "").strip(),
+                              "cet1_fully_loaded_pct": _c_cet1, "requisito_cet1_total_pct": _c_req,
+                              "politica_reparto": _c_pol or None, "generacion_capital_bps_anual": _c_gen,
+                              "ratio_solvencia_ii_pct": _c_solv, "rango_objetivo_declarado": _c_rango or None,
+                              "fuente": _c_fte, "url": _c_url or None,
+                              "fecha_verificacion": _c_fv.isoformat(), "verificado_por": _c_vp}
+                        _err, _avi = verificacion.validar_cobertura(_d)
+                        for _a in _avi:
+                            st.warning(_a)
+                        if _err:
+                            for _e in _err:
+                                st.error(_e)
+                        else:
+                            try:
+                                ver = verificacion.publicar_cobertura(conn, _d, _user, confianza=_c_conf)
+                                st.success(f"Cobertura de {_c_tk} ({_d['periodo']}) guardada (v{ver}).")
+                            except Exception as ex:
+                                st.error(f"Error al guardar: {ex}")
+                _cobs = verificacion.leer_cobertura(conn, ticker=_c_tk)
+                if _cobs:
+                    st.markdown(f"**Cobertura vigente de {_c_tk}:**")
+                    _cols_cap = ["ticker", "subtipo", "periodo", "cet1_fully_loaded_pct",
+                                 "requisito_cet1_total_pct", "distancia_mda_bps", "ratio_solvencia_ii_pct",
+                                 "confianza", "version"]
+                    _dfc = _pd.DataFrame(_cobs)
+                    st.dataframe(_dfc[[c for c in _cols_cap if c in _dfc.columns]],
+                                 hide_index=True, use_container_width=True)
+                else:
+                    st.caption(f"Sin cobertura de capital verificada para {_c_tk}. Mientras no la haya, su "
+                               "veredicto queda **≤ Parcial** (evaluación incompleta — cobertura pendiente).")
 
         with _t_ref:
             st.markdown("**Paso 1 — Fichas de empresa** (prerrequisito para colgar los dividendos)")
@@ -13902,6 +13993,53 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"(métrica no válida para este modelo de negocio), pero el "
                                   f"BPA negativo es señal universal de deterioro de resultados.",
                     })
+                # ── COBERTURA DEL DIVIDENDO POR CAPITAL REGULATORIO (extensión banca/seguros)
+                # Ocupa el slot que el payout tiene en los valores estándar: en financieras la
+                # sostenibilidad la mide el margen de capital sobre el mínimo del regulador, no
+                # el payout contable. Estados (verificacion.estado_cobertura):
+                #   ok -> no penaliza · ajustado -> informativo · estrecho -> cap (Parcial) ·
+                #   veto -> No cumple · SIN dato -> N/A transitorio (≤ Parcial, blindaje D-001).
+                _cap_estado, _cap_row = None, None
+                try:
+                    import verificacion as _vf_cap
+                    _cx_cap = get_db_connection()
+                    try:
+                        _cap_row = _vf_cap.cobertura_vigente(_cx_cap, ticker)
+                    finally:
+                        release_db_connection(_cx_cap)
+                    _cap_estado = _vf_cap.estado_cobertura(_cap_row) if _cap_row else None
+                except Exception:
+                    _cap_estado, _cap_row = None, None
+                if _cap_estado == "veto":
+                    killshots.append({
+                        "tipo":   "hard",
+                        "codigo": "K-CAP",
+                        "razon":  "Cobertura de capital insuficiente: agotado el margen sobre el "
+                                  "mínimo regulatorio (MDA incumplido / Solvencia < mínimo). El "
+                                  "reparto puede estar legalmente restringido — incompatible con "
+                                  "una tesis de rentas.",
+                    })
+                elif _cap_estado == "estrecho":
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K-CAP",
+                        "razon":  "Cobertura de capital estrecha: el colchón sobre el requisito "
+                                  "regulatorio es reducido; el dividendo es sostenible pero sin "
+                                  "margen para shocks.",
+                    })
+                elif _cap_estado is None:
+                    # N/A transitorio (D-001): sin dato verificado NO penaliza el score, pero
+                    # IMPIDE 'Cumple' (evaluación incompleta — cobertura de capital pendiente).
+                    # Cierra el hueco actual: un banco no puede salir 'Cumple' sin comprobar
+                    # su sostenibilidad de capital.
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K-CAP-NA",
+                        "razon":  "Cobertura de capital sin verificar: no puede mostrar 'Cumple' "
+                                  "hasta comprobar el margen de capital regulatorio (CET1 vs "
+                                  "requisito / Solvencia II). Verifícalo en «Cobertura de capital».",
+                    })
+                # 'ok' -> no penaliza · 'ajustado' -> informativo (sin killshot degradante)
 
             elif _ks_payout is not None:
                 _kp = float(_ks_payout)
@@ -14213,7 +14351,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3", "K-CAP", "K-CAP-NA")]
         nota_degradacion = None
         if _ks_hard:
             # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
@@ -14246,19 +14384,26 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # puntuación → "—" (p.ej. VID 69 Parcial por score, sin veto ni cap). Así un Parcial
         # con cap activo (TEF/AMS) se distingue de un Parcial por puntuación (VID).
         _ETIQ_MOTIVO = {
-            "K5":        ("free float < 20%",                "veto"),
-            "K2":        ("recorte sostenido del dividendo", "veto"),
-            "K10-veto":  ("historial < 3 años",              "veto"),
-            "K1-BPA":    ("BPA negativo",                     "umbral"),
-            "K1-Payout": ("payout ≥ 85%",                     "umbral"),
-            "K10-cap":   ("historial corto (3–4 a.)",        "umbral"),
-            "K3":        ("yield bajo",                       "umbral"),
+            "K5":         ("free float < 20%",                "veto"),
+            "K2":         ("recorte sostenido del dividendo", "veto"),
+            "K-CAP-veto": ("cobertura de capital insuficiente", "veto"),
+            "K10-veto":   ("historial < 3 años",              "veto"),
+            "K1-BPA":     ("BPA negativo",                     "umbral"),
+            "K1-Payout":  ("payout ≥ 85%",                     "umbral"),
+            "K-CAP-cap":  ("cobertura de capital estrecha",    "umbral"),
+            "K-CAP-na":   ("cobertura de capital pendiente",   "umbral"),
+            "K10-cap":    ("historial corto (3–4 a.)",        "umbral"),
+            "K3":         ("yield bajo",                       "umbral"),
         }
-        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap", "K3"]  # más severo primero
+        # más severo primero
+        _SEV_MOTIVO = ["K5", "K2", "K-CAP-veto", "K10-veto", "K1-BPA", "K1-Payout",
+                       "K-CAP-cap", "K-CAP-na", "K10-cap", "K3"]
         _activos_mot = []
         for _k in killshots:
             _cod, _tip = _k.get("codigo"), _k.get("tipo", "hard")
             if _cod == "K10":                                       _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
+            elif _cod == "K-CAP":                                   _activos_mot.append("K-CAP-veto" if _tip == "hard" else "K-CAP-cap")
+            elif _cod == "K-CAP-NA":                                _activos_mot.append("K-CAP-na")
             elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout", "K3"): _activos_mot.append(_cod)
         motivo, motivo_tipo = "—", "score"
         if estado_global == "no_cumple":
@@ -14270,7 +14415,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         if _pool:
             _gob = min(_pool, key=lambda m: _SEV_MOTIVO.index(m))
             _lbl, motivo_tipo = _ETIQ_MOTIVO[_gob]
-            _cod_gob = "K10" if _gob.startswith("K10") else _gob
+            _cod_gob = ("K10" if _gob.startswith("K10")
+                        else "K-CAP" if _gob.startswith("K-CAP") else _gob)
             motivo = f"{_cod_gob} · {_lbl} · {motivo_tipo}"
             _n_extra = len(_activos_mot) - 1
             if _n_extra > 0:
