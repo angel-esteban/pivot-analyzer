@@ -15,14 +15,23 @@ from __future__ import annotations
 import json
 
 
-def acuses_activos(conn, ticker: str | None = None) -> set:
-    """set de (ticker, bandera, huella) con acuse vigente (silencian su bandera)."""
+def acuses_activos(conn, ticker: str | None = None) -> dict:
+    """dict {(ticker, bandera, huella): tipo} de acuses vigentes. tipo derivado de la nota:
+      · 'confirmado' → el dato es correcto: LEVANTA el cap (el veredicto puede alcanzar Cumple).
+      · 'explicable' → aviso legítimo pero asumido: MANTIENE el cap, solo silencia (§8, regla dura).
+      · 'otro'       → acuse antiguo/sin nota clara: por seguridad NO levanta el cap.
+    (Sigue soportando `key in acuses` porque son las claves del dict.)"""
     cur = conn.cursor()
     if ticker:
-        cur.execute("SELECT ticker, bandera, huella FROM aviso_acuse WHERE ticker=%s", [ticker])
+        cur.execute("SELECT ticker, bandera, huella, COALESCE(nota,'') FROM aviso_acuse WHERE ticker=%s", [ticker])
     else:
-        cur.execute("SELECT ticker, bandera, huella FROM aviso_acuse")
-    return {(r[0], r[1], r[2]) for r in cur.fetchall()}
+        cur.execute("SELECT ticker, bandera, huella, COALESCE(nota,'') FROM aviso_acuse")
+    out = {}
+    for t, b, h, nota in cur.fetchall():
+        _n = (nota or "").strip().lower()
+        out[(t, b, h)] = ("confirmado" if _n.startswith("confirmado")
+                          else "explicable" if _n.startswith("explicable") else "otro")
+    return out
 
 
 def guardar_acuse(conn, ticker: str, bandera: str, huella: str, usuario: str, nota: str | None = None):

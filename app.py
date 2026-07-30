@@ -10462,6 +10462,59 @@ def _explicar_bandera(cod, valores, ticker):
             "tecnico": f"{cod} · valores={v}"}
 
 
+_FICHA_CORRECCION = {   # §7.3 — contenido de dominio (Pólaris): 5 puntos por métrica
+    "payout": (
+        "**(a)** corriges el beneficio del ejercicio (denominador del payout), o el BPA. "
+        "**(b)** mete el **beneficio recurrente atribuido a la dominante** del último ejercicio cerrado (NO el "
+        "reportado con extraordinarios): base=consolidado, beneficio recurrente (M€), nº de acciones (millones), "
+        "DPA con cargo. **(c)** fuente: CCAA / informe de gestión (resultado recurrente) en CNMV o IR; confirma "
+        "también el dividendo con cargo. **(d)** trampas: consolidado vs individual (usa el del grupo) · reportado "
+        "vs recurrente (usa el recurrente) · continuadas vs discontinuadas · básico vs diluido. **(e)** al guardar "
+        "recalcula el payout; puede activar el tope K1-Payout. *Ej.: Enagás 2025 → recurrente 266,3 M€ → ~98%, "
+        "no el ~77% del reportado.*"),
+    "free_float": (
+        "**(a)** corriges el % de capital en circulación. **(b)** mete el free float con su **base** (capital total "
+        "vs solo la clase cotizada). **(c)** fuente: IR (estructura accionarial) / CNMV (participaciones "
+        "significativas). **(d)** trampas: dos clases de acción (fija la base — cf. Puig) · autocartera · "
+        "participaciones de control. **(e)** al guardar puede activar o levantar el veto K5."),
+    "ev_ebitda": (
+        "**(a)** corriges el EV/EBITDA o sus componentes. **(b)** mete EBITDA y deuda neta del último ejercicio. "
+        "**(c)** fuente: CCAA / informe (el EV/EBITDA automático varía según definición). **(e)** al guardar puede "
+        "activar/levantar el KO de valoración (22×)."),
+    "clasificacion": (
+        "**(a)** corriges el **tipo** de un pago (ordinario / extraordinario / scrip). **(b)** según la **política de "
+        "dividendos** de la empresa, en la pestaña «Dividendos». **(c)** fuente: IR (política / hechos relevantes). "
+        "**(e)** al guardar recalcula yield y CAGR (excluye el extraordinario del CAGR) y el payout."),
+    "historial": (
+        "**(a)** confirma si hubo pago en el año marcado como hueco. **(c)** fuente: histórico de dividendos "
+        "(IR / CNMV). **(e)** al guardar recompone la racha de años (criterio K10). *Si el hueco es 2020/2021, casi "
+        "seguro fue el corte por COVID — confírmalo y marca explicable.*"),
+    "capital": (
+        "**(a)** corriges CET1 fully loaded y su requisito (o ratio de Solvencia II). **(b)** mete el ratio del "
+        "último trimestre y la **distancia al gatillo MDA**. **(c)** fuente: presentación de resultados / IR; "
+        "requisito SREP del BCE. **(d)** trampas: fully loaded vs phase-in · requisito total (P1+P2+colchones) vs "
+        "solo Pilar 1. *(La app aún no ingiere CET1; de momento se verifica a mano.)*"),
+}
+
+
+def _metricas_de_bandera(cod, valores):
+    """Métrica(s) que toca corregir según la bandera (para la ficha «¿Cómo corrijo?»)."""
+    v = valores or {}
+    if cod in ("B1", "B-soft"):
+        return ["payout"]
+    if cod == "B2":
+        m = [k for k in ("payout", "ev_ebitda", "free_float") if k in v]
+        return m or ["payout"]
+    if cod == "B3":
+        m = []
+        if v.get("extra"):
+            m.append("clasificacion")
+        if v.get("hueco_serie") or v.get("base_susp"):
+            m.append("historial")
+        return m or ["clasificacion"]
+    return ["payout"]
+
+
 def _admin_bandeja_avisos(conn, _user, _pd):
     """Bandeja de avisos v2 (Spec v2 · D-006): valores marcados por el motor de banderas en el
     último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
@@ -10483,26 +10536,35 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                    "para poblar la bandeja.")
         return
     st.markdown(f"**{len(filas)} valor(es) marcados** en el último screening registrado.")
+    if st.session_state.get("_avisos_msg"):
+        st.info(st.session_state.pop("_avisos_msg"))
     _NOM = {v: k for k, v in IBEX_35.items()}   # ticker -> nombre (para identificar el valor)
+    _silenciados = []   # (tk, nom, cod, hue, tipo) — acusados: van a la sección de reactivación
     for f in filas:
         tk = f["ticker"]; nruns = int(f.get("runs_marcado", 1) or 1)
         _nom = _NOM.get(tk, tk)
         e1, e2 = f.get("payout_e1"), f.get("payout_e2")
-        _bnds = f.get("banderas") or []
-        for b in _bnds:
-            b["_ya"] = (tk, b.get("codigo"), b.get("huella")) in _acu
-        _pend = [b for b in _bnds if b.get("tipo") == "capa" and not b["_ya"]]
+        _pend = []   # banderas-capa SIN acuse (pendientes de atender)
+        for b in (f.get("banderas") or []):
+            if b.get("tipo") != "capa":
+                continue
+            _tp = _acu.get((tk, b.get("codigo"), b.get("huella")))
+            if _tp is None:
+                _pend.append(b)
+            else:
+                _silenciados.append((tk, _nom, b.get("codigo"), b.get("huella"), _tp))
+        if not _pend:
+            continue   # valor totalmente atendido → no da la lata (§8: silenciar = dejar de avisar)
         _e1s = f"{float(e1)*100:.1f}%" if e1 is not None else "n/d"
         _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
         _deriva = f"  ·  ⏳ marcado en los últimos {nruns} cribados seguidos" if nruns >= 2 else ""
-        _estado = f"{len(_pend)} pendiente(s)" if _pend else "✅ resuelto (se irá en el próximo run)"
-        with st.expander(f"🔎 {tk} · {_nom} — {_estado} · payout yfinance {_e1s} / DPA-BPA {_e2s}{_deriva}"):
+        with st.expander(f"🔎 {tk} · {_nom} — {len(_pend)} pendiente(s) · payout yfinance {_e1s} / "
+                         f"DPA-BPA {_e2s}{_deriva}"):
             _q = tk.replace(".MC", "")
             st.markdown(f"[🔗 Buscar fuente (CNMV / IR) de {tk}]"
                         f"(https://www.google.com/search?q={_q}+CNMV+informe+financiero+anual+dividendo)")
-            for b in _bnds:
+            for b in _pend:
                 _cod, _hue = b.get("codigo"), b.get("huella")
-                _tipo = b.get("tipo"); _ya = b["_ya"]
                 _vals = dict(b.get("valores") or {})   # backfill de E1/E2 desde columnas del log (runs viejos)
                 if _cod in ("B1", "B2", "B-soft"):
                     if _vals.get("E1_campo") is None and e1 is not None:
@@ -10510,22 +10572,41 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                     if _vals.get("E2_dpa_bpa") is None and e2 is not None:
                         _vals["E2_dpa_bpa"] = float(e2)
                 _ex = _explicar_bandera(_cod, _vals, tk)   # explicación llana, cifras reales
-                _c1, _c2 = st.columns([6, 1])
-                _pre = "✅ " if (_ya and _tipo == "capa") else ("ℹ️ " if _tipo != "capa" else "⚠️ ")
-                _c1.markdown(f"{_pre}{_ex['titular']}")   # LENGUAJE LLANO, nunca el código
-                if _tipo == "capa" and not _ya:
-                    if _c2.button("Aceptar", key=f"_acu_{tk}_{_cod}_{_hue}"):
-                        try:
-                            _av.guardar_acuse(conn, tk, _cod, _hue, _user); st.rerun()
-                        except Exception as _ex2:
-                            st.error(f"Error guardando acuse: {_ex2}")
-                elif _tipo == "capa" and _ya:
-                    if _c2.button("Reactivar", key=f"_rea_{tk}_{_cod}_{_hue}"):
-                        try:
-                            _av.borrar_acuse(conn, tk, _cod, _hue); st.rerun()
-                        except Exception as _ex2:
-                            st.error(f"Error: {_ex2}")
-                # Detalle EN LÍNEA (se despliega en la página, no flota encima → no hay que arrastrar nada)
+                st.markdown(f"⚠️ {_ex['titular']}")        # LENGUAJE LLANO, nunca el código
+                # ── Tres acciones (§8) ──
+                _b1, _b2, _b3 = st.columns(3)
+                if _b1.button("✅ Confirmar", key=f"_conf_{tk}_{_cod}_{_hue}", use_container_width=True,
+                              help="El valor automático ES correcto: se adopta como verificado. El veredicto sigue "
+                                   "su curso (puede alcanzar Cumple)."):
+                    try:
+                        _av.guardar_acuse(conn, tk, _cod, _hue, _user, "confirmado: dato correcto"); st.rerun()
+                    except Exception as _ex2:
+                        st.error(f"Error: {_ex2}")
+                if _b2.button("✏️ Corregir", key=f"_cor_{tk}_{_cod}_{_hue}", use_container_width=True,
+                              help="El valor está MAL: ve a «BPA por ejercicio»/«Dividendos», corrígelo y re-lanza."):
+                    st.session_state["_bpa_tk"] = tk
+                    st.session_state["_avisos_msg"] = (
+                        f"✏️ **{tk}** preseleccionado. Abre arriba **«BPA por ejercicio»** (o **«Dividendos»** si es "
+                        f"un extraordinario), corrige y guarda. Al **re-lanzar el screening** el aviso se recalcula: "
+                        f"el dato verificado (vigente) manda sobre el estimador.")
+                    st.rerun()
+                if _b3.button("🏷️ Marcar explicable", key=f"_exp_{tk}_{_cod}_{_hue}", use_container_width=True,
+                              help="Aviso legítimo pero situación real/esperada. Silencia SIN subir el veredicto "
+                                   "(§8): el tope/veto se mantiene. No sirve para tapar un problema."):
+                    try:
+                        _av.guardar_acuse(conn, tk, _cod, _hue, _user, "explicable: situación real/esperada"); st.rerun()
+                    except Exception as _ex2:
+                        st.error(f"Error: {_ex2}")
+                # ── ¿Cómo corrijo este dato? (fichas por métrica, §7) ──
+                _howfix = (st.toggle("🛠️ ¿Cómo corrijo este dato?", key=f"_howfix_{tk}_{_cod}_{_hue}")
+                           if hasattr(st, "toggle")
+                           else st.checkbox("🛠️ ¿Cómo corrijo este dato?", key=f"_howfix_{tk}_{_cod}_{_hue}"))
+                if _howfix:
+                    for _m in _metricas_de_bandera(_cod, _vals):
+                        st.markdown(f"**{_m.replace('_', ' ').title()}** — {_FICHA_CORRECCION.get(_m, '—')}")
+                    st.caption("En todas: **fuente + fecha + quién** obligatorios; se guarda como **vigente** (manda "
+                               "sobre el estimador) y silencia el aviso por huella hasta que el dato cambie.")
+                # ── ¿Por qué y qué mirar? (explicación de 5 elementos) ──
                 _abrir = (st.toggle("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}")
                           if hasattr(st, "toggle")
                           else st.checkbox("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}"))
@@ -10543,6 +10624,19 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                         st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  "
                                    f"⏳ marcado en {nruns} cribado(s) seguido(s).")
                 st.divider()
+
+    if _silenciados:
+        with st.expander(f"🔇 Avisos silenciados ({len(_silenciados)}) — reactivar si hace falta"):
+            st.caption("Silenciados con «Confirmar» o «Marcar explicable». Recuerda (§8): los **explicables siguen "
+                       "capando** el veredicto; solo dejan de avisar cada cribado.")
+            for (_stk, _snom, _scod, _shue, _stp) in _silenciados:
+                _s1, _s2 = st.columns([4, 1])
+                _s1.markdown(f"**{_stk}** · {_snom} — {_scod} · *{_stp}*")
+                if _s2.button("↩️ Reactivar", key=f"_reasil_{_stk}_{_scod}_{_shue}", use_container_width=True):
+                    try:
+                        _av.borrar_acuse(conn, _stk, _scod, _shue); st.rerun()
+                    except Exception as _ex2:
+                        st.error(f"Error: {_ex2}")
 
 
 def _periodo_desde_cierre(ejercicio: str, cierre: str) -> str:
@@ -10773,6 +10867,19 @@ def _admin_curacion_dividendos():
                     st.caption(f"Sin BPA verificado para {_b_tk}.")
 
         with _t_div:
+            # §7.1.2 — Guía de corrección estática (todas las fichas por métrica, consulta general)
+            with st.expander("🛠️ Guía de corrección — cómo verificar cada dato (todas las fichas)"):
+                st.caption("Qué introducir, de dónde sacarlo y qué trampas vigilar, por métrica. Cada aviso de la "
+                           "bandeja abre además la ficha concreta que le toca. En todas: fuente + fecha + quién "
+                           "obligatorios; se guarda como **vigente** (manda sobre el estimador) y silencia el aviso.")
+                _titulos_fc = {
+                    "payout": "Payout / cobertura (beneficio)", "free_float": "Free float",
+                    "ev_ebitda": "EV/EBITDA (valoración)",
+                    "clasificacion": "Clasificación de un dividendo (ordinario / extraordinario / scrip)",
+                    "historial": "Historial / hueco en la serie",
+                    "capital": "Cobertura de capital (banca / seguros)"}
+                for _mk, _mt in _titulos_fc.items():
+                    st.markdown(f"**{_mt}** — {_FICHA_CORRECCION.get(_mk, '—')}")
             _tickers = [e["ticker"] for e in verificacion.leer_empresas(conn)]
             if not _tickers:
                 st.info("Crea antes al menos una Ficha de empresa.")
@@ -13697,13 +13804,31 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # Un score aditivo no puede capturar combinaciones que hacen el dividendo
         # estructuralmente insostenible. Los killshots son vetos analíticos explícitos.
         killshots = []
+        _pv_verif = None                 # payout VERIFICADO (vigente): MANDA sobre yfinance (Lente B)
         _es_cartera_div_ks = any(c.get("id") == "dividend_yield" for c in criterios)
         if _es_cartera_div_ks:
-            # K1 — Sistema de tres niveles de sostenibilidad del payout
-            # Nivel 1 (hard/veto): triple insostenibilidad — payout>100% + BPA<0 + FCF ko
-            # Nivel 2 (aviso): combinaciones de dos factores malos — señal visible, sin veto
-            _ks_payout = info.get("payoutRatio")
-            _ks_bpa    = info.get("trailingEps")
+            # Payout/BPA VERIFICADO (último BPA vigente del ticker): si existe, gobierna el veredicto
+            # por encima de yfinance. Es lo que hace que "verificar en la ficha" cambie el veredicto
+            # (payout real), no solo silencie el aviso — y evita que un payout alto verificado (ENG 98%)
+            # se escape a "Cumple" por el dato flojo de yfinance.
+            _bpa_verif = None
+            try:
+                _cxv0 = get_db_connection()
+                try:
+                    _bpv0 = verificacion.leer_bpa(_cxv0, ticker)
+                finally:
+                    release_db_connection(_cxv0)
+                if _bpv0:
+                    _b00 = _bpv0[-1]
+                    _pv_verif = verificacion.calcular_bpa_payout(
+                        _b00.get("beneficio_recurrente_meur"), _b00.get("numero_acciones"),
+                        _b00.get("dividendo_por_accion_eur")).get("payout")
+                    _bpa_verif = _b00.get("bpa_auditado")
+            except Exception:
+                _pv_verif, _bpa_verif = None, None
+            # K1 — Sistema de tres niveles de sostenibilidad del payout (usa el VERIFICADO si existe)
+            _ks_payout = _pv_verif if _pv_verif is not None else info.get("payoutRatio")
+            _ks_bpa    = float(_bpa_verif) if _bpa_verif not in (None, "") else info.get("trailingEps")
             # #6-B — FCF para alarmas/vetos con el MISMO fallback (Flujo operativo−Capex)
             # que la celda de la tabla. Antes los killshots leían _sc_fcf_vs_div(info), que
             # solo mira freeCashflow nativo: un FCF 'ko*' (calculado por fallback) NO
@@ -14136,6 +14261,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 # años del hueco = años SIN pago entre el primero y el último con pago (la 'fecha esperada')
                 _hueco_v2 = ([a for a in range(min(_pagos_v2), max(_pagos_v2) + 1) if a not in _pagos_v2]
                              if (_es_hueco and _pagos_v2) else [])
+                # payout VERIFICADO (vigente): del último BPA verificado del ticker. Si existe, MANDA
+                # sobre el estimador (inhibe B1/B2-payout en banderas.py). Es lo que enlaza "corregir en
+                # la ficha" con "el aviso desaparece al re-lanzar" (el dato humano gobierna).
+                _pv_v2 = _pv_verif          # reutiliza el payout verificado ya calculado en los killshots
                 _ctx_v2 = {
                     "payout_campo":            info.get("payoutRatio"),
                     "dividendo_ord_ejercicio": _div_ord_ej,
@@ -14153,7 +14282,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     "payout_na":               (("financial" in (info.get("sector") or "").strip().lower())
                                                 or ("real estate" in (info.get("sector") or "").strip().lower()
                                                     and (info.get("industry") or "").strip().lower().startswith("reit"))),
-                    "payout_vigente":          None,
+                    "payout_vigente":          _pv_v2,
                 }
                 _res_v2 = _bnd.evaluar_banderas(_ctx_v2)
                 banderas_v2 = _res_v2["banderas"]
@@ -14161,11 +14290,15 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     import avisos as _av_v2
                     _cx_v2 = get_db_connection()
                     try:
-                        _acu_v2 = _av_v2.acuses_activos(_cx_v2, ticker)   # acuses vigentes (por huella)
+                        _acu_v2 = _av_v2.acuses_activos(_cx_v2, ticker)   # {(t,b,h): tipo}
                         for _b in banderas_v2:
-                            _b["acusada"] = (ticker, _b.get("codigo"), _b.get("huella")) in _acu_v2
-                        # capa efectiva: banderas-capa NO acusadas (un acuse por huella deja de capar)
-                        _capa_ef = any(_b["tipo"] == "capa" and not _b.get("acusada") for _b in banderas_v2)
+                            _tp = _acu_v2.get((ticker, _b.get("codigo"), _b.get("huella")))
+                            _b["acuse_tipo"] = _tp                       # None|'confirmado'|'explicable'|'otro'
+                            _b["acusada"] = _tp is not None
+                        # §8 REGLA DURA: SOLO 'confirmado' levanta el cap. 'explicable' (y sin acuse)
+                        # MANTIENEN el cap → silenciar nunca sube el veredicto.
+                        _capa_ef = any(_b["tipo"] == "capa" and _b.get("acuse_tipo") != "confirmado"
+                                       for _b in banderas_v2)
                         if _capa_ef:
                             if estado_global == "cumple":
                                 estado_global = "parcial"          # nunca Cumple con bandera activa

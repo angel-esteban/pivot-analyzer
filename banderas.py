@@ -99,11 +99,14 @@ def evaluar_banderas(ctx: dict) -> dict:
     # (métricas no válidas para ese modelo de negocio). yield/historial/free-float SÍ aplican.
     pna = bool(ctx.get("payout_na") if ctx.get("payout_na") is not None
                else ctx.get("sector_financiero"))
+    # payout VERIFICADO (vigente) presente -> manda sobre el estimador: se inhiben B1 y B2-payout
+    # (ya no hay que "revisar cuál es el bueno": el humano lo fijó). Corregir en la ficha resuelve el aviso.
+    _has_vig = ctx.get("payout_vigente") is not None
     banderas = []
 
     # ── B1 — Divergencia entre estimadores automáticos (payout) ──────────────
     # (Vía por la que se caza Logista: campo ~72% vs cálculo/parser ~99%.)
-    if not pna and e1 is not None and e2 is not None and abs(e1 - e2) > B1_DIVERGENCIA_PP:
+    if not pna and not _has_vig and e1 is not None and e2 is not None and abs(e1 - e2) > B1_DIVERGENCIA_PP:
         banderas.append({
             "codigo": "B1", "tipo": "capa",
             "motivo": f"Divergencia de payout entre estimadores: campo {_pct(e1)} vs DPA/BPA {_pct(e2)} "
@@ -117,7 +120,7 @@ def evaluar_banderas(ctx: dict) -> dict:
     # NO van en B2 — el historial pasa a B3 como "hueco de serie".
     motivos_b2, vals_b2 = [], {}
     payout_ref = e2 if e2 is not None else e1     # el más informativo disponible
-    if not pna and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI:
+    if not pna and not _has_vig and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI:
         motivos_b2.append(f"payout {_pct(payout_ref)} en zona gris ({int(B2_PAYOUT_LO*100)}–{int(B2_PAYOUT_HI*100)}%)")
         vals_b2["payout"] = round(payout_ref, 4)
     _ev = ctx.get("ev_ebitda")
@@ -166,16 +169,20 @@ def evaluar_banderas(ctx: dict) -> dict:
             "huella": _huella("B3", *[f"{k}={vals_b3[k]}" for k in sorted(vals_b3)]),
         })
 
-    # ── Bandera SUAVE — obsolescencia del dato curado (no capa el veredicto) ──
+    # ── Bandera SUAVE — obsolescencia del dato verificado (no capa el veredicto) ──
+    # Compara el estimador FIABLE (E3 = parser CNMV) con el vigente. NO usa E2 (DPA/BPA de
+    # yfinance), que es ruidoso y dispararía falsos "obsoleto" justo tras verificar. Queda
+    # LATENTE hasta que exista E3 (parser CNMV): entonces avisará si el verificado envejece.
     _pv = ctx.get("payout_vigente")
-    if _pv is not None and e2 is not None and abs(e2 - float(_pv)) > SOFT_OBSOLESCENCIA:
+    _e3 = est.get("E3_cnmv")
+    if _pv is not None and _e3 is not None and abs(_e3 - float(_pv)) > SOFT_OBSOLESCENCIA:
         banderas.append({
             "codigo": "B-soft", "tipo": "suave",
-            "motivo": f"El estimador ({_pct(e2)}) se ha separado del payout curado vigente ({_pct(_pv)}): "
-                      f"el dato curado puede estar obsoleto (¿reformulación?). No cambia el veredicto; "
-                      f"conviene refrescar la curación.",
-            "valores": {"E2_dpa_bpa": e2, "payout_vigente": float(_pv)},
-            "huella": _huella("Bsoft", e2, float(_pv)),
+            "motivo": f"El estimador CNMV ({_pct(_e3)}) se ha separado del payout verificado vigente "
+                      f"({_pct(_pv)}): el dato verificado puede estar obsoleto (¿reformulación?). No cambia "
+                      f"el veredicto; conviene refrescar la verificación.",
+            "valores": {"E3_cnmv": _e3, "payout_vigente": float(_pv)},
+            "huella": _huella("Bsoft", _e3, float(_pv)),
         })
 
     capa = any(b["tipo"] == "capa" for b in banderas)
