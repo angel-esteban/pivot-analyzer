@@ -14495,9 +14495,12 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                 estado_global = "parcial"          # nunca Cumple con bandera activa
                             if estado_global != "no_cumple":
                                 revisar = True
-                                _cods_v2 = " + ".join(_b["codigo"] for _b in banderas_v2
-                                                      if _b["tipo"] == "capa" and not _b.get("acusada"))
-                                motivo_revisar = f"revisar · {_cods_v2}"
+                                _cods_v2 = " + ".join(
+                                    (f'{_b["codigo"]} ({_b.get("metrica")})' if _b.get("metrica")
+                                     else _b["codigo"])
+                                    for _b in banderas_v2
+                                    if _b["tipo"] == "capa" and not _b.get("acusada"))
+                                motivo_revisar = f"revisar · {_cods_v2}" if _cods_v2 else "revisar"
                         _av_v2.registrar_log(_cx_v2, ticker, _res_v2["estimadores"],
                                              banderas_v2, _capa_ef, estado_global)   # log de auditoría
                     finally:
@@ -14511,8 +14514,11 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                             estado_global = "parcial"
                         if estado_global != "no_cumple":
                             revisar = True
-                            _cods_v2 = " + ".join(_b["codigo"] for _b in banderas_v2 if _b["tipo"] == "capa")
-                            motivo_revisar = f"revisar · {_cods_v2}"
+                            _cods_v2 = " + ".join(
+                                (f'{_b["codigo"]} ({_b.get("metrica")})' if _b.get("metrica")
+                                 else _b["codigo"])
+                                for _b in banderas_v2 if _b["tipo"] == "capa")
+                            motivo_revisar = f"revisar · {_cods_v2}" if _cods_v2 else "revisar"
             except Exception:
                 banderas_v2, revisar, motivo_revisar = [], False, None
 
@@ -15038,8 +15044,11 @@ def _render_screening_resultados(job: dict):
                 # ── v2 · Banderas de aviso (por qué "revisar") ──
                 _bnds = r.get("banderas_v2") or []
                 if _bnds:
+                    def _lbl_bnd(b):
+                        _c, _m = b.get("codigo", ""), b.get("metrica")
+                        return f"{_c} ({_m})" if _m else _c
                     _items = "".join(
-                        f'<li><b>{b.get("codigo")}</b> — {b.get("motivo","")}</li>' for b in _bnds)
+                        f'<li><b>{_lbl_bnd(b)}</b> — {b.get("motivo","")}</li>' for b in _bnds)
                     _cap = any(b.get("tipo") == "capa" for b in _bnds)
                     _col = "#b45309" if _cap else "#0369a1"
                     _bg  = "#fffbeb" if _cap else "#f0f9ff"

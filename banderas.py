@@ -103,70 +103,97 @@ def evaluar_banderas(ctx: dict) -> dict:
     # (ya no hay que "revisar cuál es el bueno": el humano lo fijó). Corregir en la ficha resuelve el aviso.
     _has_vig = ctx.get("payout_vigente") is not None
     banderas = []
+    # §3.1 — precedencia POR MÉTRICA: B2 (zona gris) sólo mide distancia a una frontera si hay
+    # UN valor limpio; por eso se SUPRIME B2 en una métrica cuando en ESA MISMA métrica ya hay
+    # B1 (divergencia) o B3 (anomalía). B1 y B3 sí coexisten (síntoma + causa). Cada bandera
+    # nombra su métrica, así "B1 (payout) + B2 (free float)" es válido pero "B1 (payout) +
+    # B2 (payout)" no puede existir. Rastreamos qué métricas quedan "tomadas" por B1/B3.
+    _b1b3_metricas: set[str] = set()
 
-    # ── B1 — Divergencia entre estimadores automáticos (payout) ──────────────
+    # ── B1 — Divergencia entre estimadores automáticos (métrica: payout) ─────
     # (Vía por la que se caza Logista: campo ~72% vs cálculo/parser ~99%.)
     if not pna and not _has_vig and e1 is not None and e2 is not None and abs(e1 - e2) > B1_DIVERGENCIA_PP:
+        _b1b3_metricas.add("payout")
         banderas.append({
-            "codigo": "B1", "tipo": "capa",
+            "codigo": "B1", "metrica": "payout", "tipo": "capa",
             "motivo": f"Divergencia de payout entre estimadores: campo {_pct(e1)} vs DPA/BPA {_pct(e2)} "
                       f"(Δ {abs(e1-e2)*100:.1f} pp > {B1_DIVERGENCIA_PP*100:.0f}). Revisar cuál es el bueno.",
             "valores": {"E1_campo": e1, "E2_dpa_bpa": e2},
             "huella": _huella("B1", e1, e2),
         })
 
-    # ── B2 — Zona gris cerca de un umbral, SOLO métricas con ruido real (Pólaris D-006):
-    # payout, EV/EBITDA y free float. yield (poco ruidoso) e historial (recuento, no ruido)
-    # NO van en B2 — el historial pasa a B3 como "hueco de serie".
-    motivos_b2, vals_b2 = [], {}
-    payout_ref = e2 if e2 is not None else e1     # el más informativo disponible
-    if not pna and not _has_vig and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI:
-        motivos_b2.append(f"payout {_pct(payout_ref)} en zona gris ({int(B2_PAYOUT_LO*100)}–{int(B2_PAYOUT_HI*100)}%)")
-        vals_b2["payout"] = round(payout_ref, 4)
-    _ev = ctx.get("ev_ebitda")
-    if not pna and _ev is not None and B2_EVEBITDA_LO <= float(_ev) <= B2_EVEBITDA_HI:
-        motivos_b2.append(f"EV/EBITDA {float(_ev):.1f}× (cerca del KO 22×)")
-        vals_b2["ev_ebitda"] = round(float(_ev), 2)
-    _ff = ctx.get("free_float")
-    if _ff is not None and B2_FREEFLOAT_LO <= float(_ff) <= B2_FREEFLOAT_HI:
-        motivos_b2.append(f"free float {_pct(_ff)} (cerca del veto 20%)")
-        vals_b2["free_float"] = round(float(_ff), 4)
-    if motivos_b2:
-        banderas.append({
-            "codigo": "B2", "tipo": "capa",
-            "motivo": "Zona gris cerca de umbral: " + "; ".join(motivos_b2) + ".",
-            "valores": vals_b2,
-            "huella": _huella("B2", *[vals_b2[k] for k in sorted(vals_b2)]),
-        })
-
-    # ── B3 — Anomalía / firma de fallo ───────────────────────────────────────
+    # ── B3 — Anomalía / firma de fallo, SEPARADA POR MÉTRICA ─────────────────
     # (Vía por la que se caza un payout erróneamente BAJO, como el 72% de Logista, que B2 no vería.)
-    motivos_b3, vals_b3 = [], {}
+    # B3 sobre PAYOUT: extraordinario / salto interanual / base suspendida / fuente rancia. Estas
+    # ensucian la estimación del payout, así que "toman" la métrica payout y bloquean B2(payout).
+    motivos_b3p, vals_b3p = [], {}
     if ctx.get("tiene_extraordinario"):
-        motivos_b3.append("extraordinario detectado en la serie")
-        vals_b3["extra"] = True
+        motivos_b3p.append("extraordinario detectado en la serie")
+        vals_b3p["extra"] = True
     _sy = ctx.get("salto_yoy_ordinario")
     if _sy is not None and abs(float(_sy)) > B3_SALTO_YOY:
-        motivos_b3.append(f"salto interanual del dividendo ordinario {float(_sy)*100:+.0f}% (> {int(B3_SALTO_YOY*100)}%)")
-        vals_b3["salto_yoy"] = round(float(_sy), 3)
+        motivos_b3p.append(f"salto interanual del dividendo ordinario {float(_sy)*100:+.0f}% (> {int(B3_SALTO_YOY*100)}%)")
+        vals_b3p["salto_yoy"] = round(float(_sy), 3)
     if ctx.get("base_suspendida"):
-        motivos_b3.append("base de dividendo suspendida/reanudada (≈0)")
-        vals_b3["base_susp"] = True
+        motivos_b3p.append("base de dividendo suspendida/reanudada (≈0)")
+        vals_b3p["base_susp"] = True
+    if ctx.get("fuente_rancia"):
+        motivos_b3p.append("fuente nula o rancia")
+        vals_b3p["fuente_rancia"] = True
+    if motivos_b3p:
+        _b1b3_metricas.add("payout")
+        banderas.append({
+            "codigo": "B3", "metrica": "payout", "tipo": "capa",
+            "motivo": "Anomalía en el payout: " + "; ".join(motivos_b3p) + ".",
+            "valores": vals_b3p,
+            "huella": _huella("B3p", *[f"{k}={vals_b3p[k]}" for k in sorted(vals_b3p)]),
+        })
+    # B3 sobre HISTORIAL: hueco en la serie (racha rota por dato faltante, no por interrupción real).
+    # El historial no va en B2 (recuento sin ruido, ya lo gobierna K10); su riesgo se cubre aquí.
     _hs = ctx.get("hueco_serie")
     if _hs:
+        _b1b3_metricas.add("historial")
         _anos_hs = ", ".join(str(a) for a in _hs) if isinstance(_hs, (list, tuple)) else ""
-        motivos_b3.append(f"hueco en la serie de dividendo ({_anos_hs})" if _anos_hs
-                          else "hueco en la serie de dividendo (interrupción/año sin pago)")
-        vals_b3["hueco_serie"] = list(_hs) if isinstance(_hs, (list, tuple)) else True
-    if ctx.get("fuente_rancia"):
-        motivos_b3.append("fuente nula o rancia")
-        vals_b3["fuente_rancia"] = True
-    if motivos_b3:
         banderas.append({
-            "codigo": "B3", "tipo": "capa",
-            "motivo": "Anomalía: " + "; ".join(motivos_b3) + ".",
-            "valores": vals_b3,
-            "huella": _huella("B3", *[f"{k}={vals_b3[k]}" for k in sorted(vals_b3)]),
+            "codigo": "B3", "metrica": "historial", "tipo": "capa",
+            "motivo": (f"Anomalía en el historial: hueco en la serie de dividendo ({_anos_hs})."
+                       if _anos_hs else
+                       "Anomalía en el historial: hueco en la serie de dividendo (año sin pago)."),
+            "valores": {"hueco_serie": list(_hs) if isinstance(_hs, (list, tuple)) else True},
+            "huella": _huella("B3h", *(list(_hs) if isinstance(_hs, (list, tuple)) else ["hueco"])),
+        })
+
+    # ── B2 — Zona gris cerca de un umbral, UNA BANDERA POR MÉTRICA (§3.1/§4) ──
+    # Sólo métricas con ruido real de estimación: payout, EV/EBITDA, free float. yield es de baja
+    # prioridad (poco ruido) e historial queda FUERA (recuento exacto → B3 hueco). Cada métrica se
+    # evalúa sólo si NO está "tomada" por un B1/B3 en esa misma métrica.
+    payout_ref = e2 if e2 is not None else e1     # el más informativo disponible
+    if (not pna and not _has_vig and "payout" not in _b1b3_metricas
+            and payout_ref is not None and B2_PAYOUT_LO <= payout_ref <= B2_PAYOUT_HI):
+        banderas.append({
+            "codigo": "B2", "metrica": "payout", "tipo": "capa",
+            "motivo": f"Zona gris cerca de umbral: payout {_pct(payout_ref)} "
+                      f"({int(B2_PAYOUT_LO*100)}–{int(B2_PAYOUT_HI*100)}%).",
+            "valores": {"payout": round(payout_ref, 4)},
+            "huella": _huella("B2", "payout", round(payout_ref, 4)),
+        })
+    _ev = ctx.get("ev_ebitda")
+    if (not pna and "ev_ebitda" not in _b1b3_metricas
+            and _ev is not None and B2_EVEBITDA_LO <= float(_ev) <= B2_EVEBITDA_HI):
+        banderas.append({
+            "codigo": "B2", "metrica": "EV/EBITDA", "tipo": "capa",
+            "motivo": f"Zona gris cerca de umbral: EV/EBITDA {float(_ev):.1f}× (cerca del KO 22×).",
+            "valores": {"ev_ebitda": round(float(_ev), 2)},
+            "huella": _huella("B2", "ev_ebitda", round(float(_ev), 2)),
+        })
+    _ff = ctx.get("free_float")
+    if ("free_float" not in _b1b3_metricas
+            and _ff is not None and B2_FREEFLOAT_LO <= float(_ff) <= B2_FREEFLOAT_HI):
+        banderas.append({
+            "codigo": "B2", "metrica": "free float", "tipo": "capa",
+            "motivo": f"Zona gris cerca de umbral: free float {_pct(_ff)} (cerca del veto 20%).",
+            "valores": {"free_float": round(float(_ff), 4)},
+            "huella": _huella("B2", "free_float", round(float(_ff), 4)),
         })
 
     # ── Bandera SUAVE — obsolescencia del dato verificado (no capa el veredicto) ──
@@ -177,7 +204,7 @@ def evaluar_banderas(ctx: dict) -> dict:
     _e3 = est.get("E3_cnmv")
     if _pv is not None and _e3 is not None and abs(_e3 - float(_pv)) > SOFT_OBSOLESCENCIA:
         banderas.append({
-            "codigo": "B-soft", "tipo": "suave",
+            "codigo": "B-soft", "metrica": "payout", "tipo": "suave",
             "motivo": f"El estimador CNMV ({_pct(_e3)}) se ha separado del payout verificado vigente "
                       f"({_pct(_pv)}): el dato verificado puede estar obsoleto (¿reformulación?). No cambia "
                       f"el veredicto; conviene refrescar la verificación.",
