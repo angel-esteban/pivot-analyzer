@@ -13823,6 +13823,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             # se escape a "Cumple" por el dato flojo de yfinance.
             _bpa_verif = None
             try:
+                import verificacion                     # ← faltaba: sin él, NameError silencioso -> _pv_verif None
                 _cxv0 = get_db_connection()
                 try:
                     _bpv0 = verificacion.leer_bpa(_cxv0, ticker)
