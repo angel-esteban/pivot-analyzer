@@ -10520,7 +10520,7 @@ def _admin_bandeja_avisos(conn, _user, _pd):
     último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
     mantenimiento rutinario — aquí solo se atienden anomalías, al ritmo del usuario."""
     import avisos as _av
-    st.markdown("#### 🔎 Bandeja de avisos — atención por excepción")
+    st.markdown("#### 🔎 Bandeja de avisos del último screening — atención por excepción")
     st.caption("El motor carga todo en automático y marca solo lo que puede voltear un veredicto "
                "(divergencia entre estimadores, zona gris de umbral, anomalía). Un valor marcado "
                "**nunca sale 'Cumple'** hasta resolverse. «Revisado y aceptado» silencia el aviso "
