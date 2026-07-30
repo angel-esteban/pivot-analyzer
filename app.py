@@ -10633,28 +10633,58 @@ def _admin_curacion_dividendos():
                            "nº de acciones, DPA en **€**); la app calcula el **BPA** y el **payout** como "
                            "derivados. No teclees un BPA ya cocinado (individual vs consolidado, reportado "
                            "vs recurrente → ahí se cometen los errores).")
-                c1, c2, c3 = st.columns(3)
-                _b_tk = c1.selectbox("Ticker", _tickers, key="_bpa_tk")
-                _b_ej = c2.text_input("Ejercicio (FY2025)", key="_bpa_ej").strip().upper()
+                ca, cb = st.columns(2)
+                _b_tk = ca.selectbox("Ticker", _tickers, key="_bpa_tk")
+                _bpas_tk = verificacion.leer_bpa(conn, ticker=_b_tk)           # vigentes de este ticker
+                _ejs_tk = [b["ejercicio"] for b in _bpas_tk]
+                _b_edit = cb.selectbox("Ejercicio a ver / editar", _ejs_tk + ["➕ Nuevo ejercicio"], index=0,
+                                       key=f"_bpa_edit_{_b_tk}",
+                                       help="Elige un ejercicio guardado para verlo y corregirlo "
+                                            "(guardar crea una versión nueva), o «Nuevo» para añadir uno.")
+                _es_nuevo = _b_edit == "➕ Nuevo ejercicio"
+                _row = None if _es_nuevo else next((b for b in _bpas_tk if b["ejercicio"] == _b_edit), None)
+                _sfx = f"{_b_tk}_{_b_edit}"           # al cambiar ticker/ejercicio, los widgets se recargan
+                def _rvf(k):                          # valor numérico del registro (float) o None
+                    v = (_row or {}).get(k)
+                    try:
+                        return float(v) if v not in (None, "") else None
+                    except (TypeError, ValueError):
+                        return None
+                def _rvs(k, d=""):                    # valor texto del registro o default
+                    v = (_row or {}).get(k)
+                    return d if v in (None, "") else str(v)
+                if _row is not None:
+                    st.caption(f"✏️ Editando **{_b_edit}** (v{_row.get('version')}) — al guardar se crea una "
+                               f"versión nueva; corrige lo que esté mal.")
+                c3, c4, c5 = st.columns(3)
+                _b_ej = c3.text_input("Ejercicio (FY2025)", value=("" if _es_nuevo else _b_edit),
+                                      key=f"_bpa_ej_{_sfx}").strip().upper()
                 _cierre = (_empresas.get(_b_tk) or {}).get("cierre_ejercicio") or "12-31"
                 _cierre_no_dic = _cierre != "12-31"
-                _per_sug = _periodo_desde_cierre(_b_ej, _cierre)
-                _b_per = c3.text_input("Periodo del ejercicio" + (" — OBLIGATORIO" if _cierre_no_dic else " (opcional)"),
-                                       value=_per_sug, key=f"_bpa_per_{_b_tk}_{_b_ej}")
-                c4, c5, c6 = st.columns(3)
-                _b_base = c4.selectbox("Base del beneficio", ["consolidado", "individual"], key="_bpa_base")
-                _b_rec = c5.number_input("Beneficio recurrente (M€, negativo permitido)",
-                                         value=None, step=1.0, format="%.2f", key="_bpa_rec")
-                _b_rep = c6.number_input("Beneficio reportado (M€, opcional)",
-                                         value=None, step=1.0, format="%.2f", key="_bpa_rep")
-                c7, c8 = st.columns(2)
-                _b_na_m = c7.number_input("Nº de acciones (en MILLONES, p. ej. 261,99)",
-                                          value=None, step=1.0, format="%.4f", key="_bpa_na",
+                _per_val = _rvs("periodo") or _periodo_desde_cierre(_b_ej, _cierre)
+                _b_per = c4.text_input("Periodo del ejercicio" + (" — OBLIGATORIO" if _cierre_no_dic else " (opcional)"),
+                                       value=_per_val, key=f"_bpa_per_{_sfx}")
+                _base_val = _rvs("base_beneficio", "consolidado")
+                _b_base = c5.selectbox("Base del beneficio", ["consolidado", "individual"],
+                                       index=(0 if _base_val != "individual" else 1), key=f"_bpa_base_{_sfx}")
+                c6, c7 = st.columns(2)
+                _b_rec = c6.number_input("Beneficio recurrente (M€, negativo permitido)",
+                                         value=_rvf("beneficio_recurrente_meur"), step=1.0, format="%.2f",
+                                         key=f"_bpa_rec_{_sfx}")
+                _b_rep = c7.number_input("Beneficio reportado (M€, opcional)",
+                                         value=_rvf("beneficio_reportado_meur"), step=1.0, format="%.2f",
+                                         key=f"_bpa_rep_{_sfx}")
+                c8, c8b = st.columns(2)
+                _na_abs0 = _rvf("numero_acciones")
+                _b_na_m = c8.number_input("Nº de acciones (en MILLONES, p. ej. 261,99)",
+                                          value=(_na_abs0 / 1_000_000 if _na_abs0 is not None else None),
+                                          step=1.0, format="%.4f", key=f"_bpa_na_{_sfx}",
                                           help="En millones, coherente con el beneficio en M€ "
                                                "(Enagás ≈ 261,99). La app lo convierte a absoluto para guardar.")
                 _b_na = _b_na_m * 1_000_000 if _b_na_m is not None else None
-                _b_dpa = c8.number_input("Dividendo por acción con cargo (€)",
-                                         value=None, step=0.01, format="%.4f", key="_bpa_dpa")
+                _b_dpa = c8b.number_input("Dividendo por acción con cargo (€)",
+                                          value=_rvf("dividendo_por_accion_eur"), step=0.01, format="%.4f",
+                                          key=f"_bpa_dpa_{_sfx}")
                 # ── Derivados (solo lectura, calculados en vivo) ──
                 _calc = verificacion.calcular_bpa_payout(_b_rec, _b_na, _b_dpa)
                 _bpa_s = f"{_calc['bpa']:.4f} €/acc" if _calc["bpa"] is not None else "—"
@@ -10686,11 +10716,15 @@ def _admin_curacion_dividendos():
                     f'{_nota_d}</div>',
                     unsafe_allow_html=True)
                 c9, c10, c11 = st.columns(3)
-                _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", key="_bpa_fte")
-                _b_url = c10.text_input("URL (opcional)", key="_bpa_url")
-                _b_conf = c11.selectbox("Confianza", ["alta", "media", "baja"], index=1, key="_bpa_conf")
-                _b_vp = st.text_input("Verificado por", value=_user, key="_bpa_vp")
-                if st.button("💾 Guardar BPA (vigente)", use_container_width=True, key="_bpa_save"):
+                _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", value=_rvs("fuente"), key=f"_bpa_fte_{_sfx}")
+                _b_url = c10.text_input("URL (opcional)", value=_rvs("url"), key=f"_bpa_url_{_sfx}")
+                _conf_val = _rvs("confianza", "media")
+                _b_conf = c11.selectbox("Confianza", ["alta", "media", "baja"],
+                                        index=(["alta", "media", "baja"].index(_conf_val)
+                                               if _conf_val in ("alta", "media", "baja") else 1),
+                                        key=f"_bpa_conf_{_sfx}")
+                _b_vp = st.text_input("Verificado por", value=_user, key=f"_bpa_vp_{_sfx}")
+                if st.button("💾 Guardar BPA (vigente)", use_container_width=True, key=f"_bpa_save_{_sfx}"):
                     _d = {"ticker": _b_tk, "ejercicio": _b_ej, "periodo": _b_per or None,
                           "base_beneficio": _b_base, "beneficio_recurrente_meur": _b_rec,
                           "beneficio_reportado_meur": _b_rep, "numero_acciones": _b_na,
