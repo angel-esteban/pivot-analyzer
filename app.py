@@ -1920,6 +1920,11 @@ def obtener_datos(ticker: str):
         try:
             t    = yf.Ticker(ticker)
             hist = t.history(period="1y", auto_adjust=True)
+            if hist is not None and not hist.empty and "Close" in hist:
+                # Descartar la barra del día en curso si viene SIN cierre (Close=NaN): yfinance
+                # a veces añade una fila placeholder que corrompe el precio y TODOS los
+                # indicadores (de ahí 'PRECIO nan' y lecturas técnicas erróneas).
+                hist = hist[hist["Close"].notna()]
             if hist is None or hist.empty:
                 if _intento < 2:
                     _time.sleep(1.5)
@@ -5260,10 +5265,14 @@ def pestaña_macro():
 
 
 def precio_actual(hist: pd.DataFrame):
-    """Último cierre disponible."""
+    """Último cierre disponible, IGNORANDO barras sin cierre (p. ej. la del día en curso, que
+    yfinance devuelve con Close=NaN). Antes tomaba iloc[-1] a secas → 'PRECIO nan'."""
     if hist is None or hist.empty:
         return None
-    return round(hist["Close"].iloc[-1], 4)
+    _s = hist["Close"].dropna()
+    if _s.empty:
+        return None
+    return round(float(_s.iloc[-1]), 4)
 
 
 def datos_sesion(hist: pd.DataFrame, timeframe: str):
@@ -10344,7 +10353,7 @@ def _explicar_bandera(cod, valores, ticker):
                        "(no puede ser Cumple)")
             mir.append("el **beneficio** y el **dividendo ordinario** del último ejercicio (payout = div ÷ BPA): "
                        "por debajo del 85% puede Cumplir; por encima, la limitación es correcta")
-            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, umbral/cap 85%)")
+            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, umbral 85%)")
         if "ev_ebitda" in v:
             det.append(f"el **EV/EBITDA** es **{float(v['ev_ebitda']):.1f}×**, cerca del **límite de 22×** "
                        f"a partir del cual la valoración se considera demasiado cara")
@@ -10663,19 +10672,17 @@ def _admin_curacion_dividendos():
                 _bg_d = "#fee2e2" if _bpa_raro else ("#fffbeb" if _cap85 else "#eff6ff")
                 _nota_d = ""
                 if _bpa_raro:
-                    _nota_d = ('<div style="color:#dc2626;font-size:0.85rem;margin-top:6px;font-weight:600">'
-                               '🚩 BPA implausible — revisa el nº de acciones (en MILLONES)</div>')
+                    _nota_d = ('<div style="color:#dc2626;font-size:0.82rem;margin-top:6px;font-weight:600">'
+                               '🚩 revisa el nº de acciones (en MILLONES)</div>')
                 elif _cap85:
-                    _nota_d = ('<div style="color:#b45309;font-size:0.85rem;margin-top:6px;font-weight:600">'
-                               '⚠️ Payout ≥ 85% → activa el cap K1-Payout (veredicto Parcial, nunca Cumple)</div>')
+                    _nota_d = ('<div style="color:#b45309;font-size:0.82rem;margin-top:6px;font-weight:600">'
+                               '⚠️ Payout ≥ 85% → Parcial (umbral K1-Payout)</div>')
                 st.markdown(
-                    f'<div style="padding:14px 18px;margin:8px 0;border-radius:10px;background:{_bg_d};'
-                    f'border-left:6px solid {_col_d}">'
-                    f'<div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;text-transform:uppercase;'
-                    f'letter-spacing:0.5px">📐 Derivados (solo lectura, calculados por la app)</div>'
-                    f'<span style="font-size:1.7rem;font-weight:800;color:{_col_d}">BPA {_bpa_s}</span>'
-                    f'<span style="font-size:1.7rem;font-weight:800;color:{_col_d};margin-left:24px">Payout {_pay_s}</span>'
-                    f'<span style="font-size:0.9rem;color:#475569;margin-left:24px">· Dividendo total {_dt_s}</span>'
+                    f'<div style="padding:10px 14px;margin:6px 0;border-radius:8px;background:{_bg_d};'
+                    f'border-left:4px solid {_col_d};font-size:0.9rem;color:#334155">'
+                    f'📐 Derivados — <b style="color:{_col_d}">BPA {_bpa_s}</b> &nbsp;·&nbsp; '
+                    f'<b style="color:{_col_d}">Payout {_pay_s}</b> &nbsp;·&nbsp; '
+                    f'<span style="color:#64748b">Div. total {_dt_s}</span>'
                     f'{_nota_d}</div>',
                     unsafe_allow_html=True)
                 c9, c10, c11 = st.columns(3)
@@ -13937,7 +13944,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _campos_sin_calidad = [c for c in _campos_sin_calidad if c != "payoutRatio"]
         if _campos_sin_calidad:
             _nombres_k8 = {"payoutRatio": "payout", "debtToEquity": "deuda/equity",
-                           "enterpriseToEbitda": "EV/EBITDA", "marketCap": "market cap",
+                           "enterpriseToEbitda": "EV/EBITDA", "marketCap": "capitalización bursátil",
                            "beta": "beta", "returnOnEquity": "ROE", "grossMargins": "margen bruto",
                            "operatingMargins": "margen operativo", "revenueGrowth": "crec. ingresos",
                            "earningsGrowth": "crec. beneficio", "pegRatio": "PEG", "trailingEps": "BPA"}
@@ -14038,10 +14045,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "K5":        ("free float < 20%",                "veto"),
             "K2":        ("recorte sostenido del dividendo", "veto"),
             "K10-veto":  ("historial < 3 años",              "veto"),
-            "K1-BPA":    ("BPA negativo",                     "cap"),
-            "K1-Payout": ("payout ≥ 85%",                     "cap"),
-            "K10-cap":   ("historial corto (3–4 a.)",        "cap"),
-            "K3":        ("yield bajo",                       "cap"),
+            "K1-BPA":    ("BPA negativo",                     "umbral"),
+            "K1-Payout": ("payout ≥ 85%",                     "umbral"),
+            "K10-cap":   ("historial corto (3–4 a.)",        "umbral"),
+            "K3":        ("yield bajo",                       "umbral"),
         }
         _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap", "K3"]  # más severo primero
         _activos_mot = []
@@ -14053,7 +14060,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         if estado_global == "no_cumple":
             _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "veto"]
         elif estado_global == "parcial":
-            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "cap"]
+            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "umbral"]
         else:
             _pool = []
         if _pool:
@@ -14370,7 +14377,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
     # ── Tabla resumen tickers ──────────────────────────────────────────
     story.append(Paragraph("Resumen de valores", S_SECTION))
     hdr_style = {"fontName": "Helvetica-Bold", "fontSize": 8, "textColor": colors.white}
-    _MOT_HEX = {"veto": "#dc2626", "cap": "#d97706", "score": "#94a3b8"}
+    _MOT_HEX = {"veto": "#dc2626", "umbral": "#d97706", "score": "#94a3b8"}
     tbl_data = [[
         p("<b>Ticker</b>",  **hdr_style),
         p("<b>Empresa</b>", **hdr_style),
@@ -14517,7 +14524,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
     ))
     story.append(Paragraph(
         "Motivo = restricción que fija el veredicto. <i>veto</i> fuerza No cumple; "
-        "<i>cap</i> limita a Parcial; “—” = el veredicto lo determina la puntuación.",
+        "<i>umbral</i> baja a Parcial; “—” = el veredicto lo determina la puntuación.",
         S_FOOT
     ))
     story.append(Paragraph(
@@ -16675,8 +16682,10 @@ def pantalla_analisis():
         # informe de estrategia (se pasa como 'ts'). Fallback: última sesión del histórico.
         ts_str = _sello_datos(info, hist)
 
+        _precio_disp = float(_curr_market) if _curr_market else precio   # precio en vivo; fallback histórico
+        _precio_txt = f"{_precio_disp:.4f}{curr_str}" if _precio_disp is not None else "—"
         with col_p1:
-            st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
+            st.metric("Precio", _precio_txt, delta=var_str, help=TOOLTIPS["Precio"])
         with col_p2:
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
