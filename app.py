@@ -10584,11 +10584,18 @@ def _admin_bandeja_avisos(conn, _user, _pd):
                         st.error(f"Error: {_ex2}")
                 if _b2.button("✏️ Corregir", key=f"_cor_{tk}_{_cod}_{_hue}", use_container_width=True,
                               help="El valor está MAL: ve a «BPA por ejercicio»/«Dividendos», corrígelo y re-lanza."):
-                    st.session_state["_bpa_tk"] = tk
+                    # clave intermedia (NO la del widget) -> la pestaña BPA la aplica antes de crear el
+                    # selectbox, evitando la excepción 'modified after instantiated'. Streamlit no cambia
+                    # de pestaña por código, así que el mensaje guía a abrirla.
+                    st.session_state["_bpa_goto"] = tk
                     st.session_state["_avisos_msg"] = (
-                        f"✏️ **{tk}** preseleccionado. Abre arriba **«BPA por ejercicio»** (o **«Dividendos»** si es "
-                        f"un extraordinario), corrige y guarda. Al **re-lanzar el screening** el aviso se recalcula: "
-                        f"el dato verificado (vigente) manda sobre el estimador.")
+                        f"✏️ **{tk}** preseleccionado en **«BPA por ejercicio»**. Abre esa pestaña arriba "
+                        f"(o **«Dividendos»** si es un extraordinario), corrige y guarda. Al **re-lanzar el "
+                        f"screening** el aviso se recalcula: el dato verificado manda sobre el estimador.")
+                    try:
+                        st.toast(f"✏️ {tk} preseleccionado en «BPA por ejercicio» — abre esa pestaña para corregir.")
+                    except Exception:
+                        pass
                     st.rerun()
                 if _b3.button("🏷️ Marcar explicable", key=f"_exp_{tk}_{_cod}_{_hue}", use_container_width=True,
                               help="Aviso legítimo pero situación real/esperada. Silencia SIN subir el veredicto "
@@ -10720,6 +10727,9 @@ def _admin_curacion_dividendos():
         with _t_bpa:
             _empresas = {e["ticker"]: e for e in verificacion.leer_empresas(conn)}
             _tickers = list(_empresas.keys())
+            # preselección desde el botón «Corregir» de la bandeja (antes de crear el selectbox)
+            if st.session_state.get("_bpa_goto") in _tickers:
+                st.session_state["_bpa_tk"] = st.session_state.pop("_bpa_goto")
             if not _tickers:
                 st.info("Crea antes al menos una Ficha de empresa.")
             else:
