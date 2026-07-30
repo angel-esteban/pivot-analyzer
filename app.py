@@ -12,6 +12,31 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, date
 import bcrypt
+
+
+def _ahora_es():
+    """datetime actual en hora local de España (Europe/Madrid), para los sellos de los informes."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Madrid"))
+    except Exception:
+        return datetime.now()
+
+
+def _ts_es(ts):
+    """Convierte un timestamp de la BBDD (NOW() de Neon = UTC, naive) a Europe/Madrid.
+    Acepta datetime (naive→se asume UTC; aware→se convierte) o str ISO. Devuelve datetime local ES."""
+    if ts is None:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace("Z", "").strip()[:19])
+        if getattr(ts, "tzinfo", None) is None:
+            ts = ts.replace(tzinfo=ZoneInfo("UTC"))
+        return ts.astimezone(ZoneInfo("Europe/Madrid"))
+    except Exception:
+        return ts
 import io
 import traceback
 import uuid as _uuid_mod
@@ -6671,7 +6696,7 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
     beta_val = beta calculada vs índice (la de pantalla); si None, se usa info['beta'] (Yahoo).
     """
 
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora = _ahora_es().strftime("%d/%m/%Y %H:%M")
     sem_colors = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}
     sem_color  = sem_colors.get(semaforo, "#94a3b8")
     emoji_sem  = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
@@ -7901,7 +7926,7 @@ def generar_informe_estrategia_html(ticker: str, nombre: str, precio: float,
     """
     import re as _re
 
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora = _ahora_es().strftime("%d/%m/%Y %H:%M")
 
     # ── Convertidor markdown → HTML (formato de los popovers) ────────────
     def _md_to_html(md: str) -> str:
@@ -8335,7 +8360,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
     S_EXP_LI = _p(fontName="Helvetica",         fontSize=7,  leading=10,  leftIndent=8,  spaceAfter=1)
     S_PIE    = _p(fontName="Helvetica",         fontSize=6.5,textColor=colors.grey, alignment=TA_CENTER)
 
-    ahora    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora    = _ahora_es().strftime("%d/%m/%Y %H:%M")
     historia = []
 
     # ── Cabecera ──────────────────────────────────────────────────────────
@@ -8669,7 +8694,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         hist.append(t)
         hist.append(Spacer(1, 0.1*cm))
 
-    ahora   = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora   = _ahora_es().strftime("%d/%m/%Y %H:%M")
     historia = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
@@ -10520,17 +10545,26 @@ def _admin_bandeja_avisos(conn, _user, _pd):
     último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
     mantenimiento rutinario — aquí solo se atienden anomalías, al ritmo del usuario."""
     import avisos as _av
-    st.markdown("#### 🔎 Bandeja de avisos del último screening — atención por excepción")
-    st.caption("El motor carga todo en automático y marca solo lo que puede voltear un veredicto "
-               "(divergencia entre estimadores, zona gris de umbral, anomalía). Un valor marcado "
-               "**nunca sale 'Cumple'** hasta resolverse. «Revisado y aceptado» silencia el aviso "
-               "**mientras el dato no cambie** (si cambia, la huella cambia y vuelve).")
     try:
         filas = _av.leer_avisos_ultimo(conn, solo_capa=True)
         _acu = _av.acuses_activos(conn)
     except Exception as _ex:
+        st.markdown("#### 🔎 Bandeja de avisos del último screening — atención por excepción")
         st.error(f"No se pudo leer la bandeja (¿ejecutaste migracion_avisos_v2_neon.sql?): {_ex}")
         return
+    # Fecha y hora del último screening registrado (max run_ts del log), en hora local ES
+    _run_ts = None
+    try:
+        _cands = [f.get("run_ts") for f in filas if f.get("run_ts")]
+        _run_ts = _ts_es(max(_cands)) if _cands else None
+    except Exception:
+        _run_ts = None
+    _sello = f" · {_run_ts.strftime('%d/%m/%Y %H:%M')}" if _run_ts else ""
+    st.markdown(f"#### 🔎 Bandeja de avisos del último screening{_sello} — atención por excepción")
+    st.caption("El motor carga todo en automático y marca solo lo que puede voltear un veredicto "
+               "(divergencia entre estimadores, zona gris de umbral, anomalía). Un valor marcado "
+               "**nunca sale 'Cumple'** hasta resolverse. «Revisado y aceptado» silencia el aviso "
+               "**mientras el dato no cambie** (si cambia, la huella cambia y vuelve).")
     if not filas:
         st.success("✅ Sin avisos en el último run. Lanza un screening de dividendos (Estrategia) "
                    "para poblar la bandeja.")
@@ -14445,7 +14479,8 @@ def _generar_pdf_screening(job: dict) -> bytes:
 
     indice    = job.get("indice", "—")
     tipo      = job.get("tipo_cartera", "—")
-    completed = str(job.get("completed_at") or job.get("created_at") or "")[:16]
+    _cj_dt    = _ts_es(job.get("completed_at") or job.get("created_at"))
+    completed = _cj_dt.strftime("%Y-%m-%d %H:%M") if _cj_dt else ""
     job_id    = job.get("id", "")
 
     n_cumple  = sum(1 for r in resultado if r.get("estado_global") == "cumple")
@@ -14777,9 +14812,9 @@ def _render_screening_resultados(job: dict):
 
     # Botón descarga PDF
     _indice_slug = (job.get('indice') or 'screening').replace(' ', '_')
-    _dt_job      = job.get('completed_at') or job.get('created_at')
-    _fecha_slug  = str(_dt_job)[:10].replace('-', '') if _dt_job else 'sin_fecha'
-    _hora_slug   = str(_dt_job)[11:16].replace(':', '') if _dt_job else ''
+    _dt_job      = _ts_es(job.get('completed_at') or job.get('created_at'))
+    _fecha_slug  = _dt_job.strftime('%Y%m%d') if _dt_job else 'sin_fecha'
+    _hora_slug   = _dt_job.strftime('%H%M') if _dt_job else ''
     _pdf_filename = f"screening_{_indice_slug}_{_fecha_slug}_{_hora_slug}.pdf"
     try:
         _pdf_bytes = _generar_pdf_screening(job)
@@ -15296,7 +15331,7 @@ def _render_screening_panel(tipo_key: str, uid: int):
                 _hist_labels = []
                 for _hj in _hist_jobs:
                     _ts = _hj.get("completed_at")
-                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
+                    _ts_s = _ts_es(_ts).strftime("%d/%m %H:%M") if _ts else "—"
                     _ico  = "✅" if _hj["estado"] == "completado" else "💥"
                     _hist_labels.append(f"{_ico} {_hj.get('indice','')} — {_ts_s}")
                 # Si viene de notificación, preseleccionar ese job
@@ -15422,7 +15457,7 @@ def _render_screening_cartera(tipo_key: str, uid: int, tickers_cartera: dict):
                 _hist_labels = []
                 for _hj in _hist_jobs:
                     _ts   = _hj.get("completed_at")
-                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
+                    _ts_s = _ts_es(_ts).strftime("%d/%m %H:%M") if _ts else "—"
                     _ico  = "✅" if _hj["estado"] == "completado" else "💥"
                     _hist_labels.append(f"{_ico} Cartera — {_ts_s}")
             _job_ver_id  = st.session_state.get("_sc_job_ver")
@@ -16561,7 +16596,7 @@ def pantalla_analisis():
                 st.markdown(f"**{_n_notif} notificación{'es' if _n_notif>1 else ''} nueva{'s' if _n_notif>1 else ''}**")
                 st.divider()
                 for _nf in _notifs:
-                    _ts = _nf.get("created_at")
+                    _ts = _ts_es(_nf.get("created_at"))
                     _ts_str = _ts.strftime("%d/%m %H:%M") if _ts else ""
                     st.markdown(
                         f'<div style="padding:6px 0;border-bottom:1px solid #e2e8f0">'
