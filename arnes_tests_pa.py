@@ -153,7 +153,8 @@ def info_sana(dpa: float = 0.80, bpa: float = 1.60, sector: str = "Industrials",
 
 
 def simular_screening(info: dict, dividendos=None, criterios: list | None = None,
-                      historico=None, neon: dict | None = None, neon_fecha=None) -> dict:
+                      historico=None, neon: dict | None = None, neon_fecha=None,
+                      neon_invalidos: set | None = None) -> dict:
     """Ejecuta el _evaluar_ticker_screening REAL con fuentes simuladas.
     - info: lo que devolvería yfinance .info ({} = Yahoo bloqueado, 401 Invalid Crumb).
     - historico: DataFrame OHLCV que devolvería Ticker.history() (endpoint sin crumb).
@@ -180,7 +181,8 @@ def simular_screening(info: dict, dividendos=None, criterios: list | None = None
     repo_falso = _modulo_falso("repositorio")
     _neon = dict(neon or {})
     _fresc = {"estructural": {"estado": "ok", "actualizado_en": neon_fecha, "valido": True}} if neon_fecha else {}
-    repo_falso.componer_info = lambda *_a, **_k: (dict(_neon), dict(_fresc), set())   # type: ignore[attr-defined]
+    _inv = set(neon_invalidos or ())
+    repo_falso.componer_info = lambda *_a, **_k: (dict(_neon), dict(_fresc), set(_inv))   # type: ignore[attr-defined]
 
     guardado = {k: sys.modules.get(k) for k in ("yfinance", "repositorio")}
     viejos = {k: app.get(k) for k in ("_yf_info_con_retry", "get_db_connection",

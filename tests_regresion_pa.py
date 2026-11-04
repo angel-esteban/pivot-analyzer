@@ -485,6 +485,28 @@ def test_s2_payout_estrategia():
         else: sys.modules["repositorio"] = prev
 
 
+def test_v4_bpa_decimal_neon():
+    """Job #60: con Yahoo bloqueado, el BPA llega de Neon como Decimal (numeric de Postgres).
+    Debe usarse igual que un float: TEF (BPA < 0) → payout no interpretable + K1-BPA, no N/A."""
+    from decimal import Decimal as D
+    import pandas as pd
+    _check(_v0.resolver_payout(0.30, D("-0.4300"), D("0.3488"))["origen"] == "bpa_no_positivo",
+           "V-4: resolver_payout debe aceptar Decimal (BPA de Neon)")
+    fechas = [pd.Timestamp(f"{y}-{m:02d}-15", tz="Europe/Madrid")
+              for y in range(2014, 2027) for m in (6, 12) if (y, m) <= (2026, 6)]
+    div = pd.Series([0.15] * len(fechas), index=pd.DatetimeIndex(fechas))
+    neon = {"trailingEps": D("-0.4300"), "payoutRatio": D("0.3488"), "marketCap": D("19500000000"),
+            "debtToEquity": D("227.6"), "enterpriseToEbitda": D("8.56"),
+            "sector": "Communication Services", "_free_float_pct_neon": D("69.6"), "longName": "Telefónica, S.A."}
+    r = _A.simular_screening({}, dividendos=div, historico=_A.historico_diario(3.44, volumen=11_000_000),
+                             neon=neon, neon_fecha="2026-07-08", neon_invalidos={"payoutRatio"})
+    c = _crit(r, "payout_ratio")
+    _check(c["estado"] == "ko" and "no interpretable" in c["mensaje"].lower(),
+           f"V-4: TEF con BPA de Neon → payout no interpretable (es {c['estado']}, {c['valor_fmt']})")
+    _check("K1-BPA" in _codigos(r) and r["estado_global"] != "cumple",
+           f"V-4: TEF no puede salir Cumple con BPA negativo ({r['estado_global']}, {_codigos(r)})")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 _avisos: list[str] = []
 

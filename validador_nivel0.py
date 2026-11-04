@@ -108,6 +108,16 @@ def _a_numero(v: Any) -> float | None:
         return None
     if isinstance(v, (int, float)):
         return float(v)
+    # Decimal (Postgres/Neon `numeric` vía psycopg2) y enteros/flotantes de numpy: son números.
+    # Sin esto el BPA leído de Neon se descartaba y el payout quedaba "no reconstruible"
+    # cuando yfinance no respondía (validación Job #60).
+    import numbers
+    if isinstance(v, numbers.Number) and not isinstance(v, complex):
+        try:
+            f = float(v)
+            return f if f == f else None
+        except (TypeError, ValueError, OverflowError):
+            return None
     if isinstance(v, str):
         try:
             return float(v.strip().replace(",", "."))
