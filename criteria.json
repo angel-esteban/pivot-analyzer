@@ -186,7 +186,7 @@
           "textos": {
             "guia": "**Qué es**: Yield (rentabilidad por dividendo) = Dividendo anual por acción ÷ Precio de cotización. Mide cuánto cobras en dividendo por cada euro invertido.\n\n**Cómo se calcula**: Fuente prioritaria (1) dividendRate ÷ precio de mercado — importe real pagado dividido entre el precio actual. Si no está disponible: (2) trailingAnnualDividendYield de yfinance — dividendo de los últimos 12 meses. En último recurso: (3) dividendYield, normalizado si viene en formato porcentaje en vez de decimal.\n\n**Umbrales**: OK 2,5%–8% · Warning 1,5%–9% · KO fuera de esos rangos. Yield > 12% se etiqueta como posible value trap — el mercado puede estar anticipando un recorte.\n\n**K3 (killshot suave)**: Si yield < 2,5%, el veredicto no puede superar 'Parcial' aunque el resto de criterios sean perfectos. Una empresa excelente con yield del 1,2% no pertenece a una cartera de income.",
             "ok": "Yield atractivo y dentro del rango sostenible ({valor:.1%}).",
-            "warning": "Yield fuera del rango óptimo ({valor:.1%}) — acceptable pero con reservas.",
+            "warning": "Yield fuera del rango óptimo ({valor:.1%}) — aceptable pero con reservas.",
             "ko": "Yield {valor:.1%} — fuera del rango sostenible para cartera de rentas.",
             "ko_bajo": "Yield {valor:.1%} — demasiado bajo para una estrategia de rentas. La empresa no genera renta suficiente en relación al precio de entrada. Considera si el crecimiento futuro del dividendo justifica la entrada.",
             "ko_alto": "Yield {valor:.1%} — señal de alerta: un yield excesivamente alto suele reflejar expectativa de recorte inminente o precio deprimido por deterioro del negocio (yield trap). Verificar sostenibilidad antes de interpretar como oportunidad."
@@ -272,7 +272,7 @@
           "textos": {
             "guia": "**Qué es**: D/E (Deuda total ÷ Equity) — ratio de apalancamiento financiero. Equity = fondos propios o patrimonio neto. Mide cuántos euros de deuda hay por cada euro de capital propio.\n\n**Cómo se calcula**: Campo `debtToEquity` de yfinance. Atención: yfinance lo devuelve en porcentaje, no en ratio directo — un valor de 150 equivale a un ratio D/E de 1,5×.\n\n**Umbrales**: OK ≤1,5× · Warning ≤2,5× · KO >2,5×.\n\n**Excepción sectorial**: Utilities y REITs regulados operan estructuralmente con más deuda (activos de infraestructura financiados a largo plazo). Para estos sectores, un D/E de hasta 2,5× puede ser normal y no implica el mismo riesgo que en una empresa industrial cíclica.",
             "ok": "Deuda controlada (ratio {valor_ratio:.1f}×) — poco riesgo de que la deuda comprometa el dividendo.",
-            "warning": "Deuda elevada (ratio {valor_ratio:.1f}×) — acceptable en utilities o REITs regulados, pero a vigilar en sectores cíclicos.",
+            "warning": "Deuda elevada (ratio {valor_ratio:.1f}×) — aceptable en utilities o REITs regulados, pero a vigilar en sectores cíclicos.",
             "ko": "Deuda muy alta (ratio {valor_ratio:.1f}×) — el pago de intereses puede competir con el dividendo en una desaceleración económica."
           }
         },

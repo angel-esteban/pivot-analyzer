@@ -405,6 +405,15 @@ def test_pa2_01_redaccion():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Job #32 · hallazgo 11 — sin "acceptable" (inglés) en los textos de criteria.json
+# ─────────────────────────────────────────────────────────────────────────────
+def test_job32_11_sin_acceptable():
+    from pathlib import Path
+    txt = Path(__file__).with_name("criteria.json").read_text(encoding="utf-8")
+    _check("acceptable" not in txt.lower(), "Job #32 #11: 'acceptable' (inglés) en criteria.json; debe ser 'aceptable'")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 _avisos: list[str] = []
 
 
