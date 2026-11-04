@@ -25,6 +25,10 @@ import umbrales   # fuente única del SLA de frescura (Configuración)
 # Columna en BD -> clave de yfinance que esperan los criterios de criteria.json
 MAP_INSTRUMENTO = {
     "sector": "sector",
+    # V-1(c) (Polaris, Job #58): último dato estructural validado, para cuando yfinance
+    # no responde. Claves con "_" = solo de respaldo; nunca pisan un dato en vivo.
+    "free_float_pct": "_free_float_pct_neon",
+    "nombre":         "longName",
     "ter":    "annualReportExpenseRatio",
     "aum":    "totalAssets",
 }

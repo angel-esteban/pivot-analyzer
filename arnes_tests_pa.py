@@ -119,6 +119,16 @@ def serie_dividendos(dpa_ultimo: float, anios: int = 12, crecimiento: float = 0.
     return pd.Series(importes, index=pd.DatetimeIndex(fechas), name="Dividends")
 
 
+def historico_diario(precio: float, sesiones: int = 252, volumen: float = 1_000_000):
+    """OHLCV diario sintético (tz Madrid) que termina en `precio`, con rango ±10 %."""
+    import numpy as np
+    import pandas as pd
+    idx = pd.bdate_range(end=pd.Timestamp.now().normalize(), periods=sesiones, tz="Europe/Madrid")
+    close = np.linspace(precio * 0.9, precio, sesiones)
+    return pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99,
+                         "Close": close, "Volume": np.full(sesiones, float(volumen))}, index=idx)
+
+
 def info_sana(dpa: float = 0.80, bpa: float = 1.60, sector: str = "Industrials",
               industry: str = "Conglomerates", yield_obj: float = 0.04, **extra) -> dict:
     """info de yfinance con TODOS los criterios de dividendos en OK.
@@ -142,9 +152,13 @@ def info_sana(dpa: float = 0.80, bpa: float = 1.60, sector: str = "Industrials",
     return info
 
 
-def simular_screening(info: dict, dividendos=None, criterios: list | None = None) -> dict:
+def simular_screening(info: dict, dividendos=None, criterios: list | None = None,
+                      historico=None, neon: dict | None = None, neon_fecha=None) -> dict:
     """Ejecuta el _evaluar_ticker_screening REAL con fuentes simuladas.
-    Neon devuelve vacío (como un ticker aún no ingerido): manda el dato en vivo validado."""
+    - info: lo que devolvería yfinance .info ({} = Yahoo bloqueado, 401 Invalid Crumb).
+    - historico: DataFrame OHLCV que devolvería Ticker.history() (endpoint sin crumb).
+    - neon: dict con forma de info que devolvería repositorio.componer_info (por defecto vacío,
+      como un ticker aún no ingerido); neon_fecha = fecha del nivel estructural."""
     import json
     app = cargar_app()
     if criterios is None:
@@ -159,12 +173,14 @@ def simular_screening(info: dict, dividendos=None, criterios: list | None = None
             self.cashflow = None
 
         def history(self, *a, **k):
-            return None
+            return historico
 
     yf_falso = _modulo_falso("yfinance")
     yf_falso.Ticker = _TickerFalso                   # type: ignore[attr-defined]
     repo_falso = _modulo_falso("repositorio")
-    repo_falso.componer_info = lambda *_a, **_k: ({}, {}, set())   # type: ignore[attr-defined]
+    _neon = dict(neon or {})
+    _fresc = {"estructural": {"estado": "ok", "actualizado_en": neon_fecha, "valido": True}} if neon_fecha else {}
+    repo_falso.componer_info = lambda *_a, **_k: (dict(_neon), dict(_fresc), set())   # type: ignore[attr-defined]
 
     guardado = {k: sys.modules.get(k) for k in ("yfinance", "repositorio")}
     viejos = {k: app.get(k) for k in ("_yf_info_con_retry", "get_db_connection",

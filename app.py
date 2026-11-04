@@ -8046,8 +8046,8 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         datos_extra = est.get("datos_extra", {})
 
         # Score
-        total  = sum(ok for _, ok in criterios)
-        maxpts = len(criterios) * 2
+        total  = sum(ok for _, ok in criterios if ok is not None)   # None = sin puntuar (S-1/S-2)
+        maxpts = sum(2 for _, ok in criterios if ok is not None)
         pct    = int(total / maxpts * 100) if maxpts else 0
         if pct >= 70:   vrd = "CONDICIONES FAVORABLES"
         elif pct >= 45: vrd = "CONDICIONES MIXTAS"
@@ -8305,8 +8305,8 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
         popover_md  = est.get("popover_md", "")
         datos_extra = est.get("datos_extra", {})
 
-        total  = sum(ok for _, ok in criterios)
-        maxpts = len(criterios) * 2
+        total  = sum(ok for _, ok in criterios if ok is not None)   # None = sin puntuar (S-1/S-2)
+        maxpts = sum(2 for _, ok in criterios if ok is not None)
         pct    = int(total / maxpts * 100) if maxpts else 0
         if pct >= 70:   vrd = "CONDICIONES FAVORABLES"
         elif pct >= 45: vrd = "CONDICIONES MIXTAS"
@@ -8338,7 +8338,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
         punto_items = []
 
         for html_str, ok in criterios:
-            icon = "[+]" if ok == 2 else "[~]" if ok == 1 else "[-]"
+            icon = "[ ]" if ok is None else "[+]" if ok == 2 else "[~]" if ok == 1 else "[-]"
             text = _html_to_plain(html_str).lstrip("[+][~][-]? ").strip()
             crit_items.append(Paragraph(f"{icon} {_esc(text)}", S_CRIT))
             crit_items.append(Spacer(1, 1))
@@ -11814,6 +11814,14 @@ def _sc_free_float(info: dict) -> float | None:
     if fs and so and so > 0:
         # yfinance a veces devuelve floatShares > sharesOutstanding (error de datos)
         return min(fs / so, 1.0)
+    # V-1(c): sin acciones en vivo → último free float validado en Neon (instrumento.free_float_pct)
+    _ffp = info.get("_free_float_pct_neon")
+    if _ffp is not None:
+        try:
+            info["_ff_desde_neon"] = True
+            return min(float(_ffp) / 100.0, 1.0)
+        except (TypeError, ValueError):
+            return None
     return None
 
 
@@ -12692,6 +12700,11 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                        " (payoutRatio de yfinance ausente o incoherente)")
                     + ". Verificar contra informe anual. ")
         mensaje = _nota_py + mensaje
+    # V-1(c): free float tomado del último dato validado en Neon (yfinance no lo dio)
+    if crit.get("funcion") == "calcular_free_float_pct" and info.get("_ff_desde_neon"):
+        _f_ff = info.get("_neon_estructural_fecha")
+        _f_ff = str(_f_ff)[:10] if _f_ff else "s.f."
+        mensaje = (mensaje + f" Dato de Neon (último valor validado, {_f_ff}).").strip()
     # PA2-03 — marcas informativas del payout (no cambian estado ni score)
     if "payout_extremo" in _payout_marcas:
         mensaje = (chr(9888) + " Payout extremo (> 500 %): valor recalculado DPA/BPA, se "
@@ -12702,6 +12715,132 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje,
             "marcas": _payout_marcas}
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V-1 (Polaris, validación Job #58) — Capa de mercado sin depender del "crumb".
+# Yahoo rechaza a ratos `Ticker.info` (HTTP 401 "Invalid Crumb") y el cribado se
+# quedaba sin precio, volumen ni dividendo TTM: yield, liquidez y free float en N/A
+# sin aviso, scores topados en 70. El histórico de cotizaciones (endpoint "chart",
+# el mismo de los gráficos) no necesita crumb: se usa para completar SOLO los
+# campos de mercado que falten. Si aun así no hay precio, el valor va a "Sin datos".
+# ─────────────────────────────────────────────────────────────────────────────
+def completar_mercado_desde_historico(info: dict, hist=None, dividends=None) -> list:
+    """Rellena en `info` los campos de mercado ausentes a partir del histórico diario
+    (1 año) y de la serie de dividendos. Nunca sobrescribe un dato presente.
+    Devuelve la lista de claves rellenadas (vacía si no hizo falta o no se pudo)."""
+    import pandas as _pd_m
+    rell = []
+    try:
+        if hist is not None and len(hist) > 0:
+            _c = hist["Close"].dropna()
+            if len(_c) and not (info.get("regularMarketPrice") or info.get("currentPrice")):
+                info["regularMarketPrice"] = float(_c.iloc[-1]); rell.append("regularMarketPrice")
+            if len(_c) > 1 and not info.get("previousClose"):
+                info["previousClose"] = float(_c.iloc[-2]); rell.append("previousClose")
+            _v = hist["Volume"].dropna().tail(63)                 # ~3 meses de sesiones
+            if len(_v) and not (info.get("averageVolume") or info.get("averageDailyVolume10Day")):
+                info["averageVolume"] = float(_v.mean()); rell.append("averageVolume")
+            if not info.get("fiftyTwoWeekHigh") and "High" in hist:
+                info["fiftyTwoWeekHigh"] = float(hist["High"].max()); rell.append("fiftyTwoWeekHigh")
+            if not info.get("fiftyTwoWeekLow") and "Low" in hist:
+                info["fiftyTwoWeekLow"] = float(hist["Low"].min()); rell.append("fiftyTwoWeekLow")
+    except Exception:
+        pass
+    _precio = info.get("regularMarketPrice") or info.get("currentPrice")
+    try:
+        if dividends is not None and len(dividends) > 0 and _precio:
+            if not info.get("trailingAnnualDividendRate"):
+                _ahora = _pd_m.Timestamp.now(tz=dividends.index.tz)
+                _ttm = float(dividends[dividends.index > _ahora - _pd_m.Timedelta(days=365)].sum())
+                if _ttm > 0:
+                    info["trailingAnnualDividendRate"] = _ttm; rell.append("trailingAnnualDividendRate")
+            if not info.get("trailingAnnualDividendYield") and info.get("trailingAnnualDividendRate"):
+                info["trailingAnnualDividendYield"] = float(info["trailingAnnualDividendRate"]) / float(_precio)
+                rell.append("trailingAnnualDividendYield")
+    except Exception:
+        pass
+    if rell:
+        info["_mercado_desde_historico"] = list(rell)
+    return rell
+
+
+MSG_FALLO_MERCADO = ("Fallo de descarga de datos de mercado (precio y volumen no disponibles ni en "
+                     "yfinance ni en el histórico de cotizaciones). Valor no evaluado: repetir el cribado.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S-1 / S-2 (Polaris, validación estrategia NTGY) — datos de la evaluación individual.
+# Si `Ticker.info` falla, la estrategia tomaba rango 52s = precio (posición "0 %,
+# cerca de mínimos", puntuada a favor) y payout = 0 ("Sostenible"). Ahora: rango del
+# histórico de cotizaciones y payout con la MISMA regla que el screener (resolver_payout,
+# con respaldo del último dato validado en Neon). Un dato ausente es neutro y no puntúa.
+# ─────────────────────────────────────────────────────────────────────────────
+def posicion_rango_52s(precio, info=None, hist=None) -> dict | None:
+    """Posición del precio en su rango de 52 semanas (0 = mínimo, 100 = máximo).
+    Fuente: máximo/mínimo de 52s de yfinance; si faltan, el histórico diario (≥ 200 sesiones).
+    Devuelve {"pos", "hi", "lo", "fuente"} o None si no hay dato fiable."""
+    hi = lo = None
+    fuente = "yfinance"
+    try:
+        hi = float((info or {}).get("fiftyTwoWeekHigh") or 0) or None
+        lo = float((info or {}).get("fiftyTwoWeekLow") or 0) or None
+    except (TypeError, ValueError):
+        hi = lo = None
+    if not (hi and lo and hi > lo):
+        hi = lo = None
+        try:
+            if hist is not None and len(hist) >= 200:
+                _h = hist.tail(252)
+                hi, lo = float(_h["High"].max()), float(_h["Low"].min())
+                fuente = "histórico"
+        except Exception:
+            hi = lo = None
+    try:
+        precio = float(precio)
+    except (TypeError, ValueError):
+        return None
+    if not (precio > 0 and hi and lo and hi > lo):
+        return None
+    return {"pos": max(0.0, min(100.0, (precio - lo) / (hi - lo) * 100)), "hi": hi, "lo": lo,
+            "fuente": fuente}
+
+
+def payout_para_estrategia(ticker: str, info: dict, div_ttm=None) -> dict:
+    """Payout con la misma regla que el screener (PA2-03): DPA/BPA si hay ambos; si no,
+    el payoutRatio validado. Si yfinance no trae BPA ni payout, último dato validado de Neon.
+    Devuelve {"valor": fracción|None, "origen", "bpa": float|None, "fuente"}."""
+    import validador_nivel0 as _v0p
+    info = info or {}
+    dpa = info.get("trailingAnnualDividendRate") or div_ttm
+    bpa, crudo, fuente = info.get("trailingEps"), info.get("payoutRatio"), "yfinance"
+    if bpa is None and crudo is None:
+        try:
+            import repositorio as _repo_p
+            _cn = get_db_connection()
+            try:
+                _neon, _fr, _inv = _repo_p.componer_info(ticker, _cn)
+            finally:
+                release_db_connection(_cn)
+            if "trailingEps" not in _inv:
+                bpa = _neon.get("trailingEps")
+            if "payoutRatio" not in _inv:
+                crudo = _neon.get("payoutRatio")
+            if bpa is not None or crudo is not None:
+                fuente = "Neon"
+        except Exception:
+            pass
+    res = _v0p.resolver_payout(dpa, bpa, crudo)
+    valor = res["valor"]
+    if res["origen"] == "crudo" and valor is not None:
+        _sp = _v0p.DEFAULT_SPECS.get("payoutRatio")
+        if _sp is not None and _v0p.validar_campo(valor, _sp).estado is not _v0p.Estado.OK:
+            valor = None                      # crudo fuera de rango: no es dato fiable
+    try:
+        bpa = float(bpa) if bpa is not None else None
+    except (TypeError, ValueError):
+        bpa = None
+    return {"valor": valor, "origen": res["origen"], "bpa": bpa, "fuente": fuente}
 
 
 def _yf_info_con_retry(ticker: str, max_intentos: int = 3) -> dict:
@@ -12744,6 +12883,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _conn = get_db_connection()
             try:
                 _info_neon, _frescura, _db_invalidos = _repo.componer_info(ticker, _conn)
+                # V-1(c): fecha del último dato estructural validado en Neon (free float, nombre)
+                _f_estr = (_frescura.get("estructural") or {}).get("actualizado_en")
+                if _f_estr is not None:
+                    _info_neon["_neon_estructural_fecha"] = _f_estr
             finally:
                 release_db_connection(_conn)
             # Campos en vivo NO fiables: fallan rango (nivel 0) o coherencia (nivel 1)
@@ -12768,7 +12911,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     info[_k] = _lv
                 elif _db_ok:
                     info[_k] = _info_neon[_k]            # vivo malo -> dato validado de Neon
-                elif (_lv is not None) or (_k in _info_neon):
+                elif ((_lv is not None) or (_k in _info_neon)) and not str(_k).startswith("_"):
                     _campos_sin_calidad.append(_k)       # sin valor fiable en ninguna fuente
         except Exception:
             info = _info_live                            # fallback robusto: comportamiento previo
@@ -12802,6 +12945,28 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 cashflow = _cf if (_cf is not None and not _cf.empty) else None
             except Exception:
                 cashflow = None
+
+        # ── V-1: capa de mercado sin crumb (solo si falta el precio) ────────
+        if not (info.get("regularMarketPrice") or info.get("currentPrice")):
+            import time as _time_m
+            _h_merc = None
+            for _int_m in range(2):
+                try:
+                    _h_merc = t.history(period="1y", auto_adjust=False)
+                except Exception:
+                    _h_merc = None
+                if _h_merc is not None and len(_h_merc) > 0:
+                    break
+                _time_m.sleep(2)
+            completar_mercado_desde_historico(info, _h_merc, dividends)
+        else:
+            completar_mercado_desde_historico(info, None, dividends)   # solo dividendo TTM si falta
+        if not (info.get("regularMarketPrice") or info.get("currentPrice")):
+            # Sin precio no hay yield, liquidez ni posición: el valor NO se evalúa con N/A
+            # (antes se topaba el score en 70 sin aviso). Cuenta en "Sin datos".
+            return {"ticker": ticker, "nombre": nombre, "puntuacion": 0, "puntuacion_raw": 0,
+                    "estado_global": "error", "criterios": [], "error": True,
+                    "fallo_mercado": True, "error_msg": MSG_FALLO_MERCADO, "killshots": []}
 
         # ── Filtro de elegibilidad para carteras de dividendo ───────────────
         # Si hay criterio dividend_yield pero la empresa no paga dividendo en
@@ -13211,6 +13376,21 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "codigo": "K8",
                 "razon":  " ".join(_partes_k8),
             })
+        # V-1(b): un criterio en N/A por falta de dato (no por sector) debe verse en K8.
+        # Antes yield, free float o liquidez sin dato quedaban mudos ("K8 solo menciona el payout").
+        _id2campo_k8 = {cr.get("id"): cr.get("campo") for cr in criterios}
+        _na_sd = [c for c in resultados_criterios
+                  if c.get("estado") == "sin_datos"
+                  and "(sector)" not in str(c.get("valor_fmt", ""))
+                  and _id2campo_k8.get(c.get("id")) not in _campos_sin_calidad]
+        if _na_sd:
+            _txt_na = ("Criterios en N/A por falta de dato en la descarga (penalizan el score como "
+                       "N/A): " + ", ".join(c.get("nombre", "?") for c in _na_sd) + ".")
+            _k8_prev = next((k for k in killshots if k.get("codigo") == "K8"), None)
+            if _k8_prev is not None:
+                _k8_prev["razon"] = (_k8_prev.get("razon", "") + " " + _txt_na).strip()
+            else:
+                killshots.append({"tipo": "aviso", "codigo": "K8", "razon": _txt_na})
 
         # PA2-05 (Spec PA v2) — K-SECT (degradante): banca/seguros con los criterios de
         # cobertura y solvencia (payout, FCF, Deuda/Equity) en N/A por sector. Sin ninguna
@@ -13382,6 +13562,16 @@ def _ejecutar_job_background(job_id: int, tickers: dict, tipo_cartera: str, usua
                 _actualizar_progreso_job(job_id, i + 1)
             time.sleep(0.3)   # respetar límite de rate de yfinance
 
+        # V-1(a): segunda pasada para los valores sin datos de mercado (bloqueos de Yahoo
+        # suelen ser transitorios). Los que sigan fallando quedan en "Sin datos" y la
+        # cabecera marca el cribado como no válido.
+        _rep_m = [k for k, r in enumerate(resultados) if r.get("fallo_mercado")]
+        if _rep_m:
+            time.sleep(20)
+            for k in _rep_m:
+                resultados[k] = _evaluar_ticker_screening(ticker_list[k][1], criterios)
+                time.sleep(1.0)
+
         n_ok = sum(1 for r in resultados if r.get("estado_global") == "cumple")
         _completar_job(job_id, resultados)
         indice_label = ticker_list[0][0] if ticker_list else tipo_cartera
@@ -13532,6 +13722,13 @@ def _generar_pdf_screening(job: dict) -> bytes:
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
     ]))
     story.append(met_tbl)
+    if _cnt["n_fallo_mercado"]:
+        # V-1(a): cribado incompleto por fallo de descarga → no válido, visible en cabecera.
+        story.append(p(
+            f"<b>&#9888; CRIBADO NO VÁLIDO — fallo de descarga de datos de mercado</b> en "
+            f"{_cnt['n_fallo_mercado']} de {total} valores (contados en «Sin datos»). Los resultados "
+            f"no son completos ni comparables: repetir el cribado.",
+            fontSize=9, textColor=C_RED, alignment=TA_CENTER))
     if _descuadre_cab != 0:
         # Invariante roto: estado terminal sin columna. Aviso ruidoso en el propio informe.
         story.append(p(
@@ -13606,7 +13803,8 @@ def _generar_pdf_screening(job: dict) -> bytes:
 
         if r.get("error"):
             story.append(KeepTogether([
-                p(f"<b>{ticker}</b> — <font color='#dc2626'>Error al obtener datos</font>",
+                p(f"<b>{ticker}</b> — <font color='#dc2626'>Sin datos: "
+                  f"{r.get('error_msg') or 'error al obtener datos'}</font>",
                   fontSize=8, spaceBefore=4),
                 Spacer(1, 0.1*cm),
             ]))
@@ -13715,6 +13913,8 @@ def contar_estados_cribado(resultado: list) -> dict:
         "n_sectorial_parcial": sum(1 for r in resultado
                                    if any(k.get("codigo") == "K-SECT" for k in (r.get("killshots") or []))),
     }
+    # V-1: valores sin datos de mercado (cuentan ya en n_error / "Sin datos")
+    c["n_fallo_mercado"] = sum(1 for r in resultado if r.get("fallo_mercado"))
     c["suma_estados"] = c["n_cumple"] + c["n_parcial"] + c["n_no"] + c["n_error"] + c["n_no_apto"]
     c["descuadre"] = c["total"] - c["suma_estados"]
     return c
@@ -13780,6 +13980,10 @@ def _render_screening_resultados(job: dict):
         f'{_napto_html}{_err_html}{_desc_html}{_sect_html}</div>',
         unsafe_allow_html=True
     )
+    if _cnt["n_fallo_mercado"]:   # V-1(a)
+        st.error(f"⚠️ **Cribado no válido — fallo de descarga de datos de mercado** en "
+                 f"{_cnt['n_fallo_mercado']} de {_cnt['total']} valores (contados en «Sin datos»). "
+                 f"Los resultados no son completos ni comparables: repite el cribado.")
 
     # Botón descarga PDF
     _indice_slug = (job.get('indice') or 'screening').replace(' ', '_')
@@ -19202,7 +19406,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
             # ── Helpers de scoring ────────────────────────────────────────
             def _criterio(ok, texto, detalle="", explicacion=""):
-                if ok == 2:   icn, col = "✅", "#166534"
+                # ok: 2 / 1 / 0, o None = dato ausente (neutro, no puntúa: S-1/S-2)
+                if ok is None: icn, col = "➖", "#6b7280"
+                elif ok == 2: icn, col = "✅", "#166534"
                 elif ok == 1: icn, col = "⚠️", "#92400e"
                 else:         icn, col = "❌", "#991b1b"
                 det = f'<span style="color:#6b7280;font-size:0.78rem"> — {detalle}</span>' if detalle else ""
@@ -19232,9 +19438,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
             def _scorecard(titulo, emoji_tit, criterios, color_hdr):
                 """Returns (header_html, body_html) — header has the colored bar, body has score+criteria."""
-                total  = sum(p for _, p in criterios)
-                maxpts = len(criterios) * 2
-                pct    = int(total / maxpts * 100)
+                total  = sum(p for _, p in criterios if p is not None)   # None = sin puntuar
+                maxpts = sum(2 for _, p in criterios if p is not None)
+                pct    = int(total / maxpts * 100) if maxpts else 0
                 if pct >= 70:   vrd, vrd_col = "CONDICIONES FAVORABLES", "#166534"
                 elif pct >= 45: vrd, vrd_col = "CONDICIONES MIXTAS",     "#92400e"
                 else:           vrd, vrd_col = "CONDICIONES DESFAVORABLES", "#991b1b"
@@ -19294,15 +19500,17 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         _yr = float(_info.get("dividendYield", 0) or 0)
                         _yield = min(_yr if _yr > 1.0 else _yr * 100, 25.0)
             except: _yield = 0.0
-            try: _payout  = float(_info.get("payoutRatio",   0) or 0) * 100
-            except: _payout = 0.0
+            # S-2: mismo payout que el screener; None si no hay dato (neutro, sin puntuar)
+            _pay_est = payout_para_estrategia(ed.get("ticker", ""), _info, ed.get("div_ttm"))
+            _payout  = (_pay_est["valor"] * 100) if _pay_est["valor"] is not None else None
             try: _pe      = float(_info.get("trailingPE",    0) or 0)
             except: _pe = 0.0
             try: _beta    = float(_info.get("beta",          1) or 1)
             except: _beta = 1.0
             # Campos adicionales dividendos/valoración — dividendo TTM desde historial real
             _div_rate = float(ed.get("div_ttm") or 0.0) or float(_info.get("dividendRate", 0) or 0)
-            try: _eps_ttm    = float(_info.get("trailingEps",       0) or 0)
+            try: _eps_ttm    = float(_info.get("trailingEps") if _info.get("trailingEps") is not None
+                                     else (_pay_est["bpa"] or 0))   # S-2: BPA de Neon si .info falló
             except: _eps_ttm = 0.0
             try: _eps_fwd    = float(_info.get("forwardEps",        0) or 0)
             except: _eps_fwd = 0.0
@@ -19334,8 +19542,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             _sma200 = float((_medias.get(200) or (0, 0))[0])
             _sma20  = float((_medias.get(20)  or (0, 0))[0])
 
-            _rng52 = _52h - _52l if _52h != _52l else 1
-            _pos52 = (_precio - _52l) / _rng52 * 100  # 0=mín, 100=máx
+            # S-1: si yfinance no da el rango 52s se usa el histórico; sin dato → None (no puntúa).
+            # Antes rango = precio → posición 0 % "cerca de mínimos" puntuada a favor.
+            _r52 = posicion_rango_52s(_precio, _info, _hist)
+            _pos52 = _r52["pos"] if _r52 else None
 
             # Volume trend (last 20 sessions)
             try:
@@ -19433,22 +19643,40 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "El RSI (Relative Strength Index) mide la velocidad y magnitud de los movimientos de precio en los últimos 14 sesiones, en una escala 0-100. "
                     "Por debajo de 45 indica que el valor ha tenido una corrección reciente — los vendedores están agotados y el precio puede estar cerca de un suelo técnico. "
                     "Para dividendos no buscamos sobreventa extrema (&lt;30), sino zona de corrección razonable que mejore el precio de entrada sin que sea señal de deterioro fundamental."))
-                c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
-                    f"Posición 52W: {_pos52:.0f}% del rango",
-                    f"{'El precio está cerca de los mínimos del año — históricamente un buen punto de entrada ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual — ni caro ni barato en términos recientes ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año: a este nivel se paga más por el mismo dividendo ❌'}",
-                    "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
-                    "Para dividendos, un precio en el 0-35% del rango es bajo frente a lo pagado por el mercado durante el último año. "
-                    "Consecuencia: el yield efectivo es el más alto del período, más dividendo por euro invertido que en máximos."))
+                if _pos52 is None:   # S-1: dato ausente → neutro, sin puntuar
+                    c.append(_criterio(None, "Posición 52W no disponible — sin puntuar",
+                        "Sin rango de 52 semanas en la fuente ni histórico suficiente; el criterio no puntúa.",
+                        "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo."))
+                else:
+                    c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
+                        f"Posición 52W: {_pos52:.0f}% del rango",
+                        f"{'El precio está cerca de los mínimos del año: condición favorable para el método ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año: a este nivel se paga más por el mismo dividendo ❌'}",
+                        "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
+                        "Para dividendos, un precio en el 0-35% del rango es bajo frente a lo pagado por el mercado durante el último año. "
+                        "Consecuencia: el yield efectivo es el más alto del período, más dividendo por euro invertido que en máximos."))
                 # Guard BPA<0: con pérdidas el payout no es interpretable (mismo criterio
                 # que el screening). Forzar score 0 y etiqueta KO; nunca "Sostenible".
                 _payout_bpa_neg = (_eps_ttm < 0)
-                c.append(_criterio(0 if _payout_bpa_neg else 2 if _payout > 0 and _payout < 70 else 1 if _payout < 90 else 0,
-                    "Payout no interpretable (BPA negativo)" if _payout_bpa_neg else (f"Payout ratio {_payout:.0f}%" if _payout else "Payout no disponible"),
-                    "El BPA es negativo (pérdidas): el payout no refleja cobertura real del dividendo ❌" if _payout_bpa_neg else f"{'Sostenible ✅' if _payout < 70 else 'Ajustado ⚠️' if _payout < 90 else 'Riesgo de recorte ❌'}",
-                    "El payout es el porcentaje del beneficio neto que la empresa distribuye como dividendo. "
-                    "Payout 50% = de cada 100€ de beneficio, 50€ van a dividendo y 50€ se reinvierten en el negocio. "
-                    "Por debajo del 70% hay margen de seguridad: aunque los beneficios caigan un 30%, el dividendo se puede mantener. "
-                    "Por encima del 90%, cualquier tropiezo en beneficios puede forzar un recorte del dividendo. Un recorte suele ir acompañado de una caída brusca del precio."))
+                # S-2: mismos umbrales que el screener (criteria.json, payout_ratio) y mismo dato.
+                _cp = _crit_dividendos("payout_ratio")
+                _p_ok = float(_cp.get("umbral_ok", 0.75)) * 100
+                _p_wr = float(_cp.get("umbral_warning", 0.90)) * 100
+                _ayuda_pay = ("El payout es el porcentaje del beneficio neto que la empresa distribuye como dividendo. "
+                              "Payout 50% = de cada 100€ de beneficio, 50€ van a dividendo y 50€ se reinvierten en el negocio. "
+                              f"Umbrales del método (los mismos del screener): OK por debajo del {_p_ok:.0f}%, "
+                              f"ajustado entre {_p_ok:.0f}% y {_p_wr:.0f}%, riesgo de recorte por encima del {_p_wr:.0f}%. "
+                              "Con BPA negativo el payout no es interpretable.")
+                if _payout_bpa_neg:
+                    c.append(_criterio(0, "Payout no interpretable (BPA negativo)",
+                        "El BPA es negativo (pérdidas): el payout no refleja cobertura real del dividendo ❌", _ayuda_pay))
+                elif _payout is None:
+                    c.append(_criterio(None, "Payout no disponible — sin puntuar",
+                        "Sin BPA ni payout en la fuente (ni en Neon); el criterio no puntúa.", _ayuda_pay))
+                else:
+                    c.append(_criterio(2 if _payout < _p_ok else 1 if _payout <= _p_wr else 0,
+                        f"Payout ratio {_payout:.0f}%" + (" (BPA de Neon)" if _pay_est["fuente"] == "Neon" else ""),
+                        "Cobertura holgada ✅" if _payout < _p_ok else ("Ajustado ⚠️" if _payout <= _p_wr else "Riesgo de recorte ❌"),
+                        _ayuda_pay))
                 c.append(_criterio(2 if _div_alc and not _div_baj else 1 if not _div_baj else 0,
                     "Divergencias técnicas",
                     _div_txt(),
@@ -19617,13 +19845,15 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         puntos.append(f"❌ El precio está un {gap:.1f}% por encima de su media de los últimos 200 días. Un precio en torno a la SMA200 ({_sma200:.2f}€) equivaldría a una rentabilidad por dividendo mayor.")
                     elif _sma200 > 0:
                         puntos.append(f"✅ El precio está por debajo de su media de los últimos 200 días: históricamente, zona de entrada favorable para el método.")
-                    if _pos52 > 70:
+                    if _pos52 is not None and _pos52 > 70:
                         puntos.append(f"❌ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango anual): el precio de entrada es menos favorable que tras una corrección.")
                     if _eps_ttm < 0:
                         puntos.append(f"❌ BPA negativo (pérdidas): el payout no es interpretable — el dividendo no está cubierto por beneficios. Señal de deterioro.")
-                    elif _payout > 0 and _payout < 70:
+                    elif _payout is None:
+                        puntos.append("➖ Payout no disponible en la fuente: el método no puntúa la cobertura.")
+                    elif _payout < float(_crit_dividendos("payout_ratio").get("umbral_ok", 0.75)) * 100:
                         puntos.append(f"✅ Payout del {_payout:.0f}% — dividendo bien cubierto por beneficios.")
-                    elif _payout >= 70:
+                    else:
                         puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado; la tendencia del BPA es relevante.")
                     _sop_ref = _niv_soporte[0]["precio"] if _niv_soporte else None
                     rec = lectura_metodo_dividendos(_yield, _rsi, _sop_ref)

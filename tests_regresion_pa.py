@@ -413,6 +413,78 @@ def test_job32_11_sin_acceptable():
     _check("acceptable" not in txt.lower(), "Job #32 #11: 'acceptable' (inglés) en criteria.json; debe ser 'aceptable'")
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Validación Polaris tras Spec PA v2 (Job #58 / estrategia NTGY) — V-1, S-1, S-2
+# ═════════════════════════════════════════════════════════════════════════════
+def test_v1_capa_mercado():
+    import sys, types
+    sana = _A.info_sana()
+    neon = {k: sana[k] for k in ("trailingEps", "marketCap", "debtToEquity", "enterpriseToEbitda",
+                                  "sector", "payoutRatio")}
+    neon.update(_free_float_pct_neon=60.0, longName="Naturgy Energy Group, S.A.")
+    hist = _A.historico_diario(sana["regularMarketPrice"], volumen=1_500_000)
+    # a) Yahoo bloquea .info (401 Invalid Crumb) pero el histórico responde → yield, liquidez
+    #    y free float se evalúan (no N/A) y el valor NO queda topado en 70.
+    r = _A.simular_screening({}, historico=hist, neon=neon, neon_fecha="2026-11-02")
+    for cid in ("dividend_yield", "volumen_diario", "free_float"):
+        _check(_crit(r, cid)["estado"] != "sin_datos", f"V-1a: {cid} no debe quedar N/A con histórico disponible")
+    _check(r["puntuacion"] > 70 and not r.get("error"), f"V-1a: score no topado en 70 (es {r['puntuacion']})")
+    _check("Dato de Neon" in _crit(r, "free_float")["mensaje"] and "2026-11-02" in _crit(r, "free_float")["mensaje"],
+           "V-1c: free float de Neon con su fecha")
+    _check(r["nombre"].startswith("Naturgy"), "V-6: nombre desde Neon cuando .info falla")
+    # b) N/A por falta de dato → K8
+    _check(any(k["codigo"] == "K8" and "Flujo de caja libre" in k["razon"] for k in r["killshots"]),
+           "V-1b: criterio N/A por falta de dato debe aparecer en K8")
+    # c) Sin .info ni histórico → "Sin datos" (error) con motivo, nunca evaluado con N/A
+    r2 = _A.simular_screening({}, historico=None, neon=neon)
+    _check(r2.get("error") and r2.get("fallo_mercado") and r2["estado_global"] == "error",
+           "V-1a: sin datos de mercado el valor va a 'Sin datos'")
+    cnt = _APP["contar_estados_cribado"]([r, r2, _A.simular_screening(sana)])
+    _check(cnt["n_fallo_mercado"] == 1 and cnt["n_error"] == 1 and cnt["descuadre"] == 0,
+           "V-1a: cabecera cuenta el fallo de mercado en 'Sin datos' y marca el cribado")
+    # Control: valor sano sin cambios
+    r3 = _A.simular_screening(sana)
+    _check(r3["puntuacion"] == 100 and r3["estado_global"] == "cumple" and not r3["killshots"],
+           "V-1 control: valor sano sigue en 100 / Cumple sin señales")
+
+
+def test_s1_posicion_52s():
+    import numpy as np, pandas as pd
+    f = _APP["posicion_rango_52s"]
+    idx = pd.bdate_range(end=pd.Timestamp.now().normalize(), periods=252)
+    close = np.linspace(22.81, 30.48, 252)
+    h = pd.DataFrame({"High": close, "Low": close, "Close": close}, index=idx)
+    r = f(29.42, {}, h)                         # .info vacío: antes salía 0 % "cerca de mínimos"
+    _check(r is not None and abs(r["pos"] - 86.2) < 0.5, f"S-1: posición 52s ≈ 86 % (es {r})")
+    r = f(29.42, {"fiftyTwoWeekHigh": 30.48, "fiftyTwoWeekLow": 22.81}, None)
+    _check(r is not None and abs(r["pos"] - 86.2) < 0.5, "S-1: con datos de yfinance, mismo resultado")
+    _check(f(29.42, {}, None) is None, "S-1: sin rango ni histórico → None (neutro, sin puntuar)")
+
+
+def test_s2_payout_estrategia():
+    import sys, types
+    f = _APP["payout_para_estrategia"]
+    r = f("NTGY.MC", {"trailingAnnualDividendRate": 1.80, "trailingEps": 2.2528}, None)
+    _check(r["valor"] is not None and abs(r["valor"] - 0.799) < 0.001, f"S-2: payout = DPA/BPA (79,9 %), es {r}")
+    # .info vacío → último dato validado de Neon (mismo dato que el screener)
+    repo = types.ModuleType("repositorio")
+    repo.componer_info = lambda *_a, **_k: ({"trailingEps": 2.2528, "payoutRatio": 0.799}, {}, set())
+    prev = sys.modules.get("repositorio"); sys.modules["repositorio"] = repo
+    viejos = {k: _APP.get(k) for k in ("get_db_connection", "release_db_connection")}
+    _APP["get_db_connection"] = lambda: object(); _APP["release_db_connection"] = lambda _c: None
+    try:
+        r = f("NTGY.MC", {}, 1.80)
+        _check(r["valor"] is not None and abs(r["valor"] - 0.799) < 0.001 and r["fuente"] == "Neon",
+               f"S-2: sin .info, payout desde Neon (es {r})")
+        repo.componer_info = lambda *_a, **_k: ({}, {}, set())
+        r = f("NTGY.MC", {}, 1.80)
+        _check(r["valor"] is None, "S-2: sin dato en ninguna fuente → None (neutro, nunca 'Sostenible')")
+    finally:
+        _APP.update(viejos)
+        if prev is None: sys.modules.pop("repositorio", None)
+        else: sys.modules["repositorio"] = prev
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 _avisos: list[str] = []
 
