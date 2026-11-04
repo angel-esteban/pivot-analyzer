@@ -131,6 +131,14 @@
             "condicion": "EV/EBITDA > 22× (excluye Real Estate y Financial Services)",
             "efecto": "Señal informativa. Sin efecto sobre veredicto ni score.",
             "razon": "Prima de crecimiento incompatible con el margen de seguridad de una cartera de rentas. El criterio ev_ebitda ya penaliza en score (peso 1); K7 hace visible la señal en el bloque de alarmas."
+          },
+          {
+            "codigo": "K-SECT",
+            "nombre": "Evaluación sectorial parcial",
+            "tipo": "aviso",
+            "condicion": "Banca o seguros con los criterios de cobertura y solvencia (payout, FCF, Deuda/Equity) en N/A por sector",
+            "efecto": "Degrada el veredicto máximo a 'Parcial'. No modifica el score. Motivo: 'Evaluación sectorial parcial — faltan métricas regulatorias (CET1 / Solvencia II)'. Es la degradante de menor prioridad (K1-BPA > K1-Payout > K10 > K3 > K-SECT).",
+            "razon": "Sin ninguna métrica de cobertura del dividendo ni de solvencia, un banco o una aseguradora no puede salir 'Cumple' pleno. Solución provisional hasta disponer del bloque banca/seguros (CET1, Solvencia II). Real Estate no se ve afectado."
           }
         ]
       },
@@ -173,6 +181,7 @@
           "max": 0.08,
           "umbral_warning_min": 0.015,
           "umbral_warning_max": 0.09,
+          "yield_entrada_atractiva": 0.035,
           "peso": 3,
           "textos": {
             "guia": "**Qué es**: Yield (rentabilidad por dividendo) = Dividendo anual por acción ÷ Precio de cotización. Mide cuánto cobras en dividendo por cada euro invertido.\n\n**Cómo se calcula**: Fuente prioritaria (1) dividendRate ÷ precio de mercado — importe real pagado dividido entre el precio actual. Si no está disponible: (2) trailingAnnualDividendYield de yfinance — dividendo de los últimos 12 meses. En último recurso: (3) dividendYield, normalizado si viene en formato porcentaje en vez de decimal.\n\n**Umbrales**: OK 2,5%–8% · Warning 1,5%–9% · KO fuera de esos rangos. Yield > 12% se etiqueta como posible value trap — el mercado puede estar anticipando un recorte.\n\n**K3 (killshot suave)**: Si yield < 2,5%, el veredicto no puede superar 'Parcial' aunque el resto de criterios sean perfectos. Una empresa excelente con yield del 1,2% no pertenece a una cartera de income.",

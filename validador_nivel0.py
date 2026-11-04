@@ -212,6 +212,39 @@ def validar_registro(ticker: str, datos_crudos: dict[str, Any],
 RANGO_BETA_PLAUSIBLE = (0.0, 3.0)      # equity-céntrico: beta < 0 o > 3 = glitch de fuente
 RANGO_FREE_FLOAT_PCT = (0.0, 100.0)    # free float = % de acciones en circulación libre
 
+# PA2-03 (Polaris, Spec PA v2): por encima de este payout (500 %) el valor recalculado
+# DPA/BPA se conserva con la marca informativa `payout_extremo` (NO es SOSPECHOSO).
+PAYOUT_EXTREMO = 5.0
+
+
+def resolver_payout(dpa: Any, bpa: Any, payout_crudo: Any) -> dict:
+    """PA2-03 — Fuente única del payout. Pura; la usan el screener (app.py) y la ingesta.
+
+    - DPA > 0 y BPA > 0  → payout = DPA/BPA, SIN rango de plausibilidad. > 500 % lleva la
+      marca `payout_extremo`. Un payoutRatio crudo negativo es error de fuente: se ignora
+      y se marca `payout_crudo_inconsistente`.
+    - DPA > 0 y BPA ≤ 0  → `bpa_no_positivo`: payout no interpretable (regla Job #32).
+      valor = DPA/|BPA| (None si BPA = 0), solo para que K1 lo lea; nunca se interpreta.
+    - Sin DPA o sin BPA  → `crudo`: se usa el payoutRatio de yfinance y el llamador le
+      aplica el rango 0–500 % (fuera de rango → NULL / N/A / K8, como hasta ahora).
+
+    Devuelve {"valor": float|None, "origen": "dpa_bpa"|"bpa_no_positivo"|"crudo",
+              "marcas": [str, ...]}.
+    """
+    d, b, c = _a_numero(dpa), _a_numero(bpa), _a_numero(payout_crudo)
+    marcas: list[str] = []
+    if d is not None and d > 0 and b is not None:
+        if b > 0:
+            v = d / b
+            if v > PAYOUT_EXTREMO:
+                marcas.append("payout_extremo")
+            if c is not None and c < 0:
+                marcas.append("payout_crudo_inconsistente")
+            return {"valor": v, "origen": "dpa_bpa", "marcas": marcas}
+        return {"valor": (d / abs(b)) if b < 0 else None, "origen": "bpa_no_positivo",
+                "marcas": marcas}
+    return {"valor": c, "origen": "crudo", "marcas": marcas}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Specs por defecto (campos reales del screener)

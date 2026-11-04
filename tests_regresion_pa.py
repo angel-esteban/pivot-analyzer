@@ -159,8 +159,272 @@ def test_pa_m01_doble_porcentaje():
     _check(render == "(nivel 61.8%, a 7.9% de distancia)", "PA-M-01: formato de nivel correcto")
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# SPEC PA v2 (Polaris, 4-nov-2026) — PA2-01 … PA2-05
+# Estos tests ejecutan el código REAL de app.py (arnes_tests_pa.py lo carga sin
+# Streamlit ni red), no espejos de su lógica.
+# ═════════════════════════════════════════════════════════════════════════════
+import random as _random
+import validador_nivel0 as _v0
+import arnes_tests_pa as _A
+
+_APP = _A.cargar_app()
+_DIV_CRIT = None
+
+
+def _crit(res, cid):
+    return next(c for c in res["criterios"] if c["id"] == cid)
+
+
+def _codigos(res):
+    return [k.get("codigo") for k in res.get("killshots", [])]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
+# PA2-02 · Camarilla = C ± R × 1,1/12, /6, /4, /2
+# ─────────────────────────────────────────────────────────────────────────────
+def test_pa2_02_camarilla():
+    f = _APP["pivot_camarilla"]
+    casos = {
+        "T-PA2-02a": ((110, 100, 105), dict(R1=105.9167, R2=106.8333, R3=107.75, R4=110.5,
+                                             S1=104.0833, S2=103.1667, S3=102.25, S4=99.5)),
+        "T-PA2-02b": ((50.40, 48.00, 49.20), dict(R1=49.42, R2=49.64, R3=49.86, R4=50.52,
+                                                  S1=48.98, S2=48.76, S3=48.54, S4=47.88)),
+    }
+    entradas = []
+    for cid, ((H, L, C), esp) in casos.items():
+        r = f(H, L, C)
+        for k, v in esp.items():
+            _check(abs(r[k] - v) <= 1e-4, f"{cid}: {k}={r[k]:.4f}, esperado {v:.4f}")
+        entradas.append((H, L, C))
+    rnd = _random.Random(20261104)
+    for _ in range(20):
+        L = rnd.uniform(1, 500); H = L + rnd.uniform(0.01, 50); C = rnd.uniform(L, H)
+        entradas.append((H, L, C))
+    for H, L, C in entradas:
+        r, R = f(H, L, C), H - L
+        orden = [r["S4"], r["S3"], r["S2"], r["S1"], C, r["R1"], r["R2"], r["R3"], r["R4"]]
+        _check(all(a < b for a, b in zip(orden, orden[1:])),
+               f"T-PA2-02c: orden S4<…<S1<C<R1<…<R4 roto para H={H} L={L} C={C}")
+        _check(r["R1"] - C < 0.1 * R, f"T-PA2-02c: R1 no está 'muy próximo' (H={H} L={L} C={C})")
+        _check(abs((r["R4"] - r["S4"]) - 1.1 * R) <= 1e-9 * max(1, R),
+               f"T-PA2-02c: R4−S4 ≠ 1,1×R (H={H} L={L} C={C})")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PA2-03 · Payout extremo o con BPA negativo
+# ─────────────────────────────────────────────────────────────────────────────
+def test_pa2_03_payout():
+    # a) DPA 0,60 · BPA 0,10 · crudo 6,00 → 600 %, KO crítico, payout_extremo, nunca N/A
+    r = _A.simular_screening(_A.info_sana(dpa=0.60, bpa=0.10, payoutRatio=6.00))
+    c = _crit(r, "payout_ratio")
+    _check(c["estado"] == "ko", f"T-PA2-03a: payout debe ser KO (es {c['estado']})")
+    _check("payout_extremo" in c.get("marcas", []), "T-PA2-03a: falta la marca payout_extremo")
+    _check(abs(r["puntuacion_raw"] - 68.58) <= 1.0,
+           f"T-PA2-03a: score ≈ 68,6 (es {r['puntuacion_raw']})")
+    _check(r["estado_global"] == "parcial", f"T-PA2-03a: veredicto Parcial (es {r['estado_global']})")
+    _check(any(k.get("codigo") == "K9" and "Payout" in k.get("razon", "") for k in r["killshots"]),
+           "T-PA2-03a: el KO de payout debe verse en cabecera (K9)")
+    # b) DPA 0,50 · BPA −0,20 · crudo −2,50 → no interpretable, KO, K1-BPA; con FCF malo → K1
+    r = _A.simular_screening(_A.info_sana(dpa=0.50, bpa=-0.20, payoutRatio=-2.50))
+    c = _crit(r, "payout_ratio")
+    _check(c["estado"] == "ko" and "no interpretable" in c["mensaje"].lower(),
+           "T-PA2-03b: payout 'no interpretable: BPA negativo' en KO")
+    _check("K1-BPA" in _codigos(r) and r["estado_global"] == "parcial",
+           f"T-PA2-03b: K1-BPA degrada a Parcial (es {r['estado_global']}, {_codigos(r)})")
+    r = _A.simular_screening(_A.info_sana(dpa=0.50, bpa=-0.20, payoutRatio=-2.50, freeCashflow=1.0))
+    _check("K1" in _codigos(r) and r["estado_global"] == "no_cumple",
+           f"T-PA2-03b: con FCF insuficiente → K1, No cumple (es {r['estado_global']}, {_codigos(r)})")
+    # c) Sin DPA ni BPA, crudo 7,50 → PENDIENTE de decisión de Polaris (ver nota en main()).
+    # d) DPA 0,40 · BPA 0,50 · crudo −0,80 → 80 % recalculado, ~OK, incidencia registrada
+    r = _A.simular_screening(_A.info_sana(dpa=0.40, bpa=0.50, payoutRatio=-0.80))
+    c = _crit(r, "payout_ratio")
+    _check(c["estado"] == "warning", f"T-PA2-03d: estado ~OK (es {c['estado']})")
+    _check(abs(float(c.get("valor_raw") or 0) - 0.80) < 1e-9 if "valor_raw" in c else "80" in c["valor_fmt"],
+           f"T-PA2-03d: payout recalculado 80 % (es {c['valor_fmt']})")
+    _check("payout_crudo_inconsistente" in r.get("incidencias_dato", {}).get("payout_ratio", []),
+           "T-PA2-03d: incidencia 'payout crudo inconsistente' registrada")
+    # Resolver puro (lo comparten screener e ingesta)
+    _check(_v0.resolver_payout(0.6, 0.1, 6.0)["marcas"] == ["payout_extremo"], "PA2-03: resolver 600 %")
+    _check(_v0.resolver_payout(None, None, 7.5)["origen"] == "crudo", "PA2-03: sin DPA/BPA → crudo")
+    # Control: valor sano sin cambios
+    r = _A.simular_screening(_A.info_sana())
+    _check(r["puntuacion"] == 100 and r["estado_global"] == "cumple" and not r["killshots"],
+           "PA2-03 control: un valor sano sigue en 100 / Cumple sin señales")
+
+
+def test_pa2_03_ingesta():
+    import ingesta
+
+    class _Cur:
+        def execute(self, *a, **k): pass
+        def fetchone(self): return None
+        def fetchall(self): return []
+
+    class _Conn:
+        def cursor(self): return _Cur()
+        def commit(self): pass
+        def rollback(self): pass
+
+    class _Fuente:
+        def __init__(self, info): self._i = info
+        def info(self, _t): return dict(self._i)
+        def dividendos(self, _t): return []
+
+    r = ingesta.ingerir_fundamental(["T.MC"], _Conn(), dry_run=True,
+                                    fuente=_Fuente(_A.info_sana(dpa=0.6, bpa=0.1, payoutRatio=6.0)))
+    f = r.filas[0]
+    _check(abs((f.get("payout_ratio") or 0) - 6.0) < 1e-9, "PA2-03 ingesta: 600 % se guarda (no NULL)")
+    _check(not f.get("incidencias"), "PA2-03 ingesta: payout extremo no es incidencia (no SOSPECHOSO)")
+    _check("payout_extremo" in f.get("origen", ""), "PA2-03 ingesta: marca payout_extremo en origen")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PA2-04 · Umbral único de yield
+# ─────────────────────────────────────────────────────────────────────────────
+def test_pa2_04_yield():
+    ev = _APP["evaluar_yield_dividendos"]
+    casos = [  # (id, yield, estado screener, K3?, estado individual, banda)
+        ("T-PA2-04a", 0.030, "ok",      False, "ok",      "entrada: yield en rango"),
+        ("T-PA2-04b", 0.040, "ok",      False, "ok",      "entrada: yield atractivo"),
+        ("T-PA2-04c", 0.020, "warning", True,  "warning", None),
+        ("T-PA2-04d", 0.095, "ko",      False, "ko",      None),
+    ]
+    for cid, y, est_sc, k3, est_ind, banda in casos:
+        r = _A.simular_screening(_A.info_sana(yield_obj=y))
+        c = _crit(r, "dividend_yield")
+        _check(c["estado"] == est_sc, f"{cid}: screener {c['estado']} ≠ {est_sc}")
+        _check(("K3" in _codigos(r)) == k3, f"{cid}: K3 {'esperada' if k3 else 'no esperada'} ({_codigos(r)})")
+        e = ev(y)
+        _check(e["estado"] == est_ind and e["banda"] == banda,
+               f"{cid}: individual {e} ≠ ({est_ind}, {banda})")
+        _check(e["estado"] == c["estado"], f"T-PA2-04e: {cid} estado distinto screener/individual")
+        lec = _APP["lectura_yield_dividendos"](y * 100)
+        _check(lec["estado"] == c["estado"], f"T-PA2-04e: {cid} lectura individual distinta")
+    if True:
+        r = _A.simular_screening(_A.info_sana(yield_obj=0.020))
+        _check(r["estado_global"] == "parcial", "T-PA2-04c: K3 degrada a Parcial")
+    crit = _APP["_crit_dividendos"]("dividend_yield")
+    _check(abs(float(crit.get("yield_entrada_atractiva", 0)) - 0.035) < 1e-12,
+           "PA2-04: criteria.json debe traer yield_entrada_atractiva = 0.035")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PA2-05 · K-SECT (banca y seguros: evaluación sectorial parcial)
+# ─────────────────────────────────────────────────────────────────────────────
+_BANCO = dict(sector="Financial Services", industry="Banks - Diversified")
+_SEGURO = dict(sector="Financial Services", industry="Insurance - Diversified")
+
+
+def test_pa2_05_ksect():
+    r = _A.simular_screening(_A.info_sana(**_BANCO))
+    _check(r["estado_global"] == "parcial" and r["puntuacion"] == 100 and r["motivo"].startswith("K-SECT")
+           and "faltan métricas regulatorias" in r["motivo"],
+           f"T-PA2-05a: banco limpio → Parcial por K-SECT, score 100 ({r['estado_global']}, {r['puntuacion']}, {r['motivo']})")
+    r = _A.simular_screening(_A.info_sana(floatShares=150_000_000, **_SEGURO))
+    _check(r["estado_global"] == "no_cumple" and r["motivo"].startswith("K5"),
+           f"T-PA2-05b: aseguradora free float 15 % → No cumple por K5 ({r['estado_global']}, {r['motivo']})")
+    r = _A.simular_screening(_A.info_sana(bpa=-0.5, **_BANCO))
+    _check(r["estado_global"] == "parcial" and r["motivo"].startswith("K1-BPA"),
+           f"T-PA2-05c: banco BPA<0 → Parcial con motivo K1-BPA ({r['motivo']})")
+    r = _A.simular_screening(_A.info_sana(sector="Utilities", industry="Utilities - Regulated Electric"))
+    _check(r["estado_global"] == "cumple" and "K-SECT" not in _codigos(r),
+           "T-PA2-05d: utility limpia → Cumple, sin K-SECT")
+    r = _A.simular_screening(_A.info_sana(sector="Real Estate", industry="REIT - Office"))
+    _check("K-SECT" not in _codigos(r), "PA2-05: Real Estate no se ve afectado")
+    lote = ([_A.simular_screening(_A.info_sana(**_BANCO)) for _ in range(3)]
+            + [_A.simular_screening(_A.info_sana(**_SEGURO)) for _ in range(2)]
+            + [_A.simular_screening(_A.info_sana())])
+    cnt = _APP["contar_estados_cribado"](lote)
+    _check(cnt["n_sectorial_parcial"] == 5, f"T-PA2-05e: 'Evaluación sectorial parcial: 5' (es {cnt['n_sectorial_parcial']})")
+    _check(cnt["descuadre"] == 0 and cnt["suma_estados"] == cnt["total"] == 6,
+           "T-PA2-05e: los recuentos por veredicto suman el total")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PA2-01 · Redacción no prescriptiva
+# ─────────────────────────────────────────────────────────────────────────────
+_FUNCS_PA2_01 = {"_build_dividendos", "_build_swing", "_build_gestion_posicion", "_interpretar",
+                 "_render_analisis_compra_div", "_render_analisis_venta_swing",
+                 "generar_informe_estrategia_html", "generar_pdf_estrategia", "_lectura_integrada"}
+
+
+def test_pa2_01_redaccion():
+    prohib = _APP["terminos_prohibidos_en"]
+    g = _APP["lectura_metodo_gestion"](3, 5, ["SAR bajista — tendencia invertida formalmente",
+                                               "MACD cruzado a bajista", "RSI en sobrecompra extrema (78)"],
+                                       9.50, 3.2)
+    s = _APP["lectura_metodo_swing"](10.00, 11.00, 4, 5)
+    d = _APP["lectura_metodo_dividendos"](4.0, 42, 9.87)
+    for nombre, txt in (("gestión", g), ("swing", s), ("dividendos", d)):
+        _check(not prohib(txt), f"T-PA2-01a: términos prohibidos en {nombre}: {prohib(txt)}")
+    _check("La decisión corresponde al usuario" in g, "T-PA2-01a: falta 'La decisión corresponde al usuario'")
+    _check("3 de 5" in g, "T-PA2-01a: gestión debe indicar 3 señales activas")
+    _check("9,80" in s and not prohib(s), "T-PA2-01b: invalidación 2 % bajo 10,00 = 9,80")
+    # Barrido estático de TODOS los literales de los bloques afectados (puntos, criterios,
+    # lecturas, informe de estrategia, lectura integrada y cartera).
+    import ast
+    arbol = ast.parse(_A._RUTA_APP.read_text(encoding="utf-8"))
+    for fn in ast.walk(arbol):
+        if isinstance(fn, ast.FunctionDef) and fn.name in _FUNCS_PA2_01:
+            doc = ast.get_docstring(fn, clean=False)
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value != doc:
+                    t = prohib(n.value)
+                    _check(not t, f"PA2-01: término prohibido {t} en {fn.name} (línea {n.lineno})")
+    # c) Informe de estrategia: sin "Recomendación final"/"Recomendación"; con "Lectura del método"
+    est = [{"nombre": "🗂️ Gestión de posición", "color": "#7c3aed",
+            "criterios": [("<b>SAR</b> bajista", 0)], "puntos": ["✅ Posición en beneficio"],
+            "rec": g, "popover_md": ""}]
+    html = _APP["generar_informe_estrategia_html"](ticker="TEST.MC", nombre="Test", precio=10.0,
+                                                   ts="04/11/2026 12:00", estrategias=est)
+    _check("Recomendación final" not in html and ">Recomendación<" not in html,
+           "T-PA2-01c: el HTML no debe contener 'Recomendación final'")
+    _check("Lectura del método" in html, "T-PA2-01c: el HTML debe contener 'Lectura del método'")
+    _check(_APP["PIE_LECTURA_METODO"] in html, "PA2-01: pie fijo en el informe de estrategia HTML")
+    import importlib.util as _ilu
+    pdf = None
+    if _ilu.find_spec("reportlab") is not None:      # sin reportlab no se puede generar el PDF
+        pdf = _APP["generar_pdf_estrategia"](ticker="TEST.MC", nombre="Test", precio=10.0,
+                                            ts="04/11/2026 12:00", estrategias=est)
+    else:
+        _avisos.append("PDF de estrategia no comprobado: falta reportlab (pip install reportlab)")
+    if pdf is not None:
+        _check(pdf[:4] == b"%PDF", "T-PA2-01c: el PDF de estrategia se genera")
+        try:
+            import io
+            from pypdf import PdfReader
+            txt = " ".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages)
+            txt = " ".join(txt.split())
+            _check("Recomendación final" not in txt and "RECOMENDACION" not in txt,
+                   "T-PA2-01c: el PDF no debe contener 'Recomendación final'")
+            _check("Lectura del método" in txt, "T-PA2-01c: el PDF debe contener 'Lectura del método'")
+            _check("No es una recomendación de inversión" in txt, "PA2-01: pie fijo en el PDF")
+        except ImportError:
+            pass                                     # sin pypdf no se lee el texto del PDF
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+_avisos: list[str] = []
+
+
+def _dependencias_ok() -> bool:
+    """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
+    Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
+    import importlib.util as _ilu
+    faltan = [m for m in ("pandas", "numpy") if _ilu.find_spec(m) is None]
+    if faltan:
+        print(f"⚠️  Faltan librerías en este Python: {', '.join(faltan)}.")
+        print("   Instálalas una vez con:")
+        print("       python -m pip install -r requirements.txt pypdf")
+        print("   y vuelve a lanzar:  python tests_regresion_pa.py")
+        return False
+    return True
+
+
 def main():
+    if not _dependencias_ok():
+        return 2
     for fn in sorted(k for k in globals() if k.startswith("test_")):
         try:
             globals()[fn]()
@@ -171,8 +435,12 @@ def main():
         for m in _fallos:
             print("  -", m)
         return 1
-    print("✅ Contrato de regresión Spec PA v1 — TODOS los tests unitarios PASAN.")
-    print("   (PA-A-06/PA-M-02/03/04 son verificación visual sobre un informe real.)")
+    for _a in _avisos:
+        print("ℹ️ ", _a)
+    print("✅ Contrato de regresión Spec PA v1 + v2 — TODOS los tests unitarios PASAN.")
+    print("   (PA-A-06/PA-M-02/03/04 y la revisión visual de PA2-01 se verifican sobre informes reales.)")
+    print("   ⏸  T-PA2-03c pendiente de decisión de Polaris (payout crudo 7,5 sin DPA/BPA: el")
+    print("      normalizador lo lee como 7,5 % y la spec espera N/A + K8).")
     return 0
 
 

@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
+from dataclasses import replace as _dc_replace
+from validador_nivel0 import resolver_payout   # PA2-03: payout = DPA/BPA cuando se puede
 from validador_nivel0 import (DEFAULT_SPECS, Estado, FieldSpec,
                               cargar_specs_desde_criteria, validar_campo)
 from validador_coherencia import validar_coherencia
@@ -73,18 +75,6 @@ class FuenteYFinance:
                 time.sleep(self.espera)
         return []
 
-    def cashflow(self, ticker: str):
-        """Estado de flujos anual (DataFrame de yfinance) o None. Fuente del FCF de
-        respaldo cuando `info.freeCashflow` no viene (frecuente en valores .MC)."""
-        for _ in range(self.reintentos):
-            try:
-                cf = self._ticker(ticker).cashflow
-                if cf is not None and getattr(cf, "empty", True) is False:
-                    return cf
-            except Exception:             # noqa: BLE001
-                time.sleep(self.espera)
-        return None
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers de cálculo (autónomos)
@@ -97,45 +87,6 @@ def _fcf_yield(info: dict, _div) -> float | None:
         return float(fcf) / float(mcap)
     except (TypeError, ZeroDivisionError, ValueError):
         return None
-
-
-# Sectores donde el FCF convencional NO es interpretable (regla financiera POLARIS):
-#  - Financial Services (bancos y seguros): no hay FCF/capex en sentido industrial.
-#  - Real Estate (SOCIMIs/REITs): el FCF está distorsionado por revalorizaciones y
-#    rotación de activos; se valoran por NAV/FFO. NO se les deriva FCF de respaldo.
-SECTORES_SIN_FCF = {"Financial Services", "Real Estate"}
-
-
-def _fcf_desde_cashflow(cashflow) -> float | None:
-    """FCF anual (último ejercicio) desde el estado de flujos, como respaldo cuando
-    `info.freeCashflow` falta. Usa la fila 'Free Cash Flow' si existe; si no,
-    'Operating Cash Flow' + 'Capital Expenditure' (capex viene en negativo)."""
-    if cashflow is None or getattr(cashflow, "empty", True):
-        return None
-    try:
-        col = cashflow.columns[0]                      # periodo más reciente
-        _idx = {str(i).strip().lower(): i for i in cashflow.index}
-
-        def _fila(*nombres):
-            for n in nombres:
-                k = _idx.get(n.lower())
-                if k is not None:
-                    v = cashflow.loc[k, col]
-                    if v is not None and v == v:       # descarta NaN
-                        return float(v)
-            return None
-
-        fcf = _fila("Free Cash Flow")
-        if fcf is not None:
-            return fcf
-        ocf = _fila("Operating Cash Flow", "Total Cash From Operating Activities",
-                    "Cash Flow From Continuing Operating Activities")
-        capex = _fila("Capital Expenditure", "Capital Expenditures")
-        if ocf is not None and capex is not None:
-            return ocf + capex                         # capex negativo -> resta
-    except Exception:                                  # noqa: BLE001
-        return None
-    return None
 
 
 def _anos_div_consecutivos(_info, dividendos: list[tuple[Any, float]]) -> int | None:
@@ -292,9 +243,12 @@ class ResumenIngesta:
 # Construcción de fila validada (nivel 0 + nivel 1 coherencia)
 # ─────────────────────────────────────────────────────────────────────────────
 def _construir_fila(ticker: str, info: dict, dividendos: list,
-                    mapa: list[Mapa], specs: dict[str, FieldSpec]
+                    mapa: list[Mapa], specs: dict[str, FieldSpec],
+                    sin_rango: frozenset = frozenset()
                     ) -> tuple[dict, dict[str, str]]:
-    """Devuelve (fila, incidencias{campo: motivo}). incidencias vacío = todo válido."""
+    """Devuelve (fila, incidencias{campo: motivo}). incidencias vacío = todo válido.
+    `sin_rango`: spec_keys a los que NO se aplica el rango de plausibilidad (PA2-03:
+    payout recalculado DPA/BPA). Se sigue aplicando ausente≠0."""
     fila: dict[str, Any] = {}
     incidencias: dict[str, str] = {}
 
@@ -305,6 +259,8 @@ def _construir_fila(ticker: str, info: dict, dividendos: list,
             fila[m.col] = crudo.strip() if isinstance(crudo, str) else crudo
             continue
         spec = specs.get(m.spec_key) or _SPEC_PERMISIVA
+        if m.spec_key in sin_rango:
+            spec = _dc_replace(spec, rango_valido=None)
         rc = validar_campo(crudo, spec)
         val = rc.valor
         if val is not None and m.transform:
@@ -420,20 +376,20 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
             if not info:
                 raise ValueError("yfinance no devolvió datos (.info vacío)")
             info, _ = normalizar_info(info)   # unidades canónicas antes de validar
+            # PA2-03: si hay DPA y BPA, payoutRatio = DPA/BPA y no se le aplica el rango
+            # 0–500 % (un payout real del 600 % se guarda, no se anula). Sin DPA/BPA se
+            # valida el crudo de yfinance como hasta ahora.
+            _res_pay = resolver_payout(info.get("trailingAnnualDividendRate"),
+                                       info.get("trailingEps"), info.get("payoutRatio"))
+            _sin_rango: frozenset = frozenset()
+            if _res_pay["origen"] != "crudo":
+                info = dict(info)
+                info["payoutRatio"] = _res_pay["valor"]
+                _sin_rango = frozenset({"payoutRatio"})
             dividendos = fuente.dividendos(ticker) if (con_dividendos or nivel == "fundamental") else []
 
-            # Fallback FCF (nivel fundamental): si yfinance no da `freeCashflow`, derivarlo
-            # del estado de flujos (operativo − capex). NO se hace en sectores donde el FCF
-            # no es interpretable (financieras, SOCIMIs/REITs): ahí queda ausente a propósito
-            # (regla POLARIS), no es un hueco a rellenar.
-            if (nivel == "fundamental" and info.get("freeCashflow") in (None, "")
-                    and (info.get("sector") or "").strip() not in SECTORES_SIN_FCF
-                    and hasattr(fuente, "cashflow")):
-                _fcf_cf = _fcf_desde_cashflow(fuente.cashflow(ticker))
-                if _fcf_cf is not None:
-                    info["freeCashflow"] = _fcf_cf
-
-            fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs)
+            fila, incidencias = _construir_fila(ticker, info, dividendos, mapa, specs,
+                                                sin_rango=_sin_rango)
 
             # Protección de ediciones manuales: un campo con origen="manual" NO se
             # sobrescribe con yfinance (si no, se perdería la corrección en cada refresco).
@@ -454,6 +410,10 @@ def _ingerir(nivel: str, tabla: str, columnas: list[str], mapa: list[Mapa],
                         incidencias.pop(m.spec_key, None)
                 elif fila.get(m.col) is not None:
                     _origen[m.col] = nombre_fuente
+            # PA2-03: procedencia del payout recalculado + marcas informativas. Van en
+            # `origen` (procedencia por columna), NO en `incidencias`: no invalidan el dato.
+            if _res_pay["origen"] != "crudo" and _origen.get("payout_ratio") not in (None, "manual"):
+                _origen["payout_ratio"] = ":".join([nombre_fuente, _res_pay["origen"], *_res_pay["marcas"]])
 
             fila.update(
                 ticker=ticker, fuente=nombre_fuente,

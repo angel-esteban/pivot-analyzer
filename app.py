@@ -12,31 +12,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, date
 import bcrypt
-
-
-def _ahora_es():
-    """datetime actual en hora local de España (Europe/Madrid), para los sellos de los informes."""
-    try:
-        from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Europe/Madrid"))
-    except Exception:
-        return datetime.now()
-
-
-def _ts_es(ts):
-    """Convierte un timestamp de la BBDD (NOW() de Neon = UTC, naive) a Europe/Madrid.
-    Acepta datetime (naive→se asume UTC; aware→se convierte) o str ISO. Devuelve datetime local ES."""
-    if ts is None:
-        return None
-    try:
-        from zoneinfo import ZoneInfo
-        if isinstance(ts, str):
-            ts = datetime.fromisoformat(ts.replace("Z", "").strip()[:19])
-        if getattr(ts, "tzinfo", None) is None:
-            ts = ts.replace(tzinfo=ZoneInfo("UTC"))
-        return ts.astimezone(ZoneInfo("Europe/Madrid"))
-    except Exception:
-        return ts
 import io
 import traceback
 import uuid as _uuid_mod
@@ -403,42 +378,14 @@ st.markdown("""
     }
 
     /* ── SELECTBOX ──────────────────────────────────────────────── */
-    /* NUCLEAR: blanco en CUALQUIER div del selectbox, sin depender de [data-baseweb].
-       El gris venía de un div interno que los selectores anteriores no alcanzaban. */
-    [data-testid="stSelectbox"] div {
-        background-color: #ffffff !important;
-    }
-    [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-    [data-testid="stSelectbox"] [data-baseweb="select"] > div {
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         border-radius: 7px !important; border: 1.5px solid #e2e8f0 !important;
+        background: #ffffff !important; font-size: 0.88rem !important;
         transition: border-color 0.15s ease !important;
     }
-    [data-testid="stSelectbox"] span {
+    [data-testid="stSelectbox"] div[data-baseweb="select"] span,
+    [data-testid="stSelectbox"] div[data-baseweb="select"] div {
         font-size: 0.88rem !important;
-    }
-    /* lista desplegable (se renderiza en un portal, fuera del stSelectbox) */
-    div[data-baseweb="popover"] [role="listbox"],
-    div[data-baseweb="popover"] [role="option"],
-    div[data-baseweb="popover"] ul,
-    div[data-baseweb="popover"] li {
-        background-color: #ffffff !important;
-    }
-    div[data-baseweb="popover"] [role="option"]:hover {
-        background-color: #eff6ff !important;
-    }
-
-    /* ── DATAFRAME / DATA_EDITOR — encabezados más resaltados ─────── */
-    /* glide-data-grid es un canvas: solo se estila con sus variables --gdg-*.
-       Se aplican también a los descendientes por si Streamlit las fija en el propio grid. */
-    [data-testid="stDataFrame"], [data-testid="stDataFrame"] *,
-    [data-testid="stDataFrameResizable"], [data-testid="stDataFrameResizable"] *,
-    [data-testid="stDataEditor"], [data-testid="stDataEditor"] *,
-    [data-testid="stDataEditorResizable"], [data-testid="stDataEditorResizable"] *,
-    [data-testid="stDataFrameGlideDataEditor"], .glideDataEditor, .glideDataEditor * {
-        --gdg-text-header: #0f172a !important;
-        --gdg-text-header-selected: #0f172a !important;
-        --gdg-header-font-style: 700 13px !important;
-        --gdg-font-family: inherit !important;
     }
 
     /* ── EXPANDERS ──────────────────────────────────────────────── */
@@ -1945,11 +1892,6 @@ def obtener_datos(ticker: str):
         try:
             t    = yf.Ticker(ticker)
             hist = t.history(period="1y", auto_adjust=True)
-            if hist is not None and not hist.empty and "Close" in hist:
-                # Descartar la barra del día en curso si viene SIN cierre (Close=NaN): yfinance
-                # a veces añade una fila placeholder que corrompe el precio y TODOS los
-                # indicadores (de ahí 'PRECIO nan' y lecturas técnicas erróneas).
-                hist = hist[hist["Close"].notna()]
             if hist is None or hist.empty:
                 if _intento < 2:
                     _time.sleep(1.5)
@@ -5290,14 +5232,10 @@ def pestaña_macro():
 
 
 def precio_actual(hist: pd.DataFrame):
-    """Último cierre disponible, IGNORANDO barras sin cierre (p. ej. la del día en curso, que
-    yfinance devuelve con Close=NaN). Antes tomaba iloc[-1] a secas → 'PRECIO nan'."""
+    """Último cierre disponible."""
     if hist is None or hist.empty:
         return None
-    _s = hist["Close"].dropna()
-    if _s.empty:
-        return None
-    return round(float(_s.iloc[-1]), 4)
+    return round(hist["Close"].iloc[-1], 4)
 
 
 def datos_sesion(hist: pd.DataFrame, timeframe: str):
@@ -5414,15 +5352,18 @@ def pivot_woodie(H, L, C):
 
 
 def pivot_camarilla(H, L, C):
+    # PA2-02 (Polaris, Spec PA v2): Camarilla de Nick Scott, C ± R × 1,1/k con k = 12, 6, 4, 2.
+    # Antes usaba 1,0833/1,1666/1,25/1,5 × R, que situaba R1 a más de un rango del cierre.
+    # Fracción exacta (1.1/12), no decimal truncado. Invariante: R4 − S4 = 1,1 × R.
     rango = H - L
-    R1 = C + rango * 1.0833
-    R2 = C + rango * 1.1666
-    R3 = C + rango * 1.2500
-    R4 = C + rango * 1.5000
-    S1 = C - rango * 1.0833
-    S2 = C - rango * 1.1666
-    S3 = C - rango * 1.2500
-    S4 = C - rango * 1.5000
+    R1 = C + rango * 1.1 / 12
+    R2 = C + rango * 1.1 / 6
+    R3 = C + rango * 1.1 / 4
+    R4 = C + rango * 1.1 / 2
+    S1 = C - rango * 1.1 / 12
+    S2 = C - rango * 1.1 / 6
+    S3 = C - rango * 1.1 / 4
+    S4 = C - rango * 1.1 / 2
     return {"R1": R1, "R2": R2, "R3": R3, "R4": R4,
             "S1": S1, "S2": S2, "S3": S3, "S4": S4}
 
@@ -6491,25 +6432,12 @@ def _alertas_fundamentales(info: dict, div_ttm: float = None) -> list:
 
     return alertas
 
-def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None, hist=None):
+def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
     """
     Retorna dict con datos fundamentales según tipo (accion / etf).
     """
     if not info:
         return {}
-
-    # 52W con fallback al histórico (misma lógica que la cabecera HTML/PDF): cuando
-    # yfinance no devuelve fiftyTwoWeekHigh/Low (frecuente en .MC), se calcula del
-    # histórico de 1 año ya disponible. Evita la incoherencia de que la cabecera muestre
-    # el rango y esta tabla enseñe "—" para el MISMO dato. NO se acota a 252 sesiones a
-    # propósito: replica la ventana de 1 año de calendario de Yahoo (fuente primaria).
-    _h52, _l52 = info.get("fiftyTwoWeekHigh"), info.get("fiftyTwoWeekLow")
-    if (not _h52 or not _l52) and hist is not None and len(hist):
-        try:
-            _h52 = _h52 or float(hist["High"].max())
-            _l52 = _l52 or float(hist["Low"].min())
-        except Exception:
-            pass
 
     if tipo == "accion":
         return {
@@ -6551,8 +6479,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
                     or umbrales.actuales()["beta_min"] <= float(info.get("beta")) <= umbrales.actuales()["beta_max"])
                 else f"[VERIFICAR] ({float(info.get('beta')):.2f}x)"
             ),  # benchmark Yahoo, distinto al calculado vs índice seleccionado
-            "52W Max": _fmt_precio(_h52),
-            "52W Min": _fmt_precio(_l52),
+            "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
+            "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
             "Objetivo analistas": _fmt_precio(info.get("targetMeanPrice")),
             "Nº analistas": str(info.get("numberOfAnalystOpinions", "—")),
         }
@@ -6564,8 +6492,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "Moneda": info.get("currency", "—"),
             "Patrimonio": _fmt_numero(info.get("totalAssets")),
             "TER (expense ratio)": _fmt_pct(info.get("annualReportExpenseRatio") or info.get("expenseRatio")),
-            "52W Max": _fmt_precio(_h52),
-            "52W Min": _fmt_precio(_l52),
+            "52W Max": _fmt_precio(info.get("fiftyTwoWeekHigh")),
+            "52W Min": _fmt_precio(info.get("fiftyTwoWeekLow")),
             "Rentab. dividendo": _fmt_pct(info.get("dividendYield")),
             "Beta": _fmt_ratio(info.get("beta3Year") or info.get("beta")),
         }
@@ -6642,27 +6570,6 @@ def _sem_interp_html(color_sem: str, pct_sem: float,
     )
 
 
-def _sello_datos(info: dict, hist=None) -> str:
-    """Hora de corte HONESTA del dato de mercado: `regularMarketTime` de Yahoo
-    (epoch UTC) convertido a la zona horaria del propio mercado. Es la hora del
-    DATO, no la de generación del informe ni la del reloj local. Fallback: fecha
-    de la última sesión del histórico. Devuelve '—' si no hay nada fiable."""
-    try:
-        import datetime as _dtm, zoneinfo as _zi
-        rmt = (info or {}).get("regularMarketTime")
-        tzname = (info or {}).get("exchangeTimezoneName") or "Europe/Madrid"
-        if isinstance(rmt, (int, float)) and rmt > 0:
-            return _dtm.datetime.fromtimestamp(int(rmt), _zi.ZoneInfo(tzname)).strftime("%d/%m/%Y %H:%M %Z")
-    except Exception:
-        pass
-    try:
-        if hist is not None and len(hist):
-            return hist.index[-1].strftime("%d/%m/%Y")
-    except Exception:
-        pass
-    return "—"
-
-
 def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: float,
                           cambio: float, cambio_pct: float, h52, l52, currency: str,
                           sistema: str, resultados_pivots: dict, confluencias: list,
@@ -6696,7 +6603,7 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
     beta_val = beta calculada vs índice (la de pantalla); si None, se usa info['beta'] (Yahoo).
     """
 
-    ahora = _ahora_es().strftime("%d/%m/%Y %H:%M")
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
     sem_colors = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}
     sem_color  = sem_colors.get(semaforo, "#94a3b8")
     emoji_sem  = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
@@ -7888,7 +7795,6 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<span class="chip">Beta: {_beta_h}</span>\n'
         f'<span class="chip">{tipo_activo}</span>\n'
         f'<span class="chip">Sistema: {sistema}</span>\n'
-        f'<span class="chip">Datos: {_sello_datos(info, hist)}</span>\n'
         f'<span class="chip">Generado: {ahora}</span>\n'
         f'</div>\n</div>\n'
 
@@ -7921,12 +7827,12 @@ def generar_informe_estrategia_html(ticker: str, nombre: str, precio: float,
       - color     : str  (hex del header)
       - criterios : list of (html_str, ok_int)  — salida de _build_xxx()
       - puntos    : list of str (HTML)           — salida de _interpretar()
-      - rec       : str                          — recomendación narrativa
+      - rec       : str                          — lectura del método (PA2-01, sin recomendación)
       - popover_md: str                          — texto markdown del ℹ️
     """
     import re as _re
 
-    ahora = _ahora_es().strftime("%d/%m/%Y %H:%M")
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     # ── Convertidor markdown → HTML (formato de los popovers) ────────────
     def _md_to_html(md: str) -> str:
@@ -8143,9 +8049,9 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         total  = sum(ok for _, ok in criterios)
         maxpts = len(criterios) * 2
         pct    = int(total / maxpts * 100) if maxpts else 0
-        if pct >= 70:   vrd = "OPORTUNIDAD"
-        elif pct >= 45: vrd = "VIGILAR"
-        else:           vrd = "NO ES EL MOMENTO"
+        if pct >= 70:   vrd = "CONDICIONES FAVORABLES"
+        elif pct >= 45: vrd = "CONDICIONES MIXTAS"
+        else:           vrd = "CONDICIONES DESFAVORABLES"
 
         # Criterios HTML
         crit_rows = "".join(
@@ -8161,10 +8067,11 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
 
         rec_html = (
             f'<div class="rec-box">'
-            f'<div class="rec-lbl">Recomendación</div>'
+            f'<div class="rec-lbl">{ROTULO_LECTURA_METODO}</div>'
             f'<div class="rec-txt">{rec}</div>'
+            f'<div style="font-size:10px;color:#64748b;margin-top:6px">{PIE_LECTURA_METODO}</div>'
             f'</div>'
-        ) if rec else ""
+        ) if rec else f'<div style="font-size:10px;color:#64748b">{PIE_LECTURA_METODO}</div>'  # PA2-01
 
         exp_html = _md_to_html(popover_md)
 
@@ -8360,7 +8267,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
     S_EXP_LI = _p(fontName="Helvetica",         fontSize=7,  leading=10,  leftIndent=8,  spaceAfter=1)
     S_PIE    = _p(fontName="Helvetica",         fontSize=6.5,textColor=colors.grey, alignment=TA_CENTER)
 
-    ahora    = _ahora_es().strftime("%d/%m/%Y %H:%M")
+    ahora    = datetime.now().strftime("%d/%m/%Y %H:%M")
     historia = []
 
     # ── Cabecera ──────────────────────────────────────────────────────────
@@ -8401,10 +8308,10 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
         total  = sum(ok for _, ok in criterios)
         maxpts = len(criterios) * 2
         pct    = int(total / maxpts * 100) if maxpts else 0
-        if pct >= 70:   vrd = "OPORTUNIDAD"
-        elif pct >= 45: vrd = "VIGILAR"
-        else:           vrd = "NO ES EL MOMENTO"
-        vrd_col = {"OPORTUNIDAD": VE, "VIGILAR": AM, "NO ES EL MOMENTO": RO}[vrd]
+        if pct >= 70:   vrd = "CONDICIONES FAVORABLES"
+        elif pct >= 45: vrd = "CONDICIONES MIXTAS"
+        else:           vrd = "CONDICIONES DESFAVORABLES"
+        vrd_col = {"CONDICIONES FAVORABLES": VE, "CONDICIONES MIXTAS": AM, "CONDICIONES DESFAVORABLES": RO}[vrd]
 
         # Header con color de estrategia
         hdr = Table(
@@ -8426,7 +8333,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
         ]))
         historia.append(hdr)
 
-        # Dos columnas: criterios | análisis + recomendación
+        # Dos columnas: criterios | análisis + lectura del método
         crit_items  = []
         punto_items = []
 
@@ -8441,9 +8348,10 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
             punto_items.append(Paragraph(_esc(text), S_PUNTO))
             punto_items.append(Spacer(1, 1))
 
-        if rec:
-            punto_items.append(Paragraph("RECOMENDACION:", S_REC_H))
+        if rec:   # PA2-01: "Lectura del método" + pie fijo (sin campo recomendación)
+            punto_items.append(Paragraph(f"{ROTULO_LECTURA_METODO}:", S_REC_H))
             punto_items.append(Paragraph(_esc(rec), S_REC))
+        punto_items.append(Paragraph(_esc(PIE_LECTURA_METODO), S_PUNTO))
 
         body = Table(
             [[crit_items, punto_items]],
@@ -8694,7 +8602,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         hist.append(t)
         hist.append(Spacer(1, 0.1*cm))
 
-    ahora   = _ahora_es().strftime("%d/%m/%Y %H:%M")
+    ahora   = datetime.now().strftime("%d/%m/%Y %H:%M")
     historia = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
@@ -8771,7 +8679,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     ]))
     historia.append(cab_t)
     chips_t = Table(
-        [[Paragraph(f"Generado: {ahora}   ·   Datos a: {_sello_datos(info, hist)}   ·   ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
+        [[Paragraph(f"Generado: {ahora}   ·   Datos ~15 min de retraso vía Yahoo Finance", S_CHIP)]],
         colWidths=[18*cm]
     )
     chips_t.setStyle(TableStyle([
@@ -9892,52 +9800,6 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
 # PANEL DE ADMINISTRACIÓN — GESTIÓN DE USUARIOS
 # =============================================================================
 
-def _df_a_xlsx(df, sheet: str = "datos") -> bytes:
-    """DataFrame -> bytes .xlsx (motor openpyxl). Para descargas del panel de admin."""
-    import io as _io
-    import pandas as _pd
-    _buf = _io.BytesIO()
-    with _pd.ExcelWriter(_buf, engine="openpyxl") as _w:
-        df.to_excel(_w, index=False, sheet_name=(sheet[:31] or "datos"))
-    return _buf.getvalue()
-
-
-def _df_a_pdf(df, titulo: str) -> bytes:
-    """DataFrame -> bytes PDF (tabla en A4 apaisado, columnas repartidas y con ajuste
-    de texto). Para descargas del panel de admin."""
-    import io as _io
-    import pandas as _pd
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib import colors as _col
-    from reportlab.lib.units import cm as _cm
-    from reportlab.platypus import (SimpleDocTemplate, Table as _T, TableStyle as _TS,
-                                    Paragraph as _P, Spacer as _S)
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle as _PS
-    _buf = _io.BytesIO()
-    _pw, _ph = landscape(A4)
-    _doc = SimpleDocTemplate(_buf, pagesize=landscape(A4), topMargin=1*_cm,
-                             bottomMargin=1*_cm, leftMargin=1*_cm, rightMargin=1*_cm)
-    _ss = getSampleStyleSheet()
-    _hdr = _PS("h", parent=_ss["BodyText"], fontSize=6, leading=7, textColor=_col.white)
-    _cel = _PS("c", parent=_ss["BodyText"], fontSize=6, leading=7)
-    _cols = [str(c) for c in df.columns]
-    _data = [[_P(c, _hdr) for c in _cols]]
-    for _, _r in df.iterrows():
-        _data.append([_P("" if _pd.isna(_v) else str(_v), _cel) for _v in _r.tolist()])
-    _avail = _pw - 2*_cm
-    _cw = _avail / max(1, len(_cols))
-    _tbl = _T(_data, colWidths=[_cw]*len(_cols), repeatRows=1)
-    _tbl.setStyle(_TS([
-        ("BACKGROUND", (0, 0), (-1, 0), _col.HexColor("#0f2f4f")),
-        ("GRID", (0, 0), (-1, -1), 0.3, _col.HexColor("#cbd5e1")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_col.white, _col.HexColor("#f1f5f9")]),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
-    ]))
-    _doc.build([_P(titulo, _ss["Title"]), _S(1, 6), _tbl])
-    return _buf.getvalue()
-
-
 def _admin_refresco():
     """Sub-página de Administración: refresco de datos del screener (yfinance) y
     edición manual. Dos pestañas (Estructural / Fundamental); cada una con Refrescar
@@ -10030,30 +9892,11 @@ def _admin_refresco():
                         _row["·manual"] = ", ".join(_man) if _man else "—"
                         _rows.append(_row)
                     _df0 = _pd_ed.DataFrame(_rows)
-                    # ── Descargas del snapshot cargado: Excel (.xlsx) y PDF ──
-                    _fname_dl = f"{_nivel_key}_{_idx_sel}_{datetime.now().strftime('%Y%m%d_%H%M')}"
-                    _c_xls, _c_pdf = st.columns(2)
-                    with _c_xls:
-                        st.download_button(
-                            "⬇️ Excel (.xlsx)", data=_df_a_xlsx(_df0, _nivel_key),
-                            file_name=f"{_fname_dl}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"_adm_dl_xls_{_nivel_key}", use_container_width=True)
-                    with _c_pdf:
-                        st.download_button(
-                            "⬇️ PDF", data=_df_a_pdf(_df0, f"{_nivel_label} — {_nom_idx}"),
-                            file_name=f"{_fname_dl}.pdf", mime="application/pdf",
-                            key=f"_adm_dl_pdf_{_nivel_key}", use_container_width=True)
                     st.caption("Edita cualquier celda. Al guardar, los cambios se marcan origen=manual "
                                "(validados en formato) y quedan protegidos de futuros refrescos.")
-                    # Altura suficiente para todas las filas: el scroll vertical pasa a la página
-                    # (queda FUERA de la tabla) y se deja un margen inferior para que el scroll
-                    # horizontal no se solape con la última fila de datos.
-                    _h_editor = min((len(_df0) + 1) * 35 + 40, 2000)
                     _ed = st.data_editor(
                         _df0, key=f"_adm_de_{_nivel_key}", use_container_width=True,
                         hide_index=True, disabled=["ticker", "·válido", "·manual"],
-                        height=_h_editor,
                     )
                     if st.button(f"💾 Guardar cambios ({_nivel_label.lower()})", key=f"_adm_save_{_nivel_key}"):
                         _n_ok, _errs = 0, {}
@@ -10203,975 +10046,6 @@ def _admin_umbrales():
                 st.rerun()
 
 
-# Sectores del motor (lista cerrada para la Ficha de empresa — regla E4)
-_SECTORES_CURACION = [
-    "Utilities", "Consumer Defensive", "Communication Services", "Real Estate",
-    "Healthcare", "Industrials", "Energy", "Financial Services",
-    "Consumer Cyclical", "Technology", "Basic Materials",
-]
-
-
-def _reconciliar_bpa_yf(conn, ticker, ejercicio, bpa):
-    """Payout con dividendos ordinarios curados del ejercicio vs payoutRatio de yfinance (R1).
-    Degrada con gracia: si falta algo, confianza media y sin reconciliación (no bloquea)."""
-    import verificacion
-    payout_calc = None
-    try:
-        if bpa and float(bpa) != 0:
-            divs = verificacion.leer_dividendos(conn, ticker)
-            _sum = sum(float(d["importe_eur"]) for d in divs
-                       if d.get("tipo") == "ordinario" and d.get("con_cargo_a_ejercicio") == ejercicio
-                       and d.get("importe_eur") is not None)
-            if _sum > 0:
-                payout_calc = _sum / float(bpa)
-    except Exception:
-        payout_calc = None
-    payout_yf = None
-    try:
-        import yfinance as yf
-        payout_yf = yf.Ticker(ticker).info.get("payoutRatio")
-    except Exception:
-        payout_yf = None
-    rev, conf, delta = verificacion.reconciliar_payout(payout_calc, payout_yf)
-    return payout_calc, payout_yf, rev, conf, delta
-
-
-_CIERRE_ESPECIAL = {"LOG.MC": ("09-30", True), "ITX.MC": ("01-31", True)}   # cierres no-diciembre conocidos
-
-
-def sembrar_fichas_ibex35(conn) -> dict:
-    """Crea (UPSERT, solo las que falten) las fichas de empresa del IBEX-35: nombre de IBEX_35,
-    sector de yfinance, cierre conocido (LOG 30-sep, ITX 31-ene; resto 31-dic a confirmar) y
-    clase_exclusion inferida del sector. Es dimensión (no ciclo borrador). El curador debe
-    REVISAR sector/clase y confirmar el cierre. No sobrescribe fichas ya existentes."""
-    import verificacion
-    import yfinance as yf
-    existentes = {e["ticker"] for e in verificacion.leer_empresas(conn)}
-    creadas = saltadas = 0
-    errores = []
-    for nombre, ticker in IBEX_35.items():
-        if ticker in existentes:
-            saltadas += 1
-            continue
-        try:
-            try:
-                _info = yf.Ticker(ticker).info
-            except Exception:                            # noqa: BLE001
-                _info = {}
-            _sec = _info.get("sector")
-            _ind = (_info.get("industry") or "").strip().lower()
-            _sl = (_sec or "").strip().lower()
-            _clase = ("banca_seguros" if "financial" in _sl
-                      else "reit_socimi" if (_sl == "real estate" and _ind.startswith("reit"))
-                      else "estandar")
-            _cie, _conf = _CIERRE_ESPECIAL.get(ticker, ("12-31", False))
-            verificacion.guardar_empresa(conn, {
-                "ticker": ticker, "nombre": nombre, "cierre_ejercicio": _cie,
-                "cierre_confirmado": _conf, "sector": _sec, "clase_exclusion": _clase,
-                "notas": "Ficha sembrada automáticamente — revisar sector/clase y confirmar cierre."},
-                "siembra_auto")
-            creadas += 1
-        except Exception as ex:                          # noqa: BLE001
-            try:
-                conn.rollback()                          # evita cascada "transaction aborted"
-            except Exception:
-                pass
-            errores.append(f"{ticker}: {ex}")
-    return {"creadas": creadas, "saltadas": saltadas, "errores": errores}
-
-
-def refresco_masivo_dividendos(conn, tickers_nombres: dict, desde_ano: int | None = None) -> dict:
-    """Auto-1: siembra en BORRADOR los eventos de dividendo del IBEX-35 desde yfinance
-    (importe + ex-date) con `con_cargo` heurístico. NO toca vigente; requiere ficha de empresa
-    (FK). El curador revisa y promueve. `desde_ano` acota a eventos con ex_date.year >= desde_ano
-    (yfinance devuelve décadas de historial; para curar bastan los años recientes).
-    Devuelve resumen {nuevos, saltados, sin_ficha, errores}."""
-    import verificacion, lente, datetime as _dt
-    hoy = _dt.date.today().isoformat()
-    cierres = {e["ticker"]: (e.get("cierre_ejercicio") or "12-31") for e in verificacion.leer_empresas(conn)}
-    n_nuevos = n_saltados = 0
-    eventos_total = 0
-    sin_ficha = []
-    errores = []
-    for _nombre, ticker in tickers_nombres.items():
-        if ticker not in cierres:
-            sin_ficha.append(ticker); continue
-        for exd, imp in lente.eventos_yfinance(ticker):
-            eventos_total += 1
-            if imp is None or imp <= 0:
-                continue
-            _ex = exd if hasattr(exd, "year") else _dt.date.fromisoformat(str(exd)[:10])
-            if desde_ano and _ex.year < desde_ano:
-                continue
-            d = {"ticker": ticker, "ex_date": _ex.isoformat(), "importe_eur": round(float(imp), 6),
-                 "tipo": "ordinario", "con_cargo_a_ejercicio": verificacion.heuristica_con_cargo(_ex, cierres[ticker]),
-                 "fuente": "yfinance (evento observado)", "fecha_verificacion": hoy, "verificado_por": "refresco_auto"}
-            try:
-                if verificacion.guardar_dividendo_borrador(conn, d, "refresco_auto"):
-                    n_nuevos += 1
-                else:
-                    n_saltados += 1
-            except Exception as ex:                      # noqa: BLE001
-                try:
-                    conn.rollback()                      # evita cascada "transaction aborted"
-                except Exception:
-                    pass
-                n_saltados += 1
-                if len(errores) < 6:
-                    errores.append(f"{ticker} {d.get('ex_date')}: {ex}")
-    return {"nuevos": n_nuevos, "saltados": n_saltados, "sin_ficha": sin_ficha,
-            "errores": errores, "eventos": eventos_total}
-
-
-def _explicar_bandera(cod, valores, ticker):
-    """Explicación en lenguaje LLANO de un aviso, rellena con las CIFRAS REALES del valor
-    (spec Pólaris v1). 5 elementos: qué he detectado · por qué importa · qué mirar · dónde ·
-    cómo se resuelve. El código (B1/B2/B3) NO va en el mensaje, solo en 'tecnico'. Puro."""
-    v = valores or {}
-    q = ticker.replace(".MC", "")
-    url_cnmv = f"https://www.google.com/search?q={q}+CNMV+informe+financiero+anual+cuentas"
-    url_ir = f"https://www.google.com/search?q={q}+relación+inversores+dividendo+estructura+accionarial"
-
-    def pc(x):
-        return f"{float(x)*100:.1f}%" if x is not None else "n/d"
-
-    resolver = ("**Confirmar** el valor (botón *Aceptar*, si el dato es correcto) · "
-                "**Corregir** a mano en la pestaña *BPA por ejercicio* / *Dividendos* (override vigente) · "
-                "**Marcar explicable** (*Aceptar*: silencia por huella hasta que el dato cambie).")
-
-    if cod == "B1":
-        e1, e2 = v.get("E1_campo"), v.get("E2_dpa_bpa")
-        if e1 is None or e2 is None:
-            return {
-                "titular": "Cobertura (payout) marcada, pero faltan los estimadores en este registro.",
-                "detectado": f"El registro de {ticker} no guardó las dos vías del payout (es de un run "
-                             f"anterior a la mejora del log). **Relanza el screening** para ver las cifras.",
-                "importa": "Sin las dos cifras no se puede mostrar la divergencia; el capado sigue por seguridad.",
-                "mirar": "Relanza el screening de dividendos y vuelve a abrir este aviso.",
-                "donde_url": url_cnmv, "donde_txt": "Cuentas anuales — CNMV",
-                "resolver": resolver, "tecnico": "B1 · estimadores no persistidos (run antiguo).",
-            }
-        delta = abs(e1 - e2) * 100
-        return {
-            "titular": f"Cobertura (payout) no fiable: **{pc(e1)}** (campo yfinance) vs **{pc(e2)}** "
-                       f"(dividendo÷beneficio) — **{delta:.0f} pp** de diferencia.",
-            "detectado": f"He calculado el payout de {ticker} por dos vías —campo del proveedor "
-                         f"(**yfinance**): {pc(e1)}, y dividendo÷beneficio (BPA propio): {pc(e2)}— y "
-                         f"difieren {delta:.0f} puntos.",
-            "importa": "Un payout tan distinto cambia si el valor **cumple la cobertura o queda capado**: "
-                       "si el bueno es el alto, el dividendo consume casi todo el beneficio → **Parcial, no Cumple**.",
-            "mirar": "El **beneficio por acción** del último ejercicio cerrado y el **dividendo ordinario** "
-                     "pagado; comprueba cuál de las dos cifras es la correcta (ojo: consolidado vs individual, "
-                     "**continuadas vs discontinuadas**, básico vs diluido).",
-            "donde_url": url_cnmv, "donde_txt": "Cuentas anuales — CNMV",
-            "resolver": resolver,
-            "tecnico": f"B1 · métrica payout · umbral divergencia 10 pp · E1 (yfinance)={pc(e1)}, E2 (DPA/BPA)={pc(e2)}.",
-        }
-
-    if cod == "B2":
-        det, imp, mir, tec = [], [], [], []
-        if "payout" in v:
-            det.append(f"el **payout** es **{pc(v['payout'])}**, cerca del **85%** —el nivel a partir del "
-                       f"cual el dividendo se considera en riesgo")
-            imp.append("por encima del 85% la empresa reparte casi todo el beneficio (poco colchón): si el "
-                       "beneficio baja, peligra el dividendo, y por eso el veredicto se **limita a Parcial** "
-                       "(no puede ser Cumple)")
-            mir.append("el **beneficio** y el **dividendo ordinario** del último ejercicio (payout = div ÷ BPA): "
-                       "por debajo del 85% puede Cumplir; por encima, la limitación es correcta")
-            tec.append(f"payout={pc(v['payout'])} (banda 75–110%, umbral 85%)")
-        if "ev_ebitda" in v:
-            det.append(f"el **EV/EBITDA** es **{float(v['ev_ebitda']):.1f}×**, cerca del **límite de 22×** "
-                       f"a partir del cual la valoración se considera demasiado cara")
-            imp.append("por encima de 22× la empresa cotiza tan cara que un dividendo atractivo deja de ser "
-                       "compatible con esa valoración")
-            mir.append("el **EBITDA** y la **deuda neta** del último ejercicio (el EV/EBITDA de fuentes "
-                       "automáticas varía según la definición)")
-            tec.append(f"ev_ebitda={float(v['ev_ebitda']):.1f}x (banda 20–24, umbral/KO 22)")
-        if "free_float" in v:
-            det.append(f"el **free float** es **{pc(v['free_float'])}**, cerca del veto por concentración (20%)")
-            imp.append("por debajo del 20% se veta por concentración accionarial")
-            mir.append("el **free float declarado y su base de cálculo** (en sociedades con varias clases de "
-                       "acción cambia mucho según se mida sobre el capital total o solo la clase cotizada)")
-            tec.append(f"free_float={pc(v['free_float'])} (banda 18–22%, veto 20%)")
-        titular = "Métrica en zona gris: " + "; ".join(det) + "."
-        return {
-            "titular": titular, "detectado": titular,
-            "importa": "Cerca del umbral la **precisión del dato decide** el veredicto — " + "; ".join(imp) + ".",
-            "mirar": "  ".join(f"{i+1}) {m}." for i, m in enumerate(mir)),
-            "donde_url": (url_ir if "free_float" in v else url_cnmv),
-            "donde_txt": "IR / cuentas — CNMV",
-            "resolver": resolver,
-            "tecnico": "B2 · " + " · ".join(tec),
-        }
-
-    if cod == "B3":
-        det, imp, mir, tec = [], [], [], []
-        if v.get("extra"):
-            det.append("ha pagado un **dividendo extraordinario** en la ventana")
-            imp.append("los extraordinarios inflan yield, payout y CAGR y no son renta recurrente")
-            mir.append("separar el **dividendo ordinario del extraordinario** en la política de dividendos; "
-                       "el ordinario es el que gobierna la sostenibilidad")
-            tec.append("extraordinario presente")
-        if v.get("hueco_serie"):
-            _hs = v["hueco_serie"]
-            _anos = list(_hs) if isinstance(_hs, (list, tuple)) else []
-            _anos_txt = ", ".join(str(a) for a in _anos)
-            _pandemia = any(a in (2020, 2021) for a in _anos)
-            det.append(f"**falta el pago esperado de {_anos_txt}**" if _anos
-                       else "**falta un pago esperado** en la secuencia (hueco de serie)")
-            if _pandemia:
-                imp.append("el hueco cae en **2020/2021 (pandemia)** — casi con seguridad una suspensión "
-                           "conocida por COVID, no un error de datos: **no hace falta investigar mucho más**")
-                mir.append(f"basta confirmar que el corte fue en **{_anos_txt}** (año COVID) y cuándo reanudó; "
-                           "si es así, **Aceptar** (interrupción real y conocida)")
-            else:
-                imp.append("la racha de años consecutivos puede estar rota por un **dato ausente** y no por "
-                           "una interrupción real — afecta al criterio de historial (K10)")
-                mir.append(f"si la empresa **pagó dividendo en {_anos_txt or 'el año del hueco'}** "
-                           "(dato ausente vs corte real) y en qué año reanudó")
-            tec.append(f"hueco de serie · años {_anos_txt or 'n/d'} (pagos fuera de la racha, racha<7)")
-        if v.get("base_susp"):
-            det.append("el **año base del crecimiento (CAGR) tiene el dividendo ≈0** (suspendido)")
-            imp.append("una base ≈0 dispara una tasa de crecimiento artificial; se trata como n/d")
-            mir.append("el **año de reanudación** del dividendo y el DPA real de cada año")
-            tec.append("base suspendida (≈0)")
-        if v.get("salto_yoy") is not None:
-            det.append(f"el dividendo ordinario **cambió {float(v['salto_yoy'])*100:+.0f}%** de un año a otro "
-                       f"sin extraordinario que lo explique")
-            imp.append("puede ser un recorte/subida real, un especial mal clasificado o un error de datos")
-            mir.append("la **serie de dividendos por año** y si hubo algún pago especial")
-            tec.append(f"salto YoY {float(v['salto_yoy'])*100:+.0f}%")
-        if v.get("fuente_rancia"):
-            det.append("la **fuente del dato es nula o rancia**")
-            imp.append("sin dato fiable no se puede afirmar la cobertura")
-            mir.append("recuperar el dato de la **fuente oficial** más reciente")
-            tec.append("fuente nula/rancia")
-        if not det:
-            return {
-                "titular": "Anomalía en la serie marcada, pero sin detalle en este registro.",
-                "detectado": f"El registro de {ticker} no guardó el tipo de anomalía (es de un run "
-                             f"anterior a la mejora del log). **Relanza el screening** para ver qué la "
-                             f"provoca (extraordinario, hueco de serie, base suspendida…).",
-                "importa": "El capado sigue vigente por seguridad hasta reevaluar.",
-                "mirar": "Relanza el screening de dividendos y vuelve a abrir este aviso.",
-                "donde_url": url_ir, "donde_txt": "Histórico de dividendos — IR / CNMV",
-                "resolver": resolver, "tecnico": "B3 · anomalía no persistida (run antiguo).",
-            }
-        titular = "Anomalía en la serie: " + "; ".join(det) + "."
-        return {
-            "titular": titular, "detectado": titular,
-            "importa": ("; ".join(imp)[:1].upper() + "; ".join(imp)[1:] + ".") if imp else "",
-            "mirar": "  ".join(f"{i+1}) {m}." for i, m in enumerate(mir)),
-            "donde_url": url_ir, "donde_txt": "Histórico de dividendos — IR / CNMV",
-            "resolver": resolver,
-            "tecnico": "B3 · " + " · ".join(tec),
-        }
-
-    if cod == "B-soft":
-        e2, pv = v.get("E2_dpa_bpa"), v.get("payout_vigente")
-        return {
-            "titular": f"El dato verificado puede estar **obsoleto**: el estimador ({pc(e2)}) se ha separado "
-                       f"del payout verificado vigente ({pc(pv)}).",
-            "detectado": f"El estimador automático da {pc(e2)} y el payout verificado vigente es {pc(pv)}.",
-            "importa": "No cambia el veredicto (manda el dato verificado), pero sugiere que quedó "
-                       "desfasado (reformulación o nuevo ejercicio cerrado).",
-            "mirar": "compara el **BPA/dividendo verificado** con las **últimas cuentas** publicadas.",
-            "donde_url": url_cnmv, "donde_txt": "Últimas cuentas — CNMV",
-            "resolver": "Refresca la verificación en la pestaña *BPA por ejercicio* / *Dividendos* si hay nuevo "
-                        "ejercicio o reformulación.",
-            "tecnico": f"B-soft · E2={pc(e2)} vs vigente={pc(pv)} (umbral 15 pp)",
-        }
-
-    return {"titular": "Aviso sin plantilla de explicación.", "detectado": "", "importa": "",
-            "mirar": "", "donde_url": url_cnmv, "donde_txt": "CNMV", "resolver": resolver,
-            "tecnico": f"{cod} · valores={v}"}
-
-
-_FICHA_CORRECCION = {   # §7.3 — contenido de dominio (Pólaris): 5 puntos por métrica
-    "payout": (
-        "**(a)** corriges el beneficio del ejercicio (denominador del payout), o el BPA. "
-        "**(b)** mete el **beneficio recurrente atribuido a la dominante** del último ejercicio cerrado (NO el "
-        "reportado con extraordinarios): base=consolidado, beneficio recurrente (M€), nº de acciones (millones), "
-        "DPA con cargo. **(c)** fuente: CCAA / informe de gestión (resultado recurrente) en CNMV o IR; confirma "
-        "también el dividendo con cargo. **(d)** trampas: consolidado vs individual (usa el del grupo) · reportado "
-        "vs recurrente (usa el recurrente) · continuadas vs discontinuadas · básico vs diluido. **(e)** al guardar "
-        "recalcula el payout; puede activar el tope K1-Payout. *Ej.: Enagás 2025 → recurrente 266,3 M€ → ~98%, "
-        "no el ~77% del reportado.*"),
-    "free_float": (
-        "**(a)** corriges el % de capital en circulación. **(b)** mete el free float con su **base** (capital total "
-        "vs solo la clase cotizada). **(c)** fuente: IR (estructura accionarial) / CNMV (participaciones "
-        "significativas). **(d)** trampas: dos clases de acción (fija la base — cf. Puig) · autocartera · "
-        "participaciones de control. **(e)** al guardar puede activar o levantar el veto K5."),
-    "ev_ebitda": (
-        "**(a)** corriges el EV/EBITDA o sus componentes. **(b)** mete EBITDA y deuda neta del último ejercicio. "
-        "**(c)** fuente: CCAA / informe (el EV/EBITDA automático varía según definición). **(e)** al guardar puede "
-        "activar/levantar el KO de valoración (22×)."),
-    "clasificacion": (
-        "**(a)** corriges el **tipo** de un pago (ordinario / extraordinario / scrip). **(b)** según la **política de "
-        "dividendos** de la empresa, en la pestaña «Dividendos». **(c)** fuente: IR (política / hechos relevantes). "
-        "**(e)** al guardar recalcula yield y CAGR (excluye el extraordinario del CAGR) y el payout."),
-    "historial": (
-        "**(a)** confirma si hubo pago en el año marcado como hueco. **(c)** fuente: histórico de dividendos "
-        "(IR / CNMV). **(e)** al guardar recompone la racha de años (criterio K10). *Si el hueco es 2020/2021, casi "
-        "seguro fue el corte por COVID — confírmalo y marca explicable.*"),
-    "capital": (
-        "**(a)** corriges CET1 fully loaded y su requisito (o ratio de Solvencia II). **(b)** mete el ratio del "
-        "último trimestre y la **distancia al gatillo MDA**. **(c)** fuente: presentación de resultados / IR; "
-        "requisito SREP del BCE. **(d)** trampas: fully loaded vs phase-in · requisito total (P1+P2+colchones) vs "
-        "solo Pilar 1. *(La app aún no ingiere CET1; de momento se verifica a mano.)*"),
-}
-
-
-def _metricas_de_bandera(cod, valores):
-    """Métrica(s) que toca corregir según la bandera (para la ficha «¿Cómo corrijo?»)."""
-    v = valores or {}
-    if cod in ("B1", "B-soft"):
-        return ["payout"]
-    if cod == "B2":
-        m = [k for k in ("payout", "ev_ebitda", "free_float") if k in v]
-        return m or ["payout"]
-    if cod == "B3":
-        m = []
-        if v.get("extra"):
-            m.append("clasificacion")
-        if v.get("hueco_serie") or v.get("base_susp"):
-            m.append("historial")
-        return m or ["clasificacion"]
-    return ["payout"]
-
-
-def _admin_bandeja_avisos(conn, _user, _pd):
-    """Bandeja de avisos v2 (Spec v2 · D-006): valores marcados por el motor de banderas en el
-    último run del log, con acuse por huella y deriva ('N runs marcado'). Sustituye el
-    mantenimiento rutinario — aquí solo se atienden anomalías, al ritmo del usuario."""
-    import avisos as _av
-    try:
-        filas = _av.leer_avisos_ultimo(conn, solo_capa=True)
-        _acu = _av.acuses_activos(conn)
-    except Exception as _ex:
-        st.markdown("#### 🔎 Bandeja de avisos del último screening — atención por excepción")
-        st.error(f"No se pudo leer la bandeja (¿ejecutaste migracion_avisos_v2_neon.sql?): {_ex}")
-        return
-    # Fecha y hora del último screening registrado (max run_ts del log), en hora local ES
-    _run_ts = None
-    try:
-        _cands = [f.get("run_ts") for f in filas if f.get("run_ts")]
-        _run_ts = _ts_es(max(_cands)) if _cands else None
-    except Exception:
-        _run_ts = None
-    _sello = f" · {_run_ts.strftime('%d/%m/%Y %H:%M')}" if _run_ts else ""
-    st.markdown(f"#### 🔎 Bandeja de avisos del último screening{_sello} — atención por excepción")
-    st.caption("El motor carga todo en automático y marca solo lo que puede voltear un veredicto "
-               "(divergencia entre estimadores, zona gris de umbral, anomalía). Un valor marcado "
-               "**nunca sale 'Cumple'** hasta resolverse. «Revisado y aceptado» silencia el aviso "
-               "**mientras el dato no cambie** (si cambia, la huella cambia y vuelve).")
-    if not filas:
-        st.success("✅ Sin avisos en el último run. Lanza un screening de dividendos (Estrategia) "
-                   "para poblar la bandeja.")
-        return
-    st.markdown(f"**{len(filas)} valor(es) marcados** en el último screening registrado.")
-    if st.session_state.get("_avisos_msg"):
-        st.info(st.session_state.pop("_avisos_msg"))
-    _NOM = {v: k for k, v in IBEX_35.items()}   # ticker -> nombre (para identificar el valor)
-    _silenciados = []   # (tk, nom, cod, hue, tipo) — acusados: van a la sección de reactivación
-    for f in filas:
-        tk = f["ticker"]; nruns = int(f.get("runs_marcado", 1) or 1)
-        _nom = _NOM.get(tk, tk)
-        e1, e2 = f.get("payout_e1"), f.get("payout_e2")
-        _pend = []   # banderas-capa SIN acuse (pendientes de atender)
-        for b in (f.get("banderas") or []):
-            if b.get("tipo") != "capa":
-                continue
-            _tp = _acu.get((tk, b.get("codigo"), b.get("huella")))
-            if _tp is None:
-                _pend.append(b)
-            else:
-                _silenciados.append((tk, _nom, b.get("codigo"), b.get("huella"), _tp))
-        if not _pend:
-            continue   # valor totalmente atendido → no da la lata (§8: silenciar = dejar de avisar)
-        _e1s = f"{float(e1)*100:.1f}%" if e1 is not None else "n/d"
-        _e2s = f"{float(e2)*100:.1f}%" if e2 is not None else "n/d"
-        _deriva = f"  ·  ⏳ marcado en los últimos {nruns} cribados seguidos" if nruns >= 2 else ""
-        with st.expander(f"🔎 {tk} · {_nom} — {len(_pend)} pendiente(s) · payout yfinance {_e1s} / "
-                         f"DPA-BPA {_e2s}{_deriva}"):
-            _q = tk.replace(".MC", "")
-            st.markdown(f"[🔗 Buscar fuente (CNMV / IR) de {tk}]"
-                        f"(https://www.google.com/search?q={_q}+CNMV+informe+financiero+anual+dividendo)")
-            for b in _pend:
-                _cod, _hue = b.get("codigo"), b.get("huella")
-                _vals = dict(b.get("valores") or {})   # backfill de E1/E2 desde columnas del log (runs viejos)
-                if _cod in ("B1", "B2", "B-soft"):
-                    if _vals.get("E1_campo") is None and e1 is not None:
-                        _vals["E1_campo"] = float(e1)
-                    if _vals.get("E2_dpa_bpa") is None and e2 is not None:
-                        _vals["E2_dpa_bpa"] = float(e2)
-                _ex = _explicar_bandera(_cod, _vals, tk)   # explicación llana, cifras reales
-                st.markdown(f"⚠️ {_ex['titular']}")        # LENGUAJE LLANO, nunca el código
-                # ── Tres acciones (§8) ──
-                _b1, _b2, _b3 = st.columns(3)
-                if _b1.button("✅ Confirmar", key=f"_conf_{tk}_{_cod}_{_hue}", use_container_width=True,
-                              help="El valor automático ES correcto: se adopta como verificado. El veredicto sigue "
-                                   "su curso (puede alcanzar Cumple)."):
-                    try:
-                        _av.guardar_acuse(conn, tk, _cod, _hue, _user, "confirmado: dato correcto"); st.rerun()
-                    except Exception as _ex2:
-                        st.error(f"Error: {_ex2}")
-                if _b2.button("✏️ Corregir", key=f"_cor_{tk}_{_cod}_{_hue}", use_container_width=True,
-                              help="El valor está MAL: ve a «BPA por ejercicio»/«Dividendos», corrígelo y re-lanza."):
-                    # clave intermedia (NO la del widget) -> la pestaña BPA la aplica antes de crear el
-                    # selectbox, evitando la excepción 'modified after instantiated'. Streamlit no cambia
-                    # de pestaña por código, así que el mensaje guía a abrirla.
-                    st.session_state["_bpa_goto"] = tk
-                    st.session_state["_avisos_msg"] = (
-                        f"✏️ **{tk}** preseleccionado en **«BPA por ejercicio»**. Abre esa pestaña arriba "
-                        f"(o **«Dividendos»** si es un extraordinario), corrige y guarda. Al **re-lanzar el "
-                        f"screening** el aviso se recalcula: el dato verificado manda sobre el estimador.")
-                    try:
-                        st.toast(f"✏️ {tk} preseleccionado en «BPA por ejercicio» — abre esa pestaña para corregir.")
-                    except Exception:
-                        pass
-                    st.rerun()
-                if _b3.button("🏷️ Marcar explicable", key=f"_exp_{tk}_{_cod}_{_hue}", use_container_width=True,
-                              help="Aviso legítimo pero situación real/esperada. Silencia SIN subir el veredicto "
-                                   "(§8): el tope/veto se mantiene. No sirve para tapar un problema."):
-                    try:
-                        _av.guardar_acuse(conn, tk, _cod, _hue, _user, "explicable: situación real/esperada"); st.rerun()
-                    except Exception as _ex2:
-                        st.error(f"Error: {_ex2}")
-                # ── ¿Cómo corrijo este dato? (fichas por métrica, §7) ──
-                _howfix = (st.toggle("🛠️ ¿Cómo corrijo este dato?", key=f"_howfix_{tk}_{_cod}_{_hue}")
-                           if hasattr(st, "toggle")
-                           else st.checkbox("🛠️ ¿Cómo corrijo este dato?", key=f"_howfix_{tk}_{_cod}_{_hue}"))
-                if _howfix:
-                    for _m in _metricas_de_bandera(_cod, _vals):
-                        st.markdown(f"**{_m.replace('_', ' ').title()}** — {_FICHA_CORRECCION.get(_m, '—')}")
-                    st.caption("En todas: **fuente + fecha + quién** obligatorios; se guarda como **vigente** (manda "
-                               "sobre el estimador) y silencia el aviso por huella hasta que el dato cambie.")
-                # ── ¿Por qué y qué mirar? (explicación de 5 elementos) ──
-                _abrir = (st.toggle("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}")
-                          if hasattr(st, "toggle")
-                          else st.checkbox("ℹ️ ¿Por qué y qué mirar?", key=f"_ay_{tk}_{_cod}_{_hue}"))
-                if _abrir:
-                    st.markdown(f"##### {tk} · {_nom}")
-                    st.markdown(f"**Qué he detectado.** {_ex['detectado']}")
-                    st.markdown(f"**Por qué importa.** {_ex['importa']}")
-                    st.markdown(f"**Qué mirar para confirmar.** {_ex['mirar']}")
-                    st.markdown(f"**Dónde mirarlo.** [{_ex['donde_txt']}]({_ex['donde_url']})")
-                    st.markdown(f"**Cómo se resuelve.** {_ex['resolver']}")
-                    _vtec = (st.toggle("🔧 detalle técnico", key=f"_tec_{tk}_{_cod}_{_hue}")
-                             if hasattr(st, "toggle")
-                             else st.checkbox("🔧 detalle técnico", key=f"_tec_{tk}_{_cod}_{_hue}"))
-                    if _vtec:
-                        st.caption(f"{_ex['tecnico']}  ·  huella `{_hue}`  ·  "
-                                   f"⏳ marcado en {nruns} cribado(s) seguido(s).")
-                st.divider()
-
-    if _silenciados:
-        with st.expander(f"🔇 Avisos silenciados ({len(_silenciados)}) — reactivar si hace falta"):
-            st.caption("Silenciados con «Confirmar» o «Marcar explicable». Recuerda (§8): los **explicables siguen "
-                       "capando** el veredicto; solo dejan de avisar cada cribado.")
-            for (_stk, _snom, _scod, _shue, _stp) in _silenciados:
-                _s1, _s2 = st.columns([4, 1])
-                _s1.markdown(f"**{_stk}** · {_snom} — {_scod} · *{_stp}*")
-                if _s2.button("↩️ Reactivar", key=f"_reasil_{_stk}_{_scod}_{_shue}", use_container_width=True):
-                    try:
-                        _av.borrar_acuse(conn, _stk, _scod, _shue); st.rerun()
-                    except Exception as _ex2:
-                        st.error(f"Error: {_ex2}")
-
-
-def _periodo_desde_cierre(ejercicio: str, cierre: str) -> str:
-    """Sugiere el rango de fechas del ejercicio (B4) a partir de FYaaaa y el cierre 'MM-DD'.
-    Cierre 31-dic → 01/01–31/12; 30-sep → 01/10 (año-1)–30/09; 31-ene → 01/02 (año-1)–31/01."""
-    import re as _re, datetime as _dt
-    m = _re.match(r"FY(\d{4})", (ejercicio or "").strip().upper())
-    if not m:
-        return ""
-    y = int(m.group(1))
-    try:
-        mm, dd = (int(cierre.split("-")[0]), int(cierre.split("-")[1])) if (cierre and "-" in cierre) else (12, 31)
-        fin = _dt.date(y, mm, dd)
-        ini = _dt.date(y - 1, mm, dd) + _dt.timedelta(days=1)
-        return f"{ini.strftime('%d/%m/%Y')}–{fin.strftime('%d/%m/%Y')}"
-    except Exception:
-        return ""
-
-
-def _admin_curacion_dividendos():
-    """Verificación del golden record de dividendos (spec DosLentes v1 + rediseño BPA 2026-07-29).
-    Escribe a Neon vía verificacion.py (modo una-persona: directo a vigente, con versionado)."""
-    import verificacion
-    import pandas as _pd
-    _user = st.session_state.get("usuario", {}).get("username", "admin")
-    st.markdown("### 📝 Verificación de dividendos — golden record")
-    st.caption("El motor solo lee filas **vigentes**. Editar crea una versión nueva (no sobrescribe). "
-               "Sin **fuente** no se guarda. Ausente = N/A (nada de placeholders).")
-    # ── Icono/ayuda: guía didáctica de curación (ejemplo Naturgy) ──
-    with st.expander("📖 Guía de verificación — cómo y por qué (ejemplo Naturgy)", expanded=False):
-        try:
-            import os as _os
-            _ruta_guia = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                       "guia_curacion_dividendos.md")
-            with open(_ruta_guia, "r", encoding="utf-8") as _f:
-                st.markdown(_f.read())
-        except Exception:
-            st.info("Guía no disponible (falta `guia_curacion_dividendos.md` en el repositorio).")
-    conn = get_db_connection()
-    try:
-        _t_avi, _t_emp, _t_bpa, _t_div, _t_cap, _t_ref = st.tabs(
-            ["🔎 Bandeja de avisos", "🏢 Ficha de empresa", "📊 BPA por ejercicio",
-             "💸 Dividendos", "🏦 Cobertura de capital", "🔄 Refresco masivo"])
-
-        with _t_avi:
-            _admin_bandeja_avisos(conn, _user, _pd)
-
-        with _t_emp:
-            with st.form("_cur_emp", clear_on_submit=False):
-                c1, c2 = st.columns(2)
-                _e_ticker = c1.text_input("Ticker (XXX.MC)").strip().upper()
-                _e_nombre = c2.text_input("Nombre")
-                c3, c4, c5 = st.columns(3)
-                _e_cierre_k = c3.selectbox("Cierre de ejercicio", list(verificacion.CIERRES.keys()), index=0)
-                _e_conf = c4.checkbox("Cierre confirmado (IR)")
-                _e_clase = c5.selectbox("Clase exclusión", ["estandar", "banca_seguros", "reit_socimi"])
-                _e_sector = st.selectbox("Sector", _SECTORES_CURACION)
-                _e_notas = st.text_area("Notas", height=68)
-                _sug = ("banca_seguros" if _e_sector == "Financial Services"
-                        else "reit_socimi" if _e_sector == "Real Estate" else "estandar")
-                if _e_clase != _sug:
-                    st.warning(f"E6: para el sector «{_e_sector}» lo habitual es clase «{_sug}». Revísalo.")
-                if st.form_submit_button("💾 Guardar ficha", use_container_width=True):
-                    try:
-                        verificacion.guardar_empresa(conn, {
-                            "ticker": _e_ticker, "nombre": _e_nombre,
-                            "cierre_ejercicio": verificacion.CIERRES[_e_cierre_k],
-                            "cierre_confirmado": _e_conf, "sector": _e_sector,
-                            "clase_exclusion": _e_clase, "notas": _e_notas}, _user)
-                        st.success(f"Ficha de {_e_ticker} guardada.")
-                    except ValueError as ex:
-                        st.error(str(ex))
-                    except Exception as ex:
-                        st.error(f"Error al guardar: {ex}")
-            _emps = verificacion.leer_empresas(conn)
-            if _emps:
-                st.dataframe(_pd.DataFrame(_emps)[["ticker", "nombre", "cierre_ejercicio",
-                             "cierre_confirmado", "sector", "clase_exclusion"]],
-                             hide_index=True, use_container_width=True)
-
-        with _t_bpa:
-            _empresas = {e["ticker"]: e for e in verificacion.leer_empresas(conn)}
-            _tickers = list(_empresas.keys())
-            # preselección desde el botón «Corregir» de la bandeja (antes de crear el selectbox)
-            if st.session_state.get("_bpa_goto") in _tickers:
-                st.session_state["_bpa_tk"] = st.session_state.pop("_bpa_goto")
-            if not _tickers:
-                st.info("Crea antes al menos una Ficha de empresa.")
-            else:
-                st.caption("Introduce las **cifras crudas del informe** (beneficio recurrente en **M€**, "
-                           "nº de acciones, DPA en **€**); la app calcula el **BPA** y el **payout** como "
-                           "derivados. No teclees un BPA ya cocinado (individual vs consolidado, reportado "
-                           "vs recurrente → ahí se cometen los errores).")
-                ca, cb = st.columns(2)
-                _b_tk = ca.selectbox("Ticker", _tickers, key="_bpa_tk")
-                _bpas_tk = verificacion.leer_bpa(conn, ticker=_b_tk)           # vigentes de este ticker
-                _ejs_tk = [b["ejercicio"] for b in _bpas_tk]
-                _b_edit = cb.selectbox("Ejercicio a ver / editar", _ejs_tk + ["➕ Nuevo ejercicio"], index=0,
-                                       key=f"_bpa_edit_{_b_tk}",
-                                       help="Elige un ejercicio guardado para verlo y corregirlo "
-                                            "(guardar crea una versión nueva), o «Nuevo» para añadir uno.")
-                _es_nuevo = _b_edit == "➕ Nuevo ejercicio"
-                _row = None if _es_nuevo else next((b for b in _bpas_tk if b["ejercicio"] == _b_edit), None)
-                _sfx = f"{_b_tk}_{_b_edit}"           # al cambiar ticker/ejercicio, los widgets se recargan
-                def _rvf(k):                          # valor numérico del registro (float) o None
-                    v = (_row or {}).get(k)
-                    try:
-                        return float(v) if v not in (None, "") else None
-                    except (TypeError, ValueError):
-                        return None
-                def _rvs(k, d=""):                    # valor texto del registro o default
-                    v = (_row or {}).get(k)
-                    return d if v in (None, "") else str(v)
-                if _row is not None:
-                    st.caption(f"✏️ Editando **{_b_edit}** (v{_row.get('version')}) — al guardar se crea una "
-                               f"versión nueva; corrige lo que esté mal.")
-                c3, c4, c5 = st.columns(3)
-                _b_ej = c3.text_input("Ejercicio (FY2025)", value=("" if _es_nuevo else _b_edit),
-                                      key=f"_bpa_ej_{_sfx}").strip().upper()
-                _cierre = (_empresas.get(_b_tk) or {}).get("cierre_ejercicio") or "12-31"
-                _cierre_no_dic = _cierre != "12-31"
-                _per_val = _rvs("periodo") or _periodo_desde_cierre(_b_ej, _cierre)
-                _b_per = c4.text_input("Periodo del ejercicio" + (" — OBLIGATORIO" if _cierre_no_dic else " (opcional)"),
-                                       value=_per_val, key=f"_bpa_per_{_sfx}")
-                _base_val = _rvs("base_beneficio", "consolidado")
-                _b_base = c5.selectbox("Base del beneficio", ["consolidado", "individual"],
-                                       index=(0 if _base_val != "individual" else 1), key=f"_bpa_base_{_sfx}")
-                c6, c7 = st.columns(2)
-                _b_rec = c6.number_input("Beneficio recurrente (M€, negativo permitido)",
-                                         value=_rvf("beneficio_recurrente_meur"), step=1.0, format="%.2f",
-                                         key=f"_bpa_rec_{_sfx}")
-                _b_rep = c7.number_input("Beneficio reportado (M€, opcional)",
-                                         value=_rvf("beneficio_reportado_meur"), step=1.0, format="%.2f",
-                                         key=f"_bpa_rep_{_sfx}")
-                c8, c8b = st.columns(2)
-                _na_abs0 = _rvf("numero_acciones")
-                _b_na_m = c8.number_input("Nº de acciones (en MILLONES, p. ej. 261,99)",
-                                          value=(_na_abs0 / 1_000_000 if _na_abs0 is not None else None),
-                                          step=1.0, format="%.4f", key=f"_bpa_na_{_sfx}",
-                                          help="En millones, coherente con el beneficio en M€ "
-                                               "(Enagás ≈ 261,99). La app lo convierte a absoluto para guardar.")
-                _b_na = _b_na_m * 1_000_000 if _b_na_m is not None else None
-                _b_dpa = c8b.number_input("Dividendo por acción con cargo (€)",
-                                          value=_rvf("dividendo_por_accion_eur"), step=0.01, format="%.4f",
-                                          key=f"_bpa_dpa_{_sfx}")
-                # ── Derivados (solo lectura, calculados en vivo) ──
-                _calc = verificacion.calcular_bpa_payout(_b_rec, _b_na, _b_dpa)
-                _bpa_s = f"{_calc['bpa']:.4f} €/acc" if _calc["bpa"] is not None else "—"
-                _dt_s = f"{_calc['dividendo_total_meur']:.1f} M€" if _calc["dividendo_total_meur"] is not None else "—"
-                if _calc["payout"] is not None:
-                    _pay_s = f"{_calc['payout']*100:.1f}%"
-                elif _b_rec is not None and _b_rec <= 0:
-                    _pay_s = "no interpretable (beneficio ≤ 0)"
-                else:
-                    _pay_s = "—"
-                _cap85 = (_calc["payout"] is not None and _calc["payout"] >= 0.85)
-                # sanidad de unidades: un BPA fuera de rango razonable suele ser acciones mal escaladas
-                _bpa_raro = _calc["bpa"] is not None and (abs(_calc["bpa"]) > 200 or 0 < abs(_calc["bpa"]) < 0.01)
-                _col_d = "#dc2626" if _bpa_raro else ("#b45309" if _cap85 else "#0369a1")
-                _bg_d = "#fee2e2" if _bpa_raro else ("#fffbeb" if _cap85 else "#eff6ff")
-                _nota_d = ""
-                if _bpa_raro:
-                    _nota_d = ('<div style="color:#dc2626;font-size:0.82rem;margin-top:6px;font-weight:600">'
-                               '🚩 revisa el nº de acciones (en MILLONES)</div>')
-                elif _cap85:
-                    _nota_d = ('<div style="color:#b45309;font-size:0.82rem;margin-top:6px;font-weight:600">'
-                               '⚠️ Payout ≥ 85% → Parcial (umbral K1-Payout)</div>')
-                st.markdown(
-                    f'<div style="padding:10px 14px;margin:6px 0;border-radius:8px;background:{_bg_d};'
-                    f'border-left:4px solid {_col_d};font-size:0.9rem;color:#334155">'
-                    f'📐 Derivados — <b style="color:{_col_d}">BPA {_bpa_s}</b> &nbsp;·&nbsp; '
-                    f'<b style="color:{_col_d}">Payout {_pay_s}</b> &nbsp;·&nbsp; '
-                    f'<span style="color:#64748b">Div. total {_dt_s}</span>'
-                    f'{_nota_d}</div>',
-                    unsafe_allow_html=True)
-                c9, c10, c11 = st.columns(3)
-                _b_fte = c9.text_input("Fuente (CNMV/informe anual/IR)", value=_rvs("fuente"), key=f"_bpa_fte_{_sfx}")
-                _b_url = c10.text_input("URL (opcional)", value=_rvs("url"), key=f"_bpa_url_{_sfx}")
-                _conf_val = _rvs("confianza", "media")
-                _b_conf = c11.selectbox("Confianza", ["alta", "media", "baja"],
-                                        index=(["alta", "media", "baja"].index(_conf_val)
-                                               if _conf_val in ("alta", "media", "baja") else 1),
-                                        key=f"_bpa_conf_{_sfx}")
-                _b_vp = st.text_input("Verificado por", value=_user, key=f"_bpa_vp_{_sfx}")
-                if st.button("💾 Guardar BPA (vigente)", use_container_width=True, key=f"_bpa_save_{_sfx}"):
-                    _d = {"ticker": _b_tk, "ejercicio": _b_ej, "periodo": _b_per or None,
-                          "base_beneficio": _b_base, "beneficio_recurrente_meur": _b_rec,
-                          "beneficio_reportado_meur": _b_rep, "numero_acciones": _b_na,
-                          "dividendo_por_accion_eur": _b_dpa, "fuente": _b_fte, "url": _b_url or None,
-                          "fecha_verificacion": date.today().isoformat(), "verificado_por": _b_vp,
-                          "cierre_no_dic": _cierre_no_dic}
-                    _err, _avi = verificacion.validar_bpa(_d)
-                    for _a in _avi:
-                        st.warning(_a)
-                    if _err:
-                        for _e in _err:
-                            st.error(_e)
-                    else:
-                        # Reconciliación R1: payout DERIVADO vs payoutRatio de yfinance
-                        _py_yf = None
-                        try:
-                            import yfinance as _yf
-                            _py_yf = _yf.Ticker(_b_tk).info.get("payoutRatio")
-                        except Exception:
-                            _py_yf = None
-                        _rev, _delta = False, None
-                        if _calc["payout"] is not None and _py_yf is not None:
-                            _delta = round(abs(_calc["payout"] - float(_py_yf)) * 100, 1)
-                            _rev = _delta > 10
-                        _conf_final = "baja" if (_rev or _b_conf == "baja") else _b_conf
-                        try:
-                            ver = verificacion.publicar_bpa(conn, _d, _user,
-                                                        revision_requerida=_rev, confianza=_conf_final)
-                            st.success(f"BPA {_b_tk} {_b_ej} guardado (v{ver}) — BPA {_bpa_s}, "
-                                       f"payout {_pay_s}, confianza {_conf_final}.")
-                            if _delta is not None:
-                                _m = (f"Reconciliación: payout calculado {_calc['payout']:.0%} vs "
-                                      f"yfinance {float(_py_yf):.0%} (Δ {_delta} pp).")
-                                st.error(_m + " [VERIFICAR] — divergencia >10pp, marcado revisión.") if _rev else st.info(_m)
-                        except Exception as ex:
-                            st.error(f"Error al guardar: {ex}")
-                st.markdown(f"**BPA vigentes verificados de {_b_tk}:**")
-                _bpas = verificacion.leer_bpa(conn, ticker=_b_tk)
-                if _bpas:
-                    _cols_bpa = [c for c in ["ejercicio", "base_beneficio", "beneficio_recurrente_meur",
-                                 "numero_acciones", "dividendo_por_accion_eur", "bpa_auditado",
-                                 "confianza", "revision_requerida", "fuente", "version"]
-                                 if c in (_bpas[0].keys())]
-                    st.dataframe(_pd.DataFrame(_bpas)[_cols_bpa], hide_index=True, use_container_width=True)
-                else:
-                    st.caption(f"Sin BPA verificado para {_b_tk}.")
-
-        with _t_div:
-            # §7.1.2 — Guía de corrección estática (todas las fichas por métrica, consulta general)
-            with st.expander("🛠️ Guía de corrección — cómo verificar cada dato (todas las fichas)"):
-                st.caption("Qué introducir, de dónde sacarlo y qué trampas vigilar, por métrica. Cada aviso de la "
-                           "bandeja abre además la ficha concreta que le toca. En todas: fuente + fecha + quién "
-                           "obligatorios; se guarda como **vigente** (manda sobre el estimador) y silencia el aviso.")
-                _titulos_fc = {
-                    "payout": "Payout / cobertura (beneficio)", "free_float": "Free float",
-                    "ev_ebitda": "EV/EBITDA (valoración)",
-                    "clasificacion": "Clasificación de un dividendo (ordinario / extraordinario / scrip)",
-                    "historial": "Historial / hueco en la serie",
-                    "capital": "Cobertura de capital (banca / seguros)"}
-                for _mk, _mt in _titulos_fc.items():
-                    st.markdown(f"**{_mt}** — {_FICHA_CORRECCION.get(_mk, '—')}")
-            _tickers = [e["ticker"] for e in verificacion.leer_empresas(conn)]
-            if not _tickers:
-                st.info("Crea antes al menos una Ficha de empresa.")
-            else:
-                with st.form("_cur_div", clear_on_submit=False):
-                    c1, c2, c3 = st.columns(3)
-                    _d_tk = c1.selectbox("Ticker", _tickers)
-                    _d_tipo = c2.selectbox("Tipo", ["ordinario", "extraordinario", "scrip"])
-                    _d_cc = c3.text_input("Con cargo a ejercicio (FY2025)").strip().upper()
-                    c4, c5, c6 = st.columns(3)
-                    _d_ex = c4.date_input("Ex-date", value=date.today())
-                    _d_pay = c5.date_input("Pay-date (opcional)", value=None)
-                    _d_imp = c6.number_input("Importe efectivo (€/acción, >0)", value=None, step=0.01, format="%.4f")
-                    c7, c8 = st.columns(2)
-                    _d_fte = c7.text_input("Fuente (IR/CNMV)")
-                    _d_url = c8.text_input("URL (opcional)")
-                    c9, c10, c11 = st.columns(3)
-                    _d_fv = c9.date_input("Fecha verificación", value=date.today())
-                    _d_vp = c10.text_input("Verificado por", value=_user)
-                    _d_conf = c11.selectbox("Confianza", ["alta", "media", "baja"], index=1)
-                    if _d_tipo == "scrip":
-                        st.caption("Scrip: registra solo la parte en **efectivo** como importe.")
-                    if st.form_submit_button("💾 Guardar dividendo (vigente)", use_container_width=True):
-                        _d = {"ticker": _d_tk, "ex_date": _d_ex.isoformat(),
-                              "pay_date": _d_pay.isoformat() if _d_pay else None,
-                              "importe_eur": _d_imp, "tipo": _d_tipo,
-                              "con_cargo_a_ejercicio": _d_cc or None, "fuente": _d_fte, "url": _d_url or None,
-                              "fecha_verificacion": _d_fv.isoformat(), "verificado_por": _d_vp}
-                        _err, _avi = verificacion.validar_dividendo(_d)
-                        for _a in _avi:
-                            st.warning(_a)
-                        if _err:
-                            for _e in _err:
-                                st.error(_e)
-                        else:
-                            try:
-                                ver = verificacion.publicar_dividendo(conn, _d, _user, confianza=_d_conf)
-                                st.success(f"Dividendo {_d_tk} {_d_ex.isoformat()} ({_d_tipo}) guardado (v{ver}).")
-                            except Exception as ex:
-                                st.error(f"Error al guardar: {ex}")
-                st.markdown(f"**Dividendos vigentes verificados de {_d_tk}:**")
-                _divs = verificacion.leer_dividendos(conn, ticker=_d_tk)   # filtra por el ticker seleccionado
-                if _divs:
-                    st.dataframe(_pd.DataFrame(_divs)[["ticker", "ex_date", "pay_date", "importe_eur",
-                                 "tipo", "con_cargo_a_ejercicio", "confianza", "version"]],
-                                 hide_index=True, use_container_width=True)
-                else:
-                    st.caption(f"Sin dividendos verificados a mano para {_d_tk}. (Los eventos automáticos "
-                               "viven en «Refresco masivo» y en la «Bandeja de avisos»; esta pestaña es "
-                               "solo para altas/correcciones manuales que mandan sobre el estimador.)")
-
-        with _t_cap:
-            st.caption("Cobertura del dividendo por **capital regulatorio** (solo banca/seguros). En estas "
-                       "financieras el payout contable no aplica: lo que limita el dividendo es el capital "
-                       "que sobra sobre el mínimo del regulador. Introduce el **dato crudo** de la "
-                       "presentación de resultados; la app calcula la distancia al MDA y el estado. "
-                       "Cadencia: **trimestral** (bancos) / anual-semestral (aseguradoras).")
-            _emps_fin = [e for e in verificacion.leer_empresas(conn)
-                         if e.get("clase_exclusion") == "banca_seguros"]
-            _tk_fin = [e["ticker"] for e in _emps_fin]
-            if not _tk_fin:
-                st.info("No hay fichas de clase «banca_seguros». Ajusta la Ficha de empresa "
-                        "(p. ej. BBVA, CABK, SAN, UNI, MAP) para habilitar esta pestaña.")
-            else:
-                _c_tk = st.selectbox("Ticker (clase banca_seguros)", _tk_fin, key="_cap_tk")
-                _sub_def = "aseguradora" if _c_tk.upper().startswith("MAP") else "banco"
-                _c_sub = st.radio("Subtipo", ["banco", "aseguradora"],
-                                  index=(1 if _sub_def == "aseguradora" else 0),
-                                  horizontal=True, key=f"_cap_sub_{_c_tk}")
-                with st.form("_cur_cap", clear_on_submit=False):
-                    _c_periodo = st.text_input(
-                        "Periodo (banco: trimestre p.ej. 2025-Q4 · aseguradora: cierre p.ej. 2025-12-31)",
-                        key=f"_cap_per_{_c_tk}")
-                    _c_cet1 = _c_req = _c_pol = _c_gen = _c_solv = _c_rango = None
-                    if _c_sub == "banco":
-                        cc1, cc2 = st.columns(2)
-                        _c_cet1 = cc1.number_input("CET1 fully loaded (%)", value=None, step=0.01, format="%.2f",
-                                                   help="De la presentación de resultados. Definición CRR común (comparable).")
-                        _c_req = cc2.number_input("Requisito CET1 total = gatillo MDA (%)", value=None, step=0.01,
-                                                  format="%.2f", help="Del SREP del BCE / IR. Específico de cada banco.")
-                        cc3, cc4 = st.columns(2)
-                        _c_pol = cc3.text_input("Política de reparto (contexto)")
-                        _c_gen = cc4.number_input("Generación capital anual (bps, opcional)", value=None,
-                                                  step=1.0, format="%.1f")
-                        _dist_prev = verificacion.calcular_distancia_mda(_c_cet1, _c_req)
-                        if _dist_prev is not None:
-                            _est_prev = verificacion.estado_cobertura_banco(_dist_prev)
-                            st.markdown(f"<div style='font-size:.9rem;color:#334155'>📐 Distancia al MDA: "
-                                        f"<b>{_dist_prev:.0f} bps</b> · estado <b>{_est_prev}</b> "
-                                        f"<span style='color:#94a3b8'>(umbral holgado &gt;{verificacion.UMBRAL_MDA_HOLGADO_BPS:.0f} · "
-                                        f"estrecho &lt;{verificacion.UMBRAL_MDA_AJUSTADO_BPS:.0f} bps [VERIFICAR])</span></div>",
-                                        unsafe_allow_html=True)
-                    else:
-                        _c_solv = st.number_input("Ratio de Solvencia II (%)", value=None, step=0.1,
-                                                  format="%.1f", help="Del informe SFCR / IR.")
-                        _c_rango = st.text_input("Banda objetivo declarada (contexto)")
-                        if _c_solv is not None:
-                            _est_prev = verificacion.estado_cobertura_aseguradora(_c_solv)
-                            st.markdown(f"<div style='font-size:.9rem;color:#334155'>📐 Solvencia II "
-                                        f"<b>{_c_solv:.1f}%</b> · estado <b>{_est_prev}</b> "
-                                        f"<span style='color:#94a3b8'>(holgado &gt;{verificacion.UMBRAL_SOLV_HOLGADO_PCT:.0f}% · "
-                                        f"vigilar &lt;{verificacion.UMBRAL_SOLV_AJUSTADO_PCT:.0f}% [VERIFICAR])</span></div>",
-                                        unsafe_allow_html=True)
-                    cf1, cf2 = st.columns(2)
-                    _c_fte = cf1.text_input("Fuente (resultados/IR/SREP)")
-                    _c_url = cf2.text_input("URL (opcional)")
-                    cf3, cf4, cf5 = st.columns(3)
-                    _c_fv = cf3.date_input("Fecha verificación", value=date.today())
-                    _c_vp = cf4.text_input("Verificado por", value=_user)
-                    _c_conf = cf5.selectbox("Confianza", ["alta", "media", "baja"], index=1)
-                    if st.form_submit_button("💾 Guardar cobertura (vigente)", use_container_width=True):
-                        _d = {"ticker": _c_tk, "subtipo": _c_sub, "periodo": (_c_periodo or "").strip(),
-                              "cet1_fully_loaded_pct": _c_cet1, "requisito_cet1_total_pct": _c_req,
-                              "politica_reparto": _c_pol or None, "generacion_capital_bps_anual": _c_gen,
-                              "ratio_solvencia_ii_pct": _c_solv, "rango_objetivo_declarado": _c_rango or None,
-                              "fuente": _c_fte, "url": _c_url or None,
-                              "fecha_verificacion": _c_fv.isoformat(), "verificado_por": _c_vp}
-                        _err, _avi = verificacion.validar_cobertura(_d)
-                        for _a in _avi:
-                            st.warning(_a)
-                        if _err:
-                            for _e in _err:
-                                st.error(_e)
-                        else:
-                            try:
-                                ver = verificacion.publicar_cobertura(conn, _d, _user, confianza=_c_conf)
-                                st.success(f"Cobertura de {_c_tk} ({_d['periodo']}) guardada (v{ver}).")
-                            except Exception as ex:
-                                st.error(f"Error al guardar: {ex}")
-                _cobs = verificacion.leer_cobertura(conn, ticker=_c_tk)
-                if _cobs:
-                    st.markdown(f"**Cobertura vigente de {_c_tk}:**")
-                    _cols_cap = ["ticker", "subtipo", "periodo", "cet1_fully_loaded_pct",
-                                 "requisito_cet1_total_pct", "distancia_mda_bps", "ratio_solvencia_ii_pct",
-                                 "confianza", "version"]
-                    _dfc = _pd.DataFrame(_cobs)
-                    st.dataframe(_dfc[[c for c in _cols_cap if c in _dfc.columns]],
-                                 hide_index=True, use_container_width=True)
-                else:
-                    st.caption(f"Sin cobertura de capital verificada para {_c_tk}. Mientras no la haya, su "
-                               "veredicto queda **≤ Parcial** (evaluación incompleta — cobertura pendiente).")
-
-        with _t_ref:
-            st.markdown("**Paso 1 — Fichas de empresa** (prerrequisito para colgar los dividendos)")
-            if st.button("🏢 Sembrar las 35 fichas del IBEX-35 (solo las que falten)",
-                         use_container_width=True, key="_cur_seed_fichas"):
-                with st.spinner("Creando fichas (sector desde yfinance)…"):
-                    try:
-                        _rf = sembrar_fichas_ibex35(conn)
-                        st.success(f"{_rf['creadas']} fichas creadas · {_rf['saltadas']} ya existían.")
-                        if _rf["errores"]:
-                            st.warning("Con errores: " + "; ".join(_rf["errores"][:6]))
-                        st.caption("⚠️ Revisa **sector/clase** de cada ficha (pestaña Ficha de empresa) y "
-                                   "**confirma el cierre** — se han sembrado con valores heurísticos.")
-                    except Exception as _ex:
-                        st.error(f"Error sembrando fichas: {_ex}")
-            st.divider()
-            st.markdown("**Paso 2 — Dividendos**")
-            st.caption("Siembra en **borrador** los eventos de dividendo del IBEX-35 desde yfinance "
-                       "(importe + ex-date) con `con_cargo` heurístico. **No toca 'vigente'**: revisa y "
-                       "promueve abajo. Requiere ficha de empresa por ticker.")
-            _ano_actual = datetime.now().year
-            _c_ref1, _c_ref2 = st.columns([1, 2])
-            _desde = _c_ref1.number_input("Sembrar desde el año", min_value=2000, max_value=_ano_actual,
-                                          value=_ano_actual - 6, step=1, key="_cur_ref_desde",
-                                          help="yfinance devuelve décadas; acota a los años que vas a curar "
-                                               "(cubre la ventana de CAGR ~5 años + el ejercicio actual).")
-            if _c_ref1.button("🔄 Refrescar dividendos (a borrador)", use_container_width=True,
-                              key="_cur_ref_run"):
-                try:
-                    _res = refresco_masivo_dividendos(conn, IBEX_35, desde_ano=int(_desde))
-                    _m = (f"✅ Sembrados {_res['nuevos']} borradores nuevos · {_res['saltados']} saltados "
-                          f"· eventos yfinance: {_res.get('eventos', 0)} (desde {int(_desde)}).")
-                    if _res.get("eventos", 0) == 0:
-                        _m = ("⚠️ yfinance no devolvió NINGÚN evento (0). Probable límite de Yahoo por IP "
-                              "tras muchas descargas — reintenta en unos minutos. No es un fallo de datos.")
-                    if _res["sin_ficha"]:
-                        _m += " Sin ficha: " + ", ".join(_res["sin_ficha"])
-                    if _res.get("errores"):
-                        _m += " | ⚠️ ERRORES: " + " · ".join(_res["errores"])
-                    st.session_state["_cur_ref_msg"] = _m
-                except Exception as _ex:
-                    st.session_state["_cur_ref_msg"] = f"❌ Error en el refresco: {_ex}"
-                st.rerun()
-            if _c_ref2.button("🧹 Vaciar todos los borradores (re-sembrar limpio)",
-                              key="_cur_ref_vaciar"):
-                try:
-                    _nb = verificacion.vaciar_borradores_dividendo(conn)
-                    st.session_state["_cur_ref_msg"] = (f"🧹 {_nb} borradores eliminados. "
-                                                        "No afecta a 'vigente' (el motor no lo lee).")
-                except Exception as _ex:
-                    st.session_state["_cur_ref_msg"] = f"❌ Error vaciando borradores: {_ex}"
-                st.rerun()
-            _c_ref2.caption("Vaciar es seguro: los borradores no los ve el motor. Úsalo para "
-                            "quitar el historial masivo y re-sembrar solo los años que vas a curar.")
-            if st.session_state.get("_cur_ref_msg"):
-                st.info(st.session_state.pop("_cur_ref_msg"))
-            st.divider()
-            _bors = verificacion.leer_borradores_dividendo(conn)
-            st.markdown(f"**Borradores pendientes de revisar: {len(_bors)}**")
-            if _bors:
-                _tks_bor = sorted({b["ticker"] for b in _bors})
-                _f_tk = st.selectbox(f"Filtrar por ticker ({len(_tks_bor)} con borradores):",
-                                     ["(todos)"] + _tks_bor, key="_cur_bor_filtro")
-                _bors_v = _bors if _f_tk == "(todos)" else [b for b in _bors if b["ticker"] == _f_tk]
-                st.caption(f"Mostrando {len(_bors_v)} de {len(_bors)}.")
-                st.caption("⚠️ Revisa `con_cargo_a_ejercicio` (la heurística puede fallar en cierres "
-                           "no-diciembre como LOG/ITX) y `tipo`. Marca la casilla **Promover** de los que "
-                           "quieras pasar a **vigente** (sueltos o en bloque) y pulsa el botón.")
-                _df_bor = _pd.DataFrame(_bors_v)[["id", "ticker", "ex_date", "importe_eur", "tipo",
-                                                  "con_cargo_a_ejercicio", "confianza"]].copy()
-                _df_bor.insert(0, "Promover", False)
-                _edit = st.data_editor(
-                    _df_bor, hide_index=True, use_container_width=True,
-                    key=f"_cur_bor_editor_{_f_tk}",
-                    column_config={"Promover": st.column_config.CheckboxColumn(
-                        "Promover", help="Marca los dividendos a promover a vigente", default=False)},
-                    disabled=["id", "ticker", "ex_date", "importe_eur", "tipo",
-                              "con_cargo_a_ejercicio", "confianza"])
-                _ids_marcados = [int(r["id"]) for _, r in _edit.iterrows() if r["Promover"]]
-                _cp1, _cp2 = st.columns(2)
-                if _cp1.button(f"✅ Promover marcados ({len(_ids_marcados)})",
-                               disabled=not _ids_marcados, key="_cur_promo_btn", use_container_width=True):
-                    _n = 0
-                    for _idb in _ids_marcados:
-                        try:
-                            verificacion.promover_dividendo(conn, _idb, _user); _n += 1
-                        except Exception as _ex:
-                            st.error(f"id {_idb}: {_ex}")
-                    if _n:
-                        st.session_state["_cur_ref_msg"] = f"✅ {_n} dividendo(s) promovidos a vigente."
-                        st.rerun()
-                _lbl_all = ("todos los mostrados" if _f_tk == "(todos)" else f"todos los de {_f_tk}")
-                if _cp2.button(f"✅ Promover {_lbl_all} ({len(_bors_v)})",
-                               disabled=not _bors_v, key="_cur_promo_all", use_container_width=True):
-                    _n = 0
-                    for _b in _bors_v:
-                        try:
-                            verificacion.promover_dividendo(conn, int(_b["id"]), _user); _n += 1
-                        except Exception as _ex:
-                            st.error(f"id {_b['id']}: {_ex}")
-                    if _n:
-                        st.session_state["_cur_ref_msg"] = f"✅ {_n} dividendo(s) promovidos a vigente."
-                        st.rerun()
-    finally:
-        release_db_connection(conn)
-
-
 def panel_admin():
     """Panel de administración con sub-menú (segundo nivel del nav):
     Gestión de Usuarios (por defecto) · Refresco de datos · Calidad de datos · Umbrales."""
@@ -11194,9 +10068,6 @@ def panel_admin():
         return
     if _adm_sub == "🎚️ Umbrales de coherencia":
         _admin_umbrales()
-        return
-    if _adm_sub == "📝 Verificación dividendos":
-        _admin_curacion_dividendos()
         return
     # Por defecto (👥 Gestión de Usuarios): continúa con la gestión de usuarios.
 
@@ -11648,22 +10519,19 @@ def _lectura_integrada(
             "cómo está posicionado el valor a medio-largo plazo: distancia al ATH, medias de largo plazo, "
             "niveles de soporte…) y el momentum (la fuerza y dirección del movimiento actual) también "
             "acompaña. Los indicadores técnicos están mayoritariamente alineados al alza.",
-            "Es el entorno técnico más favorable. Si ya tienes posición, las señales respaldan "
-            "mantenerla. Si todavía no has entrado, busca una zona de soporte cercana para hacerlo "
-            "— entrar cerca de un soporte (precio donde el valor históricamente ha rebotado) "
-            "significa que si te equivocas, el golpe es menor. Nunca es el único criterio, "
-            "pero las condiciones técnicas están de tu lado.",
+            "Es el entorno técnico más favorable que describe el método: estructura y momento "
+            "apuntan en la misma dirección. Un soporte cercano (precio donde el valor ha rebotado "
+            "antes) sirve como referencia de invalidación: cuanto más cerca está, menor es la "
+            "distancia hasta el nivel que anularía la lectura. Es un criterio técnico, no el único.",
             "#f0fdf4", "#16a34a"),
         ("alto",   "amarillo"): ("🟡", "Buena estructura, pero el impulso duda",
             f"La posición estructural es fuerte (score {diag_score:.1f}/10), lo que indica que el valor "
             "está bien posicionado a medio plazo. Sin embargo, el momentum (el impulso inmediato del precio) "
             "envía señales contradictorias: algunos indicadores apuntan arriba y otros abajo. "
             "Nadie sabe todavía qué dirección va a tomar el precio en los próximos días.",
-            "No es el momento de entrar con todo el capital de golpe, pero tampoco hay nada que "
-            "indique que el valor vaya a perder su estructura de largo plazo. Es una zona de espera. "
-            "Si ya tienes posición, no hay por qué salir. Si estás fuera, espera a que "
-            "el semáforo mejore a verde antes de entrar: tendrás más certeza y probablemente "
-            "no perderás mucho precio.",
+            "El método no detecta una dirección clara a corto plazo, aunque tampoco señales de "
+            "pérdida de la estructura de largo plazo. Es una zona de indefinición: la lectura "
+            "ganaría fiabilidad si el semáforo pasara a verde. La decisión corresponde al usuario.",
             "#fefce8", "#ca8a04"),
         ("alto",   "rojo"):     ("🟡", "Buena estructura, pero corrección en marcha",
             f"La estructura técnica de largo plazo es positiva (score {diag_score:.1f}/10): el valor "
@@ -11681,66 +10549,56 @@ def _lectura_integrada(
             f"y los indicadores de corto plazo acompañan. Pero la posición estructural es neutral "
             f"(score {diag_score:.1f}/10), lo que indica que el valor no tiene una base técnica "
             "de largo plazo especialmente sólida que respalde ese movimiento.",
-            "Cuidado con las subidas sin estructura sólida detrás: un valor que sube 'en el aire' "
-            "puede bajar igual de rápido si el impulso se agota. Si ya tienes posición y tienes "
-            "beneficios, ajusta dónde pondrías el límite de pérdidas (el precio a partir del cual "
-            "saldrías) para no devolver todo lo ganado. Si no tienes posición, espera a ver si "
-            "la estructura de largo plazo también mejora antes de entrar.",
+            "Subida sin estructura sólida detrás: un impulso que no se apoya en la estructura de "
+            "largo plazo puede revertir igual de rápido si se agota. Para una posición abierta, "
+            "el método toma como referencia el nivel de invalidación (stop) frente al recorrido "
+            "acumulado. La lectura mejoraría si la estructura de largo plazo acompañara.",
             "#fefce8", "#ca8a04"),
         ("medio",  "amarillo"): ("⚪", "Sin señal clara en ningún sentido",
             f"Ni la estructura (score {diag_score:.1f}/10 — posición del valor a medio-largo plazo) "
             "ni el momentum (impulso del precio a corto plazo) apuntan en una dirección definida. "
             "Los indicadores técnicos están en zona neutral: ni alcistas ni bajistas, sin acuerdo.",
-            "Estamos ante un mercado lateral (el precio se mueve de lado, sin subir ni bajar "
-            "de forma sostenida) o simplemente sin tendencia clara. En estos entornos, actuar "
-            "basándose en señales técnicas tiene menos sentido porque las señales son poco fiables. "
-            "Lo más prudente es esperar a que el precio rompa claramente por encima o por debajo "
-            "de un nivel relevante antes de tomar ninguna decisión. No hacer nada también es "
-            "una posición válida.",
+            "Mercado lateral (el precio se mueve de lado, sin subir ni bajar de forma sostenida) "
+            "o sin tendencia clara. En este entorno las señales técnicas son poco fiables: el "
+            "método solo considera una señal válida cuando el precio rompe con claridad por "
+            "encima o por debajo de un nivel relevante.",
             "#f8fafc", "#94a3b8"),
         ("medio",  "rojo"):     ("🟠", "Impulso bajista sin base que amortigüe",
             f"El momentum (impulso del precio) a corto plazo está deteriorado — el valor cae "
             f"y los indicadores de corto plazo lo confirman. Además, la posición estructural "
             f"es neutral (score {diag_score:.1f}/10): no hay una base de largo plazo sólida "
             "que sirva de amortiguador si la caída continúa.",
-            "Es un entorno técnico desfavorable en el que no hay red de seguridad estructural. "
-            "Si ya tienes posición, revisa los niveles de soporte más cercanos (precios donde "
-            "el valor históricamente ha rebotado): si esos niveles ceden, el valor podría "
-            "seguir cayendo sin apoyos claros. Si estás fuera, no hay señal que justifique "
-            "entrar todavía — espera a ver estabilización antes de actuar.",
+            "Entorno técnico desfavorable, sin red de seguridad estructural. Los niveles de soporte "
+            "más cercanos (precios donde el valor ha rebotado antes) son la referencia: si ceden, "
+            "el valor queda sin apoyos claros. El método no detecta señal de entrada mientras no "
+            "aparezca estabilización.",
             "#fff7ed", "#ea580c"),
         ("bajo",   "verde"):    ("🟠", "Rebote puntual en un valor con problemas de fondo",
             f"El precio está subiendo a corto plazo y el momentum (impulso inmediato) es positivo, "
             f"pero la estructura de largo plazo es débil (score {diag_score:.1f}/10): el valor "
             "no está bien posicionado a medio plazo — puede estar lejos de sus medias de largo plazo, "
             "cerca de resistencias importantes, o en una tendencia bajista estructural.",
-            "Este tipo de rebote (subida puntual dentro de una tendencia bajista de fondo) "
-            "suele ser temporal. Históricamente, son momentos en los que los inversores "
-            "que ya tienen posición aprovechan para vender con menos pérdidas, no momentos "
-            "para comprar. Si piensas 'ya ha caído mucho, tiene que subir', ten cuidado: "
-            "los valores que han caído mucho pueden seguir cayendo. La estructura técnica "
-            "todavía no respalda una entrada.",
+            "Este tipo de rebote (subida puntual dentro de una tendencia bajista de fondo) suele "
+            "ser temporal según el método. Que un valor haya caído mucho no implica que tenga que "
+            "subir: puede seguir cayendo. La estructura técnica no respalda una entrada.",
             "#fff7ed", "#ea580c"),
         ("bajo",   "amarillo"): ("🔴", "Estructura débil y sin dirección",
             f"La estructura técnica de largo plazo es claramente negativa (score {diag_score:.1f}/10): "
             "el valor está mal posicionado a medio plazo. Y el momentum (impulso a corto plazo) "
             "tampoco muestra señales de recuperación. Doble presión en la misma dirección.",
-            "Es un entorno de alto riesgo técnico: no hay base estructural que aguante caídas "
-            "ni impulso alcista que impulse subidas. Si tienes posición, revisa si el precio "
-            "al que decidiste salir (tu nivel de stop-loss, el límite de pérdidas que te "
-            "habías marcado) sigue siendo válido o si ya ha sido superado. Si estás fuera, "
-            "no hay ninguna señal técnica que justifique entrar.",
+            "Entorno de alto riesgo técnico: no hay base estructural que aguante caídas ni impulso "
+            "alcista. Para una posición abierta, la referencia del método es el nivel de stop-loss "
+            "(límite de pérdidas) definido al entrar y si sigue vigente o ya se ha superado. El "
+            "método no detecta ninguna señal técnica de entrada.",
             "#fef2f2", "#dc2626"),
         ("bajo",   "rojo"):     ("🔴", "Todos los indicadores en contra",
             f"La estructura técnica de largo plazo es negativa (score {diag_score:.1f}/10) "
             "y el momentum (el impulso del precio a corto plazo) confirma la presión bajista. "
             "No hay ningún indicador técnico relevante que apunte al alza en este momento.",
-            "Es el entorno técnico más desfavorable. Entrar ahora sería ir contra todos los "
-            "indicadores técnicos disponibles. Solo tendría sentido si tuvieras una razón "
-            "fundamental muy sólida (análisis de la empresa, valoración, dividendo…) que "
-            "justificara ir a contracorriente — y aun así, la técnica te está diciendo que "
-            "esperes. Si ya tienes posición, valora honestamente si lo que esperabas cuando "
-            "entraste sigue siendo válido.",
+            "Entorno técnico más desfavorable: todos los indicadores disponibles apuntan en contra. "
+            "Una entrada iría contra la lectura técnica completa y solo tendría soporte en un "
+            "análisis fundamental independiente (empresa, valoración, dividendo). Para una posición "
+            "abierta, la referencia es si la tesis inicial sigue vigente. La decisión corresponde al usuario.",
             "#fef2f2", "#dc2626"),
     }
 
@@ -11986,20 +10844,20 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
     # ── Puntuación ──────────────────────────────────────────────────────────
     sc = []
     # RSI
-    if rsi < 40:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobreventa ({rsi:.1f}). El valor ha caído más de lo que su impulso interno justifica — históricamente un buen punto de entrada. No es garantía de subida inmediata, pero el riesgo de comprar cerca de máximos es bajo.")
+    if rsi < 40:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobreventa ({rsi:.1f}). El valor ha caído más de lo que su impulso interno justifica. Para el método es una condición de entrada favorable: el precio está lejos de máximos recientes. No implica una subida inmediata.")
     elif rsi < 60: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona neutral ({rsi:.1f}). El valor no está ni sobrecomprado ni sobrevendido. Entrada aceptable si el resto de indicadores acompañan, pero sin urgencia especial.")
-    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho recientemente. Para el inversor en dividendos esto es relevante: comprar más caro significa una rentabilidad por dividendo menor. Es preferible esperar un retroceso que mejore el precio de entrada.")
+    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho recientemente. Para una cartera de dividendos, un precio más alto equivale a una rentabilidad por dividendo menor; el método puntúa mejor un precio de entrada tras un retroceso.")
     sc.append(rsi_s)
 
     # Posición 52W
-    if pos52 < 35:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% inferior de su rango anual — cerca de mínimos del año. Para un inversor en dividendos esto es positivo: el mismo dividendo se compra más barato, lo que mejora la rentabilidad por dividendo (yield on cost).")
+    if pos52 < 35:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% inferior de su rango anual, cerca de mínimos del año. Para una cartera de dividendos es una condición favorable: el mismo dividendo cuesta menos, lo que eleva la rentabilidad sobre el coste (yield on cost).")
     elif pos52 < 65: p52_e="🟡"; p52_s=1; p52_t=(f"Posición media en el rango anual ({pos52:.0f}%). Ni caro ni barato en términos históricos recientes. Entrada neutra.")
-    else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual — cerca de máximos del año. Comprar en este punto reduce la rentabilidad por dividendo (se paga más por el mismo dividendo). Mejor esperar un retroceso o promediar a la baja.")
+    else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual, cerca de máximos del año. A este precio la rentabilidad por dividendo es menor (se paga más por el mismo dividendo). El método puntúa mejor un precio de entrada tras un retroceso.")
     sc.append(p52_s)
 
     # SMA200
     if dist is not None:
-        if dist < -5:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de su media de largo plazo (SMA200). La SMA200 es la referencia de precio 'justo' de largo plazo. Comprar por debajo de ella equivale a comprar con descuento estructural — exactamente lo que busca el inversor en dividendos para maximizar el yield.")
+        if dist < -5:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de su media de largo plazo (SMA200), la referencia de precio 'justo' de largo plazo. Para el método equivale a un descuento estructural, que eleva el yield para una cartera de dividendos.")
         elif dist < 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está prácticamente en la SMA200 (distancia: {dist:+.1f}%). Zona neutral — ni descuento ni sobrevalor respecto a la media histórica. Es una entrada razonable.")
         else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor cotiza muy por encima de su media de largo plazo puede indicar euforia o sobreextensión. Para el inversor en dividendos, más precio = menos yield. No es el momento óptimo.")
         sc.append(s2_s)
@@ -12009,7 +10867,7 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
     # OBV
     if obv > 0.001:    obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está subiendo: hay más compras que ventas en términos de volumen. Esto indica que el dinero grande está acumulando posiciones, aunque el precio no lo refleje todavía. Es una señal positiva para el inversor de largo plazo: si los grandes compran, es que ven valor.")
     elif obv > -0.001: obv_e="🟡"; obv_s=1; obv_t=("El volumen neto (OBV) está en zona neutral: las compras y ventas se compensan. No hay señal clara en ninguna dirección desde el análisis de volumen.")
-    else:              obv_e="🔴"; obv_s=0; obv_t=("El volumen neto (OBV) está bajando: hay más ventas que compras en términos de volumen. Aunque el precio puede no caer todavía, el dinero grande está saliendo. Para el inversor en dividendos esto es una señal de cautela: mejor esperar a que el volumen muestre señales de acumulación antes de incrementar posición.")
+    else:              obv_e="🔴"; obv_s=0; obv_t=("El volumen neto (OBV) está bajando: hay más ventas que compras en términos de volumen. Aunque el precio no caiga todavía, indica salida de dinero. Para el método es una señal de cautela mientras el volumen no muestre acumulación.")
     sc.append(obv_s)
 
     # ── Veredicto global ─────────────────────────────────────────────────────
@@ -12023,7 +10881,7 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
         f'padding:12px 18px;margin:12px 0;text-align:center">'
         f'<span style="font-size:16px;font-weight:900;color:{vc}">{verd}</span>'
         f'<div style="font-size:11px;color:#6b7280;margin-top:4px">'
-        f'Precio actual: {precio:.2f} · Precio compra: {precio_compra:.2f} · '
+        f'Precio actual: {precio:.2f} · Precio de adquisición: {precio_compra:.2f} · '
         f'Yield/coste actual: {yield_coste:.2f}%</div></div>', unsafe_allow_html=True
     )
 
@@ -12033,7 +10891,7 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
     st.markdown(_semaforo_html(s2_e, "Distancia a SMA200 (media largo plazo)", f"{dist:+.1f}%" if dist else "sin datos", s2_t), unsafe_allow_html=True)
     st.markdown(_semaforo_html(obv_e, "OBV — flujo neto de volumen", "acumulando" if obv>0.001 else "distribuyendo" if obv<-0.001 else "neutro", obv_t), unsafe_allow_html=True)
 
-    st.caption("⚠️ Análisis educativo generado automáticamente. No constituye recomendación de inversión bajo MiFID II. Confirma siempre con análisis propio antes de tomar decisiones.")
+    st.caption(PIE_LECTURA_METODO)
 
 
 def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
@@ -12068,43 +10926,43 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
     sc = []
 
     # RSI (alto = señal de venta)
-    if rsi > 65:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho en poco tiempo y el impulso comprador empieza a agotarse. En swing trading, el RSI > 65 es una de las señales más fiables para reducir o cerrar posición antes de que llegue el retroceso.")
-    elif rsi > 50: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona media-alta ({rsi:.1f}). El valor tiene momentum alcista todavía, pero sin señal de agotamiento claro. Mantener posición con stop ajustado; vigilar si el RSI sigue subiendo hacia 70.")
-    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI bajo ({rsi:.1f}). El momentum bajista sugiere que el valor puede seguir cayendo. Si ya tienes pérdidas, revisa si el stop está bien colocado. Si tienes ganancias y el RSI ha caído desde 70+, puede ser señal de que el swing ya ha completado su recorrido.")
+    if rsi > 65:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho en poco tiempo y el impulso comprador empieza a agotarse. En swing trading, el método trata un RSI > 65 como una de las señales de salida más fiables.")
+    elif rsi > 50: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona media-alta ({rsi:.1f}). El momentum alcista se mantiene sin señal clara de agotamiento. El método sigue la evolución del RSI hacia 70 y la distancia al stop.")
+    else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI bajo ({rsi:.1f}). El momentum bajista indica que el valor puede seguir cayendo. Con la posición en pérdidas, la referencia del método es la ubicación del stop; si el RSI ha caído desde 70+, el swing puede haber completado su recorrido.")
     sc.append(rsi_s)
 
     # Posición 52W (alta = cerca de máximos = momento de reducir)
-    if pos52 > 75:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual — muy cerca de máximos. En swing trading, los máximos del año son resistencias naturales donde los vendedores tienden a aparecer. Es un nivel donde reducir o cerrar tiene sentido técnico.")
-    elif pos52 > 50: p52_e="🟡"; p52_s=1; p52_t=(f"Posición en la mitad superior del rango anual ({pos52:.0f}%). El precio tiene espacio antes de llegar a máximos anuales. Mantener con vigilancia, especialmente si el RSI también está alto.")
+    if pos52 > 75:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual, muy cerca de máximos. En swing trading, los máximos del año son resistencias naturales donde suelen aparecer vendedores: el método lo cuenta como señal de salida.")
+    elif pos52 > 50: p52_e="🟡"; p52_s=1; p52_t=(f"Posición en la mitad superior del rango anual ({pos52:.0f}%). El precio tiene espacio antes de llegar a máximos anuales; la señal gana peso si el RSI también está alto.")
     else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor está en la mitad inferior del rango anual ({pos52:.0f}%). No hay señal técnica de agotamiento por posición. Si la operación ya está en pérdidas, evalúa si la tesis de entrada sigue vigente.")
     sc.append(p52_s)
 
     # SMA200 (muy por encima = extensión = riesgo de reversión)
     if dist is not None:
         if dist > 15:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor se aleja tanto de su media de largo plazo, las probabilidades de reversión a la media aumentan. En swing trading, esta extensión es un aviso claro de que el movimiento puede estar agotado.")
-        elif dist > 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está un {dist:.1f}% por encima de la SMA200. Señal moderada de extensión. El precio podría seguir subiendo, pero el margen de seguridad se reduce. Ajustar stop.")
+        elif dist > 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está un {dist:.1f}% por encima de la SMA200. Señal moderada de extensión: el precio podría seguir subiendo, pero el margen de seguridad es menor y el stop gana relevancia.")
         elif dist > -5:  s2_e="🟡"; s2_s=1; s2_t=(f"El precio está cerca de la SMA200 (distancia: {dist:+.1f}%). La media actúa como soporte/resistencia dinámico. Zona neutral para decidir.")
-        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de la SMA200. El valor está en zona de debilidad estructural. Si el swing ya generó ganancias, considerar cierre. Si está en pérdidas, la tendencia de fondo no acompaña.")
+        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de la SMA200, en zona de debilidad estructural. Con ganancias acumuladas, el método lo cuenta como señal de salida; con pérdidas, indica que la tendencia de fondo no acompaña.")
         sc.append(s2_s)
     else:
         s2_e="⚪"; s2_t="Sin datos suficientes para SMA200."; dist=0
 
     # OBV (bajando = distribución = señal de venta)
-    if obv < -0.001:   obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está bajando mientras el precio sube o se mantiene: los grandes inversores están vendiendo sus posiciones. Esta divergencia entre precio y volumen es la señal más relevante para cerrar un swing. El precio puede aguantar unos días más, pero la base compradora se está erosionando.")
-    elif obv < 0.001:  obv_e="🟡"; obv_s=1; obv_t=("El OBV está en zona neutral. Las compras y las ventas se compensan. No hay una señal clara de distribución masiva, pero tampoco hay flujo comprador fuerte. Mantener con atención.")
+    if obv < -0.001:   obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está bajando mientras el precio sube o se mantiene: señal de distribución por parte de grandes inversores. Para el método, esta divergencia entre precio y volumen es la señal de salida más relevante de un swing.")
+    elif obv < 0.001:  obv_e="🟡"; obv_s=1; obv_t=("El OBV está en zona neutral: compras y ventas se compensan. No hay señal clara de distribución, pero tampoco flujo comprador fuerte.")
     else:              obv_e="🔴"; obv_s=0; obv_t=("El OBV sigue subiendo — el dinero grande aún está comprando. No hay señal de distribución. La posición puede tener más recorrido.")
     sc.append(obv_s)
 
     # MACD histograma (bajando = momentum se agota)
-    if macd == "bajando":   mc_e="🟢"; mc_s=2; mc_t=("El histograma MACD está bajando: el momentum alcista se está desacelerando. En swing trading, el MACD que pierde fuerza antes de que el precio corrija es una señal de alerta temprana. Momento de ajustar el stop o reducir posición.")
+    if macd == "bajando":   mc_e="🟢"; mc_s=2; mc_t=("El histograma MACD está bajando: el momentum alcista se desacelera. En swing trading, un MACD que pierde fuerza antes de que el precio corrija es para el método una señal de alerta temprana.")
     else:                   mc_e="🔴"; mc_s=0; mc_t=("El histograma MACD sigue subiendo: el momentum alcista está activo. No hay señal de agotamiento por MACD. La tendencia de corto plazo sigue siendo favorable.")
     sc.append(mc_s)
 
     # ── Veredicto ────────────────────────────────────────────────────────────
     avg = sum(sc) / (len(sc) * 2)
-    if avg >= 0.6:    verd="🟢 REDUCIR / CERRAR POSICIÓN"; vbg="#fff7ed"; vc="#ea580c"
-    elif avg >= 0.35: verd="🟡 VIGILAR — ajustar stop";    vbg="#fefce8"; vc="#ca8a04"
-    else:             verd="🔴 MANTENER — sin señales de salida"; vbg="#f0fdf4"; vc="#16a34a"
+    if avg >= 0.6:    verd="🟢 SEÑALES DE SALIDA DOMINANTES"; vbg="#fff7ed"; vc="#ea580c"
+    elif avg >= 0.35: verd="🟡 SEÑALES DE SALIDA MIXTAS";    vbg="#fefce8"; vc="#ca8a04"
+    else:             verd="🔴 SIN SEÑALES DE SALIDA"; vbg="#f0fdf4"; vc="#16a34a"
 
     pl_str = f"{pl_pct:+.1f}%" if pl_pct is not None else "N/D"
     st.markdown(
@@ -12112,7 +10970,7 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
         f'padding:12px 18px;margin:12px 0;text-align:center">'
         f'<span style="font-size:16px;font-weight:900;color:{vc}">{verd}</span>'
         f'<div style="font-size:11px;color:#6b7280;margin-top:4px">'
-        f'Precio actual: {precio:.2f} · Precio compra: {precio_compra:.2f} · '
+        f'Precio actual: {precio:.2f} · Precio de adquisición: {precio_compra:.2f} · '
         f'P&L: {pl_str}</div></div>', unsafe_allow_html=True
     )
 
@@ -12123,7 +10981,7 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
     st.markdown(_semaforo_html(obv_e,  "OBV — flujo neto de volumen", "distribuyendo" if obv<-0.001 else "neutro" if obv<0.001 else "acumulando", obv_t), unsafe_allow_html=True)
     st.markdown(_semaforo_html(mc_e,   "MACD — momentum", macd, mc_t), unsafe_allow_html=True)
 
-    st.caption("⚠️ Análisis educativo generado automáticamente. No constituye recomendación de inversión bajo MiFID II. Confirma siempre con análisis propio antes de tomar decisiones.")
+    st.caption(PIE_LECTURA_METODO)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -13402,6 +12260,154 @@ def _gravedad_ko(cid: str, valor_raw, info: dict) -> str:
     return "leve"   # liquidez, técnicos, historial y resto
 
 
+def _estado_between(valor: float, crit: dict) -> str:
+    """Clasificación de un criterio 'between' (OK dentro de [min, max]; ~OK en la franja de
+    aviso; KO por arriba o por abajo). Una sola implementación para el screener y para la
+    evaluación individual (PA2-04: mismos umbrales en toda la app)."""
+    mn     = crit.get("min", float("-inf"))
+    mx     = crit.get("max", float("inf"))
+    wrn_mn = crit.get("umbral_warning_min", mn * 0.8)
+    wrn_mx = crit.get("umbral_warning_max", mx * 1.2)
+    if mn <= valor <= mx:           return "ok"
+    if wrn_mn < valor <= wrn_mx:    return "warning"   # límite inferior estricto: el umbral exacto → ko_bajo
+    if valor > wrn_mx:              return "ko_alto"   # yield trampa o valoración excesiva
+    return "ko_bajo"                                   # yield insuficiente
+
+
+def _crit_dividendos(cid: str) -> dict:
+    """Criterio `cid` de la cartera de dividendos en criteria.json ({} si no existe)."""
+    for _c in (_cargar_criteria().get("carteras", {}).get("dividendos", {}).get("criterios", [])):
+        if _c.get("id") == cid:
+            return _c
+    return {}
+
+
+YIELD_ENTRADA_ATRACTIVA_DEFAULT = 0.035   # solo si criteria.json no trae el parámetro
+
+
+def evaluar_yield_dividendos(yield_frac: float, crit: dict | None = None) -> dict:
+    """PA2-04 (Spec PA v2) — Aptitud del yield con los MISMOS umbrales que el screener,
+    leídos de criteria.json (criterio dividend_yield), más una banda de entrada solo
+    informativa para la evaluación individual.
+
+    yield_frac en fracción (0.04 = 4 %). Devuelve {"estado": ok|warning|ko, "banda": str|None}.
+    La banda nunca produce "no apto" ni cambia el estado:
+      apto (OK) y yield ≥ yield_entrada_atractiva → "entrada: yield atractivo"
+      apto (OK) y min ≤ yield < yield_entrada_atractiva → "entrada: yield en rango"
+    """
+    crit = crit or _crit_dividendos("dividend_yield")
+    est = _estado_between(float(yield_frac), crit)
+    est = "ko" if est in ("ko_alto", "ko_bajo") else est
+    banda = None
+    if est == "ok":
+        _umbral = float(crit.get("yield_entrada_atractiva", YIELD_ENTRADA_ATRACTIVA_DEFAULT))
+        banda = "entrada: yield atractivo" if yield_frac >= _umbral else "entrada: yield en rango"
+    return {"estado": est, "banda": banda}
+
+
+_ETIQ_ESTADO_YIELD = {"ok": "OK", "warning": "~OK", "ko": "KO"}
+
+
+def lectura_yield_dividendos(yield_pct: float) -> dict:
+    """PA2-04 / PA2-01 — Lectura descriptiva del yield para la evaluación individual de
+    Dividendos (yield en %, p. ej. 4.0). Mismo estado que el screener; banda informativa.
+    Devuelve {estado, banda, score (0/1/2), etiqueta, detalle, punto}."""
+    if not yield_pct or yield_pct <= 0:
+        return {"estado": "ko", "banda": None, "score": 0, "etiqueta": "Sin dividendo",
+                "detalle": "La empresa no distribuye dividendo: el criterio de rentas no se cumple.",
+                "punto": "❌ Sin dividendo: el criterio de rentas no se cumple."}
+    _crit = _crit_dividendos("dividend_yield")
+    _ev = evaluar_yield_dividendos(yield_pct / 100, _crit)
+    _est, _banda = _ev["estado"], _ev["banda"]
+    _mn  = float(_crit.get("min", 0.025)) * 100
+    _mx  = float(_crit.get("max", 0.08)) * 100
+    _wmn = float(_crit.get("umbral_warning_min", _mn / 100 * 0.8)) * 100
+    _wmx = float(_crit.get("umbral_warning_max", _mx / 100 * 1.2)) * 100
+    _etq = f"Dividend yield {yield_pct:.2f}% · {_ETIQ_ESTADO_YIELD[_est]}" + (f" · {_banda}" if _banda else "")
+    _det = (f"Umbrales del método: OK {_mn:.1f}%–{_mx:.1f}% · ~OK {_wmn:.1f}%–{_mn:.1f}% "
+            f"o {_mx:.1f}%–{_wmx:.1f}% · KO fuera de ese rango.")
+    if yield_pct > 12:
+        _det += " Un yield superior al 12% suele indicar un dato a verificar o un dividendo no sostenible."
+    _ico = {"ok": "✅", "warning": "⚠️", "ko": "❌"}[_est]
+    _pto = (f"{_ico} Yield {yield_pct:.1f}%: {_ETIQ_ESTADO_YIELD[_est]} según los umbrales del método"
+            + (f" ({_banda})." if _banda else "."))
+    return {"estado": _est, "banda": _banda, "score": {"ok": 2, "warning": 1, "ko": 0}[_est],
+            "etiqueta": _etq, "detalle": _det, "punto": _pto}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PA2-01 (Spec PA v2) — Redacción no prescriptiva. La app describe lo que el método
+# detecta; no dice al usuario qué hacer. Plantillas únicas para la "Lectura del método"
+# de la evaluación individual (app e informe de estrategia HTML/PDF).
+# ─────────────────────────────────────────────────────────────────────────────
+PIE_LECTURA_METODO = "Lectura automática de un método. No es una recomendación de inversión."
+ROTULO_LECTURA_METODO = "Lectura del método"
+INVALIDACION_SWING_PCT = 2.0   # % bajo el soporte (antes el texto decía "stop 2-3% por debajo")
+
+# Términos que no pueden aparecer en los textos generados de estos bloques
+# (comparación sin mayúsculas ni acentos, por palabra completa).
+TERMINOS_PROHIBIDOS_PA2 = ("recomienda", "recomendamos", "recomendación", "te aconsejamos",
+                           "deberías", "debes", "compra", "vende", "reduce", "sal de",
+                           "salir de la posición", "entra", "es buen momento")
+
+
+def terminos_prohibidos_en(texto: str) -> list:
+    """Devuelve los términos prohibidos (PA2-01) presentes en `texto`. Se ignora el pie fijo,
+    que por definición contiene "recomendación" en negativo."""
+    import re as _re_t, unicodedata as _ud
+    def _n(s):
+        return "".join(c for c in _ud.normalize("NFD", s.lower()) if _ud.category(c) != "Mn")
+    _t = _n((texto or "").replace(PIE_LECTURA_METODO, ""))
+    return [w for w in TERMINOS_PROHIBIDOS_PA2
+            if _re_t.search(r"(?<!\w)" + _re_t.escape(_n(w)) + r"(?!\w)", _t)]
+
+
+def _num_es(x, dec: int = 2) -> str:
+    """Número con coma decimal (9.8 → '9,80')."""
+    return f"{float(x):.{dec}f}".replace(".", ",")
+
+
+def lectura_metodo_gestion(n: int, m: int, lista: list, stop, dist_pct) -> str:
+    """Gestión de posición. n señales de salida activas de m evaluadas; stop = 2×ATR14."""
+    _lst = "; ".join(lista) if lista else "ninguna"
+    _stop = f"{_num_es(stop, 4)} €" if stop else "no disponible"
+    _dist = _num_es(dist_pct, 1) if dist_pct is not None else "n/d"
+    return (f"Señales de salida activas según el método: {n} de {m} ({_lst}). "
+            f"El método considera escenario de salida con 3 o más señales o con cierre por debajo "
+            f"del stop dinámico ({_stop}, 2×ATR14). Precio actual respecto al stop: {_dist}%. "
+            f"La decisión corresponde al usuario.")
+
+
+def lectura_metodo_swing(soporte, resistencia, k: int, K: int,
+                         pct_inv: float = INVALIDACION_SWING_PCT) -> str:
+    """Swing EOD (entrada). Invalidación = soporte × (1 − pct_inv/100);
+    relación recorrido/riesgo = (resistencia − soporte) / (soporte − invalidación)."""
+    if soporte:
+        _s_inv = float(soporte) * (1 - pct_inv / 100)
+        _s_txt, _inv_txt = f"{_num_es(soporte)} €", f"{_num_es(_s_inv)} €"
+        _rr = ((float(resistencia) - float(soporte)) / (float(soporte) - _s_inv)
+               if resistencia and float(resistencia) > float(soporte) else None)
+    else:
+        _s_txt = _inv_txt = "no identificado"
+        _rr = None
+    _r_txt = f"{_num_es(resistencia)} €" if resistencia else "no identificada"
+    _rr_txt = _num_es(_rr, 1) if _rr is not None else "n/d"
+    return (f"Escenario de entrada según el método: soporte de referencia {_s_txt}; "
+            f"nivel de invalidación {_inv_txt} ({_num_es(pct_inv, 0)}% bajo el soporte); "
+            f"objetivo técnico en la resistencia {_r_txt}; relación recorrido/riesgo {_rr_txt}. "
+            f"Condiciones cumplidas: {k} de {K}.")
+
+
+def lectura_metodo_dividendos(yield_pct: float, rsi, nivel) -> str:
+    """Dividendos (entrada). Banda de yield según PA2-04 (o estado si no hay banda)."""
+    _ly = lectura_yield_dividendos(yield_pct)
+    _banda = _ly["banda"] or _ETIQ_ESTADO_YIELD[_ly["estado"]]
+    _rsi = _num_es(rsi, 0) if rsi is not None else "n/d"
+    _niv = f"{_num_es(nivel)} €" if nivel else "no identificada"
+    return (f"Lectura del método: yield {_num_es(yield_pct or 0, 1)}% ({_banda}); RSI {_rsi}; "
+            f"referencia técnica de invalidación en la confluencia pivot + media {_niv}.")
+
+
 def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflow=None) -> dict:
     """Evalúa un criterio contra los datos del ticker. Devuelve {estado, valor_raw, valor_fmt, mensaje}."""
     cid      = crit.get("id", "")
@@ -13426,7 +12432,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         if any(_sectores_na_match(s) for s in _sectores_na):
             _msg_na = crit.get("sectores_na_mensaje",
                                "Métrica no aplicable a este sector — excluida del score.")
-            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
                     "mensaje": _msg_na, "nombre": crit.get("nombre", "")}
 
     # ── Obtener valor raw ───────────────────────────────────────────────
@@ -13436,11 +12442,13 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                 "mensaje": textos.get("warning", "Verificar manualmente.")}
 
     _payout_origen   = None   # directo | calculado | calculado_bpa_negativo | no_disponible
+    _payout_marcas   = []     # PA2-03: payout_extremo | payout_crudo_inconsistente
+    _payout_difiere  = False  # PA2-03: True si el crudo de yfinance falta o no cuadra con DPA/BPA
     _dpa_es_calculado = False  # True cuando DPA viene de t.dividends, no de trailingAnnualDividendRate
     if fuente == "yfinance_info":
         campo = crit.get("campo", "")
         if campo == "debtToEquity" and _es_sector_sin_metricas_convencionales(info):
-            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
                     "mensaje": ("Deuda/Equity convencional no es métrica válida para bancos y "
                                 "aseguradoras — el apalancamiento se evalúa mediante ratios "
                                 "regulatorios (CET1, Tier 1, Solvencia II) no disponibles en "
@@ -13454,48 +12462,64 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
             valor = valor / 100
         # ── Fallback payoutRatio: dos niveles ──────────────────────────────
         if campo == "payoutRatio":
-            if valor is not None:
-                _payout_origen = "directo"
-            else:
-                # Nivel 1: trailingAnnualDividendRate de info{}
-                _dpa = info.get("trailingAnnualDividendRate")
-                _dpa_es_calculado = False
-                # Nivel 2: sumar dividends del año calendario anterior completo
-                if (not _dpa or float(_dpa) == 0) and dividends is not None and len(dividends) > 0:
-                    try:
-                        import pandas as _pd_pay
-                        _anyo_ref = int(dividends.index[-1].year) - 1
-                        _dpa_hist = float(dividends[dividends.index.year == _anyo_ref].sum())
-                        if _dpa_hist > 0:
-                            _dpa = _dpa_hist
-                            _dpa_es_calculado = True
-                        else:
-                            # Ultimo recurso: año en curso
-                            _anyo_cur = int(dividends.index[-1].year)
-                            _dpa_cur  = float(dividends[dividends.index.year == _anyo_cur].sum())
-                            if _dpa_cur > 0:
-                                _dpa = _dpa_cur
-                                _dpa_es_calculado = True
-                    except Exception:
-                        pass
-                _bpa = info.get("trailingEps")
-                if _dpa and _bpa and float(_dpa) > 0:
-                    if float(_bpa) > 0:
-                        valor = float(_dpa) / float(_bpa)
-                        _payout_origen = "calculado"
+            # PA2-03 (Spec PA v2) — Si hay DPA y BPA, el payout es SIEMPRE DPA/BPA, sin rango
+            # de plausibilidad (resolver_payout, fuente única compartida con la ingesta).
+            # Antes un payout real > 500 % se descartaba como SOSPECHOSO y acababa en N/A
+            # (−10 de techo) en vez de KO crítico: el peor caso puntuaba mejor que un 95 %.
+            # El payoutRatio crudo de yfinance solo se usa si no hay DPA o BPA; en ese caso ya
+            # llega filtrado por el rango 0–500 % (fuera de rango → N/A + K8, sin cambio).
+            # Nivel 1: trailingAnnualDividendRate de info{}
+            _dpa = info.get("trailingAnnualDividendRate")
+            _dpa_es_calculado = False
+            # Nivel 2: sumar dividends del año calendario anterior completo
+            if (not _dpa or float(_dpa) == 0) and dividends is not None and len(dividends) > 0:
+                try:
+                    _anyo_ref = int(dividends.index[-1].year) - 1
+                    _dpa_hist = float(dividends[dividends.index.year == _anyo_ref].sum())
+                    if _dpa_hist > 0:
+                        _dpa = _dpa_hist
+                        _dpa_es_calculado = True
                     else:
-                        # BPA negativo: ratio sobre valor absoluto, marcar especialmente
-                        valor = float(_dpa) / abs(float(_bpa))
-                        _payout_origen = "calculado_bpa_negativo"
-                else:
-                    _payout_origen = "no_disponible"
-                    # valor sigue None -> cae en sin_datos mas adelante
-                # Fuente única de verdad: persistir el fallback en info para que la
-                # familia de killshots K1 lea el MISMO número que la celda de la tabla.
-                # Antes K1 leía info["payoutRatio"]=None y se saltaba la evaluación.
-                if valor is not None and _payout_origen in ("calculado", "calculado_bpa_negativo"):
-                    info["payoutRatio"] = valor
-                    info["_payout_bpa_negativo"] = (_payout_origen == "calculado_bpa_negativo")
+                        # Ultimo recurso: año en curso
+                        _anyo_cur = int(dividends.index[-1].year)
+                        _dpa_cur  = float(dividends[dividends.index.year == _anyo_cur].sum())
+                        if _dpa_cur > 0:
+                            _dpa = _dpa_cur
+                            _dpa_es_calculado = True
+                except Exception:
+                    pass
+            import validador_nivel0 as _v0_pay
+            _crudo_pay = info.get("_payout_crudo", valor)
+            _res_pay = _v0_pay.resolver_payout(_dpa, info.get("trailingEps"), _crudo_pay)
+            _payout_marcas = list(_res_pay["marcas"])
+            if _res_pay["origen"] == "dpa_bpa":
+                valor = _res_pay["valor"]
+                _payout_origen = "calculado"
+                # Nota/asterisco solo si el dato de yfinance faltaba o no cuadra con DPA/BPA
+                # (misma tolerancia que la coherencia de nivel 1); si cuadra, no hay ruido.
+                _c_num = _crudo_pay if isinstance(_crudo_pay, (int, float)) else None
+                _u_pay = umbrales.actuales()
+                _payout_difiere = (_c_num is None or _c_num < 0 or (
+                    abs(_c_num - valor) > _u_pay["payout_tol_abs"]
+                    and abs(_c_num - valor) / max(abs(valor), 1e-9) > _u_pay["payout_tol_rel"]))
+            elif _res_pay["origen"] == "bpa_no_positivo":
+                valor = _res_pay["valor"]
+                _payout_origen = "calculado_bpa_negativo"
+                _payout_difiere = True
+                if valor is None:   # BPA = 0: no hay ratio que calcular; no interpretable → KO
+                    return {"estado": "ko", "valor_raw": None, "valor_fmt": "no interpretable",
+                            "mensaje": (chr(9889) + " Payout no interpretable: BPA nulo o negativo. "
+                                        "Criterio tratado como KO."),
+                            "marcas": _payout_marcas}
+            else:
+                _payout_origen = "directo" if valor is not None else "no_disponible"
+                _payout_difiere = False
+                # valor None -> cae en sin_datos mas adelante
+            # Fuente única de verdad: persistir en info para que la familia de killshots K1
+            # lea el MISMO número que la celda de la tabla.
+            if valor is not None and _payout_origen in ("calculado", "calculado_bpa_negativo"):
+                info["payoutRatio"] = valor
+                info["_payout_bpa_negativo"] = (_payout_origen == "calculado_bpa_negativo")
 
     elif fuente == "calculado":
         funcion = crit.get("funcion", "")
@@ -13506,7 +12530,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         elif funcion == "verificar_tendencia_sma":      valor = _sc_tendencia_sma(info)
         elif funcion == "calcular_fcf_yield_vs_div_yield":
             if _es_sector_sin_metricas_convencionales(info):
-                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A**", "na_sector": True,
+                return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sector)",
                         "mensaje": ("FCF convencional (flujo operativo−capex) no es métrica válida "
                                     "para bancos y aseguradoras — los flujos operativos incluyen "
                                     "variaciones en créditos, depósitos, primas y siniestros que "
@@ -13603,22 +12627,15 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         else:                          estado = "ko"
 
     elif operador == "between":
-        mn       = crit.get("min", float("-inf"))
-        mx       = crit.get("max", float("inf"))
-        wrn_mn   = crit.get("umbral_warning_min", mn * 0.8)
-        wrn_mx   = crit.get("umbral_warning_max", mx * 1.2)
-        if mn <= valor <= mx:           estado = "ok"
-        elif wrn_mn < valor <= wrn_mx:  estado = "warning"  # límite inferior estricto: el umbral exacto → ko_bajo
-        elif valor > wrn_mx:            estado = "ko_alto"   # yield trampa o valoración excesiva
-        else:                           estado = "ko_bajo"   # yield insuficiente
+        estado = _estado_between(valor, crit)   # PA2-04: misma clasificación que la evaluación individual
 
     elif operador == "in_list":
         valores_ok = crit.get("valores_ok", [])
         estado = "ok" if valor in valores_ok else "warning"
 
     valor_fmt = _fmt_valor(valor, cid)
-    if _payout_origen in ("calculado", "calculado_bpa_negativo"):
-        valor_fmt = valor_fmt + chr(42)   # asterisco: valor estimado, no directo de yfinance
+    if _payout_origen in ("calculado", "calculado_bpa_negativo") and _payout_difiere:
+        valor_fmt = valor_fmt + chr(42)   # asterisco: valor recalculado, distinto del de yfinance
     # #D — Etiqueta dinámica de ventana para el CAGR: "CAGR {N}a" (N = min(5, racha)).
     if cid == "crecimiento_dividendo" and dividends is not None:
         valor_fmt = f"{valor_fmt} · CAGR {min(5, _sc_anos_dividendo(dividends))}a"
@@ -13669,13 +12686,21 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                    "último ejercicio). El beneficio es negativo, así que el dividendo no "
                    "se está pagando contra beneficio; criterio tratado como KO. "
                    "Ver alarma K1-BPA en cabecera.")
-    elif _payout_origen == "calculado":
+    elif _payout_origen == "calculado" and _payout_difiere:
         _nota_py = (chr(9889) + " Calculado DPA/BPA"
                     + (" (DPA desde historial)" if _dpa_es_calculado else
-                       " (payoutRatio no disponible en yfinance)")
+                       " (payoutRatio de yfinance ausente o incoherente)")
                     + ". Verificar contra informe anual. ")
         mensaje = _nota_py + mensaje
-    return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje}
+    # PA2-03 — marcas informativas del payout (no cambian estado ni score)
+    if "payout_extremo" in _payout_marcas:
+        mensaje = (chr(9888) + " Payout extremo (> 500 %): valor recalculado DPA/BPA, se "
+                   "conserva y se evalúa (no se descarta como dato sospechoso). ") + mensaje
+    if "payout_crudo_inconsistente" in _payout_marcas:
+        mensaje = mensaje + (" Incidencia: payout crudo inconsistente (payoutRatio de yfinance "
+                             "negativo con BPA positivo); se usa DPA/BPA.")
+    return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje,
+            "marcas": _payout_marcas}
 
 
 
@@ -13694,72 +12719,6 @@ def _yf_info_con_retry(ticker: str, max_intentos: int = 3) -> dict:
     return {}
 
 # ── Evaluador de un ticker completo ─────────────────────────────────────────
-
-@st.cache_data(ttl=300)
-def _extras_curados() -> dict:
-    """{ticker: set(ex_date_iso)} de dividendos VIGENTES clasificados como extraordinario/scrip
-    en el golden record. Una sola query, cacheada 5 min. Vacío mientras no haya curación
-    -> el filtro de la Lente A (D-002/D-003) es un NO-OP y no cambia veredictos."""
-    out: dict = {}
-    try:
-        conn = get_db_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT ticker, ex_date FROM dividendo_clasificado "
-                        "WHERE estado='vigente' AND tipo IN ('extraordinario','scrip')")
-            for tk, exd in cur.fetchall():
-                out.setdefault(tk, set()).add(exd.isoformat() if hasattr(exd, "isoformat") else str(exd)[:10])
-        finally:
-            release_db_connection(conn)
-    except Exception:                                   # noqa: BLE001 — sin tabla/conexión -> {}
-        pass
-    return out
-
-
-def _dividendos_ordinarios(dividends, ticker: str):
-    """Serie de dividendos con las fechas ex clasificadas extraordinario/scrip (curadas)
-    RETIRADAS -> solo ordinario (D-002 yield K3 / D-003 CAGR K2). No-op sin curación."""
-    try:
-        extras = _extras_curados().get(ticker)
-        if not extras or dividends is None or len(dividends) == 0:
-            return dividends
-        mask = [(ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]) not in extras
-                for ts in dividends.index]
-        return dividends[mask]
-    except Exception:                                   # noqa: BLE001
-        return dividends
-
-
-def _calc_lente_a(div_raw, ticker: str, info: dict) -> dict | None:
-    """Lente A (renta por año natural) para el bloque 'Renta' del informe. Usa la serie CRUDA
-    (con extraordinarios) para el total, y la clasificación curada para separar el ordinario.
-    El yield ORDINARIO es el que evalúa K3 (D-002); el CAGR lleva la guarda de base suspendida."""
-    try:
-        import lente
-        if div_raw is None or len(div_raw) == 0:
-            return None
-        ev = [(ts.date() if hasattr(ts, "date") else ts, float(v)) for ts, v in div_raw.items()]
-        clas = {d: "extraordinario" for d in _extras_curados().get(ticker, set())}
-        por = lente.renta_por_ano(ev, clas)
-        if not por:
-            return None
-        precio = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
-        import datetime as _dt
-        anos = sorted(por); _hoy = _dt.date.today().year
-        cerr = [a for a in anos if a < _hoy]; ref = cerr[-1] if cerr else anos[-1]
-        return {
-            "ano_ref":        ref,
-            "renta_total":    por[ref]["total"],
-            "renta_ordinaria": por[ref]["ordinario"],
-            "yield_total":    lente.yield_actual(por, precio, "total"),
-            "yield_ordinario": lente.yield_actual(por, precio, "ordinario"),
-            "cagr":           lente.cagr_ordinario(por),
-            "tiene_extra":    any(por[a]["extraordinario"] > 0 or por[a]["scrip"] > 0 for a in por),
-            "por_ano":        por,          # v2: base de los estimadores/banderas (E2, base suspendida)
-        }
-    except Exception:                                   # noqa: BLE001
-        return None
-
 
 def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
     """Descarga datos y evalúa todos los criterios. Devuelve el resultado completo."""
@@ -13813,6 +12772,9 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                     _campos_sin_calidad.append(_k)       # sin valor fiable en ninguna fuente
         except Exception:
             info = _info_live                            # fallback robusto: comportamiento previo
+        # PA2-03: conservar el payoutRatio crudo de yfinance (aunque el filtro de calidad lo
+        # haya descartado) para detectar el crudo negativo con BPA > 0 (error de fuente).
+        info["_payout_crudo"] = _info_live.get("payoutRatio")
         _TICKER_NOMBRES_FIJOS = {
             # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
             # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
@@ -13833,10 +12795,6 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         necesita_cashflow = any(c.get("id") == "free_cash_flow" for c in criterios)
         hist      = t.history(period="6mo")    if necesita_hist else None
         dividends = t.dividends                if necesita_div  else None
-        _div_raw  = dividends                           # serie cruda (con extraordinarios) para la Lente A
-        if dividends is not None:                       # D-002/D-003: solo ordinario (excluye
-            dividends = _dividendos_ordinarios(dividends, ticker)   # extraordinarios curados; no-op sin curación)
-        _lente_a  = _calc_lente_a(_div_raw, ticker, info) if necesita_div else None
         cashflow  = None
         if necesita_cashflow:
             try:
@@ -13910,7 +12868,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "valor_fmt": res["valor_fmt"],
                 "mensaje":   res["mensaje"],
                 "peso":      peso,
-                "na_sector": bool(res.get("na_sector")),   # N/A por sector/industria (no penaliza techo)
+                "marcas":    res.get("marcas", []),   # PA2-03: marcas informativas del dato
             })
 
         n_na        = sum(1 for c in resultados_criterios if c["estado"] in ("manual", "sin_datos"))
@@ -13921,7 +12879,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # 4 N/A sectoriales de un banco capaban el score a 60 y SAN (yield ~OK + K3) empataba
         # con BBVA (limpio). Ahora el score se calcula desde los criterios evaluables y el cap
         # sectorial deja de aplastar la calidad relativa. (Decisión Polaris: techo fuera.)
-        n_na_sector = sum(1 for c in resultados_criterios if c.get("na_sector"))
+        n_na_sector = sum(1 for c in resultados_criterios
+                          if "(sector)" in str(c.get("valor_fmt", "")))
         n_na_cap    = n_na - n_na_sector          # solo N/A por falta de dato penalizan
         # #8(c) — Score = base de calidad − penalización por KO (gravedad). El término
         # aditivo garantiza monotonicidad estricta (añadir un KO baja la base Y suma pena) y
@@ -13939,32 +12898,13 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # Un score aditivo no puede capturar combinaciones que hacen el dividendo
         # estructuralmente insostenible. Los killshots son vetos analíticos explícitos.
         killshots = []
-        _pv_verif = None                 # payout VERIFICADO (vigente): MANDA sobre yfinance (Lente B)
         _es_cartera_div_ks = any(c.get("id") == "dividend_yield" for c in criterios)
         if _es_cartera_div_ks:
-            # Payout/BPA VERIFICADO (último BPA vigente del ticker): si existe, gobierna el veredicto
-            # por encima de yfinance. Es lo que hace que "verificar en la ficha" cambie el veredicto
-            # (payout real), no solo silencie el aviso — y evita que un payout alto verificado (ENG 98%)
-            # se escape a "Cumple" por el dato flojo de yfinance.
-            _bpa_verif = None
-            try:
-                import verificacion                     # ← faltaba: sin él, NameError silencioso -> _pv_verif None
-                _cxv0 = get_db_connection()
-                try:
-                    _bpv0 = verificacion.leer_bpa(_cxv0, ticker)
-                finally:
-                    release_db_connection(_cxv0)
-                if _bpv0:
-                    _b00 = _bpv0[-1]
-                    _pv_verif = verificacion.calcular_bpa_payout(
-                        _b00.get("beneficio_recurrente_meur"), _b00.get("numero_acciones"),
-                        _b00.get("dividendo_por_accion_eur")).get("payout")
-                    _bpa_verif = _b00.get("bpa_auditado")
-            except Exception:
-                _pv_verif, _bpa_verif = None, None
-            # K1 — Sistema de tres niveles de sostenibilidad del payout (usa el VERIFICADO si existe)
-            _ks_payout = _pv_verif if _pv_verif is not None else info.get("payoutRatio")
-            _ks_bpa    = float(_bpa_verif) if _bpa_verif not in (None, "") else info.get("trailingEps")
+            # K1 — Sistema de tres niveles de sostenibilidad del payout
+            # Nivel 1 (hard/veto): triple insostenibilidad — payout>100% + BPA<0 + FCF ko
+            # Nivel 2 (aviso): combinaciones de dos factores malos — señal visible, sin veto
+            _ks_payout = info.get("payoutRatio")
+            _ks_bpa    = info.get("trailingEps")
             # #6-B — FCF para alarmas/vetos con el MISMO fallback (Flujo operativo−Capex)
             # que la celda de la tabla. Antes los killshots leían _sc_fcf_vs_div(info), que
             # solo mira freeCashflow nativo: un FCF 'ko*' (calculado por fallback) NO
@@ -13993,53 +12933,6 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                                   f"(métrica no válida para este modelo de negocio), pero el "
                                   f"BPA negativo es señal universal de deterioro de resultados.",
                     })
-                # ── COBERTURA DEL DIVIDENDO POR CAPITAL REGULATORIO (extensión banca/seguros)
-                # Ocupa el slot que el payout tiene en los valores estándar: en financieras la
-                # sostenibilidad la mide el margen de capital sobre el mínimo del regulador, no
-                # el payout contable. Estados (verificacion.estado_cobertura):
-                #   ok -> no penaliza · ajustado -> informativo · estrecho -> cap (Parcial) ·
-                #   veto -> No cumple · SIN dato -> N/A transitorio (≤ Parcial, blindaje D-001).
-                _cap_estado, _cap_row = None, None
-                try:
-                    import verificacion as _vf_cap
-                    _cx_cap = get_db_connection()
-                    try:
-                        _cap_row = _vf_cap.cobertura_vigente(_cx_cap, ticker)
-                    finally:
-                        release_db_connection(_cx_cap)
-                    _cap_estado = _vf_cap.estado_cobertura(_cap_row) if _cap_row else None
-                except Exception:
-                    _cap_estado, _cap_row = None, None
-                if _cap_estado == "veto":
-                    killshots.append({
-                        "tipo":   "hard",
-                        "codigo": "K-CAP",
-                        "razon":  "Cobertura de capital insuficiente: agotado el margen sobre el "
-                                  "mínimo regulatorio (MDA incumplido / Solvencia < mínimo). El "
-                                  "reparto puede estar legalmente restringido — incompatible con "
-                                  "una tesis de rentas.",
-                    })
-                elif _cap_estado == "estrecho":
-                    killshots.append({
-                        "tipo":   "aviso",
-                        "codigo": "K-CAP",
-                        "razon":  "Cobertura de capital estrecha: el colchón sobre el requisito "
-                                  "regulatorio es reducido; el dividendo es sostenible pero sin "
-                                  "margen para shocks.",
-                    })
-                elif _cap_estado is None:
-                    # N/A transitorio (D-001): sin dato verificado NO penaliza el score, pero
-                    # IMPIDE 'Cumple' (evaluación incompleta — cobertura de capital pendiente).
-                    # Cierra el hueco actual: un banco no puede salir 'Cumple' sin comprobar
-                    # su sostenibilidad de capital.
-                    killshots.append({
-                        "tipo":   "aviso",
-                        "codigo": "K-CAP-NA",
-                        "razon":  "Cobertura de capital sin verificar: no puede mostrar 'Cumple' "
-                                  "hasta comprobar el margen de capital regulatorio (CET1 vs "
-                                  "requisito / Solvencia II). Verifícalo en «Cobertura de capital».",
-                    })
-                # 'ok' -> no penaliza · 'ajustado' -> informativo (sin killshot degradante)
 
             elif _ks_payout is not None:
                 _kp = float(_ks_payout)
@@ -14274,7 +13167,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _KNOWN_CAMPO_E = {"free_cash_flow": "freeCashflow"}   # criterios computados sin 'campo' nativo
         _campos_sector_na = set()
         for _rc in resultados_criterios:
-            if _rc.get("na_sector"):
+            if "(sector)" in str(_rc.get("valor_fmt", "")):
                 _cmp_e = _id2campo_e.get(_rc.get("id")) or _KNOWN_CAMPO_E.get(_rc.get("id"))
                 if _cmp_e:
                     _campos_sector_na.add(_cmp_e)
@@ -14286,7 +13179,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             _campos_sin_calidad = [c for c in _campos_sin_calidad if c != "payoutRatio"]
         if _campos_sin_calidad:
             _nombres_k8 = {"payoutRatio": "payout", "debtToEquity": "deuda/equity",
-                           "enterpriseToEbitda": "EV/EBITDA", "marketCap": "capitalización bursátil",
+                           "enterpriseToEbitda": "EV/EBITDA", "marketCap": "market cap",
                            "beta": "beta", "returnOnEquity": "ROE", "grossMargins": "margen bruto",
                            "operatingMargins": "margen operativo", "revenueGrowth": "crec. ingresos",
                            "earningsGrowth": "crec. beneficio", "pegRatio": "PEG", "trailingEps": "BPA"}
@@ -14319,6 +13212,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "razon":  " ".join(_partes_k8),
             })
 
+        # PA2-05 (Spec PA v2) — K-SECT (degradante): banca/seguros con los criterios de
+        # cobertura y solvencia (payout, FCF, Deuda/Equity) en N/A por sector. Sin ninguna
+        # métrica de cobertura del dividendo ni de solvencia, un banco no puede salir
+        # "Cumple" pleno. Solución provisional hasta el bloque banca/seguros (CET1,
+        # Solvencia II). NO toca el score. Real Estate no se ve afectado.
+        _ids_cob_solv = {"payout_ratio", "free_cash_flow", "deuda_equity"}
+        if _es_sector_sin_metricas_convencionales(info) and any(
+                c.get("id") in _ids_cob_solv and "(sector)" in str(c.get("valor_fmt", ""))
+                for c in resultados_criterios):
+            killshots.append({
+                "tipo":   "aviso",
+                "codigo": "K-SECT",
+                "razon":  ("Evaluación sectorial parcial — faltan métricas regulatorias "
+                           "(CET1 / Solvencia II). En banca y seguros el payout contable, el FCF "
+                           "y la Deuda/Equity no son métricas válidas y la fuente no ofrece las "
+                           "sustitutivas: el veredicto no puede ser Cumple pleno. El score no cambia."),
+            })
         # #6-A — Regla de cierre: TODO criterio en KO debe subir a cabecera. Los KO con
         # K-código propio ya lo hacen (payout→K1*, yield→K3, FCF→K1-FCF/K4/K6, free float→K5,
         # CAGR→K2, EV/EBITDA→K7). Los demás (D/E, historial, liquidez...) quedaban mudos:
@@ -14326,6 +13236,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # entrada genérica los hace visibles sin tocar el veredicto (el score ya refleja el KO).
         _ids_con_kcode = {"payout_ratio", "dividend_yield", "free_cash_flow",
                           "free_float", "crecimiento_dividendo", "ev_ebitda"}
+        # PA2-03: un payout en KO sin ninguna señal de la familia K1 (p. ej. 600 % con BPA > 0
+        # y caja suficiente) quedaba mudo en cabecera. Si no hay K1*, entra en la regla K9.
+        if not any(str(k.get("codigo", "")).startswith("K1") for k in killshots):
+            _ids_con_kcode.discard("payout_ratio")
         _ko_sin_alarma = [c for c in resultados_criterios
                           if c.get("estado") == "ko" and c.get("id") not in _ids_con_kcode]
         if _ko_sin_alarma:
@@ -14351,7 +13265,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3", "K-CAP", "K-CAP-NA")]
+                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3", "K-SECT")]
         nota_degradacion = None
         if _ks_hard:
             # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
@@ -14384,143 +13298,37 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # puntuación → "—" (p.ej. VID 69 Parcial por score, sin veto ni cap). Así un Parcial
         # con cap activo (TEF/AMS) se distingue de un Parcial por puntuación (VID).
         _ETIQ_MOTIVO = {
-            "K5":         ("free float < 20%",                "veto"),
-            "K2":         ("recorte sostenido del dividendo", "veto"),
-            "K-CAP-veto": ("cobertura de capital insuficiente", "veto"),
-            "K10-veto":   ("historial < 3 años",              "veto"),
-            "K1-BPA":     ("BPA negativo",                     "umbral"),
-            "K1-Payout":  ("payout ≥ 85%",                     "umbral"),
-            "K-CAP-cap":  ("cobertura de capital estrecha",    "umbral"),
-            "K-CAP-na":   ("cobertura de capital pendiente",   "umbral"),
-            "K10-cap":    ("historial corto (3–4 a.)",        "umbral"),
-            "K3":         ("yield bajo",                       "umbral"),
+            "K5":        ("free float < 20%",                "veto"),
+            "K2":        ("recorte sostenido del dividendo", "veto"),
+            "K10-veto":  ("historial < 3 años",              "veto"),
+            "K1-BPA":    ("BPA negativo",                     "cap"),
+            "K1-Payout": ("payout ≥ 85%",                     "cap"),
+            "K10-cap":   ("historial corto (3–4 a.)",        "cap"),
+            "K3":        ("yield bajo",                       "cap"),
+            "K-SECT":    ("Evaluación sectorial parcial — faltan métricas regulatorias (CET1 / Solvencia II)", "cap"),
         }
-        # más severo primero
-        _SEV_MOTIVO = ["K5", "K2", "K-CAP-veto", "K10-veto", "K1-BPA", "K1-Payout",
-                       "K-CAP-cap", "K-CAP-na", "K10-cap", "K3"]
+        # PA2-05: K-SECT es la degradante menos prioritaria (K1-BPA > K1-Payout > K10 > K3 > K-SECT)
+        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap", "K3", "K-SECT"]  # más severo primero
         _activos_mot = []
         for _k in killshots:
             _cod, _tip = _k.get("codigo"), _k.get("tipo", "hard")
             if _cod == "K10":                                       _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
-            elif _cod == "K-CAP":                                   _activos_mot.append("K-CAP-veto" if _tip == "hard" else "K-CAP-cap")
-            elif _cod == "K-CAP-NA":                                _activos_mot.append("K-CAP-na")
-            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout", "K3"): _activos_mot.append(_cod)
+            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout", "K3", "K-SECT"): _activos_mot.append(_cod)
         motivo, motivo_tipo = "—", "score"
         if estado_global == "no_cumple":
             _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "veto"]
         elif estado_global == "parcial":
-            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "umbral"]
+            _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "cap"]
         else:
             _pool = []
         if _pool:
             _gob = min(_pool, key=lambda m: _SEV_MOTIVO.index(m))
             _lbl, motivo_tipo = _ETIQ_MOTIVO[_gob]
-            _cod_gob = ("K10" if _gob.startswith("K10")
-                        else "K-CAP" if _gob.startswith("K-CAP") else _gob)
+            _cod_gob = "K10" if _gob.startswith("K10") else _gob
             motivo = f"{_cod_gob} · {_lbl} · {motivo_tipo}"
             _n_extra = len(_activos_mot) - 1
             if _n_extra > 0:
                 motivo += f"  (+{_n_extra})"
-
-        # ── v2 · Motor de avisos por excepción (banderas B1/B2/B3) — Spec v2 ──
-        # Estimadores del payout AL VUELO + banderas. Si hay bandera-capa, el veredicto NO
-        # puede ser "Cumple": se capa a Parcial y se marca 'revisar' (tercer estado D-001,
-        # score intacto). En zona segura (sin bandera) el veredicto fluye normal (puede Cumple).
-        # Los KO (BPA<0, recorte) ya los gobierna el motor (K1-BPA/K2): no se duplican aquí.
-        # Silencio por acuse/override -> Paso 4-5 (aún no); por defecto toda bandera capa (seguro).
-        banderas_v2, revisar, motivo_revisar = [], False, None
-        if _es_cartera_div and _lente_a is not None:
-            try:
-                import banderas as _bnd
-                import datetime as _dt_v2
-                _por_v2  = _lente_a.get("por_ano", {}) or {}
-                _hoy_v2  = _dt_v2.date.today().year
-                _cerr_v2 = sorted(a for a in _por_v2 if a < _hoy_v2)
-                _ult_v2  = _cerr_v2[-1] if _cerr_v2 else None
-                _div_ord_ej = _por_v2[_ult_v2]["ordinario"] if _ult_v2 else None
-                _ords6 = [_por_v2[a]["ordinario"] for a in _cerr_v2[-6:] if _por_v2[a]["ordinario"] > 0]
-                _base_susp_v2 = bool(_ords6) and min(_ords6) <= 0.01
-                # hueco de serie: dividendo INTERRUMPIDO que aún no re-acredita historial sólido.
-                # = hay pagos fuera de la racha continua (hubo corte/reanudación) Y la racha < 7
-                # (si ya lleva ≥7 continuos, el corte es antiguo y K10/K4 lo dan por acreditado).
-                # No confundir con empresa JOVEN (racha corta pero sin interrupción): esa la capa K10.
-                _pagos_v2 = [a for a in _cerr_v2 if _por_v2[a]["ordinario"] > 0]
-                _racha_v2, _yy_v2 = 0, (_cerr_v2[-1] if _cerr_v2 else None)
-                while _yy_v2 in _por_v2 and _por_v2[_yy_v2]["ordinario"] > 0:
-                    _racha_v2 += 1; _yy_v2 -= 1
-                _es_hueco = (len(_pagos_v2) > _racha_v2) and (_racha_v2 < 7)
-                # años del hueco = años SIN pago entre el primero y el último con pago (la 'fecha esperada')
-                _hueco_v2 = ([a for a in range(min(_pagos_v2), max(_pagos_v2) + 1) if a not in _pagos_v2]
-                             if (_es_hueco and _pagos_v2) else [])
-                # payout VERIFICADO (vigente): del último BPA verificado del ticker. Si existe, MANDA
-                # sobre el estimador (inhibe B1/B2-payout en banderas.py). Es lo que enlaza "corregir en
-                # la ficha" con "el aviso desaparece al re-lanzar" (el dato humano gobierna).
-                _pv_v2 = _pv_verif          # reutiliza el payout verificado ya calculado en los killshots
-                _ctx_v2 = {
-                    "payout_campo":            info.get("payoutRatio"),
-                    "dividendo_ord_ejercicio": _div_ord_ej,
-                    "eps":                     info.get("trailingEps"),
-                    "yield_ordinario":         _lente_a.get("yield_ordinario"),
-                    "racha_anios":             _sc_anos_dividendo(dividends) if dividends is not None else None,
-                    "ev_ebitda":               info.get("enterpriseToEbitda"),
-                    "free_float":              _sc_free_float(info),
-                    "tiene_extraordinario":    _lente_a.get("tiene_extra"),   # clave real de _calc_lente_a
-                    "salto_yoy_ordinario":     None,   # diferido (ver banderas.py): evita fatiga de alertas
-                    "base_suspendida":         _base_susp_v2,
-                    "hueco_serie":             _hueco_v2,   # historial -> B3 (interrupción del dividendo)
-                    "fuente_rancia":           False,
-                    # payout N/A estructural: banca/seguros Y SOCIMIs (Real Estate + industria REIT)
-                    "payout_na":               (("financial" in (info.get("sector") or "").strip().lower())
-                                                or ("real estate" in (info.get("sector") or "").strip().lower()
-                                                    and (info.get("industry") or "").strip().lower().startswith("reit"))),
-                    "payout_vigente":          _pv_v2,
-                }
-                _res_v2 = _bnd.evaluar_banderas(_ctx_v2)
-                banderas_v2 = _res_v2["banderas"]
-                try:
-                    import avisos as _av_v2
-                    _cx_v2 = get_db_connection()
-                    try:
-                        _acu_v2 = _av_v2.acuses_activos(_cx_v2, ticker)   # {(t,b,h): tipo}
-                        for _b in banderas_v2:
-                            _tp = _acu_v2.get((ticker, _b.get("codigo"), _b.get("huella")))
-                            _b["acuse_tipo"] = _tp                       # None|'confirmado'|'explicable'|'otro'
-                            _b["acusada"] = _tp is not None
-                        # §8 REGLA DURA: SOLO 'confirmado' levanta el cap. 'explicable' (y sin acuse)
-                        # MANTIENEN el cap → silenciar nunca sube el veredicto.
-                        _capa_ef = any(_b["tipo"] == "capa" and _b.get("acuse_tipo") != "confirmado"
-                                       for _b in banderas_v2)
-                        if _capa_ef:
-                            if estado_global == "cumple":
-                                estado_global = "parcial"          # nunca Cumple con bandera activa
-                            if estado_global != "no_cumple":
-                                revisar = True
-                                _cods_v2 = " + ".join(
-                                    (f'{_b["codigo"]} ({_b.get("metrica")})' if _b.get("metrica")
-                                     else _b["codigo"])
-                                    for _b in banderas_v2
-                                    if _b["tipo"] == "capa" and not _b.get("acusada"))
-                                motivo_revisar = f"revisar · {_cods_v2}" if _cods_v2 else "revisar"
-                        _av_v2.registrar_log(_cx_v2, ticker, _res_v2["estimadores"],
-                                             banderas_v2, _capa_ef, estado_global)   # log de auditoría
-                    finally:
-                        release_db_connection(_cx_v2)
-                except Exception:
-                    # sin BBDD (acuse/log no disponibles): capa por defecto con TODA bandera (seguro)
-                    for _b in banderas_v2:
-                        _b.setdefault("acusada", False)
-                    if _res_v2["capa_veredicto"]:
-                        if estado_global == "cumple":
-                            estado_global = "parcial"
-                        if estado_global != "no_cumple":
-                            revisar = True
-                            _cods_v2 = " + ".join(
-                                (f'{_b["codigo"]} ({_b.get("metrica")})' if _b.get("metrica")
-                                 else _b["codigo"])
-                                for _b in banderas_v2 if _b["tipo"] == "capa")
-                            motivo_revisar = f"revisar · {_cods_v2}" if _cods_v2 else "revisar"
-            except Exception:
-                banderas_v2, revisar, motivo_revisar = [], False, None
 
         return {
             "ticker":                ticker,
@@ -14528,20 +13336,18 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "puntuacion":            puntuacion,
             "puntuacion_raw":        puntuacion_raw,
             "estado_global":         estado_global,
-            "revisar":               revisar,         # v2: capado por bandera (nunca Cumple)
-            "banderas_v2":           banderas_v2,      # v2: [{codigo,tipo,motivo,valores,huella}]
-            "motivo_revisar":        motivo_revisar,   # v2: banderas que gobiernan el "revisar"
             "motivo":                motivo,        # #C: restricción que fija el veredicto
             "motivo_tipo":           motivo_tipo,   # "veto" | "cap" | "score"
             "criterios":             resultados_criterios,
             "n_na":                  n_na,
             "n_na_cap":              n_na_cap,
+            # PA2-03: marcas informativas del dato por criterio (payout_extremo, crudo inconsistente)
+            "incidencias_dato":      {c["id"]: c["marcas"] for c in resultados_criterios if c.get("marcas")},
             "n_evaluados":           n_evaluados,
             "n_total_criterios":     n_total_c,
             "evaluacion_incompleta": evaluacion_incompleta,
             "killshots":             killshots,
             "nota_degradacion":      nota_degradacion,
-            "lente_a":               _lente_a,
             "error":                 False,
         }
     except Exception as e:
@@ -14631,21 +13437,17 @@ def _generar_pdf_screening(job: dict) -> bytes:
 
     indice    = job.get("indice", "—")
     tipo      = job.get("tipo_cartera", "—")
-    _cj_dt    = _ts_es(job.get("completed_at") or job.get("created_at"))
-    completed = _cj_dt.strftime("%Y-%m-%d %H:%M") if _cj_dt else ""
+    completed = str(job.get("completed_at") or job.get("created_at") or "")[:16]
     job_id    = job.get("id", "")
 
-    n_cumple  = sum(1 for r in resultado if r.get("estado_global") == "cumple")
-    n_parcial = sum(1 for r in resultado if r.get("estado_global") == "parcial")
-    n_no      = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
-    n_error   = sum(1 for r in resultado if r.get("error"))
-    n_no_apto = sum(1 for r in resultado if r.get("no_apto"))   # Sin dividendo / No evaluable
-    total     = len(resultado)
+    _cnt = contar_estados_cribado(resultado)
+    n_cumple, n_parcial, n_no = _cnt["n_cumple"], _cnt["n_parcial"], _cnt["n_no"]
+    n_error, n_no_apto, total = _cnt["n_error"], _cnt["n_no_apto"], _cnt["total"]
     # Invariante de cabecera (#3): los estados terminales deben AGOTAR el total. Si no
     # cuadra hay un estado sin columna (p.ej. 'Sin dividendo' caía fuera). Se reporta de
     # forma visible en el informe en vez de mostrar una cabecera silenciosamente incoherente.
-    _suma_estados  = n_cumple + n_parcial + n_no + n_error + n_no_apto
-    _descuadre_cab = total - _suma_estados
+    _suma_estados  = _cnt["suma_estados"]
+    _descuadre_cab = _cnt["descuadre"]
 
     # ── Colores ───────────────────────────────────────────────────────
     C_DARK   = colors.HexColor("#1e3a5f")
@@ -14737,12 +13539,18 @@ def _generar_pdf_screening(job: dict) -> bytes:
             f"total ({_suma_estados} &#8800; {total}; descuadre {_descuadre_cab}). Hay un "
             f"estado terminal sin columna asignada — revisar el clasificador.",
             fontSize=8, textColor=C_RED, alignment=TA_CENTER))
+    if _cnt["n_sectorial_parcial"]:
+        # PA2-05: línea informativa, no altera los recuentos por veredicto.
+        story.append(p(
+            f"<b>Evaluación sectorial parcial: {_cnt['n_sectorial_parcial']} valores</b> "
+            f"(banca y seguros sin métricas regulatorias CET1 / Solvencia II; señal K-SECT).",
+            fontSize=8, textColor=colors.HexColor("#d97706"), alignment=TA_CENTER))
     story.append(Spacer(1, 0.5*cm))
 
     # ── Tabla resumen tickers ──────────────────────────────────────────
     story.append(Paragraph("Resumen de valores", S_SECTION))
     hdr_style = {"fontName": "Helvetica-Bold", "fontSize": 8, "textColor": colors.white}
-    _MOT_HEX = {"veto": "#dc2626", "umbral": "#d97706", "score": "#94a3b8"}
+    _MOT_HEX = {"veto": "#dc2626", "cap": "#d97706", "score": "#94a3b8"}
     tbl_data = [[
         p("<b>Ticker</b>",  **hdr_style),
         p("<b>Empresa</b>", **hdr_style),
@@ -14752,17 +13560,13 @@ def _generar_pdf_screening(job: dict) -> bytes:
     ]]
     for r in resultado:
         eg    = r.get("estado_global", "error")
-        if r.get("revisar"):                       # v2: capado por bandera (nunca Cumple)
-            ehex, elbl = "#b45309", "Revisar"
-        else:
-            ehex  = ESTADO_HEX.get(eg, "#94a3b8")
-            elbl  = ESTADO_LABEL.get(eg, eg)
+        ehex  = ESTADO_HEX.get(eg, "#94a3b8")
+        elbl  = ESTADO_LABEL.get(eg, eg)
         score = r.get("puntuacion", 0)
         nombre = (r.get("nombre") or r.get("ticker", ""))[:38]
         # #C — Motivo: restricción que fija el veredicto (veto/cap), o "—" si por puntuación.
         if r.get("no_apto"):       _mot, _mhex = "sin dividendo", "#94a3b8"
         elif r.get("error"):       _mot, _mhex = "—", "#94a3b8"
-        elif r.get("revisar"):     _mot, _mhex = (r.get("motivo_revisar") or "revisar"), "#b45309"
         else:
             _mot  = r.get("motivo", "—")
             _mhex = _MOT_HEX.get(r.get("motivo_tipo", "score"), "#94a3b8")
@@ -14884,12 +13688,8 @@ def _generar_pdf_screening(job: dict) -> bytes:
     story.append(Spacer(1, 0.8*cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER))
     story.append(Paragraph(
-        "<b>N/A**</b>: No Aplica a ese sector o industria.",
-        S_FOOT
-    ))
-    story.append(Paragraph(
         "Motivo = restricción que fija el veredicto. <i>veto</i> fuerza No cumple; "
-        "<i>umbral</i> baja a Parcial; “—” = el veredicto lo determina la puntuación.",
+        "<i>cap</i> limita a Parcial; “—” = el veredicto lo determina la puntuación.",
         S_FOOT
     ))
     story.append(Paragraph(
@@ -14900,6 +13700,25 @@ def _generar_pdf_screening(job: dict) -> bytes:
     doc.build(story)
     buf.seek(0)
     return buf.read()
+
+def contar_estados_cribado(resultado: list) -> dict:
+    """Recuentos de la cabecera del cribado (PDF y vista HTML usan esta misma función).
+    Los estados terminales agotan el total (invariante #3). PA2-05: `n_sectorial_parcial`
+    es una línea informativa aparte (valores con K-SECT) y NO entra en los recuentos."""
+    c = {
+        "n_cumple":  sum(1 for r in resultado if r.get("estado_global") == "cumple"),
+        "n_parcial": sum(1 for r in resultado if r.get("estado_global") == "parcial"),
+        "n_no":      sum(1 for r in resultado if r.get("estado_global") == "no_cumple"),
+        "n_error":   sum(1 for r in resultado if r.get("error")),
+        "n_no_apto": sum(1 for r in resultado if r.get("no_apto")),   # Sin dividendo / No evaluable
+        "total":     len(resultado),
+        "n_sectorial_parcial": sum(1 for r in resultado
+                                   if any(k.get("codigo") == "K-SECT" for k in (r.get("killshots") or []))),
+    }
+    c["suma_estados"] = c["n_cumple"] + c["n_parcial"] + c["n_no"] + c["n_error"] + c["n_no_apto"]
+    c["descuadre"] = c["total"] - c["suma_estados"]
+    return c
+
 
 def _render_screening_resultados(job: dict):
     """Muestra la tabla de resultados de un job completado."""
@@ -14922,18 +13741,13 @@ def _render_screening_resultados(job: dict):
     # Ordenar alfabéticamente por ticker
     resultado = sorted(resultado, key=lambda r: r.get("ticker", ""))
 
-    # Nota al pie de datos para la marca N/A** que aparece en las tablas de criterios.
-    st.caption("N/A\\*\\* — No Aplica a ese sector o industria (métrica excluida del score).")
-
     # Métricas resumen — una sola línea
-    n_cumple   = sum(1 for r in resultado if r.get("estado_global") == "cumple")
-    n_parcial  = sum(1 for r in resultado if r.get("estado_global") == "parcial")
-    n_no       = sum(1 for r in resultado if r.get("estado_global") == "no_cumple")
-    n_error    = sum(1 for r in resultado if r.get("error"))
-    n_no_apto  = sum(1 for r in resultado if r.get("no_apto"))
+    _cnt = contar_estados_cribado(resultado)
+    n_cumple, n_parcial, n_no = _cnt["n_cumple"], _cnt["n_parcial"], _cnt["n_no"]
+    n_error, n_no_apto = _cnt["n_error"], _cnt["n_no_apto"]
     # Invariante de cabecera (#3): los estados terminales deben agotar el total.
     _desc_html = ""
-    _falt_cab  = len(resultado) - (n_cumple + n_parcial + n_no + n_error + n_no_apto)
+    _falt_cab  = _cnt["descuadre"]
     if _falt_cab != 0:
         _desc_html = (f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
                       f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
@@ -14942,6 +13756,11 @@ def _render_screening_resultados(job: dict):
                   f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
                   f'color:#64748b">💥 Sin datos: <b>{n_error}</b></span>&nbsp;'
                   if n_error else "")
+    # PA2-05: línea informativa K-SECT; no altera los recuentos por veredicto.
+    _sect_html = (f'<span style="background:#fff7ed;border:1px solid #fdba74;'
+                  f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
+                  f'color:#c2410c">🏦 Evaluación sectorial parcial: <b>{_cnt["n_sectorial_parcial"]}</b> valores</span>&nbsp;'
+                  if _cnt["n_sectorial_parcial"] else "")
     _napto_html = (f'<span style="background:#ede9fe;border:1px solid #c4b5fd;'
                    f'border-radius:8px;padding:3px 10px;font-size:.82rem;'
                    f'color:#6d28d9">🚫 Sin dividendo: <b>{n_no_apto}</b></span>&nbsp;'
@@ -14958,15 +13777,15 @@ def _render_screening_resultados(job: dict):
         f'<span style="background:#fee2e2;border:1px solid #fca5a5;'
         f'border-radius:8px;padding:3px 12px;font-size:.82rem;color:#b91c1c">'
         f'❌ No cumplen: <b>{n_no}</b></span>'
-        f'{_napto_html}{_err_html}{_desc_html}</div>',
+        f'{_napto_html}{_err_html}{_desc_html}{_sect_html}</div>',
         unsafe_allow_html=True
     )
 
     # Botón descarga PDF
     _indice_slug = (job.get('indice') or 'screening').replace(' ', '_')
-    _dt_job      = _ts_es(job.get('completed_at') or job.get('created_at'))
-    _fecha_slug  = _dt_job.strftime('%Y%m%d') if _dt_job else 'sin_fecha'
-    _hora_slug   = _dt_job.strftime('%H%M') if _dt_job else ''
+    _dt_job      = job.get('completed_at') or job.get('created_at')
+    _fecha_slug  = str(_dt_job)[:10].replace('-', '') if _dt_job else 'sin_fecha'
+    _hora_slug   = str(_dt_job)[11:16].replace(':', '') if _dt_job else ''
     _pdf_filename = f"screening_{_indice_slug}_{_fecha_slug}_{_hora_slug}.pdf"
     try:
         _pdf_bytes = _generar_pdf_screening(job)
@@ -14989,7 +13808,7 @@ def _render_screening_resultados(job: dict):
         score  = r.get("puntuacion", 0)
         nombre = r.get("nombre", r.get("ticker", ""))
         ticker = r.get("ticker", "")
-        icono   = "🔎" if r.get("revisar") else ICONO_GLOBAL.get(eg, "💥")
+        icono   = ICONO_GLOBAL.get(eg, "💥")
         _n_na_r = r.get("n_na", 0)
         _n_ev_r = r.get("n_evaluados", r.get("n_total_criterios", 0))
         _suf_r  = (f" — {_n_ev_r} evaluables, {_n_na_r} sin datos"
@@ -14997,7 +13816,7 @@ def _render_screening_resultados(job: dict):
         _inc_r  = "  ⚠️ *Incompleto*" if r.get("evaluacion_incompleta") else ""
         # #C — Motivo en la etiqueta: hace legible por qué un score alto puede tener veredicto
         # limitado (veto/cap) frente a un Parcial por puntuación ("—" no se muestra).
-        _mot_r   = (r.get("motivo_revisar") if r.get("revisar") else r.get("motivo", "—"))
+        _mot_r   = r.get("motivo", "—")
         _mot_lbl = f"   |   {_mot_r}" if (_mot_r and _mot_r != "—") else ""
         label  = (f"{icono} **{ticker}** — {nombre}   |   Puntuación: **{score}/100**"
                   f"{_mot_lbl}{_suf_r}{_inc_r}")
@@ -15014,8 +13833,7 @@ def _render_screening_resultados(job: dict):
                     unsafe_allow_html=True
                 )
             else:
-                _badge_eg = ("🔎 Revisar (nunca Cumple)" if r.get("revisar")
-                             else "✅ Cumple" if eg=="cumple"
+                _badge_eg = ("✅ Cumple" if eg=="cumple"
                              else "⚠️ Cumple parcialmente" if eg=="parcial"
                              else "❌ No cumple")
                 _n_na_exp = r.get("n_na", 0)
@@ -15041,51 +13859,6 @@ def _render_screening_resultados(job: dict):
                     f'</div>',
                     unsafe_allow_html=True
                 )
-                # ── v2 · Banderas de aviso (por qué "revisar") ──
-                _bnds = r.get("banderas_v2") or []
-                if _bnds:
-                    def _lbl_bnd(b):
-                        _c, _m = b.get("codigo", ""), b.get("metrica")
-                        return f"{_c} ({_m})" if _m else _c
-                    _items = "".join(
-                        f'<li><b>{_lbl_bnd(b)}</b> — {b.get("motivo","")}</li>' for b in _bnds)
-                    _cap = any(b.get("tipo") == "capa" for b in _bnds)
-                    _col = "#b45309" if _cap else "#0369a1"
-                    _bg  = "#fffbeb" if _cap else "#f0f9ff"
-                    _hdr = ('🔎 Avisos v2 — capan el veredicto bajo «Cumple» hasta revisar'
-                            if _cap else 'ℹ️ Aviso v2 (informativo) — no cambia el veredicto')
-                    st.markdown(
-                        f'<div style="padding:8px 12px;margin-bottom:8px;background:{_bg};'
-                        f'border-left:4px solid {_col};border-radius:6px;font-size:0.78rem;color:{_col}">'
-                        f'<b>{_hdr}</b>'
-                        f'<ul style="margin:4px 0 0 16px;padding:0">{_items}</ul>'
-                        f'</div>',
-                        unsafe_allow_html=True)
-                # ── Bloque "Renta" (Lente A) — yield ordinario (K3), renta año natural, CAGR con guarda ──
-                _la = r.get("lente_a")
-                if _la:
-                    _y_ord = _la.get("yield_ordinario"); _y_tot = _la.get("yield_total")
-                    _cagr = _la.get("cagr"); _renta = _la.get("renta_total"); _ano = _la.get("ano_ref")
-                    _y_ord_s = f"{_y_ord:.2%}" if _y_ord is not None else "—"
-                    _cagr_s = f"{_cagr:+.1%}" if _cagr is not None else "n/d"
-                    _renta_s = f"{_renta:.2f}€" if _renta is not None else "—"
-                    _tot_s = (f' · total {_y_tot:.2%}'
-                              if (_y_tot is not None and _y_ord is not None and abs(_y_tot - _y_ord) > 1e-9) else "")
-                    _badge_x = ('<span style="background:#fef9c3;color:#854d0e;border-radius:10px;'
-                                'padding:1px 7px;font-size:0.68rem;font-weight:700;margin-left:4px">extraordinario</span>'
-                                if _la.get("tiene_extra") else "")
-                    st.markdown(
-                        f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;'
-                        f'padding:6px 12px;margin-bottom:6px;background:#f0f9ff;border:1px solid #bae6fd;'
-                        f'border-left:4px solid #0ea5e9;border-radius:6px;font-size:0.78rem;color:#0c4a6e">'
-                        f'<b>💰 Renta (Lente A)</b>'
-                        f'<span>Yield <b>{_y_ord_s}</b>{_tot_s}</span>'
-                        f'<span>Renta {_ano}: <b>{_renta_s}</b></span>'
-                        f'<span>CAGR ordinario: <b>{_cagr_s}</b></span>'
-                        f'{_badge_x}'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
                 _nota_deg = r.get("nota_degradacion")
                 if _nota_deg:
                     st.markdown(
@@ -15486,7 +14259,7 @@ def _render_screening_panel(tipo_key: str, uid: int):
                 _hist_labels = []
                 for _hj in _hist_jobs:
                     _ts = _hj.get("completed_at")
-                    _ts_s = _ts_es(_ts).strftime("%d/%m %H:%M") if _ts else "—"
+                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
                     _ico  = "✅" if _hj["estado"] == "completado" else "💥"
                     _hist_labels.append(f"{_ico} {_hj.get('indice','')} — {_ts_s}")
                 # Si viene de notificación, preseleccionar ese job
@@ -15612,7 +14385,7 @@ def _render_screening_cartera(tipo_key: str, uid: int, tickers_cartera: dict):
                 _hist_labels = []
                 for _hj in _hist_jobs:
                     _ts   = _hj.get("completed_at")
-                    _ts_s = _ts_es(_ts).strftime("%d/%m %H:%M") if _ts else "—"
+                    _ts_s = _ts.strftime("%d/%m %H:%M") if _ts else "—"
                     _ico  = "✅" if _hj["estado"] == "completado" else "💥"
                     _hist_labels.append(f"{_ico} Cartera — {_ts_s}")
             _job_ver_id  = st.session_state.get("_sc_job_ver")
@@ -16581,21 +15354,6 @@ def pantalla_analisis():
         margin: -1rem -1.25rem 0.5rem !important;
         box-shadow: 0 2px 12px rgba(0,0,0,0.18) !important;
         align-items: center !important;
-        position: relative !important;   /* referencia para el título centrado de la cabecera */
-    }
-    /* Logo (columna 1): que ocupe toda la altura de la barra y centre su contenido,
-       y neutralizar el espaciado propio de los contenedores de Streamlit. Así
-       "PivotAnalyzer" queda a la MISMA altura (centro del bloque) que el título centrado. */
-    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) {
-        display: flex !important;
-        align-items: center !important;
-        align-self: stretch !important;
-    }
-    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) > div,
-    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) [data-testid="stElementContainer"],
-    [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) > [data-testid="stColumn"]:nth-child(1) [data-testid="stMarkdownContainer"] {
-        margin: 0 !important;
-        padding: 0 !important;
     }
     /* Alinear a la derecha las columnas de botones (campana + usuario) */
     [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) [data-testid="stColumn"]:nth-child(n+2) {
@@ -16634,9 +15392,6 @@ def pantalla_analisis():
     /* Cabecera móvil — Streamlit colapsa st.columns a vertical en móvil,
        hay que forzar flex-direction:row para mantener todo en una línea */
     @media (max-width: 768px) {
-        /* En móvil la cabecera va muy comprimida: ocultar el título centrado
-           para que no se solape con el logo/iconos. */
-        .pa-hdr-center { display: none !important; }
         [data-testid="stHorizontalBlock"]:has(#__pivot_hdr_logo) {
             display: flex !important;
             flex-direction: row !important;
@@ -16682,35 +15437,14 @@ def pantalla_analisis():
     # ── Cabecera: logo | spinner (fragment auto-refresh) | bell | user ─────────
     _hdr_left, _hdr_spin, _hdr_bell, _hdr_user = st.columns([10, 0.8, 1, 1.3])
     with _hdr_left:
-        # Título centrado en la cabecera = opción de menú actualmente elegida, con el
-        # MISMO color/formato que "PivotAnalyzer". Se lee de session_state porque la
-        # cabecera se pinta antes del radio del nav (en el primer render puede ir vacío).
-        # Se elimina el emoji inicial de la etiqueta del nav (p.ej. "⚙️ Administración").
-        _nav_actual = st.session_state.get("nav_sidebar", "") or ""
-        # Muestra la SUBOPCIÓN activa si la hay (submenú de Administración); si no, la opción.
-        _sel_hdr = (st.session_state.get("_adm_sub_sel") or _nav_actual) \
-            if _nav_actual == "⚙️ Administración" else _nav_actual
-        _p_nav = _sel_hdr.split(" ", 1)
-        _titulo_hdr = (_p_nav[1] if (len(_p_nav) == 2 and _p_nav[0][:1] and not _p_nav[0][:1].isalnum())
-                       else _sel_hdr).strip()
-        _overlay_hdr = (
-            '<div class="pa-hdr-center" style="position:absolute;top:50%;left:50%;'
-            'transform:translate(-50%,-50%);pointer-events:none;z-index:0">'
-            '<span style="color:#fff;font-size:0.95rem;font-weight:800;'
-            f'letter-spacing:-0.02em;white-space:nowrap">{_titulo_hdr}</span></div>'
-        ) if _titulo_hdr else ""
-        # IMPORTANTE: HTML en UNA sola línea concatenada. Si se deja {_overlay_hdr} en su
-        # propia línea y va vacío (p.ej. al hacer login, antes de que el nav tenga valor),
-        # queda una línea en blanco que CIERRA el bloque HTML de Markdown y el resto se
-        # renderiza como texto crudo. Concatenando en una línea se evita por completo.
         st.markdown(
-            f'<span id="__pivot_hdr_logo" style="display:none"></span>{_overlay_hdr}'
-            '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;position:relative;z-index:1">'
-            '<div style="background:rgba(255,255,255,0.12);border-radius:6px;'
-            'padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>'
-            '<div style="color:#fff;font-size:0.95rem;font-weight:800;'
-            'letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>'
-            '</div>',
+            '''<span id="__pivot_hdr_logo" style="display:none"></span>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <div style="background:rgba(255,255,255,0.12);border-radius:6px;
+                          padding:4px 8px;font-size:1.2rem;line-height:1">📊</div>
+              <div style="color:#fff;font-size:0.95rem;font-weight:800;
+                          letter-spacing:-0.02em;white-space:nowrap">PivotAnalyzer</div>
+            </div>''',
             unsafe_allow_html=True
         )
     with _hdr_spin:
@@ -16751,7 +15485,7 @@ def pantalla_analisis():
                 st.markdown(f"**{_n_notif} notificación{'es' if _n_notif>1 else ''} nueva{'s' if _n_notif>1 else ''}**")
                 st.divider()
                 for _nf in _notifs:
-                    _ts = _ts_es(_nf.get("created_at"))
+                    _ts = _nf.get("created_at")
                     _ts_str = _ts.strftime("%d/%m %H:%M") if _ts else ""
                     st.markdown(
                         f'<div style="padding:6px 0;border-bottom:1px solid #e2e8f0">'
@@ -16881,8 +15615,7 @@ def pantalla_analisis():
             st.radio(
                 "admin_sub",
                 ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener",
-                 "📊 Calidad de datos", "🎚️ Umbrales de coherencia",
-                 "📝 Verificación dividendos"],
+                 "📊 Calidad de datos", "🎚️ Umbrales de coherencia"],
                 label_visibility="collapsed", key="_adm_sub_sel",
             )
 
@@ -17045,15 +15778,13 @@ def pantalla_analisis():
         currency = info.get("currency", "")
         curr_str = f" {currency}" if currency else ""
 
-        # Hora de corte HONESTA del dato (regularMarketTime de Yahoo en la zona del
-        # mercado), no la del reloj local. Alimenta también el chip "Datos:" del
-        # informe de estrategia (se pasa como 'ts'). Fallback: última sesión del histórico.
-        ts_str = _sello_datos(info, hist)
+        # Timestamp de carga del dato
+        from datetime import datetime as _dt
+        import zoneinfo as _zi
+        ts_str = _dt.now(_zi.ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M")
 
-        _precio_disp = float(_curr_market) if _curr_market else precio   # precio en vivo; fallback histórico
-        _precio_txt = f"{_precio_disp:.4f}{curr_str}" if _precio_disp is not None else "—"
         with col_p1:
-            st.metric("Precio", _precio_txt, delta=var_str, help=TOOLTIPS["Precio"])
+            st.metric("Precio", f"{precio:.4f}{curr_str}", delta=var_str, help=TOOLTIPS["Precio"])
         with col_p2:
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
@@ -17090,7 +15821,7 @@ def pantalla_analisis():
             f'<p style="margin:6px 0 0 0">'
             f'<span style="font-size:1.25rem;font-weight:700;color:#1e3a5f">{nombre}</span>'
             f'<span style="font-size:0.85rem;color:#64748b"> · {tipo_activo.upper()} · '
-            f'Datos a: <b>{ts_str}</b> · Retraso Yahoo ~15 min</span></p>',
+            f'Datos cargados: <b>{ts_str}</b> · Retraso ~15 min</span></p>',
             unsafe_allow_html=True
         )
 
@@ -17421,7 +16152,7 @@ def pantalla_analisis():
 
             # ---- FUNDAMENTALES ----
             div_ttm = calcular_div_ttm(ticker_activo)
-            fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm, hist=hist)
+            fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm)
 
             # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----
             st.session_state["estrategia_data"] = {
@@ -18026,7 +16757,7 @@ La elegancia matemática es que R1 y S1 «recuerdan» el máximo y mínimo de la
 |---------|-------------------|-----------|---------------|
 | **Clásico** | (H+L+C)/3 | Cualquier activo y plazo | El más universal; máximo consenso |
 | **Woodie** | (H+L+2C)/4 | Activos con cierres significativos | Da doble peso al cierre; PP ≠ media |
-| **Camarilla** | (H+L+C)/3 + ajuste | Intradía y scalping | Niveles muy ceñidos al precio del día |
+| **Camarilla** | Sin PP propio: C ± (H−L)×1,1/12, /6, /4, /2 | Intradía y scalping | Niveles muy ceñidos al cierre de la sesión anterior |
 | **Fibonacci** | (H+L+C)/3 + ratios Fib | Inversores que ya usan Fibonacci | Niveles en 38.2%, 61.8%, 100% del rango |
 | **DeMark** | Depende de si C>O, C<O o C=O | Mercados con apertura relevante | PP variable según contexto de la sesión |
 | **CPR** | TC=(H+L)/2, BC=PP−(TC−PP) | Traders intradía avanzados | Mide si el día será estrecho o amplio |
@@ -20504,10 +19235,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 total  = sum(p for _, p in criterios)
                 maxpts = len(criterios) * 2
                 pct    = int(total / maxpts * 100)
-                if pct >= 70:   vrd, vrd_col = "OPORTUNIDAD", "#166534"
-                elif pct >= 45: vrd, vrd_col = "VIGILAR",     "#92400e"
-                else:           vrd, vrd_col = "NO ES EL MOMENTO", "#991b1b"
-                vrd_bg = {"OPORTUNIDAD": "#f0fdf4", "VIGILAR": "#fffbeb", "NO ES EL MOMENTO": "#fff1f2"}[vrd]
+                if pct >= 70:   vrd, vrd_col = "CONDICIONES FAVORABLES", "#166534"
+                elif pct >= 45: vrd, vrd_col = "CONDICIONES MIXTAS",     "#92400e"
+                else:           vrd, vrd_col = "CONDICIONES DESFAVORABLES", "#991b1b"
+                vrd_bg = {"CONDICIONES FAVORABLES": "#f0fdf4", "CONDICIONES MIXTAS": "#fffbeb", "CONDICIONES DESFAVORABLES": "#fff1f2"}[vrd]
                 filas = "".join(html for html, _ in criterios)
                 hdr = (f'<div style="background:{color_hdr};padding:10px 14px;'
                        f'border-radius:8px 0 0 0;border:1px solid {color_hdr};border-bottom:none">'
@@ -20680,49 +19411,34 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 return "Sin divergencias detectadas"
 
             def _build_dividendos():
-                # Tres franjas: >12% value trap · 1-12% rango normal · <1% insuficiente
-                _y_extremo = _yield > 12
-                _y_bajo    = 0 < _yield < 1
-                _y_normal  = 1 <= _yield <= 12
-                if _y_extremo:
-                    _y_score = 0
-                    _y_label = f"Dividend yield extremadamente alto: {_yield:.1f}% ⚠️ posible value trap o dato a verificar"
-                    _y_expl  = f"Yield del {_yield:.1f}% — verifica el dividendo real en la web de la empresa"
-                elif _y_bajo:
-                    _y_score = 0
-                    _y_label = f"Dividend yield insuficiente: {_yield:.2f}% (<1%)"
-                    _y_expl  = "Por debajo del 1% el ingreso por dividendo no es relevante para estrategia de rentas"
-                elif _y_normal:
-                    _y_score = 2 if _yield >= 3.5 else 1 if _yield >= 2 else 0
-                    _y_label = f"Dividend yield (rent. por dividendo) {_yield:.2f}%"
-                    _y_expl  = "≥3.5% atractivo · 2-3.5% aceptable · 1-2% bajo para rentas"
-                else:  # _yield == 0
-                    _y_score = 0
-                    _y_label = "Sin dividendo"
-                    _y_expl  = "La empresa no distribuye dividendo — no apta para estrategia de rentas"
+                # PA2-04 (Spec PA v2): aptitud del yield con los MISMOS umbrales que el screener
+                # (criteria.json, criterio dividend_yield) + banda de entrada solo informativa.
+                # Se eliminó el requisito propio de yield ≥ 3,5 % de esta evaluación.
+                _ly = lectura_yield_dividendos(_yield)
                 c = []
-                c.append(_criterio(_y_score, _y_label, _y_expl,
-                    "El yield mide cuánto cobras anualmente en dividendos por cada euro invertido. Si la acción vale 10€ y paga 0.40€/año, el yield es 4%. "
-                    "Para rentas buscamos ≥3.5% porque por debajo el ingreso no compensa el riesgo de renta variable frente a alternativas conservadoras. "
-                    "Yield &gt;12%: el mercado puede estar descontando que el dividendo no es sostenible (value trap) — o el dato puede ser incorrecto. Verificar siempre en la web de la empresa."))
+                c.append(_criterio(_ly["score"], _ly["etiqueta"], _ly["detalle"],
+                    "El yield es el dividendo anual cobrado por cada euro invertido: si la acción vale 10€ y paga 0.40€/año, el yield es 4%. "
+                    "El método usa los mismos umbrales en el screener y en esta evaluación. La banda de entrada "
+                    "(atractivo / en rango) es solo informativa y no cambia el resultado. "
+                    "Un yield muy alto puede reflejar que el mercado descuenta un recorte del dividendo o un dato erróneo de la fuente."))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
-                    f"{'El precio está por debajo de su media de los últimos 200 días — históricamente un buen momento para entrar ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días — puede que no sea el mejor momento de entrada' if _sma200 > 0 else ''}",
+                    f"{'El precio está por debajo de su media de los últimos 200 días: condición de entrada favorable para el método ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días — puede que no sea el mejor momento de entrada' if _sma200 > 0 else ''}",
                     "La SMA200 promedia los últimos 200 cierres diarios y es la referencia de largo plazo más usada. "
-                    "Comprar por debajo de la SMA200 indica que el precio lleva meses en corrección, lo que habitualmente aumenta el yield efectivo (pagas menos por el mismo dividendo) y mejora el margen de seguridad. "
-                    "No garantiza el suelo exacto, pero históricamente ha sido zona de entrada favorable para inversores de largo plazo."))
+                    "Un precio por debajo de la SMA200 indica meses de corrección, lo que suele elevar el yield efectivo (menos precio por el mismo dividendo) y el margen de seguridad. "
+                    "No marca el suelo exacto; históricamente ha sido zona de entrada favorable para el inversor de largo plazo."))
                 c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
                     f"RSI {_rsi:.0f}",
-                    f"{'El RSI indica que el valor ha corregido lo suficiente — buen momento para considerar la entrada ✅' if _rsi < 45 else 'El RSI está en zona neutral, sin señales extremas — entrada aceptable si el resto de indicadores acompañan ⚠️' if _rsi < 55 else 'El RSI indica que el valor lleva una racha alcista fuerte — entrar ahora asume más riesgo de corrección a corto plazo ❌'}",
+                    f"{'El RSI indica una corrección suficiente: condición de entrada favorable para el método ✅' if _rsi < 45 else 'El RSI está en zona neutral, sin señales extremas — entrada aceptable si el resto de indicadores acompañan ⚠️' if _rsi < 55 else 'El RSI refleja una racha alcista fuerte: una entrada a este nivel asume más riesgo de corrección a corto plazo ❌'}",
                     "El RSI (Relative Strength Index) mide la velocidad y magnitud de los movimientos de precio en los últimos 14 sesiones, en una escala 0-100. "
                     "Por debajo de 45 indica que el valor ha tenido una corrección reciente — los vendedores están agotados y el precio puede estar cerca de un suelo técnico. "
                     "Para dividendos no buscamos sobreventa extrema (&lt;30), sino zona de corrección razonable que mejore el precio de entrada sin que sea señal de deterioro fundamental."))
                 c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
                     f"Posición 52W: {_pos52:.0f}% del rango",
-                    f"{'El precio está cerca de los mínimos del año — históricamente un buen punto de entrada ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual — ni caro ni barato en términos recientes ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año — entrar ahora significa pagar más por el mismo dividendo ❌'}",
-                    "Indica dónde está el precio actual dentro del rango máximo-mínimo de los últimos 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
-                    "Para dividendos, comprar en el 0-35% del rango significa que pagas un precio bajo frente a lo que el mercado ha pedido durante el último año. "
-                    "Consecuencia práctica: el yield efectivo que obtienes es el más alto del período — por cada euro invertido cobras más dividendo que si hubieras entrado en máximos."))
+                    f"{'El precio está cerca de los mínimos del año — históricamente un buen punto de entrada ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual — ni caro ni barato en términos recientes ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año: a este nivel se paga más por el mismo dividendo ❌'}",
+                    "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
+                    "Para dividendos, un precio en el 0-35% del rango es bajo frente a lo pagado por el mercado durante el último año. "
+                    "Consecuencia: el yield efectivo es el más alto del período, más dividendo por euro invertido que en máximos."))
                 # Guard BPA<0: con pérdidas el payout no es interpretable (mismo criterio
                 # que el screening). Forzar score 0 y etiqueta KO; nunca "Sostenible".
                 _payout_bpa_neg = (_eps_ttm < 0)
@@ -20762,22 +19478,22 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     f"{'Precio>SMA50>SMA200 ✅' if tend_ok else 'Precio>SMA50 pero SMA50<SMA200 ⚠️' if tend_par else f'Precio bajo SMA50 ({_sma50:.2f}) ❌'}",
                     "Las SMAs (medias móviles simples) promedian los últimos N cierres para mostrar la dirección del precio sin el ruido diario. "
                     "Precio &gt; SMA50 &gt; SMA200 es la 'alineación alcista perfecta': el corto plazo confirma al largo plazo y el precio está por encima de ambos. "
-                    "Para swing tendencial, entrar contra la tendencia principal tiene estadísticamente menor probabilidad de éxito — necesitas la estructura alineada. "
-                    "SMA50 &gt; SMA200 pero sin precio encima indica tendencia emergente con mayor riesgo."))
+                    "En swing tendencial, una entrada contra la tendencia principal tiene estadísticamente menor probabilidad de éxito: el método exige la estructura alineada. "
+                    "SMA50 &gt; SMA200 sin el precio encima indica una tendencia emergente con mayor riesgo."))
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
                     f"MACD histograma {_mhist:+.4f}",
                     f"{'Positivo y acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo pero perdiendo fuerza ⚠️' if _mhist > 0 else 'Negativo — sin momentum ❌'}",
                     "El histograma MACD es la diferencia entre la línea MACD (media rápida) y su señal (media de la MACD). "
-                    "Cuando es positivo y creciente, el momentum alcista está acelerando — hay fuerza real detrás del movimiento. "
-                    "Para swing buscamos momentum activo: no queremos entrar en una tendencia que está perdiendo fuerza antes de que el trade empiece. "
+                    "Cuando es positivo y creciente, el momentum alcista está acelerando: hay fuerza real detrás del movimiento. "
+                    "El método exige momentum activo: una tendencia que pierde fuerza antes de la entrada resta calidad al setup. "
                     "Un histograma positivo pero decreciente es señal de alerta: el movimiento existe pero se debilita."))
                 c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
                     f"RSI {_rsi:.0f}",
-                    f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido — esperar ❌'}",
-                    "En swing tendencial, el RSI ideal está entre 45-62: suficientemente lejos de la sobrecompra (&gt;70, señal de precio maduro) "
-                    "pero sin llegar a la sobreventa (&lt;35, señal de debilidad real). "
-                    "Esta ventana es la zona donde el precio ha retrocedido dentro de la tendencia y está listo para continuar — es el 'retroceso saludable'. "
-                    "RSI &gt;68 al entrar en swing significa que pagas el precio más caro del impulso, asumiendo el riesgo de la corrección inminente."))
+                    f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido ❌'}",
+                    "En swing tendencial, el RSI de referencia está entre 45-62: lejos de la sobrecompra (&gt;70, precio maduro) "
+                    "y sin llegar a la sobreventa (&lt;35, debilidad real). "
+                    "Es la zona en la que el precio ha retrocedido dentro de la tendencia: el 'retroceso saludable'. "
+                    "Con RSI &gt;68 la entrada se produce en la parte más cara del impulso, con mayor riesgo de corrección inminente."))
                 _vol_conf = "creciente" if _vslope > 0.001 else "estable" if _vslope > -0.001 else "cayendo"
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
                     f"Volumen ({_vol_conf})",
@@ -20838,7 +19554,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     f"P&L actual: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €)",
                     f"Entrada: {_pe_entr:.4f} € · Actual: {_precio:.4f} € · {int(_q_entr)} títulos",
                     "Mide cuánto ha ganado o perdido la posición desde la entrada. "
-                    "Positivo y creciente = la tesis se confirma. Negativo y acelerando = revisar invalidación."
+                    "Positivo y creciente = la tesis se confirma. Negativo y acelerando = el nivel de invalidación gana relevancia."
                 ))
                 # 2. Precio sobre stop dinámico 2×ATR
                 c.append(_criterio(
@@ -20856,25 +19572,25 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     f"{'✅ Tendencia activa — SAR bajo el precio' if _sar == 'alcista' else '❌ SAR cruzado — señal de giro de tendencia'}",
                     "El SAR cambia de lado cuando la tendencia se invierte formalmente. "
                     "SAR alcista = la tendencia sigue activa y la posición tiene soporte técnico. "
-                    "SAR bajista = la tendencia ha cambiado — el primer nivel de alerta para reducir."
+                    "SAR bajista = la tendencia ha cambiado: es la primera señal de alerta del método."
                 ))
                 # 4. Sin divergencia bajista
                 c.append(_criterio(
                     2 if not _div_baj else (1 if not _div_rsi_baj and not _div_mcd_baj else 0),
                     f"Divergencias: {_div_txt()}",
-                    "Sin señales de agotamiento" if not _div_baj else "⚠️ Divergencia bajista activa — revisar posición",
+                    "Sin señales de agotamiento" if not _div_baj else '⚠️ Divergencia bajista activa',
                     "Una divergencia bajista (precio sube pero RSI/MACD no confirman) es la señal de agotamiento "
-                    "más fiable antes de un giro. En una posición abierta, su aparición obliga a revisar el stop "
-                    "y plantearse reducción parcial."
+                    "más fiable antes de un giro. En una posición abierta, el método la cuenta como señal de salida "
+                    "y pone el foco en el nivel del stop."
                 ))
                 # 5. RSI sin sobrecompra extrema
                 c.append(_criterio(
                     2 if _rsi < 70 else 1 if _rsi < 76 else 0,
                     f"RSI: {_rsi:.1f}",
-                    f"{'✅ Sin sobrecompra' if _rsi < 70 else '⚠️ Sobrecomprado — reducir riesgo' if _rsi < 76 else '❌ Sobrecompra extrema — asimetría desfavorable'}",
-                    "RSI >70 en una posición abierta no obliga a salir, pero reduce la asimetría: "
+                    f"{'✅ Sin sobrecompra' if _rsi < 70 else '⚠️ Sobrecomprado' if _rsi < 76 else '❌ Sobrecompra extrema — asimetría desfavorable'}",
+                    "Un RSI >70 en una posición abierta no es por sí solo una señal de salida, pero empeora la asimetría: "
                     "el precio ha recorrido ya mucho y las correcciones desde sobrecompra suelen ser más rápidas. "
-                    "RSI >76 en una posición ganadora = momento de ajustar el stop y no añadir."
+                    "Con RSI >76 en una posición ganadora, el método cuenta sobrecompra extrema como señal de salida."
                 ))
                 # 6. MACD mantiene momentum
                 c.append(_criterio(
@@ -20890,92 +19606,52 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
 
             # ── Interpretación cualitativa por estrategia ─────────────────
             def _interpretar(key):
+                # PA2-01 (Spec PA v2): los "puntos" describen lo que detecta el método y "rec"
+                # es la "Lectura del método" (plantillas únicas lectura_metodo_*), sin
+                # imperativos ni recomendación. La decisión corresponde al usuario.
                 puntos, rec = [], ""
                 if key == "💰 Dividendos":
-                    if _yield > 12:
-                        puntos.append(f"⚠️ Yield extremadamente alto ({_yield:.1f}%) — posible value trap o dato erróneo. Verifica el dividendo real en la web de la empresa antes de cualquier decisión.")
-                    elif _yield >= 3.5:
-                        puntos.append(f"✅ Yield (rentabilidad) del {_yield:.1f}% — atractivo para estrategia de rentas.")
-                    elif _yield >= 2:
-                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yield:.1f}% — aceptable pero modesto para estrategia de rentas pura.")
-                    elif _yield >= 1:
-                        puntos.append(f"⚠️ Yield (rentabilidad) del {_yield:.1f}% — bajo para estrategia de rentas. El ingreso por dividendo apenas supera el 1%.")
-                    elif _yield > 0:
-                        puntos.append(f"❌ Yield (rentabilidad) del {_yield:.2f}% — insuficiente para estrategia de rentas. Por debajo del 1% el dividendo no es relevante como fuente de ingreso.")
-                    else:
-                        puntos.append("❌ Sin dividendo — empresa no apta para estrategia de rentas.")
+                    puntos.append(lectura_yield_dividendos(_yield)["punto"])   # PA2-04
                     if _sma200 > 0 and _precio > _sma200:
                         gap = (_precio / _sma200 - 1) * 100
-                        puntos.append(f"❌ El precio está un {gap:.1f}% por encima de su media de los últimos 200 días. Si esperas a que retroceda hacia los {_sma200:.2f}€, mejorarías significativamente la rentabilidad por dividendo que obtendrías al entrar.")
+                        puntos.append(f"❌ El precio está un {gap:.1f}% por encima de su media de los últimos 200 días. Un precio en torno a la SMA200 ({_sma200:.2f}€) equivaldría a una rentabilidad por dividendo mayor.")
                     elif _sma200 > 0:
-                        puntos.append(f"✅ El precio está por debajo de su media de los últimos 200 días, lo que históricamente ha sido un buen momento para entrar.")
+                        puntos.append(f"✅ El precio está por debajo de su media de los últimos 200 días: históricamente, zona de entrada favorable para el método.")
                     if _pos52 > 70:
-                        puntos.append(f"❌ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango anual). Esperar una corrección no tiene un coste alto y mejoraría el precio de entrada.")
+                        puntos.append(f"❌ El precio está cerca de los máximos del año (en el {_pos52:.0f}% de su rango anual): el precio de entrada es menos favorable que tras una corrección.")
                     if _eps_ttm < 0:
-                        puntos.append(f"❌ BPA negativo (pérdidas): el payout no es interpretable — el dividendo no está cubierto por beneficios. Señal de deterioro a vigilar.")
+                        puntos.append(f"❌ BPA negativo (pérdidas): el payout no es interpretable — el dividendo no está cubierto por beneficios. Señal de deterioro.")
                     elif _payout > 0 and _payout < 70:
                         puntos.append(f"✅ Payout del {_payout:.0f}% — dividendo bien cubierto por beneficios.")
                     elif _payout >= 70:
-                        puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado. Revisar tendencia de BPA.")
-                    # Recomendación
-                    _entry_yield = (_yield / (_precio / _sma200)) if _sma200 > 0 and _precio > 0 else 0
-                    if _pos52 > 65 and _sma200 > 0 and _precio > _sma200:
-                        _gap = (_precio / _sma200 - 1) * 100
-                        rec = (f"No es el momento óptimo. Precio un {_gap:.1f}% sobre SMA200 y en zona alta del rango anual — "
-                               f"el yield (rentabilidad) efectivo es el más bajo del año. Zona de espera: SMA200 ({_sma200:.2f}€) con RSI < 45. "
-                               f"Si el precio retrocede ahí, el yield (rentabilidad) efectivo mejoraría aproximadamente un {_gap:.0f}%.")
-                    elif _pos52 > 60 or (_sma200 > 0 and _precio > _sma200):
-                        rec = (f"Zona subóptima para entrada completa. Considera una posición parcial (30-40%) ahora "
-                               f"y reserva capital para promediar si el precio retrocede hacia SMA200 ({_sma200:.2f}€) o RSI baja de 45.")
-                    elif _rsi < 40 and _niv_soporte and _div_alc:
-                        rec = (f"Setup óptimo activo: RSI en sobreventa ({_rsi:.0f}), soporte técnico presente y divergencia alcista confirmada. "
-                               f"Entrada escalonada en 2-3 tramos. Stop por debajo del soporte identificado. "
-                               f"La combinación yield (rentabilidad) + precio bajo + señal técnica es el escenario de máxima asimetría.")
-                    elif _rsi < 45 and _niv_soporte:
-                        rec = (f"Condiciones razonables. RSI en {_rsi:.0f} con soporte técnico activo. "
-                               f"Entrada parcial (50%) con stop bajo soporte. Reservar capital para mejorar precio medio "
-                               f"si hay corrección adicional.")
-                    else:
-                        rec = ("Vigilar sin comprometer capital. Esperar que RSI baje de 45 o que el precio llegue a zona de soporte "
-                               "reforzado para tener una referencia técnica clara de stop.")
+                        puntos.append(f"⚠️ Payout del {_payout:.0f}% — margen de cobertura ajustado; la tendencia del BPA es relevante.")
+                    _sop_ref = _niv_soporte[0]["precio"] if _niv_soporte else None
+                    rec = lectura_metodo_dividendos(_yield, _rsi, _sop_ref)
 
                 elif key == "📈 Swing EOD":
                     tend_ok = _sma50 > 0 and _sma200 > 0 and _precio > _sma50 and _sma50 > _sma200
                     if tend_ok:
                         puntos.append("✅ Estructura tendencial completa — precio sobre SMA50 sobre SMA200.")
                     else:
-                        puntos.append("❌ Estructura tendencial incompleta — el swing requiere tendencia previa establecida.")
+                        puntos.append("❌ Estructura tendencial incompleta — el método exige una tendencia previa establecida.")
                     if 45 <= _rsi <= 62:
-                        puntos.append(f"✅ RSI en {_rsi:.0f} — ventana de entrada válida sin sobrecompra.")
+                        puntos.append(f"✅ RSI en {_rsi:.0f} — dentro de la ventana del método, sin sobrecompra.")
                     elif _rsi > 65:
                         puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobreextendido. Riesgo de corrección antes del impulso siguiente.")
                     if _div_rsi_baj or _div_mcd_baj:
-                        puntos.append("❌ Divergencia bajista RSI/MACD activa — setup invalidado. Esperar resolución.")
+                        puntos.append("❌ Divergencia bajista RSI/MACD activa — el método considera el setup invalidado mientras siga activa.")
                     elif _div_alc:
                         puntos.append("✅ Divergencia alcista activa — señal de apoyo al setup.")
                     if _niv_soporte and _niv_resist:
                         puntos.append("✅ Soporte y resistencia identificados — recorrido definido.")
                     elif not _niv_soporte:
-                        puntos.append("⚠️ Sin soporte técnico claro — difícil establecer stop lógico.")
-                    _soporte_str = f"{_niv_soporte[0]['precio']:.4f}€" if _niv_soporte else "no identificado"
-                    _resist_str  = f"{_niv_resist[0]['precio']:.4f}€" if _niv_resist else "no identificada"
-                    if _div_rsi_baj or _div_mcd_baj:
-                        rec = ("⛔ Setup invalidado. Divergencia bajista activa — la tendencia muestra agotamiento interno "
-                               "aunque el precio no lo refleje todavía. Esperar resolución de la divergencia (3-8 sesiones) "
-                               "antes de considerar entrada. Comprar ahora es perseguir el precio en el peor momento.")
-                    elif tend_ok and 45 <= _rsi <= 62 and not _div_baj and _niv_soporte:
-                        _recorrido = ((_niv_resist[0]["precio"] / _niv_soporte[0]["precio"] - 1) * 100) if _niv_soporte and _niv_resist else 0
-                        rec = (f"Setup técnico favorable. Entrada en zona de soporte reforzado ({_soporte_str}) "
-                               f"con stop 2-3% por debajo. Objetivo: resistencia identificada ({_resist_str}). "
-                               f"Recorrido potencial: ~{_recorrido:.1f}%. "
-                               f"RSI en {_rsi:.0f} — ventana válida sin sobreextensión.")
-                    elif tend_ok and _rsi > 62:
-                        rec = (f"Tendencia correcta pero RSI en {_rsi:.0f} — sobreextendido. "
-                               f"Esperar retroceso a soporte ({_soporte_str}) o RSI bajo 58 para mejorar el punto de entrada "
-                               f"y aumentar el ratio riesgo/beneficio.")
-                    else:
-                        rec = (f"Setup incompleto. {'Tendencia no establecida — ' if not tend_ok else ''}"
-                               f"esperar alineación precio>SMA50>SMA200 + RSI 45-62 + soporte identificado antes de comprometer capital.")
+                        puntos.append("⚠️ Sin soporte técnico claro — no hay referencia lógica para el nivel de invalidación.")
+                    _conds_sw = [tend_ok, 45 <= _rsi <= 62, not (_div_rsi_baj or _div_mcd_baj),
+                                 bool(_niv_soporte), bool(_niv_resist)]
+                    rec = lectura_metodo_swing(
+                        _niv_soporte[0]["precio"] if _niv_soporte else None,
+                        _niv_resist[0]["precio"] if _niv_resist else None,
+                        sum(1 for _c in _conds_sw if _c), len(_conds_sw))
 
                 elif key == "🗂️ Gestión de posición":
                     _pe_entr  = float(_pos_est.get("precio_entrada") or 0) if _pos_est else 0
@@ -21000,13 +19676,13 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     if _pl_pct >= 0:
                         puntos.append(f"✅ Posición en beneficio: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €).")
                     else:
-                        puntos.append(f"❌ Posición en pérdida: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €). Revisar si la tesis de entrada sigue vigente.")
+                        puntos.append(f"❌ Posición en pérdida: {_pl_pct:+.2f}% ({_pl_abs:+,.2f} €). La vigencia de la tesis de entrada es la referencia.")
 
                     if _stop_2x:
                         puntos.append(f"⚙️ Stop dinámico 2×ATR: {_stop_2x:.4f} € "
                                       f"({'por encima del precio — STOP TOCADO' if _precio <= _stop_2x else f'{((_precio/_stop_2x-1)*100):.1f}% de margen hasta el stop'}).")
 
-                    # Señales de salida / reducción
+                    # Señales de salida que evalúa el método (5)
                     _exit_sigs = []
                     if _sar != "alcista":
                         _exit_sigs.append("SAR bajista — tendencia invertida formalmente")
@@ -21019,26 +19695,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         _exit_sigs.append("MACD cruzado a bajista")
                     if _stop_2x and _precio <= _stop_2x:
                         _exit_sigs.append("Precio por debajo del stop 2×ATR")
-
-                    if len(_exit_sigs) >= 3 or (_stop_2x and _precio <= _stop_2x):
-                        rec = (f"⛔ **Salir.** {len(_exit_sigs)} señales de alerta simultáneas: "
-                               f"{'; '.join(_exit_sigs)}. "
-                               f"El riesgo de continuar supera el potencial de recuperación.")
-                    elif len(_exit_sigs) >= 2:
-                        rec = (f"⚠️ **Reducir 40-50%.** {'; '.join(_exit_sigs)}. "
-                               f"Ajustar stop del resto a {_stop_2x:.4f} €" if _stop_2x else
-                               f"⚠️ **Reducir 40-50%.** {'; '.join(_exit_sigs)}.")
-                    elif len(_exit_sigs) == 1:
-                        rec = (f"⚠️ Vigilar. Una señal de alerta activa: {_exit_sigs[0]}. "
-                               f"No añadir posición. Mantener stop en {_stop_2x:.4f} €." if _stop_2x else
-                               f"⚠️ Vigilar. Una señal de alerta activa: {_exit_sigs[0]}.")
-                    elif _pl_pct > 0 and not _exit_sigs:
-                        rec = (f"✅ **Mantener.** Sin señales de salida activas. "
-                               f"Stop dinámico 2×ATR en {_stop_2x:.4f} €." if _stop_2x else
-                               f"✅ **Mantener.** Sin señales de salida activas.")
-                    else:
-                        rec = (f"Posición en pérdida sin señales técnicas de recuperación. "
-                               f"Revisar la tesis de entrada y evaluar si el nivel de stop original sigue vigente.")
+                    _N_SENALES_SALIDA = 5
+                    rec = lectura_metodo_gestion(
+                        len(_exit_sigs), _N_SENALES_SALIDA, _exit_sigs, _stop_2x,
+                        ((_precio / _stop_2x - 1) * 100) if _stop_2x else None)
 
                 return puntos, rec
 
@@ -21082,8 +19742,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         unsafe_allow_html=True,
                     )
 
-                if _rec:
-                    st.info(_rec, icon="💡")
+                if _rec:   # PA2-01: "Lectura del método" + pie fijo
+                    st.info(_rec if _rec.startswith(ROTULO_LECTURA_METODO)
+                            else f"**{ROTULO_LECTURA_METODO}:** {_rec}", icon="💡")
+                st.caption(PIE_LECTURA_METODO)
 
                 st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
@@ -21382,7 +20044,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         st.download_button(
                             label="⬇️ Descargar",
                             data=_df.read(),
-                            file_name=f"Screener_Dividendos_Manual_Reglas_v1_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+                            file_name="Screener_Dividendos_Manual_Reglas_v1.docx",
                             mime="application/vnd.openxmlformats-officedocument"
                                   ".wordprocessingml.document",
                             use_container_width=True,
@@ -21434,6 +20096,6 @@ if "usuario" not in st.session_state:
             st.session_state["usuario"] = _user_restored
 
 if "usuario" not in st.session_state:
-    _ = pantalla_login()
+    pantalla_login()
 else:
-    _ = pantalla_analisis()   # descartar retorno: evita que el 'magic' de Streamlit pinte un DeltaGenerator
+    pantalla_analisis()
