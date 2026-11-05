@@ -36,6 +36,9 @@ DEFAULTS: dict[str, float] = {
     "bb_alto":           80.0,   "bb_medio":          50.0,    "bb_bajo": 20.0,
     # SLA de frescura (días) — repositorio TOLERANCIA_DIAS
     "sla_estructural_dias": 365.0, "sla_fundamental_dias": 120.0,
+    # Spec PA v3 (parámetros nuevos)
+    "k_recent_cut_ratio": 0.75,                                # PA3-03 K-RECENT_CUT
+    "tol_confluencia_pct": 0.3,                                # PA3-04 tolerancia de confluencia (% del precio)
 }
 
 # ── Rango admisible de CADA umbral en la UI (validación del input, Caución 2) ──
@@ -49,6 +52,8 @@ RANGOS_INPUT: dict[str, tuple[float, float]] = {
     "rsi_bajista":       (30.0, 50.0),  "rsi_sobreventa":    (5.0, 45.0),
     "bb_alto":           (55.0, 99.0),  "bb_medio":          (30.0, 70.0),  "bb_bajo": (1.0, 45.0),
     "sla_estructural_dias": (7.0, 3650.0), "sla_fundamental_dias": (1.0, 730.0),
+    "k_recent_cut_ratio": (0.3, 1.0),
+    "tol_confluencia_pct": (0.05, 2.0),
 }
 
 # Pares (min, max) que además deben cumplir min < max

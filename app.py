@@ -1947,7 +1947,8 @@ def obtener_datos(ticker: str):
     for _intento in range(3):
         try:
             t    = yf.Ticker(ticker)
-            hist = t.history(period="1y", auto_adjust=True)
+            # PA3-02: OHLC sin ajustar por dividendos (splits sí ajustados por Yahoo).
+            hist = t.history(period="1y", auto_adjust=False)
             if hist is None or hist.empty:
                 if _intento < 2:
                     _time.sleep(1.5)
@@ -2070,7 +2071,7 @@ def obtener_historico_yf(ticker: str, period: str = "2y") -> "pd.Series | None":
 
 
 @st.cache_data(ttl=3600)
-def obtener_hist_maximo(ticker: str, _v: int = 2) -> "pd.DataFrame | None":
+def obtener_hist_maximo(ticker: str, _v: int = 3) -> "pd.DataFrame | None":
     """Descarga histórico de 15 años para detectar ATH reales.
 
     Usamos period='15y' en lugar de 'max' porque Yahoo Finance devuelve datos
@@ -2081,7 +2082,7 @@ def obtener_hist_maximo(ticker: str, _v: int = 2) -> "pd.DataFrame | None":
     """
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period="15y", auto_adjust=True)
+        hist = t.history(period="15y", auto_adjust=False)   # PA3-02: precios que cotizaron
         if hist.empty or len(hist) < 50:
             return None
         return hist
@@ -2518,6 +2519,35 @@ def analizar_resistencias_estructurales(
 
 
 
+FIB_RETROCESOS = (0.0, 23.6, 38.2, 50.0, 61.8, 78.6, 100.0)
+
+
+def _fib_lbl_es(label) -> str:
+    """'23.6%' → '23,6%' · '0.0%' → '0%' · '100.0%' → '100%'."""
+    try:
+        v = float(str(label).rstrip("%"))
+    except ValueError:
+        return str(label)
+    return (f"{v:.1f}".rstrip("0").rstrip(".")).replace(".", ",") + "%"
+
+
+def frase_retroceso_fib(retroceso_pct) -> str:
+    """PA3-05 (T-PA3-05d): 'Retroceso del 6,8% del recorrido; entre el 0% y el 23,6%'."""
+    if retroceso_pct is None:
+        return ""
+    r = float(retroceso_pct)
+    _r = f"{r:.1f}".replace(".", ",")
+    if r < 0:
+        return f"Por encima del máximo del swing ({_r}% de retroceso)"
+    if r > 100:
+        return f"Por debajo del mínimo del swing (retroceso del {_r}%)"
+    for lo, hi in zip(FIB_RETROCESOS, FIB_RETROCESOS[1:]):
+        if lo <= r < hi or (hi == 100.0 and r == 100.0):
+            return (f"Retroceso del {_r}% del recorrido; entre el {_fib_lbl_es(lo)} "
+                    f"y el {_fib_lbl_es(hi)}")
+    return ""
+
+
 def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
     """
     Calcula niveles de retroceso y extensión de Fibonacci sobre el swing del año
@@ -2559,8 +2589,13 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
         ("23.6%",   23.6),
         ("0.0%",     0.0),
     ]
+    # PA3-05 (D-5, E-3) — convención estándar: los RETROCESOS se miden desde el máximo del
+    # swing (0 % = máximo, 100 % = mínimo) y las EXTENSIONES desde el mínimo (127,2 % y
+    # 161,8 % por encima del máximo). Antes todos se medían desde el mínimo y el "61,8 %"
+    # era en realidad el retroceso del 38,2 %.
     niveles_precio = {
-        label: swing_min + (pct / 100.0) * rango
+        label: (swing_min + (pct / 100.0) * rango) if pct > 100.0
+               else (swing_max - (pct / 100.0) * rango)
         for label, pct in FIB_LABELS
     }
 
@@ -2583,13 +2618,15 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
     # para que narrativa y etiqueta citen la misma banda que la pág. de niveles.
     retroceso_max_pct = (swing_max - precio) / rango * 100
     if fib_abajo and fib_arriba:
-        banda_label = f"{fib_abajo['label']}–{fib_arriba['label']}"
+        _b2 = sorted([fib_abajo["label"], fib_arriba["label"]], key=lambda l: float(l.rstrip("%")))
+        banda_label = f"{_fib_lbl_es(_b2[0])}–{_fib_lbl_es(_b2[1])}"
     elif fib_abajo:
-        banda_label = fib_abajo["label"]
+        banda_label = _fib_lbl_es(fib_abajo["label"])
     elif fib_arriba:
-        banda_label = fib_arriba["label"]
+        banda_label = _fib_lbl_es(fib_arriba["label"])
     else:
         banda_label = ""
+    frase_retroceso = frase_retroceso_fib(retroceso_max_pct)
 
     # ── Escenario ────────────────────────────────────────────────────────
     if pos_pct > 161.8:
@@ -2634,15 +2671,17 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
             f"resistencia o consolidación; el precio ha recorrido un {pos_s} del swing.{arriba_str}"
         )
     elif escenario == "en_maximo":
+        # PA3-05 (E-3): la extensión es SIEMPRE el nivel 127,2 % (mínimo + 1,272 × recorrido),
+        # no el nivel Fibonacci más próximo por encima (que en máximos es el propio máximo).
         arriba_str = (
-            f" Una ruptura activaría la extensión del 127.2% en "
-            f"{fib_arriba['precio']:,.4f} como próximo objetivo."
-        ) if fib_arriba else ""
+            f" Una ruptura activaría la extensión del 127,2% en "
+            f"{niveles_precio['127.2%']:,.4f} como próximo nivel de referencia."
+        )
         texto = (
             f"{nombre_c} cotiza cerca del máximo del swing {tipo_swing} ({s_max}), "
-            f"en la zona del 100% de Fibonacci (posición en swing: {pos_s}). "
-            f"Nivel de referencia crítico: la defensa o ruptura de este nivel determina "
-            f"si el precio entra en territorio de extensión o inicia corrección.{arriba_str}"
+            f"en la zona del 0% de retroceso (posición en swing: {pos_s}). {frase_retroceso}. "
+            f"Nivel de referencia crítico: la defensa o ruptura de este nivel marca "
+            f"si el precio pasa a territorio de extensión o inicia corrección.{arriba_str}"
         )
     elif escenario in ("retroceso_236", "retroceso_382", "retroceso_618", "retroceso_786"):
         # PA-A-01: narrativa derivada de la banda REAL (fib_abajo–fib_arriba) y del
@@ -2658,24 +2697,24 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
         else:
             _tono = "retroceso profundo (>61,8%); la estructura del swing queda debilitada"
         if fib_abajo and fib_arriba:
-            _banda_txt = (f"entre el {fib_abajo['label']} ({fib_abajo['precio']:,.4f}, soporte) "
-                          f"y el {fib_arriba['label']} ({fib_arriba['precio']:,.4f}, resistencia)")
+            _banda_txt = (f"entre el {_fib_lbl_es(fib_abajo['label'])} ({fib_abajo['precio']:,.4f}, soporte) "
+                          f"y el {_fib_lbl_es(fib_arriba['label'])} ({fib_arriba['precio']:,.4f}, resistencia)")
         elif fib_abajo:
-            _banda_txt = f"sobre el {fib_abajo['label']} ({fib_abajo['precio']:,.4f}, soporte)"
+            _banda_txt = f"sobre el {_fib_lbl_es(fib_abajo['label'])} ({fib_abajo['precio']:,.4f}, soporte)"
         elif fib_arriba:
-            _banda_txt = f"bajo el {fib_arriba['label']} ({fib_arriba['precio']:,.4f}, resistencia)"
+            _banda_txt = f"bajo el {_fib_lbl_es(fib_arriba['label'])} ({fib_arriba['precio']:,.4f}, resistencia)"
         else:
             _banda_txt = "en la zona de retroceso del swing"
         texto = (
             f"{nombre_c} cotiza {_banda_txt} del swing {tipo_swing} "
-            f"({s_min} → {s_max}) — {_tono}. Posición en el swing: {pos_s}; "
-            f"retroceso de {retroceso_max_pct:.1f}% desde el máximo."
+            f"({s_min} → {s_max}) — {_tono}. Posición en el swing: {pos_s}. "
+            f"{frase_retroceso}."
         )
     else:  # swing_roto
         texto = (
             f"{nombre_c} ha perforado el origen del swing {tipo_swing} ({s_min}) — "
             f"estructura Fibonacci del período anual invalidada (posición: {pos_s}). "
-            f"El precio opera por debajo del nivel de 0% Fibonacci. Nueva estructura en formación."
+            f"El precio opera por debajo del 100% de retroceso (mínimo del swing). Nueva estructura en formación."
         )
 
     # PA-A-06: declarar el periodo/lookback del swing; el mínimo del swing puede
@@ -2707,6 +2746,7 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
         "texto":         texto,
         "retroceso_max_pct": retroceso_max_pct,
         "banda_label":   banda_label,
+        "frase_retroceso": frase_retroceso,
         "n_sesiones":    n,
         "swing_periodo": swing_periodo,
     }
@@ -2741,20 +2781,12 @@ def analizar_rsi(hist, precio: float, nombre: str) -> "dict | None":
     trend_diff = rsi_val - rsi_5ago
 
     # ── Zona ─────────────────────────────────────────────────────────
-    if rsi_val >= 80:
-        escenario = "sobrecompra_extrema"
-    elif rsi_val >= 70:
-        escenario = "sobrecompra"
-    elif rsi_val >= 55:
-        escenario = "zona_alcista"
-    elif rsi_val >= 45:
-        escenario = "zona_neutra"
-    elif rsi_val >= 30:
-        escenario = "zona_bajista"
-    elif rsi_val >= 20:
-        escenario = "sobreventa"
-    else:
-        escenario = "sobreventa_extrema"
+    # PA3-05: misma clasificación que el resto del informe (clasificar_rsi); los extremos
+    # (≥ 80 / ≤ 20) solo matizan el texto, la etiqueta sigue siendo Sobrecompra / Sobreventa.
+    _cat_rsi, _ = clasificar_rsi(rsi_val)
+    escenario = {"sobrecomprado": "sobrecompra_extrema" if rsi_val >= 80 else "sobrecompra",
+                 "alcista": "zona_alcista", "neutro": "zona_neutra", "bajista": "zona_bajista",
+                 "sobrevendido": "sobreventa_extrema" if rsi_val <= 20 else "sobreventa"}[_cat_rsi]
 
     # ── Tendencia del RSI (últimas 5 sesiones) ───────────────────────
     if trend_diff > 3:
@@ -2835,9 +2867,9 @@ def analizar_rsi(hist, precio: float, nombre: str) -> "dict | None":
         texto = (
             f"{nombre_c} presenta un RSI de {rsi_str} en zona de sobreventa (20-30) "
             f"{tend_str}. El activo cotiza con presión vendedora extrema. "
-            f"Las lecturas en sobreventa pueden indicar oportunidad de rebote, "
+            f"Las lecturas en sobreventa han precedido a menudo rebotes técnicos, "
             f"pero en tendencias bajistas fuertes el RSI puede permanecer deprimido. "
-            f"Esperar confirmación de giro antes de actuar.{div_txt}"
+            f"El método no considera confirmado un giro sin un cambio de tendencia del precio.{div_txt}"
         )
     else:  # sobreventa_extrema
         texto = (
@@ -3037,6 +3069,12 @@ _PESOS = {
 }
 
 
+def diag_1d(x) -> float:
+    """Redondeo a 1 decimal, mitad hacia arriba (7,15 → 7,2), tolerante al error binario."""
+    import math as _m
+    return _m.floor(float(x) * 10 + 0.5 + 1e-9) / 10
+
+
 def calcular_puntuacion_tecnica(
     analisis_ath, analisis_sma200, analisis_resist,
     analisis_fibo, analisis_rsi, analisis_vol
@@ -3069,6 +3107,11 @@ def calcular_puntuacion_tecnica(
         if analisis and "escenario" in analisis:
             esc     = analisis["escenario"]
             pts     = tabla.get(esc, 5)
+            # PA3-05: volumen alto con distribución (volumen bajista > alcista en 10 sesiones o
+            # divergencia OBV fuerte bajista) no puntúa como lectura positiva (≤ 5/10).
+            if key == "vol" and (analisis.get("acc_dist") == "distribucion"
+                                 or analisis.get("obv_bajista_fuerte")):
+                pts = min(pts, 5)
             contrib = pts * peso
             scores_ind[key] = {
                 "nombre":      nombre_c,
@@ -3099,6 +3142,9 @@ def calcular_puntuacion_tecnica(
         score_total = score_num / peso_total * 10 / 10
         # Simplificado: score = suma_contribuciones / peso_disponible
         score_total = score_num / peso_total
+        # PA3-05 (D-6): UN solo valor en todo el informe, media ponderada redondeada a 1 decimal
+        # (mitad hacia arriba). Todas las secciones leen este mismo número.
+        score_total = diag_1d(score_total)
     else:
         score_total = 5.0
 
@@ -3152,7 +3198,7 @@ def calcular_puntuacion_tecnica(
             texto = (
                 f"Puntuación técnica integrada de {score_str}/10 — sesgo bajista moderado. "
                 f"{conviccion} de {disp_total} componentes con lectura negativa. "
-                f"Prudencia técnica — esperar señales de mejora antes de actuar."
+                f"El método no identifica señales de mejora en este momento."
             )
     else:
         texto = (
@@ -5512,11 +5558,38 @@ def calcular_todos_pivots(hist: pd.DataFrame, sistema: str):
 # DETECCIÓN DE CONFLUENCIAS
 # =============================================================================
 
-def detectar_confluencias(resultados: dict, tolerancia: float = 0.20):
+def tolerancia_confluencia(precio, pct=None) -> float:
+    """PA3-04 (F-8) — Tolerancia de confluencia en moneda: `pct` % del precio
+    (parámetro tol_confluencia_pct en umbrales.py, 0,3 % por defecto). NTGY a 29,96 → 0,09 €."""
+    if pct is None:
+        pct = umbrales.actuales().get("tol_confluencia_pct", 0.3)
+    try:
+        return round(float(precio) * float(pct) / 100.0, 4)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def tipo_por_precio(nivel, precio) -> str:
+    """PA3-04 (D-2) — Todo nivel por debajo del precio actual es 'S' y todo nivel por encima,
+    'R', sea cual sea su nombre de pivot (un R1 por debajo del precio actúa como soporte)."""
+    try:
+        if precio is None:
+            return "PP"
+        return "S" if float(nivel) < float(precio) else ("R" if float(nivel) > float(precio) else "PP")
+    except (TypeError, ValueError):
+        return "PP"
+
+
+def detectar_confluencias(resultados: dict, tolerancia: float = 0.20, precio=None):
     """
     Agrupa niveles de diferentes timeframes que estén dentro de ±tolerancia.
     Retorna lista de confluencias ordenadas por precio.
+    PA3-04 (D-1, RF-06): una confluencia exige niveles de AL MENOS DOS marcos temporales
+    distintos; de cada marco entra como máximo el nivel más cercano al centro del grupo.
+    Estrellas = marcos distintos: 2 → ★, 3 → ★★, 4 → ★★★. Con `precio`, el tipo S/R de
+    cada nivel se asigna por su posición respecto al precio actual (D-2).
     """
+    _precio_ref = precio          # el bucle de abajo reutiliza el nombre `precio`
     todos_niveles = []
     for tf, niveles in resultados.items():
         if niveles is None:
@@ -5552,20 +5625,26 @@ def detectar_confluencias(resultados: dict, tolerancia: float = 0.20):
             if abs(n1["precio"] - n2["precio"]) <= tolerancia:
                 grupo.append(n2)
                 usados.add(j)
-        if len(grupo) >= 2:
+        if len({n["timeframe"] for n in grupo}) >= 2:
+            _centro = sum(n["precio"] for n in grupo) / len(grupo)
+            _por_tf = {}
+            for n in grupo:            # un nivel por marco: el más cercano al centro
+                _prev = _por_tf.get(n["timeframe"])
+                if _prev is None or abs(n["precio"] - _centro) < abs(_prev["precio"] - _centro):
+                    _por_tf[n["timeframe"]] = n
+            grupo = sorted(_por_tf.values(), key=lambda x: x["precio"])
             precio_medio = round(sum(n["precio"] for n in grupo) / len(grupo), 4)
-            tfs_distintos = len(set(n["timeframe"] for n in grupo))
-            if tfs_distintos >= 3:
-                estrellas = "★★★"
-            elif tfs_distintos >= 2:
-                estrellas = "★★"
-            else:
-                estrellas = "★"
+            tfs_distintos = len(grupo)
+            estrellas = "★★★" if tfs_distintos >= 4 else ("★★" if tfs_distintos == 3 else "★")
+            if _precio_ref is not None:
+                for n in grupo:
+                    n["tipo"] = tipo_por_precio(n["precio"], _precio_ref)
             grupos.append({
                 "precio": precio_medio,
                 "niveles": grupo,
                 "estrellas": estrellas,
                 "tfs_distintos": tfs_distintos,
+                "tipo": tipo_por_precio(precio_medio, _precio_ref) if _precio_ref is not None else None,
             })
 
     # Ordenar desc por precio
@@ -5621,6 +5700,7 @@ def detectar_divergencias(hist, n_sesiones=60):
                 dp  = (close.iloc[p2] - close.iloc[p1]) / close.iloc[p1] * 100
                 dr  = rsi.iloc[p1] - rsi.iloc[p2]
                 divs.append({
+                    "_idx": int(p2),
                     "tipo": "RSI", "direccion": "bajista", "emoji": "🔴",
                     "fuerza": "fuerte" if dr > 5 else "moderada",
                     "descripcion": (
@@ -5635,6 +5715,7 @@ def detectar_divergencias(hist, n_sesiones=60):
                 dp = (close.iloc[v1] - close.iloc[v2]) / close.iloc[v1] * 100
                 dr = rsi.iloc[v2] - rsi.iloc[v1]
                 divs.append({
+                    "_idx": int(v2),
                     "tipo": "RSI", "direccion": "alcista", "emoji": "🟢",
                     "fuerza": "fuerte" if dr > 5 else "moderada",
                     "descripcion": (
@@ -5658,6 +5739,7 @@ def detectar_divergencias(hist, n_sesiones=60):
             p1, p2 = picos[-2], picos[-1]
             if close.iloc[p2] > close.iloc[p1] and hist_m.iloc[p2] < hist_m.iloc[p1]:
                 divs.append({
+                    "_idx": int(p2),
                     "tipo": "MACD", "direccion": "bajista", "emoji": "🔴",
                     "fuerza": "fuerte" if abs(hist_m.iloc[p2] - hist_m.iloc[p1]) > ref else "moderada",
                     "descripcion": (
@@ -5670,11 +5752,12 @@ def detectar_divergencias(hist, n_sesiones=60):
             v1, v2 = valles[-2], valles[-1]
             if close.iloc[v2] < close.iloc[v1] and hist_m.iloc[v2] > hist_m.iloc[v1]:
                 divs.append({
+                    "_idx": int(v2),
                     "tipo": "MACD", "direccion": "alcista", "emoji": "🟢",
                     "fuerza": "fuerte" if abs(hist_m.iloc[v2] - hist_m.iloc[v1]) > ref else "moderada",
                     "descripcion": (
                         "Precio en nuevo mínimo pero el histograma MACD "
-                        "reduce la presión. El momentum bajista se agota."
+                        "modera la presión. El momentum bajista se agota."
                     ),
                 })
     except Exception:
@@ -5702,7 +5785,7 @@ def detectar_divergencias(hist, n_sesiones=60):
                 "fuerza": "moderada",
                 "descripcion": (
                     "Precio con pendiente bajista pero volumen creciendo. "
-                    "Posible acumulación institucional bajo la caída."
+                    "El método lo interpreta como posible acumulación bajo la caída."
                 ),
             })
     except Exception:
@@ -5721,10 +5804,9 @@ def detectar_divergencias(hist, n_sesiones=60):
                 "tipo": "OBV", "direccion": "alcista", "emoji": "🟢",
                 "fuerza": "fuerte",
                 "descripcion": (
-                    "El precio baja, pero el volumen neto sube: se están comprando más acciones de las que "
-                    "parece. Grandes inversores (fondos, instituciones) están acumulando posiciones mientras "
-                    "el precio cae. Históricamente, cuando el dinero grande compra en la debilidad, "
-                    "el precio suele girar al alza. Señal de alta relevancia."
+                    "El precio baja, pero el volumen neto (OBV) sube: el OBV no acompaña la caída. "
+                    "El método lo interpreta como posible acumulación. Es la divergencia a la que el "
+                    "método da más peso; no anticipa por sí sola un giro del precio."
                 ),
             })
         elif ps > th and os_ < -th:
@@ -5732,16 +5814,32 @@ def detectar_divergencias(hist, n_sesiones=60):
                 "tipo": "OBV", "direccion": "bajista", "emoji": "🔴",
                 "fuerza": "fuerte",
                 "descripcion": (
-                    "El precio sube, pero el volumen neto baja: se están vendiendo más acciones de las que "
-                    "parece. Grandes inversores están deshaciendo posiciones mientras el precio sube "
-                    "empujado por compradores menores. La subida no tiene respaldo real — "
-                    "señal de aviso de alta relevancia."
+                    "El OBV no acompaña la subida; el método lo interpreta como posible distribución. "
+                    "Es la divergencia a la que el método da más peso; no anticipa por sí sola "
+                    "un giro del precio."
                 ),
             })
     except Exception:
         pass
 
-    return divs
+    return depurar_divergencias(divs, len(close))
+
+
+def depurar_divergencias(divs, n_sesiones=None):
+    """PA3-05 (S-7) — Una sola dirección por indicador: si en la ventana hay una divergencia
+    alcista y otra bajista del mismo indicador, prevalece la más reciente (la de extremo
+    confirmatorio más tardío). Añade 'sesiones_atras' cuando se conoce."""
+    out, por_tipo = [], {}
+    for d in divs or []:
+        por_tipo.setdefault(d.get("tipo"), []).append(d)
+    for tipo, lst in por_tipo.items():
+        if len({x.get("direccion") for x in lst}) > 1:
+            lst = [max(lst, key=lambda x: x.get("_idx", -1))]
+        out.extend(lst)
+    for d in out:
+        if n_sesiones is not None and d.get("_idx") is not None:
+            d["sesiones_atras"] = int(n_sesiones) - 1 - int(d["_idx"])
+    return out
 
 
 # =============================================================================
@@ -5762,7 +5860,7 @@ def _nivel_clave_mas_cercano(precio, niveles_reforzados=None, confluencias=None,
         if n.get("precio") is None:
             continue
         _src = " + ".join(str(x) for x in (n.get("pivot"), n.get("media")) if x) or "reforzado"
-        cands.append({"precio": float(n["precio"]), "tipo": n.get("tipo", "PP"), "fuente": _src})
+        cands.append({"precio": float(n["precio"]), "tipo": tipo_por_precio(n["precio"], precio), "fuente": _src})
     for c in (confluencias or []):
         if c.get("precio") is None:
             continue
@@ -5779,8 +5877,8 @@ def _nivel_clave_mas_cercano(precio, niveles_reforzados=None, confluencias=None,
                 _pp = float(_pp)
             except (TypeError, ValueError):
                 continue
-            _t = "R" if _clave.startswith("R") else ("S" if _clave.startswith("S") else "PP")
-            cands.append({"precio": _pp, "tipo": _t, "fuente": f"{_clave} {_tf}"})
+            cands.append({"precio": _pp, "tipo": tipo_por_precio(_pp, precio),   # PA3-04 (D-2)
+                          "fuente": f"{_clave} {_tf}"})
     if not cands:
         return None
     best = dict(min(cands, key=lambda x: abs(x["precio"] - precio)))
@@ -5825,7 +5923,7 @@ def detectar_huecos(hist: "pd.DataFrame", n_dias: int = 252,
             future_lows = df["Low"].iloc[i + 1:].values
             abierto = all(fl > gap_low for fl in future_lows) if len(future_lows) > 0 else True
             if abierto:
-                dist_pct = (precio_actual - gap_high) / gap_high * 100
+                dist_pct = (gap_high - precio_actual) / precio_actual * 100   # PA3-06 (D-9)
                 dias = int((df.index[-1] - fecha).days) if hasattr(fecha, 'days') else 0
                 try:
                     dias = int((df.index[-1] - fecha).days)
@@ -5852,7 +5950,7 @@ def detectar_huecos(hist: "pd.DataFrame", n_dias: int = 252,
             future_highs = df["High"].iloc[i + 1:].values
             abierto = all(fh < gap_high for fh in future_highs) if len(future_highs) > 0 else True
             if abierto:
-                dist_pct = (precio_actual - gap_low) / gap_low * 100
+                dist_pct = (gap_low - precio_actual) / precio_actual * 100    # PA3-06 (D-9)
                 try:
                     dias = int((df.index[-1] - fecha).days)
                 except Exception:
@@ -5886,15 +5984,28 @@ def clasificar_rsi(rsi):
     if rsi is None:
         return (None, None)
     _u = umbrales.actuales()
-    if rsi > _u["rsi_sobrecompra"]:
+    # PA3-05: bandas del DFR — sobreventa ≤ 30, bajista ≤ 45, neutro 45–55, alcista ≥ 55,
+    # sobrecompra ≥ 70 (límites inclusivos).
+    if rsi >= _u["rsi_sobrecompra"]:
         return ("sobrecomprado", "bajista")
-    if rsi < _u["rsi_sobreventa"]:
+    if rsi <= _u["rsi_sobreventa"]:
         return ("sobrevendido", "alcista")
     if rsi >= _u["rsi_alcista"]:
         return ("alcista", "alcista")
     if rsi <= _u["rsi_bajista"]:
         return ("bajista", "bajista")
     return ("neutro", "neutro")
+
+
+ETIQUETA_RSI = {"sobrecomprado": "Sobrecompra", "sobrevendido": "Sobreventa",
+                "alcista": "Alcista", "bajista": "Bajista", "neutro": "Neutro"}
+
+
+def etiqueta_rsi(rsi) -> str:
+    """PA3-05 — Etiqueta ÚNICA del RSI para semáforo, tabla de indicadores, diagnóstico,
+    consenso y estrategia (mismas bandas en todas las secciones)."""
+    _cat, _ = clasificar_rsi(rsi)
+    return ETIQUETA_RSI.get(_cat, "—")
 
 
 def clasificar_bollinger_pctB(pct_b):
@@ -5942,7 +6053,7 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
                     "precio": round((piv["precio"] + sma) / 2, 4),
                     "pivot": f"{piv['nivel']} {piv['tf'][:3]}",
                     "media": f"SMA{periodo}",
-                    "tipo": piv["tipo"],
+                    "tipo": tipo_por_precio((piv["precio"] + sma) / 2, precio),   # PA3-04
                     "detalle": f"{piv['nivel']} {piv['tf']} + SMA{periodo}",
                 })
             if abs(piv["precio"] - ema) <= tolerancia:
@@ -5950,7 +6061,7 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
                     "precio": round((piv["precio"] + ema) / 2, 4),
                     "pivot": f"{piv['nivel']} {piv['tf'][:3]}",
                     "media": f"EMA{periodo}",
-                    "tipo": piv["tipo"],
+                    "tipo": tipo_por_precio((piv["precio"] + ema) / 2, precio),   # PA3-04
                     "detalle": f"{piv['nivel']} {piv['tf']} + EMA{periodo}",
                 })
 
@@ -5967,9 +6078,9 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
     # RSI  (R-1: clasificador único)
     if rsi_val is not None:
         _rsi_cat, _rsi_dir = clasificar_rsi(rsi_val)
-        _RSI_LBL = {"sobrecomprado": "🔴 Sobrecomprado", "sobrevendido": "🟢 Sobrevendido",
-                    "alcista": "🔵 Zona alcista", "bajista": "🟠 Zona bajista",
-                    "neutro": "⚪ Neutro"}
+        _RSI_LBL = {"sobrecomprado": "🔴 Sobrecompra", "sobrevendido": "🟢 Sobreventa",
+                    "alcista": "🔵 Alcista", "bajista": "🟠 Bajista",
+                    "neutro": "⚪ Neutro"}   # PA3-05: etiqueta única
         señales.append(("RSI 14", _RSI_LBL[_rsi_cat], _rsi_dir, rsi_val))
 
     # MACD
@@ -6147,6 +6258,28 @@ def calcular_sar(hist: pd.DataFrame):
 # ANÁLISIS DE VOLUMEN
 # =============================================================================
 
+def sesion_en_curso(ts_ultima, ahora=None) -> bool:
+    """True si la última barra diaria es la sesión de hoy y el mercado aún no ha cerrado
+    (volumen parcial). Cierre: 17:35 en mercados europeos, 16:00 en EE. UU."""
+    try:
+        import pandas as _pd_s
+        _t = _pd_s.Timestamp(ts_ultima)
+        _tz = _t.tz or "Europe/Madrid"
+        if _t.tz is None:
+            _t = _t.tz_localize(_tz)
+        _now = _pd_s.Timestamp(ahora) if ahora is not None else _pd_s.Timestamp.now(tz=_tz)
+        if _now.tz is None:
+            _now = _now.tz_localize(_tz)
+        _now = _now.tz_convert(_t.tz)
+        if _t.date() != _now.date():
+            return False
+        _zona = str(_t.tz)
+        _cierre = (16, 0) if _zona.startswith("America") else (17, 35)
+        return (_now.hour, _now.minute) < _cierre
+    except Exception:
+        return False
+
+
 def analisis_volumen(hist: pd.DataFrame):
     """
     Retorna dict con volumen actual, medias y clasificación.
@@ -6154,10 +6287,19 @@ def analisis_volumen(hist: pd.DataFrame):
     if hist is None or len(hist) < 2:
         return None
 
-    vol_hoy = float(hist["Volume"].iloc[-1])
-    vol_10d = float(hist["Volume"].tail(11).iloc[:-1].mean()) if len(hist) > 10 else vol_hoy
-    # tail(64).iloc[:-1] = últimas 63 sesiones excluyendo hoy — consistente con vol_10d
-    vol_3m = float(hist["Volume"].tail(64).iloc[:-1].mean()) if len(hist) > 20 else vol_hoy
+    # PA3-05 (E-2): el ratio se mide sobre la ÚLTIMA SESIÓN COMPLETA. Si la última barra es
+    # la sesión en curso (volumen parcial), se descarta y las medias se toman de las sesiones
+    # anteriores a la completa.
+    _en_curso = sesion_en_curso(hist.index[-1])
+    _h = hist.iloc[:-1] if (_en_curso and len(hist) > 2) else hist
+    try:
+        _ses_fecha = _h.index[-1].strftime("%d/%m")
+    except Exception:
+        _ses_fecha = ""
+    vol_hoy = float(_h["Volume"].iloc[-1])
+    vol_10d = float(_h["Volume"].tail(11).iloc[:-1].mean()) if len(_h) > 10 else vol_hoy
+    # tail(64).iloc[:-1] = 63 sesiones anteriores a la sesión medida — consistente con vol_10d
+    vol_3m = float(_h["Volume"].tail(64).iloc[:-1].mean()) if len(_h) > 20 else vol_hoy
 
     ratio_10d = (vol_hoy / vol_10d * 100) if vol_10d > 0 else 100
     ratio_3m = (vol_hoy / vol_3m * 100) if vol_3m > 0 else 100
@@ -6187,6 +6329,9 @@ def analisis_volumen(hist: pd.DataFrame):
         "icono_10d": icono_10d,
         "clasificacion_3m": cls_3m,
         "icono_3m": icono_3m,
+        "sesion_fecha": _ses_fecha,                  # PA3-05: ventana de cada cifra
+        "sesion_en_curso_descartada": bool(_en_curso and len(hist) > 2),
+        "ventana_txt": (f"sesión completa del {_ses_fecha}" if _ses_fecha else "última sesión completa"),
     }
 
 
@@ -6211,35 +6356,34 @@ def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list)
                       "para posiciones largas en las próximas sesiones.")
         elif pct_sem >= 65:
             interp = (f"{base} Sesgo alcista predominante, aunque no todos los factores "
-                      "confirman. Entrada viable con gestión de riesgo; revisar los factores "
-                      "en amarillo/rojo antes de actuar.")
+                      "confirman. Los factores en amarillo o rojo son los que restan "
+                      "confirmación a la lectura.")
         else:
             interp = (f"{base} Verde ajustado: más factores positivos que negativos, "
                       "pero por poco margen. Interpretar con cautela.")
     elif color_sem == "amarillo":
         interp = (f"{base} Señales mixtas — sin dirección técnica clara. "
-                  "No es el momento óptimo para nuevas entradas: los indicadores se "
-                  "contradicen entre sí. Mejor esperar que la mayoría se alinee antes "
-                  "de tomar posición.")
+                  "Los indicadores se contradicen entre sí: el método no identifica "
+                  "una dirección hasta que la mayoría se alinee.")
     else:  # rojo
         if pct_sem <= 20:
             interp = (f"{base} Presión vendedora dominante: casi todos los indicadores "
-                      "técnicos están en negativo. Evitar entradas largas hasta que el "
-                      "panorama mejore.")
+                      "técnicos están en negativo. El método no identifica condiciones "
+                      "alcistas en este entorno.")
         else:
             interp = (f"{base} Predominio bajista a corto plazo. Más factores en negativo "
-                      "que en positivo. Gestionar stops si hay posición abierta.")
+                      "que en positivo. El soporte más cercano es la referencia de invalidación.")
 
     # Detección de condiciones de veto
     avisos = []
     for fac, desc, score in factores_sem:
         if fac == "RSI":
-            if "Sobrecomprado" in desc:
+            if "Sobrecompra" in desc:
                 avisos.append(
                     "⚠️ **RSI sobrecomprado:** el valor ha subido mucho en muy poco tiempo. "
-                    "Aunque el semáforo sea verde, comprar ahora implica el riesgo de entrar "
-                    "justo antes de un retroceso. Considera esperar a que el RSI baje de 65.")
-            elif "Sobrevendido" in desc:
+                    "Aunque el semáforo sea verde, con RSI en sobrecompra aumenta el riesgo "
+                    "de retroceso a corto plazo; el método lo trata como factor de cautela.")
+            elif "Sobreventa" in desc:
                 avisos.append(
                     "⚠️ **RSI sobrevendido:** posible rebote técnico cercano, pero no "
                     "garantizado. Un RSI bajo puede seguir bajando si el contexto macro o "
@@ -6272,24 +6416,31 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
     factores = []
     puntos = 0
 
-    # 1. Precio vs Pivot Point diario
-    if pivots_diario and "PP" in pivots_diario:
-        pp = pivots_diario["PP"]
+    # 1. Precio vs Pivot Point diario — PA3-04 (D-3): SIEMPRE el PP CLÁSICO diario
+    # (H+L+C)/3 de la sesión anterior, sea cual sea el sistema de pivots elegido (Camarilla
+    # no tiene PP y el semáforo se quedaba en 5 factores).
+    pp = None
+    if pivots_diario:
+        if all(k in pivots_diario for k in ("_H", "_L", "_C")):
+            pp = (float(pivots_diario["_H"]) + float(pivots_diario["_L"]) + float(pivots_diario["_C"])) / 3
+        elif "PP" in pivots_diario:
+            pp = pivots_diario["PP"]
+    if pp is not None:
         if precio > pp:
-            factores.append(("Precio vs PP Diario", "✅ Por encima del PP", 1))
+            factores.append(("Precio vs PP", f"✅ Por encima del PP clásico diario ({pp:.4f})", 1))
             puntos += 1
         else:
-            factores.append(("Precio vs PP Diario", "❌ Por debajo del PP", 0))
+            factores.append(("Precio vs PP", f"❌ Por debajo del PP clásico diario ({pp:.4f})", 0))
 
     # 2. RSI  (R-1: misma clasificación que el Consenso; banda neutra 45-55)
     if rsi_val is not None:
         _rsi_cat, _ = clasificar_rsi(rsi_val)
         _RSI_SEM = {
-            "sobrecomprado": ("⚠️ Sobrecomprado", 0),
-            "sobrevendido":  ("⚠️ Sobrevendido", 0.5),
-            "alcista":       ("✅ Positivo", 1),
+            "sobrecomprado": ("⚠️ Sobrecompra", 0),
+            "sobrevendido":  ("⚠️ Sobreventa", 0.5),
+            "alcista":       ("✅ Alcista", 1),
             "neutro":        ("⚪ Neutro", 0.5),
-            "bajista":       ("❌ Débil", 0),
+            "bajista":       ("❌ Bajista", 0),
         }
         _et_rsi, _pt_rsi = _RSI_SEM[_rsi_cat]
         factores.append(("RSI", f"{_et_rsi} ({rsi_val})", _pt_rsi))
@@ -6321,13 +6472,13 @@ def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
     if vol_data:
         ratio = vol_data["ratio_10d"]
         if ratio >= 120:
-            factores.append(("Volumen", f"✅ Por encima de media ({ratio:.0f}%)", 1))
+            factores.append(("Volumen", f"✅ Por encima de media ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 1))
             puntos += 1
         elif ratio >= 80:
-            factores.append(("Volumen", f"✅ Volumen normal ({ratio:.0f}%)", 0.75))
+            factores.append(("Volumen", f"✅ Volumen normal ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 0.75))
             puntos += 0.75
         else:
-            factores.append(("Volumen", f"❌ Volumen bajo ({ratio:.0f}%)", 0))
+            factores.append(("Volumen", f"❌ Volumen bajo ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 0))
 
     # 6. Parabolic SAR
     if sar_tendencia:
@@ -6488,6 +6639,54 @@ def _alertas_fundamentales(info: dict, div_ttm: float = None) -> list:
 
     return alertas
 
+FICHA_AUSENTE = "ficha de mercado no disponible"
+SIN_CONFIRMACION_TXT = "sin nivel de confirmación reforzado por encima del precio"   # PA3-06 (D-10)
+
+
+def _fecha_es(v) -> str:
+    try:
+        return v.strftime("%d/%m/%Y")
+    except Exception:
+        return str(v)[:10] if v else "s.f."
+
+
+def texto_ficha_ausente(info: dict) -> str:
+    return (f"{FICHA_AUSENTE.capitalize()} (Yahoo no entregó la ficha del valor): nombre y "
+            f"fundamentales del último dato validado en la base de datos — estructural "
+            f"{_fecha_es(info.get('_neon_fecha_estructural'))}, fundamental "
+            f"{_fecha_es(info.get('_neon_fecha_fundamental'))}.")
+
+
+def completar_ficha_desde_neon(ticker: str, info: dict, conn=None) -> dict:
+    """PA3-06 (S-8 / D-7) — Si Yahoo no entrega la ficha (`.info` vacío o sin nombre), toma
+    nombre (tabla instrumento) y fundamentales (tabla fundamental) del último dato validado
+    en Neon, con su fecha. Nunca pisa un dato presente ni usa campos marcados no fiables."""
+    info = dict(info or {})
+    if info.get("longName") or info.get("shortName"):
+        return info
+    try:
+        import repositorio as _repo6
+        import numbers as _num6
+        _cn = conn if conn is not None else get_db_connection()
+        try:
+            _neon, _fresc, _inval = _repo6.componer_info(ticker, _cn)
+        finally:
+            if conn is None:
+                release_db_connection(_cn)
+    except Exception:
+        return info
+    if not _neon:
+        return info
+    for _k, _v in _neon.items():
+        if _k in _inval or info.get(_k) is not None:
+            continue
+        info[_k] = float(_v) if isinstance(_v, _num6.Number) and not isinstance(_v, bool) else _v
+    info["_ficha_ausente"] = True
+    info["_neon_fecha_estructural"] = (_fresc.get("estructural") or {}).get("actualizado_en")
+    info["_neon_fecha_fundamental"] = (_fresc.get("fundamental") or {}).get("actualizado_en")
+    return info
+
+
 def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
     """
     Retorna dict con datos fundamentales según tipo (accion / etf).
@@ -6512,8 +6711,16 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
                     f"{_ffv:.1f}%" if _lo < _ffv <= _hi else "[VERIFICAR]")(
                     info["floatShares"] / info["sharesOutstanding"] * 100)
                 if info.get("floatShares") and info.get("sharesOutstanding")
-                else "no disponible"
+                else (f"{float(info['_free_float_pct_neon']):.1f}% (BBDD, "
+                      f"{_fecha_es(info.get('_neon_fecha_estructural'))})"
+                      if info.get("_free_float_pct_neon") is not None
+                      and 0 < float(info["_free_float_pct_neon"]) <= 100 else "no disponible")
             ),
+            # PA3-06 (V-2): D/E en "×" también en el informe individual
+            "Deuda / Equity": (("patrimonio negativo" if patrimonio_negativo(info)
+                                else _fmt_valor(float(info["debtToEquity"]), "deuda_equity"))
+                               if info.get("debtToEquity") is not None or patrimonio_negativo(info) else "—"),
+            **({"Fuente de datos": texto_ficha_ausente(info)} if info.get("_ficha_ausente") else {}),
             "PER": _fmt_ratio(info.get("trailingPE")),
             "PER forward": _fmt_ratio(info.get("forwardPE")),
             "P/Ventas": _fmt_ratio(info.get("priceToSalesTrailing12Months")),
@@ -6529,7 +6736,7 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             ),
             # PA-A-04 — sanity-check: una beta fuera de [0, 3] es implausible (p.ej. −0,15 en
             # una integrada) → probable glitch de fuente; se marca [VERIFICAR] con el valor crudo.
-            "Beta (Yahoo)": (
+            "Beta Yahoo (5 años, mensual)": (
                 _fmt_ratio(info.get("beta"))
                 if (info.get("beta") is None
                     or umbrales.actuales()["beta_min"] <= float(info.get("beta")) <= umbrales.actuales()["beta_max"])
@@ -6659,20 +6866,22 @@ def generar_informe_html(ticker: str, nombre: str, tipo_activo: str, precio: flo
     beta_val = beta calculada vs índice (la de pantalla); si None, se usa info['beta'] (Yahoo).
     """
 
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora = ahora_madrid()   # PA3-06 (S-8)
     sem_colors = {"verde": "#22c55e", "amarillo": "#f59e0b", "rojo": "#ef4444"}
     sem_color  = sem_colors.get(semaforo, "#94a3b8")
     emoji_sem  = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}.get(semaforo, "⚪")
     var_color  = "#22c55e" if cambio_pct >= 0 else "#ef4444"
     # #UI — Fallback 52W desde el histórico cuando yfinance no devuelve fiftyTwoWeekHigh/Low
     # (frecuente en valores españoles, p.ej. REP.MC), igual que hace la pantalla.
+    _52_hist = False
     if (not h52 or not l52) and hist is not None and len(hist):
         try:
-            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min())
+            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min()); _52_hist = True
         except Exception:
             pass
-    h52_str = f"{h52:.2f}" if h52 else "—"
-    l52_str = f"{l52:.2f}" if l52 else "—"
+    _52_suf = f" ({RANGO_52S_DESDE_HIST})" if _52_hist else ""   # PA3-02
+    h52_str = f"{h52:.2f}{_52_suf}" if h52 else "—"
+    l52_str = f"{l52:.2f}{_52_suf}" if l52 else "—"
 
     # CSS como string plano (los {} son CSS, no f-string)
     css = """
@@ -6827,8 +7036,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             f'</div>'
         )
 
-    rsi_sub = ("Sobrecomprado 🔴" if rsi_val > 70
-               else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪"))
+    rsi_sub = etiqueta_rsi(rsi_val)   # PA3-05
     # Bandas de Bollinger — usar valores pasados o fallback a "—"
     bb_sup_str = f"{bb_sup:.4f}" if bb_sup is not None else "—"
     bb_med_str = f"{bb_med:.4f}" if bb_med is not None else "—"
@@ -6860,7 +7068,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         vol_html = (
             f'<div class="vol-grid">'
             f'<div class="vol-card">'
-            f'<div class="vol-lbl">Ratio vs 10 sesiones</div>'
+            f'<div class="vol-lbl">Ratio sesión {vol_data.get("sesion_fecha", "")} / media 10</div>'
             f'<div class="vol-val">{vol_data["ratio_10d"]:.0f}%</div>'
             f'<div class="vol-sub">{vol_data["clasificacion_10d"]}</div>'
             f'</div>'
@@ -7139,12 +7347,12 @@ tr:nth-child(even) td { background:#f8fafc; }
                 _sv_titulo_h = "Señal alcista consolidada"
                 _sv_txt_h = (
                     f"Se detectan <b>{_n_alc_h} divergencias alcistas</b>"
-                    + (" — entre ellas la del OBV (la más fiable, porque registra el flujo real de dinero grande)" if _tiene_obv_alc_h else "") + ". "
+                    + (" — entre ellas la del OBV (la que el método considera más fiable, porque se basa en el volumen)" if _tiene_obv_alc_h else "") + ". "
                     "Esto significa que aunque el precio sigue bajando o está estancado, "
                     "los indicadores internos muestran que la presión vendedora se está agotando. "
                     "<b>Lo que no significa:</b> que el precio vaya a subir mañana. "
-                    "<b>Qué vigilar:</b> espera que el precio rompa por encima de una resistencia cercana "
-                    "con volumen alto. Ese sería la confirmación de que el giro está ocurriendo."
+                    "<b>Niveles de referencia:</b> la confirmación sería un cierre por encima de una "
+                    "resistencia cercana con volumen alto (ver Capa Operativa)."
                 )
             else:
                 _sv_titulo_h = "Señal alcista incipiente — pendiente de confirmación"
@@ -7152,8 +7360,8 @@ tr:nth-child(even) td { background:#f8fafc; }
                     f"Se detecta <b>{_n_alc_h} divergencia alcista</b> de intensidad moderada. "
                     "Los indicadores empiezan a mostrar que la presión bajista pierde fuerza, "
                     "pero todavía no hay suficiente evidencia para considerar el giro confirmado. "
-                    "<b>Qué vigilar:</b> si el precio aguanta sin nuevos mínimos y los indicadores mejoran, "
-                    "la señal se fortalece. Si hace un nuevo mínimo, la divergencia queda invalidada."
+                    "<b>Niveles de referencia:</b> la señal ganaría peso si el precio no marca nuevos mínimos "
+                    "y los indicadores mejoran; un nuevo mínimo la invalidaría."
                 )
         elif _n_baj_h > 0 and _n_alc_h == 0:
             _sv_bg_h, _sv_brd_h, _sv_ico_h = "#fef2f2", "#dc2626", "&#9660;"
@@ -7161,18 +7369,18 @@ tr:nth-child(even) td { background:#f8fafc; }
                 _sv_titulo_h = "Señal bajista consolidada"
                 _sv_txt_h = (
                     f"Se detectan <b>{_n_baj_h} divergencias bajistas</b>"
-                    + (" — entre ellas la del OBV, que registra el movimiento del dinero institucional" if _tiene_obv_baj_h else "") + ". "
+                    + (" — entre ellas la del OBV, la que el método considera más fiable" if _tiene_obv_baj_h else "") + ". "
                     "Aunque el precio sigue subiendo, los indicadores muestran que la presión compradora se debilita. "
                     "<b>Lo que no significa:</b> que el precio vaya a caer mañana. "
-                    "<b>Qué vigilar:</b> si el precio pierde un soporte relevante con volumen alto, "
-                    "la corrección puede acelerarse. Buen momento para revisar tu stop-loss."
+                    "<b>Niveles de referencia:</b> una pérdida de soporte relevante con volumen alto "
+                    "indicaría que la corrección puede acelerarse (ver Capa Operativa)."
                 )
             else:
-                _sv_titulo_h = "Señal bajista incipiente — observar sin actuar"
+                _sv_titulo_h = "Señal bajista incipiente — pendiente de confirmación"
                 _sv_txt_h = (
                     f"Se detecta <b>{_n_baj_h} divergencia bajista</b> de intensidad moderada. "
                     "En tendencias fuertes, las divergencias bajistas moderadas pueden fallar varias veces antes de que el precio corrija. "
-                    "<b>Qué vigilar:</b> si aparecen más divergencias o el precio pierde su SMA20, la señal gana peso."
+                    "<b>Niveles de referencia:</b> la señal ganaría peso con más divergencias o con un cierre bajo la SMA20."
                 )
         else:
             _sv_bg_h, _sv_brd_h, _sv_ico_h = "#fefce8", "#ca8a04", "&#9888;"
@@ -7181,7 +7389,8 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f"Se detectan a la vez <b>{_n_alc_h} divergencia{'s' if _n_alc_h>1 else ''} alcista{'s' if _n_alc_h>1 else ''}</b> "
                 f"y <b>{_n_baj_h} bajista{'s' if _n_baj_h>1 else ''}</b>. "
                 "Cuando los indicadores no se ponen de acuerdo, lo habitual es una fase de transición o rango lateral. "
-                "<b>Qué vigilar:</b> espera a que el precio rompa un nivel técnico relevante antes de actuar."
+                "<b>Niveles de referencia:</b> confirmación e invalidación en la Capa Operativa; "
+                "el método no identifica dirección mientras el precio no rompa uno de esos niveles."
             )
         _sv_synth_h = (
             f'<div style="background:{_sv_bg_h};border:1px solid {_sv_brd_h};'
@@ -7208,7 +7417,7 @@ tr:nth-child(even) td { background:#f8fafc; }
     ]
     for _cn_h, _ca_h in _componentes_diag_html:
         if _ca_h and "escenario" in _ca_h and "texto" in _ca_h:
-            _esc_h = _ca_h["escenario"].replace("_", " ").title()
+            _esc_h = escenario_legible(_ca_h["escenario"])
             _narr_h = _ca_h["texto"][:240] + "..." if len(_ca_h["texto"]) > 240 else _ca_h["texto"]
             _diag_rows_html.append(
                 f'<tr>'
@@ -7244,13 +7453,13 @@ tr:nth-child(even) td { background:#f8fafc; }
         "retroceso_618":            ("Zona dorada 61.8%",               "#15803d", "#f0fdf4"),
         "retroceso_786":            ("Retroceso profundo 78.6%",        "#ea580c", "#fff7ed"),
         "swing_roto":               ("Swing anual invalidado",          "#dc2626", "#fef2f2"),
-        "sobrecompra_extrema":      ("Sobrecompra extrema (RSI>80)",    "#dc2626", "#fef2f2"),
-        "sobrecompra":              ("Sobrecomprado (RSI 70-80)",       "#ea580c", "#fff7ed"),
-        "zona_alcista":             ("Zona alcista (RSI 55-70)",        "#16a34a", "#f0fdf4"),
-        "zona_neutra":              ("Zona neutra (RSI 45-55)",         "#64748b", "#f8fafc"),
-        "zona_bajista":             ("Zona bajista (RSI 30-45)",        "#ea580c", "#fff7ed"),
-        "sobreventa":               ("Sobrevendido (RSI 20-30)",        "#16a34a", "#f0fdf4"),
-        "sobreventa_extrema":       ("Sobreventa extrema (RSI<20)",     "#1d4ed8", "#eff6ff"),
+        "sobrecompra_extrema":      ("Sobrecompra (RSI 80+)",           "#dc2626", "#fef2f2"),
+        "sobrecompra":              ("Sobrecompra (RSI 70-80)",         "#ea580c", "#fff7ed"),
+        "zona_alcista":             ("Alcista (RSI 55-70)",             "#16a34a", "#f0fdf4"),
+        "zona_neutra":              ("Neutro (RSI 45-55)",              "#64748b", "#f8fafc"),
+        "zona_bajista":             ("Bajista (RSI 30-45)",             "#ea580c", "#fff7ed"),
+        "sobreventa":               ("Sobreventa (RSI 20-30)",          "#16a34a", "#f0fdf4"),
+        "sobreventa_extrema":       ("Sobreventa (RSI <20)",            "#1d4ed8", "#eff6ff"),
         "volumen_excepcional":      ("Volumen excepcional",             "#16a34a", "#f0fdf4"),
         "volumen_alto":             ("Volumen alto",                    "#16a34a", "#f0fdf4"),
         "volumen_normal":           ("Volumen normal",                  "#64748b", "#f8fafc"),
@@ -7289,7 +7498,7 @@ tr:nth-child(even) td { background:#f8fafc; }
                     )
                     continue
                 _esc_h2 = _cv_h.get("escenario","")
-                _lbl_h, _fc_h, _fbg_h = _esc_labels_h.get(_esc_h2, (_esc_h2.replace("_"," ").title(), "#64748b", "#f8fafc"))
+                _lbl_h, _fc_h, _fbg_h = _esc_labels_h.get(_esc_h2, (escenario_legible(_esc_h2), "#64748b", "#f8fafc"))
                 # PA-A-01: la etiqueta del componente Fibonacci cita la banda real
                 if (_ck_h == "fibo" and analisis_fibo
                         and _esc_h2.startswith("retroceso_") and analisis_fibo.get("banda_label")):
@@ -7347,13 +7556,13 @@ tr:nth-child(even) td { background:#f8fafc; }
                 _fn_h = (f"Resistencia Fibonacci más cercana: <b>{_ffu_h['precio']:,.4f}</b> "
                          f"(nivel {_ffu_h['label']}, a {_ffu_h['dist_pct']:.1f}%). ")
             _fa_h = {
-                "extension_161": "Precio en extensión 161.8% del swing anual — no hay resistencias Fibonacci previas, camino despejado al alza. El Fibonacci no da señales de alarma si tienes posición.",
-                "extension_127": "Precio en extensión 127.2% — primer objetivo de proyección tras superar máximos. Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos.",
-                "en_maximo": "Precio en el máximo del swing (100% Fibonacci). Superar este nivel con volumen sería señal alcista importante. Sin romperlo, puede corregir.",
-                "retroceso_236": "Retroceso solo del 23.6% — tendencia alcista muy intacta. Si el precio aguanta aquí, la probabilidad de continuar al alza es alta.",
+                "extension_161": "Precio en extensión 161.8% del swing anual — no hay resistencias Fibonacci previas, camino despejado al alza. El Fibonacci no muestra niveles de resistencia previos.",
+                "extension_127": "Precio en extensión 127.2% — primer objetivo de proyección tras superar máximos. Zona de posible consolidación según el método.",
+                "en_maximo": "Precio en el máximo del swing (0% de retroceso). Superar este nivel con volumen sería señal alcista importante. Sin romperlo, puede corregir.",
+                "retroceso_236": "Retroceso solo del 23.6% — tendencia alcista muy intacta. Para el método, la tendencia sigue vigente mientras el precio se mantenga sobre este nivel.",
                 "retroceso_382": "Retroceso intermedio dentro de una tendencia alcista sana. Rebote con volumen en el soporte Fibonacci = tendencia activa. Sin rebote, siguiente soporte en el nivel inferior.",
-                "retroceso_618": "Zona dorada (61.8%) — el retroceso más seguido institucionalmente. Último soporte relevante antes de comprometer la estructura. Rebote aquí = posible entrada técnica.",
-                "retroceso_786": "Retroceso muy profundo al 78.6% — estructura alcista muy debilitada. El nivel 0% (origen del swing) es la última defensa: perderlo invalida el swing.",
+                "retroceso_618": "Zona dorada (61.8%) — el retroceso más seguido institucionalmente. Último soporte relevante antes de comprometer la estructura.",
+                "retroceso_786": "Retroceso muy profundo al 78.6% — estructura alcista muy debilitada. El 100% de retroceso (mínimo del swing) es la última defensa: perderlo invalida el swing.",
                 "swing_roto": "Swing alcista anual invalidado — precio por debajo del origen del movimiento. El análisis Fibonacci debe reconstruirse sobre el nuevo mínimo.",
             }.get(_fesc_h, "")
             if _fn_h or _fa_h:
@@ -7430,8 +7639,7 @@ tr:nth-child(even) td { background:#f8fafc; }
                 f"El hueco abierto más cercano es alcista y está <b>a un {abs(_hc_dist_h):.1f}% por debajo</b> "
                 f"(zona {_hc_low_h:.4f}–{_hc_high_h:.4f}, tamaño {_hc_size_h:.1f}%, {_hc_dias_h} sesiones sin cerrarse). "
                 "Un hueco alcista es una zona donde el precio subió de golpe sin negociarse — "
-                "los inversores que compraron antes tienden a recomprar si el precio vuelve ahí. "
-                "Eso la convierte en un <b>suelo natural</b>."
+                "El método la trata como zona de soporte."
             )
             if _hc_size_h >= 2.0:
                 _hs_txt_h += f" El tamaño ({_hc_size_h:.1f}%) es relevante — huecos grandes tienen más fuerza."
@@ -7609,7 +7817,7 @@ tr:nth-child(even) td { background:#f8fafc; }
     _min_d_b, _min_d_a = float("inf"), float("inf")
     for _cc in (confluencias or []):
         _cp = _cc["precio"]
-        if len(_cc.get("estrellas","")) < 2:
+        if _cc.get("tfs_distintos", 0) < 2:   # PA3-04: toda confluencia tiene ≥ 2 marcos
             continue
         if _cp < precio and (precio - _cp) < _min_d_b:
             _min_d_b = precio - _cp; _inv_bajo_h = _cc
@@ -7670,9 +7878,11 @@ tr:nth-child(even) td { background:#f8fafc; }
                             f'<div class="metric-sub" style="color:#16a34a">+{(_d/precio*100):.2f}% ({_d:.3f} &euro;)</div></div>')
     _cop_narr_lines = []
     if _inv_bajo_h:
-        _cop_narr_lines.append(f'Si pierde <b>{_inv_bajo_h["precio"]:.4f} &euro;</b> {_inv_bajo_h.get("estrellas","")} en cierre, la estructura intermedia queda comprometida. Buscar confirmaci&oacute;n con volumen superior a la media.')
+        _cop_narr_lines.append(f'Si pierde <b>{_inv_bajo_h["precio"]:.4f} &euro;</b> {_inv_bajo_h.get("estrellas","")} en cierre, la estructura intermedia queda comprometida. La confirmaci&oacute;n requerir&iacute;a volumen superior a la media.')
+    if not _inv_alto_h:
+        _cop_narr_lines.append(SIN_CONFIRMACION_TXT.capitalize() + ".")   # PA3-06 (D-10)
     if _inv_alto_h:
-        _cop_narr_lines.append(f'Si supera <b>{_inv_alto_h["precio"]:.4f} &euro;</b> {_inv_alto_h.get("estrellas","")} en cierre, la estructura intermedia recupera tendencia alcista. Buscar confirmaci&oacute;n con volumen superior a la media.')
+        _cop_narr_lines.append(f'Si supera <b>{_inv_alto_h["precio"]:.4f} &euro;</b> {_inv_alto_h.get("estrellas","")} en cierre, la estructura intermedia recupera tendencia alcista. La confirmaci&oacute;n requerir&iacute;a volumen superior a la media.')
     _cop_narr_html = ""
     if _cop_narr_lines:
         _cop_narr_html = (f'<div style="margin-top:10px;padding:10px 13px;background:#f1f5f9;'
@@ -7731,7 +7941,7 @@ tr:nth-child(even) td { background:#f8fafc; }
             "y ningún indicador disponible señala lo contrario."),
     }
     _li_bg_h, _li_brd_h, _li_ico_h, _li_tit_h, _li_sit_h, _li_imp_h = _LI_M.get(
-        _li_key_h, ("#f8fafc", "#94a3b8", "⚪", "Analisis en proceso", "Datos insuficientes.", "")
+        _li_key_h, ("#f8fafc", "#94a3b8", "⚪", "Análisis en proceso", "Datos insuficientes.", "")
     )
     _li_nk_h = ""
     if niveles_reforzados:
@@ -7761,7 +7971,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'border-left:3px solid {_li_brd_h};padding-left:10px">{_li_imp_h}</div>\n'
         f'{_li_nk_h}\n'
         f'<div style="font-size:10px;color:#94a3b8;margin-top:10px">'
-        f'Diagnóstico {round(_li_score_h*2)/2:.1f}/10 (semanas–meses) &middot; Semáforo {semaforo.upper()} {_n_pos_h}/{_n_tot_h} (1–5 sesiones)</div>\n'
+        f'Diagnóstico {_li_score_h:.1f}/10 (semanas–meses) &middot; Semáforo {semaforo.upper()} {_n_pos_h}/{_n_tot_h} (1–5 sesiones)</div>\n'
         f'</div>\n</div>\n'
     )
 
@@ -7848,7 +8058,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         f'<span class="chip">52W m&#225;x: {h52_str}</span>\n'
         f'<span class="chip">52W m&#237;n: {l52_str}</span>\n'
         f'<span class="chip">Volumen hoy: {_vol_hoy_h}</span>\n'
-        f'<span class="chip">Beta: {_beta_h}</span>\n'
+        f'<span class="chip">{"Beta vs índice (2 años, diaria)" if beta_val is not None else "Beta Yahoo (5 años, mensual)"}: {_beta_h}</span>\n'
         f'<span class="chip">{tipo_activo}</span>\n'
         f'<span class="chip">Sistema: {sistema}</span>\n'
         f'<span class="chip">Generado: {ahora}</span>\n'
@@ -7888,7 +8098,7 @@ def generar_informe_estrategia_html(ticker: str, nombre: str, precio: float,
     """
     import re as _re
 
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora = ahora_madrid()   # PA3-06 (S-8)
 
     # ── Convertidor markdown → HTML (formato de los popovers) ────────────
     def _md_to_html(md: str) -> str:
@@ -8323,7 +8533,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
     S_EXP_LI = _p(fontName="Helvetica",         fontSize=7,  leading=10,  leftIndent=8,  spaceAfter=1)
     S_PIE    = _p(fontName="Helvetica",         fontSize=6.5,textColor=colors.grey, alignment=TA_CENTER)
 
-    ahora    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora    = ahora_madrid()   # PA3-06
     historia = []
 
     # ── Cabecera ──────────────────────────────────────────────────────────
@@ -8427,7 +8637,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
 
         # Explicación detallada (del markdown del popover)
         historia.append(Spacer(1, 0.15*cm))
-        historia.append(Paragraph("DESCRIPCION DETALLADA DE LA ESTRATEGIA", S_EXP_H))
+        historia.append(Paragraph("DESCRIPCIÓN DETALLADA DE LA ESTRATEGIA", S_EXP_H))
 
         for raw_line in popover_md.split("\n"):
             line = raw_line.strip()
@@ -8511,7 +8721,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
                 _de_cell("Yield (rent.)/Objetivo", yield_on_tgt),
             ]
 
-            historia.append(Paragraph("DATOS DE DIVIDENDO Y VALORACION", S_DE_H))
+            historia.append(Paragraph("DATOS DE DIVIDENDO Y VALORACIÓN", S_DE_H))
             tbl1 = Table([row1], colWidths=[4.5*cm]*4)
             tbl1.setStyle(TableStyle([
                 ("VALIGN",       (0,0),(-1,-1),"TOP"),
@@ -8543,7 +8753,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
     historia.append(HRFlowable(width="100%", thickness=0.5, color=GB,
                                 spaceAfter=4, spaceBefore=4))
     historia.append(Paragraph(
-        "Analisis educativo  |  No constituye asesoramiento de inversion regulado "
+        "Análisis educativo  |  No constituye asesoramiento de inversión regulado "
         "bajo MiFID II (Directiva 2014/65/UE)  |  PivotAnalyzer -- Scriptum",
         S_PIE
     ))
@@ -8658,17 +8868,23 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         hist.append(t)
         hist.append(Spacer(1, 0.1*cm))
 
-    ahora   = datetime.now().strftime("%d/%m/%Y %H:%M")
+    ahora   = ahora_madrid()   # PA3-06
+    # PA3-04: Helvetica no tiene el glifo ★ (salía ▮): en el PDF las estrellas van como "*".
+    confluencias = [dict(_c, estrellas=str(_c.get("estrellas", "")).replace("★", "*"))
+                    for _c in (confluencias or [])]
     historia = []
 
     # ── CABECERA ──────────────────────────────────────────────────────────
     # #UI — Fallback 52W desde el histórico cuando yfinance no devuelve fiftyTwoWeekHigh/Low.
+    _52_hist = False
     if (not h52 or not l52) and hist is not None and len(hist):
         try:
-            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min())
+            h52 = float(hist["High"].max()); l52 = float(hist["Low"].min()); _52_hist = True
         except Exception:
             pass
     h52_str = f"{l52:.2f} – {h52:.2f}" if h52 and l52 else "—"
+    if _52_hist and h52 and l52:
+        h52_str += f"<br/><font size='5'>{RANGO_52S_DESDE_HIST}</font>"   # PA3-02
     # Estilos exclusivos para la cabecera
     S_DLBL = _p(fontName="Helvetica",      fontSize=6,  textColor=colors.HexColor("#93c5fd"))
     S_DVAL = _p(fontName="Helvetica-Bold", fontSize=13, textColor=BL)
@@ -8708,7 +8924,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                    Paragraph(h52_str, S_DVAL)]
     vol_cell    = [Paragraph("VOLUMEN HOY", S_DLBL),
                    Paragraph(_vol_hoy_p, S_DVAL)]
-    beta_cell   = [Paragraph("BETA vs ÍNDICE", S_DLBL),
+    beta_cell   = [Paragraph("BETA vs ÍNDICE (2 AÑOS, DIARIA)" if beta_val is not None else "BETA YAHOO (5 AÑOS, MENSUAL)", S_DLBL),
                    Paragraph(_beta_p, S_DVAL)]
 
     cab_t = Table(
@@ -8783,7 +8999,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             "Entorno técnico más desfavorable que describe el método."),
     }
     _lip_col, _lip_tit, _lip_txt = _LIP_M.get(
-        _lip_key, (colors.grey, "ANALISIS EN PROCESO", "Datos insuficientes.")
+        _lip_key, (colors.grey, "ANÁLISIS EN PROCESO", "Datos insuficientes.")
     )
     historia.append(Spacer(1, 0.3*cm))
     _pdf_sh("Lectura Integrada", historia)
@@ -8805,7 +9021,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     _n_pos_p = sum(1 for _, _, s in (factores_semaforo or []) if s >= 0.75)
     _n_tot_p = len(factores_semaforo or [])
     historia.append(Paragraph(
-        f"Diagnóstico {round(_lip_score*2)/2:.1f}/10 (semanas–meses) · Semáforo {semaforo.upper()} {_n_pos_p}/{_n_tot_p} (1–5 sesiones)",
+        f"Diagnóstico {_lip_score:.1f}/10 (semanas–meses) · Semáforo {semaforo.upper()} {_n_pos_p}/{_n_tot_p} (1–5 sesiones)",
         _p(fontSize=7, textColor=colors.HexColor("#94a3b8"))
     ))
 
@@ -8827,12 +9043,12 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 historia.append(Paragraph(f"• {_strip(_fa_a.get('titulo',''))}", _p(fontSize=8, textColor=colors.HexColor("#374151"))))
             if _nr_p >= 3:
                 _fsesgo_p = ("La lateralidad técnica puede enmascarar deterioro fundamental. "
-                             "Riesgo asimetrico: si rompe a la baja, fundamentales lo respaldan; "
+                             "Riesgo asimétrico: si rompe a la baja, fundamentales lo respaldan; "
                              "si rompe al alza, no. Sesgo operativo neto: cautela bajista.")
             elif _nr_p >= 1:
-                _fsesgo_p = "Señales de alerta fundamentales presentes. Contrastar tesis tecnica con solidez del negocio."
+                _fsesgo_p = "Señales de alerta fundamentales presentes. Contrastar la lectura técnica con la solidez del negocio."
             else:
-                _fsesgo_p = "Alertas menores. Monitorizar margenes y cobertura de dividendo."
+                _fsesgo_p = "Alertas menores en márgenes y cobertura del dividendo."
             historia.append(Paragraph(_strip(_fsesgo_p), _p(fontSize=8, textColor=colors.HexColor("#374151"))))
 
     # ── CAPA OPERATIVA (PDF) ──────────────────────────────────────────────────
@@ -8852,7 +9068,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     _min_db_p, _min_da_p = float("inf"), float("inf")
     for _cc_p in (confluencias or []):
         _cp_p = _cc_p["precio"]
-        if len(_cc_p.get("estrellas","")) < 2:
+        if _cc_p.get("tfs_distintos", 0) < 2:   # PA3-04
             continue
         if _cp_p < precio and (precio - _cp_p) < _min_db_p:
             _min_db_p = precio - _cp_p; _inv_bajo_p = _cc_p
@@ -8894,6 +9110,8 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         _cop_narr_p = []
         if _inv_bajo_p:
             _cop_narr_p.append(f'Si pierde {_inv_bajo_p["precio"]:.4f} €  {_inv_bajo_p.get("estrellas","")} en cierre, la estructura intermedia queda comprometida.')
+        if not _inv_alto_p:
+            _cop_narr_p.append(SIN_CONFIRMACION_TXT.capitalize() + ".")   # PA3-06 (D-10)
         if _inv_alto_p:
             _cop_narr_p.append(f'Si supera {_inv_alto_p["precio"]:.4f} € {_inv_alto_p.get("estrellas","")} en cierre, la estructura intermedia recupera tendencia alcista.')
         if _cop_narr_p:
@@ -8975,7 +9193,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         _dt_rows = [_dt_hdr]
         for _cn_d, _ca_d in _componentes_diag_pdf:
             if _ca_d and "escenario" in _ca_d and "texto" in _ca_d:
-                _esc_d = _ca_d["escenario"].replace("_", " ").title()
+                _esc_d = escenario_legible(_ca_d["escenario"])
                 # PA-A-01: para Fibonacci, la etiqueta cita la banda real
                 if (_ca_d["escenario"].startswith("retroceso_")
                         and _ca_d.get("banda_label")):
@@ -9031,21 +9249,21 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 "zona_alta_rango":          "Zona alta",
                 "en_resistencia":           "En resistencia",
                 "sin_soporte":              "Sin soporte",
-                "extension_161":            "Extension 161.8%",
-                "extension_127":            "Extension 127.2%",
-                "en_maximo":                "En maximo swing",
+                "extension_161":            "Extensión 161.8%",
+                "extension_127":            "Extensión 127.2%",
+                "en_maximo":                "En máximo swing",
                 "retroceso_236":            "Retroceso 23.6%",
                 "retroceso_382":            "Retroceso 38-50%",
                 "retroceso_618":            "Zona dorada 61.8%",
                 "retroceso_786":            "Retroceso 78.6%",
                 "swing_roto":               "Swing invalidado",
-                "sobrecompra_extrema":      "Sobrecompra extrema",
-                "sobrecompra":              "Sobrecomprado",
-                "zona_alcista":             "Zona alcista",
-                "zona_neutra":              "Zona neutra",
-                "zona_bajista":             "Zona bajista",
-                "sobreventa":               "Sobrevendido",
-                "sobreventa_extrema":       "Sobreventa extrema",
+                "sobrecompra_extrema":      "Sobrecompra (RSI 80+)",
+                "sobrecompra":              "Sobrecompra",
+                "zona_alcista":             "Alcista",
+                "zona_neutra":              "Neutro",
+                "zona_bajista":             "Bajista",
+                "sobreventa":               "Sobreventa",
+                "sobreventa_extrema":       "Sobreventa (RSI <20)",
                 "volumen_excepcional":      "Vol. excepcional",
                 "volumen_alto":             "Vol. alto",
                 "volumen_normal":           "Vol. normal",
@@ -9079,7 +9297,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     _mini_cells.append(Paragraph("—", _p(fontSize=7, alignment=1)))
                     continue
                 _esc_p = _cv_p.get("escenario","")
-                _lbl_p = _esc_labels_pdf.get(_esc_p, _esc_p.replace("_"," ").title())
+                _lbl_p = _esc_labels_pdf.get(_esc_p, escenario_legible(_esc_p))
                 # PA-A-01: el componente Fibonacci cita la banda real
                 if (_ck_p == "fibo" and analisis_fibo
                         and _esc_p.startswith("retroceso_") and analisis_fibo.get("banda_label")):
@@ -9139,36 +9357,36 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
             _fniveles_p = f"Resistencia Fibonacci más cercana: {_ffu_p['precio']:,.4f} (nivel {_ffu_p['label']}, a {_ffu_p['dist_pct']:.1f}%). "
         _fib_accion_p = {
             "extension_161": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 161.8% del swing anual. "
+                "[QUÉ SIGNIFICA - FIBONACCI] Precio en extensión 161.8% del swing anual. "
                 "No hay resistencias Fibonacci previas — camino técnicamente despejado al alza. El Fibonacci no da señales de alarma."
             ),
             "extension_127": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en extension 127.2% — primer objetivo de proyeccion. "
-                "Zona de posible respiro antes de continuar. Conviene tener los ojos abiertos."
+                "[QUÉ SIGNIFICA - FIBONACCI] Precio en extensión 127.2% — primer objetivo de proyección. "
+                "Zona de posible consolidación según el método."
             ),
             "en_maximo": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Precio en el maximo del swing (100% Fibonacci). "
+                "[QUÉ SIGNIFICA - FIBONACCI] Precio en el máximo del swing (0% de retroceso). "
                 "Superar este nivel con volumen sería señal alcista importante. Sin romperlo puede corregir."
             ),
             "retroceso_236": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso solo del 23.6% — tendencia alcista muy intacta. "
-                "Si aguanta este nivel, la probabilidad de continuar al alza es alta."
+                "[QUÉ SIGNIFICA - FIBONACCI] Retroceso solo del 23.6% — tendencia alcista muy intacta. "
+                "Para el método, la tendencia sigue vigente mientras el precio se mantenga sobre este nivel."
             ),
             "retroceso_382": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso intermedio dentro de tendencia alcista sana. "
+                "[QUÉ SIGNIFICA - FIBONACCI] Retroceso intermedio dentro de tendencia alcista sana. "
                 "Rebote con volumen en el soporte Fibonacci = tendencia alcista activa. Sin rebote, siguiente soporte en el nivel inferior."
             ),
             "retroceso_618": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Zona dorada (61.8%) — el retroceso más seguido institucionalmente. "
-                "Ultimo soporte relevante antes de comprometer la estructura. Rebote aquí = posible entrada técnica."
+                "[QUÉ SIGNIFICA - FIBONACCI] Zona dorada (61.8%) — el retroceso más seguido institucionalmente. "
+                "Último soporte relevante antes de comprometer la estructura."
             ),
             "retroceso_786": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Retroceso muy profundo al 78.6% — estructura alcista debilitada. "
-                "Nivel 0% (origen del swing) es la ultima defensa: perderlo invalida el swing."
+                "[QUÉ SIGNIFICA - FIBONACCI] Retroceso muy profundo al 78.6% — estructura alcista debilitada. "
+                "El 100% de retroceso (mínimo del swing) es la última defensa: perderlo invalida el swing."
             ),
             "swing_roto": (
-                "[QUE SIGNIFICA PARA TI - FIBONACCI] Swing alcista anual invalidado — precio por debajo del origen. "
-                "El analisis Fibonacci debe reconstruirse sobre el nuevo minimo."
+                "[QUÉ SIGNIFICA - FIBONACCI] Swing alcista anual invalidado — precio por debajo del origen. "
+                "El análisis Fibonacci se reconstruye sobre el nuevo mínimo."
             ),
         }.get(_fesc_p, "")
         if _fniveles_p or _fib_accion_p:
@@ -9299,11 +9517,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     # Col 2 — Volumen  (3.0 + 2.7 = 5.7 cm; inner fit: 6.0 cm col − 8 pt pad)
     if vol_data:
         vr = [
-            [Paragraph("Volumen sesión",    _lbl("")), Paragraph(_fmt_numero(vol_data["volumen"]),    _val(""))],
+            [Paragraph(f"Volumen sesión {vol_data.get('sesion_fecha', '')}".strip(), _lbl("")), Paragraph(_fmt_numero(vol_data["volumen"]),    _val(""))],
             [Paragraph("Media 10 sesiones", _lbl("")), Paragraph(_fmt_numero(vol_data["media_10d"]),  _val(""))],
             [Paragraph("Media 3 meses",     _lbl("")), Paragraph(_fmt_numero(vol_data["media_3m"]),   _val(""))],
-            [Paragraph("Ratio vs 10d",      _lbl("")), Paragraph(f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}", _val(""))],
-            [Paragraph("Ratio vs 3m",       _lbl("")), Paragraph(f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}",   _val(""))],
+            [Paragraph("Ratio sesión / media 10", _lbl("")), Paragraph(f"{vol_data['ratio_10d']:.1f}% — {vol_data['clasificacion_10d']}", _val(""))],
+            [Paragraph("Ratio sesión / media 3m", _lbl("")), Paragraph(f"{vol_data['ratio_3m']:.1f}% — {vol_data['clasificacion_3m']}",   _val(""))],
         ]
         t_vol = Table(vr, colWidths=[3.0*cm, 2.7*cm])
         t_vol.setStyle(_kv_ts([3.0*cm, 2.7*cm]))
@@ -9334,11 +9552,11 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                        for h in ["Precio", "Distancia al precio", "Pivot", "Media", "Tipo"]]
             niv_rows_pdf = [niv_hdr]
             for nr in niveles_reforzados[:8]:
-                tipo_color = VE if "soporte" in nr.get("tipo","").lower() else RO
+                tipo_color = VE if nr.get("tipo") == "S" else RO
                 niv_rows_pdf.append([
                     Paragraph(f'{nr["precio"]:.4f}', S_NRM),
                     Paragraph(
-                        (f'+{((nr["precio"]-precio)/precio*100):+.2f}%'
+                        (f'{((nr["precio"]-precio)/precio*100):+.2f}%'.replace("-", "−")
                          if precio else ""),
                         S_NRM
                     ),
@@ -9399,7 +9617,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 continue
             historia.append(Paragraph(col_label, _p(fontSize=7.5, fontName="Helvetica-Bold", textColor=col_color)))
             dv_hdr = [Paragraph(h, _p(fontSize=6.5, fontName="Helvetica-Bold", textColor=BL))
-                      for h in ["Tipo", "Descripcion", "Fuerza"]]
+                      for h in ["Tipo", "Descripción", "Fuerza"]]
             dv_rows = [dv_hdr]
             for d in col_divs:
                 fuerza = d.get("fuerza", "media")
@@ -9432,27 +9650,27 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         if _sv_n_alc > 0 and _sv_n_baj == 0:
             _sv_c = VE
             if _sv_n_alc >= 2 and (_sv_obv_alc or _sv_frt_alc):
-                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detectan {_sv_n_alc} divergencias alcistas"
+                _sv_t = (f"[QUÉ SIGNIFICA] Se detectan {_sv_n_alc} divergencias alcistas"
                     + (" (OBV incluido)" if _sv_obv_alc else "") + ". "
-                    "Aunque el precio baja, los indicadores muestran que la presion vendedora se agota. "
-                    "Que vigilar: ruptura por encima de resistencia con volumen alto.")
+                    "Aunque el precio baja, los indicadores muestran que la presión vendedora se agota. "
+                    "Niveles de referencia: la confirmación sería un cierre por encima de resistencia con volumen alto (ver Capa Operativa).")
             else:
-                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detecta {_sv_n_alc} divergencia alcista moderada. "
-                    "Que vigilar: precio aguantando sin nuevos minimos mientras mejoran indicadores.")
+                _sv_t = (f"[QUÉ SIGNIFICA] Se detecta {_sv_n_alc} divergencia alcista moderada. "
+                    "La señal ganaría peso si el precio no marca nuevos mínimos y los indicadores mejoran.")
         elif _sv_n_baj > 0 and _sv_n_alc == 0:
             _sv_c = RO
             if _sv_n_baj >= 2 and (_sv_obv_baj or _sv_frt_baj):
-                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detectan {_sv_n_baj} divergencias bajistas"
+                _sv_t = (f"[QUÉ SIGNIFICA] Se detectan {_sv_n_baj} divergencias bajistas"
                     + (" (OBV incluido)" if _sv_obv_baj else "") + ". "
-                    "Aunque el precio sube, los indicadores muestran debilitamiento comprador. "
-                    "Que vigilar: perdida de soporte con volumen.")
+                    "Aunque el precio sube, los indicadores muestran debilitamiento del impulso. "
+                    "Niveles de referencia: una pérdida de soporte con volumen indicaría corrección (ver Capa Operativa).")
             else:
-                _sv_t = (f"[QUE SIGNIFICA PARA TI] Se detecta {_sv_n_baj} divergencia bajista moderada. "
-                    "Que vigilar: mas divergencias o precio bajo SMA20 dan mas peso a la senal.")
+                _sv_t = (f"[QUÉ SIGNIFICA] Se detecta {_sv_n_baj} divergencia bajista moderada. "
+                    "Más divergencias o un cierre bajo la SMA20 darían más peso a la señal.")
         else:
             _sv_c = colors.HexColor("#ca8a04")
-            _sv_t = (f"[QUE SIGNIFICA PARA TI] Señales contradictorias: {_sv_n_alc} alcistas y {_sv_n_baj} bajistas. "
-                "Que vigilar: ruptura clara de soporte/resistencia antes de actuar.")
+            _sv_t = (f"[QUÉ SIGNIFICA] Señales contradictorias: {_sv_n_alc} alcistas y {_sv_n_baj} bajistas. "
+                "Niveles de referencia: confirmación e invalidación en la Capa Operativa.")
         historia.append(Spacer(1, 0.1*cm))
         historia.append(Paragraph(_strip(_sv_t), _p(fontSize=7.5, textColor=_sv_c)))
 
@@ -9564,7 +9782,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                     _p(fontSize=7.5, textColor=colors.HexColor("#334155"))))
                 historia.append(Spacer(1, 0.1*cm))
             if _nota_p:
-                historia.append(Paragraph(f"Nota fiscal (Espana): {_nota_p}",
+                historia.append(Paragraph(f"Nota fiscal (España): {_nota_p}",
                     _p(fontSize=7.5, textColor=colors.HexColor("#713f12"))))
                 historia.append(Spacer(1, 0.15*cm))
         else:
@@ -9692,10 +9910,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         if _hc_tipo_p == "alcista":
             _hs_col_p = VE
             _hs_txt_p = (
-                f"[QUE SIGNIFICA PARA TI] El hueco más cercano es alcista, "
+                f"[QUÉ SIGNIFICA] El hueco más cercano es alcista, "
                 f"a un {abs(_hc_dist_p):.1f}% por debajo "
                 f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
-                "Actua como suelo natural: inversores que compraron antes del salto tienden a recomprar si el precio vuelve."
+                "El método lo trata como zona de soporte."
             )
             if _hc_size_p >= 2.0:
                 _hs_txt_p += f" Tamaño relevante ({_hc_size_p:.1f}%) — mayor fuerza como soporte."
@@ -9704,10 +9922,10 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
         else:
             _hs_col_p = RO
             _hs_txt_p = (
-                f"[QUE SIGNIFICA PARA TI] El hueco más cercano es bajista, "
+                f"[QUÉ SIGNIFICA] El hueco más cercano es bajista, "
                 f"a un {abs(_hc_dist_p):.1f}% por encima "
                 f"(zona {_hc_low_p:.4f}-{_hc_high_p:.4f}, {_hc_size_p:.1f}%, {_hc_dias_p}d abierto). "
-                "Actua como techo natural: inversores con perdidas tienden a vender al recuperar."
+                "El método lo trata como zona de resistencia."
             )
             if _hc_size_p >= 2.0:
                 _hs_txt_p += f" Tamaño relevante ({_hc_size_p:.1f}%) — mayor fuerza como resistencia."
@@ -10494,8 +10712,7 @@ def calcular_div_ttm(ticker: str) -> float:
         divs = t.dividends
         if divs is None or len(divs) == 0:
             return 0.0
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.DateOffset(months=12)
-        ttm = float(divs[divs.index >= cutoff].sum())
+        ttm = dpa_ttm(divs)   # PA3-03: misma regla TTM que el screener
         return ttm if ttm > 0 else 0.0
     except Exception:
         return 0.0
@@ -10595,11 +10812,10 @@ def _lectura_integrada(
             "está bien posicionado a medio plazo. Pero está pasando por una corrección (bajada temporal "
             "dentro de una tendencia que sigue siendo alcista). El momentum (el impulso del precio "
             "a corto plazo) está deteriorado — los indicadores de corto plazo marcan debilidad.",
-            "Las correcciones en valores con buena estructura son, históricamente, oportunidades "
-            "para quien tiene paciencia. La trampa es que no sabes cuánto va a durar. "
-            "Vigila el soporte más cercano (el precio donde el valor tiende a frenar caídas): "
-            "si lo pierde con mucho volumen (muchas operaciones), la corrección puede "
-            "profundizarse antes de rebotar. No hay urgencia para actuar — la estructura resiste.",
+            "La corrección se produce dentro de una estructura positiva; su duración no es "
+            "previsible. El soporte más cercano (el precio donde el valor tiende a frenar caídas) "
+            "es la referencia del método: una pérdida con mucho volumen indicaría que la corrección "
+            "puede profundizarse. Mientras se mantenga, la estructura de largo plazo sigue vigente.",
             "#fefce8", "#ca8a04"),
         ("medio",  "verde"):    ("🟡", "El precio sube, pero la base no es sólida",
             f"El momentum (impulso del precio) a corto plazo es favorable — el valor está subiendo "
@@ -10800,7 +11016,7 @@ def _mini_analisis_cartera(ticker: str) -> dict:
         import yfinance as yf
         import numpy as _np
         tk   = yf.Ticker(ticker)
-        hist = tk.history(period="1y")
+        hist = tk.history(period="1y", auto_adjust=False)   # PA3-02
         if hist.empty or len(hist) < 30:
             return {}
         # Sector/industry en try separado para que un timeout no rompa el análisis
@@ -10902,27 +11118,27 @@ def _render_analisis_compra_div(ticker: str, nombre: str, precio_compra: float,
     sc = []
     # RSI
     if rsi < 40:   rsi_e="🟢"; rsi_s=2; rsi_t=(f"RSI en zona de sobreventa ({rsi:.1f}). El valor ha caído más de lo que su impulso interno justifica. Para el método es una condición de entrada favorable: el precio está lejos de máximos recientes. No implica una subida inmediata.")
-    elif rsi < 60: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona neutral ({rsi:.1f}). El valor no está ni sobrecomprado ni sobrevendido. Entrada aceptable si el resto de indicadores acompañan, pero sin urgencia especial.")
+    elif rsi < 60: rsi_e="🟡"; rsi_s=1; rsi_t=(f"RSI en zona neutral ({rsi:.1f}). El valor no está ni sobrecomprado ni sobrevendido. Para el método es una condición neutra: no suma ni resta.")
     else:          rsi_e="🔴"; rsi_s=0; rsi_t=(f"RSI en zona de sobrecompra ({rsi:.1f}). El valor ha subido mucho recientemente. Para una cartera de dividendos, un precio más alto equivale a una rentabilidad por dividendo menor; el método puntúa mejor un precio de entrada tras un retroceso.")
     sc.append(rsi_s)
 
     # Posición 52W
     if pos52 < 35:   p52_e="🟢"; p52_s=2; p52_t=(f"El valor cotiza en el {pos52:.0f}% inferior de su rango anual, cerca de mínimos del año. Para una cartera de dividendos es una condición favorable: el mismo dividendo cuesta menos, lo que eleva la rentabilidad sobre el coste (yield on cost).")
-    elif pos52 < 65: p52_e="🟡"; p52_s=1; p52_t=(f"Posición media en el rango anual ({pos52:.0f}%). Ni caro ni barato en términos históricos recientes. Entrada neutra.")
+    elif pos52 < 65: p52_e="🟡"; p52_s=1; p52_t=(f"Posición media en el rango anual ({pos52:.0f}%). Ni caro ni barato en términos históricos recientes. Condición neutra para el método.")
     else:            p52_e="🔴"; p52_s=0; p52_t=(f"El valor cotiza en el {pos52:.0f}% superior de su rango anual, cerca de máximos del año. A este precio la rentabilidad por dividendo es menor (se paga más por el mismo dividendo). El método puntúa mejor un precio de entrada tras un retroceso.")
     sc.append(p52_s)
 
     # SMA200
     if dist is not None:
         if dist < -5:    s2_e="🟢"; s2_s=2; s2_t=(f"El precio está un {abs(dist):.1f}% por debajo de su media de largo plazo (SMA200), la referencia de precio 'justo' de largo plazo. Para el método equivale a un descuento estructural, que eleva el yield para una cartera de dividendos.")
-        elif dist < 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está prácticamente en la SMA200 (distancia: {dist:+.1f}%). Zona neutral — ni descuento ni sobrevalor respecto a la media histórica. Es una entrada razonable.")
-        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor cotiza muy por encima de su media de largo plazo puede indicar euforia o sobreextensión. Para el inversor en dividendos, más precio = menos yield. No es el momento óptimo.")
+        elif dist < 5:   s2_e="🟡"; s2_s=1; s2_t=(f"El precio está prácticamente en la SMA200 (distancia: {dist:+.1f}%). Zona neutral — ni descuento ni sobrevalor respecto a la media histórica. Condición neutra para el método.")
+        else:            s2_e="🔴"; s2_s=0; s2_t=(f"El precio está un {dist:.1f}% por encima de su SMA200. Cuando un valor cotiza muy por encima de su media de largo plazo puede indicar euforia o sobreextensión. Para el inversor en dividendos, más precio = menos yield. El método lo puntúa como condición desfavorable.")
         sc.append(s2_s)
     else:
         s2_e="⚪"; s2_t="No hay suficientes datos para calcular la media de 200 sesiones (valor demasiado reciente)."; dist=0
 
     # OBV
-    if obv > 0.001:    obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está subiendo: hay más compras que ventas en términos de volumen. Esto indica que el dinero grande está acumulando posiciones, aunque el precio no lo refleje todavía. Es una señal positiva para el inversor de largo plazo: si los grandes compran, es que ven valor.")
+    if obv > 0.001:    obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está subiendo: hay más compras que ventas en términos de volumen. El método lo interpreta como posible acumulación, aunque el precio no lo refleje todavía; puntúa a favor.")
     elif obv > -0.001: obv_e="🟡"; obv_s=1; obv_t=("El volumen neto (OBV) está en zona neutral: las compras y ventas se compensan. No hay señal clara en ninguna dirección desde el análisis de volumen.")
     else:              obv_e="🔴"; obv_s=0; obv_t=("El volumen neto (OBV) está bajando: hay más ventas que compras en términos de volumen. Aunque el precio no caiga todavía, indica salida de dinero. Para el método es una señal de cautela mientras el volumen no muestre acumulación.")
     sc.append(obv_s)
@@ -11005,9 +11221,9 @@ def _render_analisis_venta_swing(ticker: str, nombre: str, precio_compra: float,
         s2_e="⚪"; s2_t="Sin datos suficientes para SMA200."; dist=0
 
     # OBV (bajando = distribución = señal de venta)
-    if obv < -0.001:   obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está bajando mientras el precio sube o se mantiene: señal de distribución por parte de grandes inversores. Para el método, esta divergencia entre precio y volumen es la señal de salida más relevante de un swing.")
+    if obv < -0.001:   obv_e="🟢"; obv_s=2; obv_t=("El volumen neto (OBV) está bajando mientras el precio sube o se mantiene: el método lo interpreta como posible distribución. Para el método, esta divergencia entre precio y volumen es la señal de salida más relevante de un swing.")
     elif obv < 0.001:  obv_e="🟡"; obv_s=1; obv_t=("El OBV está en zona neutral: compras y ventas se compensan. No hay señal clara de distribución, pero tampoco flujo comprador fuerte.")
-    else:              obv_e="🔴"; obv_s=0; obv_t=("El OBV sigue subiendo — el dinero grande aún está comprando. No hay señal de distribución. La posición puede tener más recorrido.")
+    else:              obv_e="🔴"; obv_s=0; obv_t=("El OBV sigue subiendo: el método no detecta señal de distribución.")
     sc.append(obv_s)
 
     # MACD histograma (bajando = momentum se agota)
@@ -11157,14 +11373,14 @@ def _pp_wizard_fragment():
                 # Pivots + convergencia (necesaria para niveles_reforzados)
                 _rpivots = calcular_todos_pivots(hist, list(SISTEMAS_PIVOT.keys())[0])
                 _pd_d    = _rpivots.get("Diario")
-                _tol_conv = st.session_state.get("tolerancia_key", 0.20)
+                _tol_conv = tolerancia_confluencia(_precio, st.session_state.get("tolerancia_pct_key"))   # PA3-04
                 _niv_ref, _señales_dir, _consenso = calcular_convergencia_tecnica(
                     _rpivots, _medias, _precio,
                     _rsi, _macd, _macd_s, _macd_h, _sar_tend, _pct_b,
                     tolerancia=_tol_conv
                 )
                 # Análisis técnico estructural (orden correcto)
-                _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=True)
+                _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=False)   # PA3-02
                 _a_ath  = analizar_maximos_historicos(_hist_l, _precio, _nombre)
                 _a_sma  = analizar_sma200(hist, _precio, _nombre)
                 _a_res  = analizar_resistencias_estructurales(_niv_ref, _precio, _nombre)
@@ -11176,7 +11392,7 @@ def _pp_wizard_fragment():
                     _precio, _pd_d, _rsi, _macd, _macd_s,
                     _bb_sup, _bb_inf, _vol_sem, _sar_tend
                 )
-                _confs = detectar_confluencias(_rpivots, tolerancia=0.20)
+                _confs = detectar_confluencias(_rpivots, tolerancia=_tol_conv, precio=_precio)
                 st.session_state["_pp_data"] = {
                     "ticker": _ticker, "nombre": _nombre, "precio": _precio,
                     "info": info, "hist": hist,
@@ -11341,7 +11557,7 @@ def _pp_wizard_fragment():
           <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico: &#191;Est&#225; el activo en buena forma?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el diagn&#243;stico t&#233;cnico?</b><br>
           Analiza la <b>estructura de largo y medio plazo</b>: m&#225;ximos hist&#243;ricos, media 200,
-          Fibonacci, RSI estructural y volumen. No mide si <i>ahora</i> es buen momento
+          Fibonacci, RSI estructural y volumen. No mide el <i>momento</i> actual
           (eso es el Paso 3), sino si el activo est&#225; en <b>buena forma estructural</b>.</div>
         </div>""", unsafe_allow_html=True)
 
@@ -11394,10 +11610,10 @@ def _pp_wizard_fragment():
 
         st.markdown(f"""
         <div class="pp-card">
-          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global: &#191;Es buen momento para actuar?</div>
+          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global: &#191;qu&#233; dice el momento actual?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el sem&#225;foro?</b><br>
           Mide el <b>momento actual</b>: si RSI, MACD, Bollinger, SAR y Volumen est&#225;n alineados
-          a favor o en contra. Buena estructura (Paso 2) con sem&#225;foro rojo = <b>esperar</b>.
+          a favor o en contra. Buena estructura (Paso 2) con sem&#225;foro rojo = <b>lectura sin confirmar</b>.
           Sem&#225;foro verde con estructura d&#233;bil = trampa frecuente para principiantes.</div>
         </div>""", unsafe_allow_html=True)
 
@@ -11420,8 +11636,8 @@ def _pp_wizard_fragment():
 
         _IMAP = {
             "verde":    "Los indicadores de corto plazo acompa&#241;an. Combinado con buena estructura es el escenario t&#233;cnico m&#225;s propicio.",
-            "amarillo": "El mercado est&#225; indeciso en este valor. Espera confirmaci&#243;n antes de actuar.",
-            "rojo":     "Los indicadores de corto plazo est&#225;n en contra. Aunque la estructura sea buena, espera a que el sem&#225;foro mejore.",
+            "amarillo": "El mercado est&#225; indeciso en este valor. El m&#233;todo no identifica direcci&#243;n.",
+            "rojo":     "Los indicadores de corto plazo est&#225;n en contra. Aunque la estructura sea buena, la lectura no est&#225; confirmada por el momento.",
         }
         st.markdown(f"""
         <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534;margin-top:.8rem">
@@ -11869,14 +12085,23 @@ def _sc_free_float(info: dict) -> float | None:
     fs = info.get("floatShares")
     so = info.get("sharesOutstanding")
     if fs and so and so > 0:
-        # yfinance a veces devuelve floatShares > sharesOutstanding (error de datos)
-        return min(fs / so, 1.0)
+        # PA3-03 (J-4): floatShares > sharesOutstanding es un glitch de la fuente → SOSPECHOSO
+        # (N/A + K8), como PA-C-01. Antes se recortaba a 100 % y puntuaba como dato bueno.
+        if fs / so > 1.0:
+            info["_ff_sospechoso"] = True
+            info["_ff_sospechoso_pct"] = fs / so * 100
+            return None
+        return fs / so
     # V-1(c): sin acciones en vivo → último free float validado en Neon (instrumento.free_float_pct)
     _ffp = info.get("_free_float_pct_neon")
     if _ffp is not None:
         try:
+            if float(_ffp) > 100.0:                       # PA3-03: también desde Neon
+                info["_ff_sospechoso"] = True
+                info["_ff_sospechoso_pct"] = float(_ffp)
+                return None
             info["_ff_desde_neon"] = True
-            return min(float(_ffp) / 100.0, 1.0)
+            return float(_ffp) / 100.0
         except (TypeError, ValueError):
             return None
     return None
@@ -12096,8 +12321,30 @@ def _sc_anos_reduccion_div(dividends) -> int:
         return 0
 
 
+def dpa_ttm(dividends, ref=None, desfase_dias: int = 0) -> float:
+    """PA3-03 — DPA de los últimos 12 meses: suma de los dividendos con fecha ex en los 365
+    días anteriores a `ref` (por defecto hoy), con `ref` incluida y el día de hace exactamente
+    365 días excluido (así un pago anual con la misma fecha ex no se cuenta dos veces).
+    `desfase_dias=365` da el TTM de hace 12 meses (K-RECENT_CUT). Nunca año natural."""
+    try:
+        if dividends is None or len(dividends) == 0:
+            return 0.0
+        import pandas as _pd_t
+        _tz = getattr(dividends.index, "tz", None)
+        _ref = _pd_t.Timestamp(ref) if ref is not None else _pd_t.Timestamp.now(tz=_tz)
+        if _tz is not None and _ref.tzinfo is None:
+            _ref = _ref.tz_localize(_tz)
+        _fin = (_ref - _pd_t.Timedelta(days=int(desfase_dias))).normalize()
+        _ini = _fin - _pd_t.Timedelta(days=365)
+        _dias = dividends.index.normalize()
+        return float(dividends[(_dias > _ini) & (_dias <= _fin)].sum())
+    except Exception:
+        return 0.0
+
+
 def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
-    """Yield = suma de dividendos del ULTIMO AÑO NATURAL COMPLETO / precio actual.
+    """Yield = DPA de los últimos 12 meses (dpa_ttm, PA3-03) / precio actual.
+    (Histórico: antes se usaba el último año natural completo; ya no.)
 
     Año natural completo = el año anterior al actual. El año en curso se ignora
     porque está incompleto (sumarlo subestimaría el yield). Esto evita el problema
@@ -12114,16 +12361,11 @@ def _sc_dividend_yield_ttm(info: dict, dividends) -> float | None:
             return None
         precio = float(precio)
 
-        # Opcion 1: dividendos pagados durante el ultimo año natural completo
+        # Opcion 1 (PA3-03): DPA TTM real — fechas ex de los últimos 365 días / precio.
         if dividends is not None and len(dividends) > 0:
-            anio_completo = _dt.datetime.now(_dt.timezone.utc).year - 1
-            try:
-                anios = dividends.index.tz_convert("UTC").year
-            except Exception:
-                anios = dividends.index.year
-            total_anio = float(dividends[anios == anio_completo].sum())
-            if total_anio > 0:
-                return round(total_anio / precio, 4)
+            total_ttm = dpa_ttm(dividends)
+            if total_ttm > 0:
+                return round(total_ttm / precio, 4)
 
         # Opcion 2: trailingAnnualDividendYield (ya es fraccion decimal)
         tady = info.get("trailingAnnualDividendYield")
@@ -12274,7 +12516,12 @@ def _fmt_valor(valor, criterio_id: str) -> str:
     if criterio_id in pct_ids:
         return f"{valor:.1%}"
     if criterio_id in mult_ids:
-        return f"{valor/100:.1f}×" if isinstance(valor, (int, float)) and valor > 5 else f"{valor:.1f}×"
+        # PA3-06 (V-2): Neon entrega Decimal; antes no entraba en la conversión % → × ("227,6×")
+        import numbers as _numx
+        if isinstance(valor, _numx.Number) and not isinstance(valor, bool):
+            valor = float(valor)
+        _x = valor / 100 if isinstance(valor, (int, float)) and valor > 5 else valor
+        return f"{_x:.1f}".replace(".", ",") + "×"   # PA3-06 (T-PA3-06b): "2,6×"
     if criterio_id in eur_ids:
         if valor >= 1e9:   return f"{valor/1e9:.1f}B€"
         if valor >= 1e6:   return f"{valor/1e6:.0f}M€"
@@ -12300,6 +12547,19 @@ def _es_sector_sin_metricas_convencionales(info: dict) -> bool:
 # que un KO crítico reste estrictamente más que uno leve y nadie empate por carga de KO.
 _PEN_GRAVEDAD = {"critico": 18, "grave": 12, "leve": 6}   # magnitudes de partida (calibrables)
 
+def patrimonio_negativo(info: dict) -> bool:
+    """PA3-07 (F-4) — Patrimonio neto negativo: D/E crudo negativo o valor contable por acción
+    (bookValue) negativo."""
+    for _k in ("_de_crudo", "debtToEquity", "_book_value", "bookValue"):
+        try:
+            _v = info.get(_k)
+            if _v is not None and float(_v) < 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def _gravedad_ko(cid: str, valor_raw, info: dict) -> str:
     """Gravedad ('critico'/'grave'/'leve') de un criterio en KO para penalizar el score."""
     if cid == "payout_ratio":
@@ -12317,6 +12577,8 @@ def _gravedad_ko(cid: str, valor_raw, info: dict) -> str:
     if cid == "ev_ebitda":               return "grave"   # margen de seguridad comprimido
     if cid == "crecimiento_dividendo":   return "grave"   # erosión material de la renta
     if cid == "deuda_equity":
+        if patrimonio_negativo(info):
+            return "grave"                                                # PA3-07 (F-4)
         _de = valor_raw
         if _de is not None and float(_de) > 5:   _de = float(_de) / 100   # forma % -> ×
         if _de is not None and float(_de) > 3.5: return "grave"           # apalancamiento extremo
@@ -12407,6 +12669,81 @@ def lectura_yield_dividendos(yield_pct: float) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 PIE_LECTURA_METODO = "Lectura automática de un método. No es una recomendación de inversión."
 ROTULO_LECTURA_METODO = "Lectura del método"
+RANGO_52S_DESDE_HIST = "calculado desde histórico"   # PA3-02
+
+_ESC_PALABRAS = {"aproximandose": "aproximándose", "maximo": "máximo", "minimo": "mínimo",
+                 "extension": "extensión", "ath": "ATH", "sma200": "SMA200", "en": "en"}
+
+
+def escenario_legible(esc) -> str:
+    """PA3-01 (PA-M-03) — Clave interna de escenario → texto con tildes ('aproximandose_cerca'
+    → 'Aproximándose cerca'). Antes se mostraba la clave con .title() y sin tildes."""
+    _p = [(_ESC_PALABRAS.get(w, w)) for w in str(esc or "").split("_") if w]
+    _t = " ".join(_p)
+    return (_t[:1].upper() + _t[1:]) if _t else "—"
+
+
+def ahora_madrid(fmt: str = "%d/%m/%Y %H:%M") -> str:
+    """PA3-06 (S-8) — Hora de Madrid para 'Generado' y nombres de fichero (Streamlit Cloud
+    corre en UTC; 'Datos' ya era hora de Madrid y salía posterior a 'Generado')."""
+    import zoneinfo as _zi6
+    from datetime import datetime as _dt6
+    return _dt6.now(_zi6.ZoneInfo("Europe/Madrid")).strftime(fmt)
+
+# PA3-01 — Ventanas de puntuación de la evaluación individual por estrategia. Fuente única:
+# el código las usa para puntuar y textos_estrategia() las imprime en la descripción.
+RSI_DIV_FAV, RSI_DIV_NEUTRO = 45, 55        # Dividendos: RSI < 45 a favor, < 55 neutro
+POS52_DIV = (35, 60)                        # Dividendos: posición en el rango de 52 semanas (%)
+SWING_RSI_IDEAL, SWING_RSI_ACEPT = (45, 62), (38, 68)
+GESTION_RSI = (70, 76)                      # Gestión: sobrecompra / sobrecompra extrema
+
+
+def _pct_es(v, dec=1):
+    """0.025 → '2,5%' · 0.75 → '75%' (sin ceros sobrantes, coma decimal)."""
+    t = f"{float(v) * 100:.{dec}f}".rstrip("0").rstrip(".")
+    return t.replace(".", ",") + "%"
+
+
+def valores_textos_estrategia(criterios=None, u=None) -> dict:
+    """PA3-01 — Valores que se imprimen en la descripción de cada estrategia, leídos de
+    criteria.json (motor del screener) y de umbrales.py (bandas de RSI del DFR)."""
+    import json as _js, os as _os2
+    if criterios is None:
+        try:
+            with open(_os2.path.join(_os2.path.dirname(__file__), "criteria.json"), encoding="utf-8") as _f:
+                criterios = _js.load(_f)["carteras"]["dividendos"]["criterios"]
+        except Exception:
+            criterios = []
+    _c = {c.get("id"): c for c in criterios}
+    _y, _p = _c.get("dividend_yield", {}), _c.get("payout_ratio", {})
+    u = u or umbrales.actuales()
+    _tol = float(u.get("tol_confluencia_pct", 0.3))
+    return {
+        "y_min": _pct_es(_y.get("min", 0.025)), "y_max": _pct_es(_y.get("max", 0.08)),
+        "y_atr": _pct_es(_y.get("yield_entrada_atractiva", YIELD_ENTRADA_ATRACTIVA_DEFAULT)),
+        "p_ok": _pct_es(_p.get("umbral_ok", 0.75)), "p_wr": _pct_es(_p.get("umbral_warning", 0.90)),
+        "rsi_sv": f"{u['rsi_sobreventa']:g}", "rsi_baj": f"{u['rsi_bajista']:g}",
+        "rsi_alc": f"{u['rsi_alcista']:g}", "rsi_sc": f"{u['rsi_sobrecompra']:g}",
+        "rsi_div_fav": RSI_DIV_FAV, "rsi_div_neu": RSI_DIV_NEUTRO,
+        "pos_lo": POS52_DIV[0], "pos_hi": POS52_DIV[1],
+        "sw_lo": SWING_RSI_IDEAL[0], "sw_hi": SWING_RSI_IDEAL[1],
+        "sw_alo": SWING_RSI_ACEPT[0], "sw_ahi": SWING_RSI_ACEPT[1],
+        "g_sc": GESTION_RSI[0], "g_ext": GESTION_RSI[1],
+        "tol": f"{_tol:g}".replace(".", ",") + "% del precio",
+    }
+
+
+def textos_estrategia(plantillas: dict, criterios=None, u=None) -> dict:
+    """Rellena las plantillas de strategy_texts.json con los umbrales vigentes del motor.
+    Una plantilla que no se pueda rellenar se devuelve tal cual (nunca rompe la pantalla)."""
+    _v = valores_textos_estrategia(criterios, u)
+    out = {}
+    for k, t in (plantillas or {}).items():
+        try:
+            out[k] = t.format(**_v)
+        except Exception:
+            out[k] = t
+    return out
 
 
 def _sin_rotulo_metodo(texto):
@@ -12529,6 +12866,12 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
                                 "esta fuente. Excluido del score."),
                     "nombre": crit.get("nombre", "")}
         valor = info.get(campo)
+        if campo == "debtToEquity" and patrimonio_negativo(info):
+            # PA3-07 (F-4): patrimonio neto negativo → KO grave "patrimonio negativo" (no N/A).
+            return {"estado": "ko", "valor_raw": None, "valor_fmt": "patrimonio negativo",
+                    "mensaje": ("Patrimonio neto negativo: el ratio Deuda/Equity no es calculable "
+                                "y la deuda supera los fondos propios. Criterio tratado como KO grave."),
+                    "nombre": crit.get("nombre", ""), "marcas": ["patrimonio_negativo"]}
         # yfinance devuelve dividendYield en forma de porcentaje (ej: 4.36)
         # para tickers de algunas bolsas, no como decimal (0.0436)
         # Normalizamos si el valor es > 1 y el criterio es de tipo ratio/pct
@@ -12548,8 +12891,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
             # Nivel 2: sumar dividends del año calendario anterior completo
             if (not _dpa or float(_dpa) == 0) and dividends is not None and len(dividends) > 0:
                 try:
-                    _anyo_ref = int(dividends.index[-1].year) - 1
-                    _dpa_hist = float(dividends[dividends.index.year == _anyo_ref].sum())
+                    _dpa_hist = dpa_ttm(dividends)   # PA3-03: TTM, no año natural
                     if _dpa_hist > 0:
                         _dpa = _dpa_hist
                         _dpa_es_calculado = True
@@ -12618,9 +12960,9 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
             _est_fcf = _fcf_res["estado"]
             _suf_fcf = chr(42) if _fcf_calc else ""
             _notas_fcf = {
-                "ok":      textos.get("ok", "El flujo de caja libre cubre holgadamente el dividendo — el pago esta respaldado por generacion real de caja."),
+                "ok":      textos.get("ok", "El flujo de caja libre cubre holgadamente el dividendo — el pago está respaldado por generación real de caja."),
                 "warning": textos.get("warning", "El flujo de caja libre cubre el dividendo de forma justa, sin margen amplio. A vigilar si el capex aumenta."),
-                "ko":      textos.get("ko", "El flujo de caja libre es insuficiente para cubrir el dividendo — la empresa podria estar usando deuda o reservas."),
+                "ko":      textos.get("ko", "El flujo de caja libre es insuficiente para cubrir el dividendo — la empresa podría estar usando deuda o reservas."),
             }
             _msg_fcf = _notas_fcf.get(_est_fcf, "")
             if _fcf_calc:
@@ -12642,23 +12984,48 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         elif funcion == "calcular_cagr_dividendo_5y" and dividends is not None:
             # #D — CAGR sobre ventana = min(5, racha): dentro de la racha continua, nunca
             # cross-gap. racha < 3 → None (no se computa una tasa a través de un hueco).
+            # PA3-03 (V-3): CAGR a 5 años SOLO con racha ≥ 5; si no, n/d estructural.
             _cagr_racha = _sc_anos_dividendo(dividends)
-            valor = (_sc_cagr_dividendo_ventana(dividends, min(5, _cagr_racha))
-                     if _cagr_racha >= 3 else None)
+            valor = (_sc_cagr_dividendo_ventana(dividends, 5)
+                     if _cagr_racha >= 5 else None)
         elif funcion == "calcular_dividendo_yield_ttm":
             valor = _sc_dividend_yield_ttm(info, dividends)
+            # PA3-07 (F-3): plausibilidad de nivel 0 según sector (Real Estate 0–20 %, resto 0–15 %)
+            if valor is not None:
+                import validador_nivel0 as _v0y
+                _rc_y = _v0y.validar_yield_ttm(valor, info.get("sector"))
+                if _rc_y.estado is _v0y.Estado.SOSPECHOSO:
+                    return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sospechoso)",
+                            "mensaje": (f"Yield {valor:.1%} fuera del rango de plausibilidad para el "
+                                        f"sector ({_rc_y.motivo}). Dato sospechoso, excluido del score."),
+                            "nombre": crit.get("nombre", "")}
 
     if valor is None:
         # #D/#G — CAGR n/d: por racha < 3 (ventana insuficiente) o por base no interpretable
         # (año suspendido / ≈0 dentro de la ventana → la fórmula explotaría). Mensaje según causa.
         if cid == "crecimiento_dividendo":
             _cagr_r = _sc_anos_dividendo(dividends) if dividends is not None else 0
-            _cagr_msg = ("CAGR n/d (histórico de dividendo < 3 años): ventana insuficiente "
-                         "para una tasa interpretable." if _cagr_r < 3 else
-                         "CAGR n/d (base de dividendo no interpretable: año suspendido o ≈0 "
+            if _cagr_r < 5:
+                # PA3-03 (J-5): N/A ESTRUCTURAL — el historial corto ya lo penaliza K10;
+                # no cuenta en K8 ni en el techo por N/A.
+                _lbl_r = "año" if _cagr_r == 1 else "años"
+                return {"estado": "sin_datos", "valor_raw": None,
+                        "valor_fmt": f"CAGR n/d (historial de {_cagr_r} {_lbl_r})",
+                        "mensaje": (f"CAGR a 5 años no calculable: historial de dividendo de "
+                                    f"{_cagr_r} {_lbl_r} (se requieren 5). El historial corto ya "
+                                    f"lo valora K10; este criterio no puntúa ni penaliza."),
+                        "nombre": crit.get("nombre", ""), "na_estructural": True}
+            _cagr_msg = ("CAGR n/d (base de dividendo no interpretable: año suspendido o ≈0 "
                          "en la ventana).")
             return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "n/d",
                     "mensaje": _cagr_msg, "nombre": crit.get("nombre", "")}
+        if crit.get("funcion") == "calcular_free_float_pct" and info.get("_ff_sospechoso"):
+            # PA3-03 (J-4): free float > 100 % → SOSPECHOSO, N/A + K8 (nunca "100 %").
+            return {"estado": "sin_datos", "valor_raw": None, "valor_fmt": "N/A (sospechoso)",
+                    "mensaje": (f"Free float de la fuente fuera de rango "
+                                f"({info.get('_ff_sospechoso_pct', 0):.1f} % > 100 %): dato "
+                                f"sospechoso, excluido del score y penalizado como N/A."),
+                    "nombre": crit.get("nombre", "")}
         # Mensaje específico por campo — diferencia "sin datos de yfinance" de "N/A por sector"
         _campo_sin_dato = crit.get("campo", "") or crit.get("funcion", "")
         _msg_sin_dato_map = {
@@ -12712,7 +13079,7 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
         valor_fmt = valor_fmt + chr(42)   # asterisco: valor recalculado, distinto del de yfinance
     # #D — Etiqueta dinámica de ventana para el CAGR: "CAGR {N}a" (N = min(5, racha)).
     if cid == "crecimiento_dividendo" and dividends is not None:
-        valor_fmt = f"{valor_fmt} · CAGR {min(5, _sc_anos_dividendo(dividends))}a"
+        valor_fmt = f"{valor_fmt} · CAGR 5a"   # PA3-03: siempre ventana de 5 años
     # ko_bajo / ko_alto: busca texto específico; si no existe, cae en "ko" genérico
     _estado_key = estado
     if estado in ("ko_bajo", "ko_alto") and estado not in textos:
@@ -12756,6 +13123,8 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     )
     if _payout_no_interpretable:
         _estado_final = "ko"
+        # PA3-03 (J-1): sin número — "n/i (BPA < 0)"; el KO crítico no cambia.
+        valor_fmt = "n/i (BPA < 0)" if float(_bpa_payout) < 0 else "n/i (BPA = 0)"
         mensaje = (chr(9889) + " Payout no interpretable: BPA negativo (pérdidas en el "
                    "último ejercicio). El beneficio es negativo, así que el dividendo no "
                    "se está pagando contra beneficio; criterio tratado como KO. "
@@ -12817,8 +13186,7 @@ def completar_mercado_desde_historico(info: dict, hist=None, dividends=None) -> 
     try:
         if dividends is not None and len(dividends) > 0 and _precio:
             if not info.get("trailingAnnualDividendRate"):
-                _ahora = _pd_m.Timestamp.now(tz=dividends.index.tz)
-                _ttm = float(dividends[dividends.index > _ahora - _pd_m.Timedelta(days=365)].sum())
+                _ttm = dpa_ttm(dividends)   # PA3-03
                 if _ttm > 0:
                     info["trailingAnnualDividendRate"] = _ttm; rell.append("trailingAnnualDividendRate")
             if not info.get("trailingAnnualDividendYield") and info.get("trailingAnnualDividendRate"):
@@ -12984,6 +13352,10 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # PA2-03: conservar el payoutRatio crudo de yfinance (aunque el filtro de calidad lo
         # haya descartado) para detectar el crudo negativo con BPA > 0 (error de fuente).
         info["_payout_crudo"] = _info_live.get("payoutRatio")
+        # PA3-07 (F-4): D/E y valor contable crudos, para detectar patrimonio neto negativo
+        # aunque el filtro de rango haya descartado el D/E negativo.
+        info["_de_crudo"] = _info_live.get("debtToEquity")
+        info["_book_value"] = _info_live.get("bookValue")
         _TICKER_NOMBRES_FIJOS = {
             # Fallback estructural: nombres para tickers donde yfinance devuelve vacío o el ticker.
             # Se aplica solo cuando longName y shortName fallan — capa de seguridad, no fuente primaria.
@@ -13002,7 +13374,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                             "dividendo" in c.get("funcion","")
                             for c in criterios)
         necesita_cashflow = any(c.get("id") == "free_cash_flow" for c in criterios)
-        hist      = t.history(period="6mo")    if necesita_hist else None
+        hist      = t.history(period="6mo", auto_adjust=False) if necesita_hist else None   # PA3-02
         dividends = t.dividends                if necesita_div  else None
         cashflow  = None
         if necesita_cashflow:
@@ -13100,6 +13472,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                 "mensaje":   res["mensaje"],
                 "peso":      peso,
                 "marcas":    res.get("marcas", []),   # PA2-03: marcas informativas del dato
+                "na_estructural": bool(res.get("na_estructural")),   # PA3-03
             })
 
         n_na        = sum(1 for c in resultados_criterios if c["estado"] in ("manual", "sin_datos"))
@@ -13111,7 +13484,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         # con BBVA (limpio). Ahora el score se calcula desde los criterios evaluables y el cap
         # sectorial deja de aplastar la calidad relativa. (Decisión Polaris: techo fuera.)
         n_na_sector = sum(1 for c in resultados_criterios
-                          if "(sector)" in str(c.get("valor_fmt", "")))
+                          if "(sector)" in str(c.get("valor_fmt", ""))
+                          or c.get("na_estructural"))      # PA3-03: N/A estructural no penaliza
         n_na_cap    = n_na - n_na_sector          # solo N/A por falta de dato penalizan
         # #8(c) — Score = base de calidad − penalización por KO (gravedad). El término
         # aditivo garantiza monotonicidad estricta (añadir un KO baja la base Y suma pena) y
@@ -13207,7 +13581,7 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                         "codigo": "K1-FCF",
                         "razon":  f"Payout {_kp_fmt} (>100%) con FCF insuficiente — el contable "
                                   f"muestra beneficios pero la caja no respalda el dividendo. "
-                                  f"Riesgo elevado de recorte si los beneficios se normalizan",
+                                  f"Riesgo elevado de recorte si los beneficios se normalizan — degrada a Parcial",
                     })
 
                 # Nivel 2c — AVISO: payout 85–100% + BPA positivo + FCF cubre
@@ -13251,6 +13625,23 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
                         "codigo": "K2",
                         "razon":  f"Recorte sistemático del dividendo ({_k2_motivo}) — "
                                   f"tendencia estructural negativa incompatible con cartera de rentas",
+                    })
+
+            # PA3-03 (F-9) — K-RECENT_CUT (degradante): DPA TTM actual < ratio × DPA TTM de
+            # hace 12 meses. Recorte reciente que K2 (tendencia de 5 años) no capta aún.
+            if dividends is not None:
+                _rc_act  = dpa_ttm(dividends)
+                _rc_prev = dpa_ttm(dividends, desfase_dias=365)
+                _rc_rat  = float(umbrales.actuales().get("k_recent_cut_ratio", 0.75))
+                if _rc_prev > 0 and _rc_act < _rc_rat * _rc_prev:
+                    _rc_pct = _rc_act / _rc_prev - 1
+                    killshots.append({
+                        "tipo":   "aviso",
+                        "codigo": "K-RECENT_CUT",
+                        "pct":    _rc_pct,
+                        "razon":  (f"Recorte reciente del dividendo ({_rc_pct:+.0%}): DPA de los "
+                                   f"últimos 12 meses {_rc_act:.2f} € frente a {_rc_prev:.2f} € "
+                                   f"en los 12 meses anteriores — degrada a Parcial"),
                     })
 
             # K3 — Yield insuficiente para cartera de rentas (soft killshot)
@@ -13448,10 +13839,14 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _na_sd = [c for c in resultados_criterios
                   if c.get("estado") == "sin_datos"
                   and "(sector)" not in str(c.get("valor_fmt", ""))
+                  and not c.get("na_estructural")                       # PA3-03
                   and _id2campo_k8.get(c.get("id")) not in _campos_sin_calidad]
         if _na_sd:
             _txt_na = ("Criterios en N/A por falta de dato en la descarga (penalizan el score como "
-                       "N/A): " + ", ".join(c.get("nombre", "?") for c in _na_sd) + ".")
+                       "N/A): " + ", ".join(c.get("nombre", "?")
+                                            + (" (dato de la fuente sospechoso: fuera de rango)"
+                                               if "sospechoso" in str(c.get("valor_fmt", "")) else "")
+                                            for c in _na_sd) + ".")
             _k8_prev = next((k for k in killshots if k.get("codigo") == "K8"), None)
             if _k8_prev is not None:
                 _k8_prev["razon"] = (_k8_prev.get("razon", "") + " " + _txt_na).strip()
@@ -13511,7 +13906,8 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         _ks_hard          = [k for k in killshots if k.get("tipo", "hard") == "hard"]
         _ks_aviso_degrade = [k for k in killshots
                              if k.get("tipo") == "aviso"
-                             and k.get("codigo") in ("K1-BPA", "K1-Payout", "K10", "K3", "K-SECT")]
+                             and k.get("codigo") in ("K1-BPA", "K1-FCF", "K1-Payout", "K-RECENT_CUT",
+                                                     "K10", "K3", "K-SECT")]   # PA3-07: K1-FCF degrada
         nota_degradacion = None
         if _ks_hard:
             # #8(a) — Desacoplar veto y score: el veto fuerza el VEREDICTO (No cumple) pero
@@ -13548,18 +13944,26 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
             "K2":        ("recorte sostenido del dividendo", "veto"),
             "K10-veto":  ("historial < 3 años",              "veto"),
             "K1-BPA":    ("BPA negativo",                     "cap"),
+            "K1-FCF":    ("payout > 100% sin cobertura de caja", "cap"),   # PA3-07 (F-6)
             "K1-Payout": ("payout ≥ 85%",                     "cap"),
+            "K-RECENT_CUT": ("recorte reciente del dividendo", "cap"),
             "K10-cap":   ("historial corto (3–4 a.)",        "cap"),
             "K3":        ("yield bajo",                       "cap"),
             "K-SECT":    ("Evaluación sectorial parcial — faltan métricas regulatorias (CET1 / Solvencia II)", "cap"),
         }
         # PA2-05: K-SECT es la degradante menos prioritaria (K1-BPA > K1-Payout > K10 > K3 > K-SECT)
-        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-Payout", "K10-cap", "K3", "K-SECT"]  # más severo primero
+        # PA3-03: K-RECENT_CUT después de K1-Payout y antes de K10
+        _SEV_MOTIVO = ["K5", "K2", "K10-veto", "K1-BPA", "K1-FCF", "K1-Payout", "K-RECENT_CUT",
+                       "K10-cap", "K3", "K-SECT"]  # más severo primero
+        for _k in killshots:
+            if _k.get("codigo") == "K-RECENT_CUT" and _k.get("pct") is not None:
+                _ETIQ_MOTIVO["K-RECENT_CUT"] = (
+                    f"recorte reciente del dividendo ({_k['pct']:+.0%})".replace("-", "−"), "cap")
         _activos_mot = []
         for _k in killshots:
             _cod, _tip = _k.get("codigo"), _k.get("tipo", "hard")
             if _cod == "K10":                                       _activos_mot.append("K10-veto" if _tip == "hard" else "K10-cap")
-            elif _cod in ("K5", "K2", "K1-BPA", "K1-Payout", "K3", "K-SECT"): _activos_mot.append(_cod)
+            elif _cod in ("K5", "K2", "K1-BPA", "K1-FCF", "K1-Payout", "K-RECENT_CUT", "K3", "K-SECT"): _activos_mot.append(_cod)
         motivo, motivo_tipo = "—", "score"
         if estado_global == "no_cumple":
             _pool = [m for m in _activos_mot if _ETIQ_MOTIVO[m][1] == "veto"]
@@ -13757,7 +14161,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
     # ── Cabecera ──────────────────────────────────────────────────────
     story.append(Paragraph("PivotAnalyzer — Informe de Screening", S_TITLE))
     story.append(Paragraph(
-        f"Indice: <b>{indice}</b>  |  Cartera: <b>{tipo}</b>  |  Fecha: <b>{completed}</b>  |  Job <b>#{job_id}</b>",
+        f"Índice: <b>{indice}</b>  |  Cartera: <b>{tipo}</b>  |  Fecha: <b>{completed}</b>  |  Job <b>#{job_id}</b>",
         S_SUB
     ))
     story.append(HRFlowable(width="100%", thickness=1, color=C_BORDER, spaceAfter=8))
@@ -13926,7 +14330,7 @@ def _generar_pdf_screening(job: dict) -> bytes:
         _inc_pdf = r.get("evaluacion_incompleta", False)
         _na_txt  = (f" | {_ev_pdf}/{_to_pdf} criterios ({_na_pdf} N/A · máx. {100-_na_cap_pdf*10}%)"
                     if _na_pdf > 0 else "")
-        _inc_txt = " | ⚠️ EVALUACION INCOMPLETA" if _inc_pdf else ""
+        _inc_txt = " | ⚠️ EVALUACIÓN INCOMPLETA" if _inc_pdf else ""
         _ks_pdf  = r.get("killshots", [])
         _ks_section = []
         for _ks in _ks_pdf:
@@ -15090,7 +15494,7 @@ def pestaña_cartera():
                                         with _btn6a:
                                             _ak = f"_an_div_{pos['id']}"
                                             if st.button("🔍", key=f"btn_an_div_{pos['id']}",
-                                                         help="Analizar si es buen momento para comprar más"):
+                                                         help="Analizar este valor con el método"):
                                                 st.session_state[_ak] = not st.session_state.get(_ak, False)
                                                 st.rerun()
                                         with _btn6b:
@@ -15921,7 +16325,8 @@ def pantalla_analisis():
 
         # Leer valores de sistema/tolerancia desde session_state (se renderizan más abajo)
         _sistema_default = st.session_state.get("sistema_sel_key", list(SISTEMAS_PIVOT.keys())[0])
-        _tol_default      = st.session_state.get("tolerancia_key", 0.20)
+        _tol_default      = st.session_state.get("tolerancia_pct_key",
+                                             float(umbrales.actuales().get("tol_confluencia_pct", 0.3)))
 
         # ── Fila única: Mercado | Ticker | Analizar ───────────────────────
         col1, col2, col4 = st.columns([2, 3, 1])
@@ -15995,7 +16400,7 @@ def pantalla_analisis():
         if analizar:
             st.session_state["ultimo_ticker"]    = ticker_input
             st.session_state["ultimo_sistema"]   = st.session_state.get("sistema_sel_key", _sistema_default)
-            st.session_state["ultima_tolerancia"] = st.session_state.get("tolerancia_key", _tol_default)
+            st.session_state["ultima_tolerancia"] = st.session_state.get("tolerancia_pct_key", _tol_default)
             st.session_state["ultimo_mercado"]   = mercado_sel
 
         ticker_activo = st.session_state.get("ultimo_ticker", ticker_input)
@@ -16006,8 +16411,10 @@ def pantalla_analisis():
                                               st.session_state.get("ultimo_sistema", sistema_sel))
         if sistema_activo not in SISTEMAS_PIVOT:
             sistema_activo = list(SISTEMAS_PIVOT.keys())[0]
-        tol_activa = st.session_state.get("tolerancia_key",
-                                          st.session_state.get("ultima_tolerancia", tolerancia))
+        # PA3-04 (F-8): la tolerancia se fija en % del precio; tol_activa (moneda) se calcula
+        # en cuanto se conoce el precio.
+        tol_pct_activa = float(st.session_state.get("tolerancia_pct_key",
+                                                    st.session_state.get("ultima_tolerancia", tolerancia)))
 
         # ---- OBTENER DATOS ----
         with st.spinner(f"Obteniendo datos de {ticker_activo}..."):
@@ -16025,6 +16432,10 @@ def pantalla_analisis():
         if precio is None:
             st.error("Sin datos de precio.")
             return
+        tol_activa = tolerancia_confluencia(precio, tol_pct_activa)   # PA3-04
+        info = completar_ficha_desde_neon(ticker_activo, info)        # PA3-06 (ficha ausente)
+        if info.get("_ficha_ausente"):
+            st.caption("ℹ️ " + texto_ficha_ausente(info))
 
         tipo_activo = detectar_tipo_activo(info)
         nombre = info.get("longName") or info.get("shortName") or ticker_activo
@@ -16066,21 +16477,25 @@ def pantalla_analisis():
             h52 = info.get("fiftyTwoWeekHigh")
             l52 = info.get("fiftyTwoWeekLow")
             # Fallback: calcular desde histórico cuando yfinance no devuelve el dato (frecuente en acciones españolas)
+            _52_hist = False
             if not h52 or not l52:
                 try:
                     h52 = float(hist["High"].max())
                     l52 = float(hist["Low"].min())
+                    _52_hist = True
                 except Exception:
                     pass
             st.metric("52W Máx / Mín", f"{h52:.2f} / {l52:.2f}" if h52 and l52 else "—", help=TOOLTIPS["52W Máx / Mín"])
+            if _52_hist:
+                st.caption(RANGO_52S_DESDE_HIST)   # PA3-02
         with col_p3:
             vol_hoy = float(hist["Volume"].iloc[-1])
             st.metric("Volumen hoy", _fmt_numero(vol_hoy), help=TOOLTIPS["Volumen hoy"])
         with col_p4:
             _beta_val = beta_calculada if beta_calculada is not None else info.get("beta")
             _beta_str = f"{_beta_val:.2f}" if _beta_val is not None else "—"
-            _beta_label = (f"Beta vs {_indice_ref_nombre}" if beta_calculada is not None
-                           else "Beta (Yahoo/S&P 500)")
+            _beta_label = (f"Beta vs {_indice_ref_nombre} (2 años, diaria)" if beta_calculada is not None
+                           else "Beta Yahoo (5 años, mensual)")   # PA3-06
             _beta_help  = (
                 f"Beta calculada por la app contra **{_indice_ref_nombre}** "
                 f"(2 años de retornos diarios EOD). "
@@ -16355,7 +16770,7 @@ def pantalla_analisis():
             sar_val, sar_tend = calcular_sar(hist)
 
             indicadores_dict = {
-                "RSI (14)": f"{rsi_val}" + (" 🔴 Sobrecomprado" if rsi_val > 70 else " 🟢 Sobrevendido" if rsi_val < 30 else " ⚪ Neutro"),
+                "RSI (14)": f"{rsi_val} {etiqueta_rsi(rsi_val)}",   # PA3-05
                 "MACD": f"{macd_val:.4f}",
                 "MACD Señal": f"{macd_señal:.4f}",
                 "MACD Histograma": f"{macd_hist_val:.4f}" + (" ↑" if macd_hist_val > 0 else " ↓"),
@@ -16381,7 +16796,7 @@ def pantalla_analisis():
             )
 
             # ---- CONFLUENCIAS ----
-            confluencias = detectar_confluencias(resultados_pivots, tolerancia=tol_activa)
+            confluencias = detectar_confluencias(resultados_pivots, tolerancia=tol_activa, precio=precio)
 
             # ---- CONVERGENCIA TÉCNICA ----
             niveles_reforzados, señales_dir, consenso_dir = calcular_convergencia_tecnica(
@@ -16416,6 +16831,10 @@ def pantalla_analisis():
 
             # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
             analisis_vol = analizar_volumen(hist, nombre)
+            if analisis_vol is not None:   # PA3-05: divergencia OBV fuerte bajista → volumen ≤ 5/10
+                analisis_vol["obv_bajista_fuerte"] = any(
+                    d.get("tipo") == "OBV" and d.get("direccion") == "bajista" and d.get("fuerza") == "fuerte"
+                    for d in (divergencias_tecnicas or []))
 
             # ---- PUNTUACIÓN TÉCNICA INTEGRADA ----
             puntuacion_tec = calcular_puntuacion_tecnica(
@@ -16480,13 +16899,14 @@ def pantalla_analisis():
             )
         with _sc2:
             tolerancia = st.number_input(
-                "⚡ Tolerancia (€/$)",
-                value=float(st.session_state.get("tolerancia_key", 0.20)),
-                step=0.05, min_value=0.01, max_value=2.0, format="%.2f",
-                key="tolerancia_key",
-                help="Distancia máxima en precio para considerar que dos niveles confluyen. "
-                     "Valor bajo (0.05€): solo confluencias muy precisas. "
-                     "Valor alto (0.50€): agrupa zonas más amplias."
+                "⚡ Tolerancia (% del precio)",
+                value=float(st.session_state.get("tolerancia_pct_key",
+                                                 umbrales.actuales().get("tol_confluencia_pct", 0.3))),
+                step=0.05, min_value=0.05, max_value=2.0, format="%.2f",
+                key="tolerancia_pct_key",
+                help="Distancia máxima, en % del precio, para considerar que dos niveles confluyen "
+                     "(por defecto 0,3 %: a 30 € son 0,09 €). Se aplica a las confluencias y al "
+                     "soporte reforzado pivot + media."
             )
 
         # #UI — Dos capas en pestañas. El HEADER de arriba (precio, gráfico, controles Sistema
@@ -16547,9 +16967,8 @@ def pantalla_analisis():
             for _c in (confluencias or []):
                 _cp = _c["precio"]
                 _es = _c.get("estrellas", "")
-                _fuerza = len(_es)  # 1, 2 o 3
-                if _fuerza < 2:
-                    continue  # mínimo ★★
+                if _c.get("tfs_distintos", 0) < 2:
+                    continue  # PA3-04: confluencia = niveles de ≥ 2 marcos distintos
                 if _cp < precio:
                     _d = precio - _cp
                     if _d < _min_dist_b:
@@ -16614,7 +17033,8 @@ def pantalla_analisis():
                              "Su superación en cierre reforzaría la tesis alcista."
                     )
                 else:
-                    st.metric("Confirmación alcista", "—", help="Sin confluencias ★★ o superiores sobre el precio actual.")
+                    st.metric("Confirmación alcista", "—", help=SIN_CONFIRMACION_TXT.capitalize() + ".")
+                    st.caption(SIN_CONFIRMACION_TXT.capitalize())
 
             # ── Narrativa de niveles de invalidación/confirmación ─────────────
             if _conf_3e_bajo or _conf_3e_alto:
@@ -16840,13 +17260,13 @@ de debilidad a corto plazo.
                 "retroceso_786":           ("Retroceso profundo 78.6%",         3),
                 "swing_roto":              ("Swing anual invalidado",           1),
                 # RSI
-                "sobrecompra_extrema":     ("Sobrecompra extrema (RSI > 80)",   2),
-                "sobrecompra":             ("Sobrecomprado (RSI 70-80)",        3),
-                "zona_alcista":            ("Zona alcista (RSI 55-70)",         7),
-                "zona_neutra":             ("Zona neutra (RSI 45-55)",          5),
-                "zona_bajista":            ("Zona bajista (RSI 30-45)",         3),
-                "sobreventa":              ("Sobrevendido (RSI 20-30)",         7),
-                "sobreventa_extrema":      ("Sobreventa extrema (RSI < 20)",    8),
+                "sobrecompra_extrema":     ("Sobrecompra (RSI 80+)",           2),
+                "sobrecompra":             ("Sobrecompra (RSI 70-80)",         3),
+                "zona_alcista":            ("Alcista (RSI 55-70)",             7),
+                "zona_neutra":             ("Neutro (RSI 45-55)",              5),
+                "zona_bajista":            ("Bajista (RSI 30-45)",             3),
+                "sobreventa":              ("Sobreventa (RSI 20-30)",          7),
+                "sobreventa_extrema":      ("Sobreventa (RSI <20)",            8),
                 # Volumen
                 "volumen_excepcional":     ("Volumen excepcional",              7),
                 "volumen_alto":            ("Volumen alto",                     7),
@@ -16875,7 +17295,7 @@ de debilidad a corto plazo.
                     )
                     continue
                 _esc = _cv["escenario"]
-                _lbl, _ = _esc_labels.get(_esc, (_esc.replace("_"," ").title(), _cv["puntos"]))
+                _lbl, _ = _esc_labels.get(_esc, (escenario_legible(_esc), _cv["puntos"]))
                 _pts = _cv["puntos"]
                 _fc, _fbg = _pt_color(_pts)
                 _comp_cards_html += (
@@ -16890,7 +17310,7 @@ de debilidad a corto plazo.
                     f'</div>'
                 )
 
-            _sc2_r = round(_sc2 * 2) / 2  # redondear a pasos de 0.5 — evita falsa precision
+            _sc2_r = _sc2   # PA3-05: el mismo valor (1 decimal) que el resto del informe
             st.markdown(
                 f'<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:12px">'
                 f'<div style="min-width:88px;text-align:center;border:3px solid {_pt2_col};'
@@ -16927,7 +17347,7 @@ de debilidad a corto plazo.
             _fmt_ej = st.radio("Formato", ["HTML", "PDF"], horizontal=True, key="fmt_export_ej")
         with _ejx_c2:
             if st.button("⬇️ Generar resumen", type="primary", key="btn_export_ej"):
-                _ts_ej = datetime.now().strftime("%Y%m%d_%H%M")
+                _ts_ej = ahora_madrid("%Y%m%d_%H%M")
                 if _fmt_ej == "HTML":
                     with st.spinner("Generando resumen HTML..."):
                         _html_ej = generar_informe_html(
@@ -17242,7 +17662,7 @@ Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar 
 5. **Recuerda que se recalculan** — las confluencias cambian con cada nueva sesión porque los Pivot Points se actualizan. Lo que hoy es una confluencia ⭐⭐⭐ puede no serlo mañana.
 """)
                         st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
-                st.caption(f"Sin confluencias dentro de ±{tol_activa:.2f}€")
+                st.caption(f"Sin confluencias entre marcos distintos dentro de ±{tol_activa:.2f} ({tol_pct_activa:.2f}% del precio)")
 
         st.divider()
 
@@ -17259,7 +17679,7 @@ Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar 
                 f'</tr>'
             )
 
-        rsi_sub_s = "Sobrecomprado 🔴" if rsi_val > 70 else ("Sobrevendido 🟢" if rsi_val < 30 else "Neutro ⚪")
+        rsi_sub_s = etiqueta_rsi(rsi_val)   # PA3-05
         ind_rows = (
             _ind_s("RSI (14)", f"{rsi_val:.2f}", rsi_sub_s) +
             _ind_s("MACD", f"{macd_val:.4f}") +
@@ -17286,11 +17706,11 @@ Zona de indecisión donde fuerzas opuestas se cancelan. El precio puede oscilar 
 
         if vol_data:
             vol_rows = (
-                _ind_s("Volumen sesión", _fmt_numero(vol_data["volumen"])) +
+                _ind_s(f"Volumen sesión {vol_data.get('sesion_fecha', '')}".strip(), _fmt_numero(vol_data["volumen"])) +
                 _ind_s("Media 10 sesiones", _fmt_numero(vol_data["media_10d"])) +
                 _ind_s("Media 3 meses", _fmt_numero(vol_data["media_3m"])) +
-                _ind_s("Ratio vs 10d", f"{vol_data['ratio_10d']:.1f}%", f"— {vol_data['clasificacion_10d']}") +
-                _ind_s("Ratio vs 3m", f"{vol_data['ratio_3m']:.1f}%", f"— {vol_data['clasificacion_3m']}")
+                _ind_s("Ratio sesión / media 10", f"{vol_data['ratio_10d']:.1f}%", f"— {vol_data['clasificacion_10d']}") +
+                _ind_s("Ratio sesión / media 3m", f"{vol_data['ratio_3m']:.1f}%", f"— {vol_data['clasificacion_3m']}")
             )
         else:
             vol_rows = "<tr><td colspan='2' style='color:#94a3b8;font-style:italic'>Sin datos</td></tr>"
@@ -17741,14 +18161,14 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
                     _sv_titulo = "Señal de advertencia alcista consolidada"
                     _sv_texto = (
                         f"Se detectan **{_n_alc} divergencias alcistas**"
-                        + (" — entre ellas la del OBV (la más fiable, porque registra el flujo real de dinero grande)" if _tiene_obv_alc else "") + ". "
+                        + (" — entre ellas la del OBV (la que el método considera más fiable, porque se basa en el volumen)" if _tiene_obv_alc else "") + ". "
                         "Esto significa que aunque el precio sigue bajando o está estancado, "
                         "los indicadores internos muestran que la presión vendedora se está agotando. "
                         "Es como ver que un coche frena: el motor sigue en marcha pero cada vez con menos fuerza. "
                         "**Lo que no significa:** que el precio vaya a subir mañana. Una divergencia avisa de agotamiento, "
                         "no marca el día exacto del giro. "
-                        "**Qué vigilar:** espera que el precio rompa por encima de un nivel de resistencia cercano "
-                        "con volumen alto antes de actuar. Ese sería la confirmación de que el giro está ocurriendo."
+                        "**Niveles de referencia:** la confirmación sería un cierre por encima de una "
+                        "resistencia cercana con volumen alto (ver Capa Operativa)."
                     )
                 else:
                     _sv_titulo = "Señal alcista incipiente — pendiente de confirmación"
@@ -17756,8 +18176,8 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
                         f"Se detecta **{_n_alc} divergencia alcista** de intensidad moderada. "
                         "Los indicadores empiezan a mostrar que la presión bajista pierde fuerza, "
                         "pero todavía no hay suficiente evidencia para considerar que el giro está confirmado. "
-                        "**Qué vigilar:** si en los próximos días el precio aguanta sin hacer nuevos mínimos "
-                        "y los indicadores siguen mejorando, la señal se fortalece. "
+                        "**Niveles de referencia:** la señal ganaría peso si el precio no marca nuevos mínimos "
+                        "y los indicadores siguen mejorando. "
                         "Si el precio hace un nuevo mínimo, la divergencia queda invalidada."
                     )
             elif _n_baj > 0 and _n_alc == 0:
@@ -17767,25 +18187,24 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
                     _sv_titulo = "Señal de advertencia bajista consolidada"
                     _sv_texto = (
                         f"Se detectan **{_n_baj} divergencias bajistas**"
-                        + (" — entre ellas la del OBV, que registra el movimiento del dinero institucional" if _tiene_obv_baj else "") + ". "
+                        + (" — entre ellas la del OBV, la que el método considera más fiable" if _tiene_obv_baj else "") + ". "
                         "Esto significa que aunque el precio sigue subiendo, los indicadores internos "
                         "muestran que la presión compradora se está debilitando. "
                         "Es como ver un coche que acelera pero con el depósito casi vacío: puede seguir subiendo "
                         "un poco más, pero el combustible se acaba. "
-                        "**Lo que no significa:** que el precio vaya a caer mañana ni que tengas que vender ya. "
-                        "**Qué vigilar:** si el precio pierde un soporte relevante con volumen alto, "
-                        "la corrección puede acelerarse. Es un buen momento para revisar dónde tienes "
-                        "el límite de pérdidas (stop-loss) si ya tienes posición."
+                        "**Lo que no significa:** que el precio vaya a caer mañana. "
+                        "**Niveles de referencia:** una pérdida de soporte relevante con volumen alto "
+                        "indicaría que la corrección puede acelerarse (ver Capa Operativa)."
                     )
                 else:
-                    _sv_titulo = "Señal bajista incipiente — observar sin actuar"
+                    _sv_titulo = "Señal bajista incipiente — pendiente de confirmación"
                     _sv_texto = (
                         f"Se detecta **{_n_baj} divergencia bajista** de intensidad moderada. "
                         "Los indicadores muestran cierta pérdida de impulso alcista, pero la señal es débil. "
                         "En tendencias fuertes, las divergencias bajistas moderadas pueden fallar varias veces "
                         "antes de que el precio realmente corrija — es uno de sus puntos débiles conocidos. "
-                        "**Qué vigilar:** si aparecen más divergencias bajistas en los próximos días "
-                        "o el precio pierde su media de corto plazo (SMA20), la señal gana peso."
+                        "**Niveles de referencia:** la señal ganaría peso con más divergencias bajistas "
+                        "o con un cierre bajo la media de corto plazo (SMA20)."
                     )
             else:
                 # Mixtas: alcistas Y bajistas al mismo tiempo
@@ -17796,10 +18215,10 @@ El OBV (Volumen en Balance) es un indicador que lleva la cuenta acumulada del vo
                     f"y **{_n_baj} bajista{'s' if _n_baj>1 else ''}**. "
                     "Cuando los indicadores no se ponen de acuerdo, lo habitual es que el precio "
                     "esté en una fase de transición o en un rango lateral (moviéndose de lado sin tendencia clara). "
-                    "En estas situaciones, actuar basándose solo en divergencias tiene menos sentido — "
+                    "En estas situaciones las divergencias pierden valor informativo: "
                     "las señales se contrarrestan entre sí. "
-                    "**Qué vigilar:** espera a que el precio rompa claramente un nivel técnico relevante "
-                    "(soporte o resistencia) para tener una dirección más clara antes de tomar decisiones."
+                    "**Niveles de referencia:** confirmación e invalidación en la Capa Operativa; el método "
+                    "no identifica dirección mientras el precio no rompa uno de esos niveles."
                 )
 
             st.markdown(
@@ -17905,7 +18324,7 @@ El porcentaje de votos alcistas / bajistas forma la señal de consenso.
                             termino_inv = f"{nr['media']} support resistance pivot"
                             st.link_button("📖 Investopedia", _url_investopedia(termino_inv), help="Buscar en Investopedia")
             else:
-                st.caption(f"Sin niveles pivot+media dentro de ±{tol_activa:.2f}")
+                st.caption(f"Sin niveles pivot+media dentro de ±{tol_activa:.2f} ({tol_pct_activa:.2f}% del precio)")
 
         with col_conv_dir:
             st.markdown("**Señal de consenso**")
@@ -18694,7 +19113,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "El precio ha retrocedido solo un 23.6% desde el máximo del swing — "
                     "es el retroceso más superficial de Fibonacci. Indica que la tendencia alcista "
                     "está muy intacta: los vendedores apenas han podido corregir la subida. "
-                    "Si el precio aguanta este nivel, la probabilidad de continuar al alza es alta."
+                    "Para el método, la tendencia sigue vigente mientras el precio se mantenga sobre este nivel."
                 ),
                 "retroceso_382": (
                     "El precio está en la zona de retroceso 38.2–50% — considerada la zona de "
@@ -18714,7 +19133,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 "retroceso_786": (
                     "El precio ha retrocedido un 78.6% del swing alcista — retroceso muy profundo "
                     "que pone a prueba la estructura. El swing alcista sigue técnicamente activo "
-                    "pero por poco margen. El nivel 0% (origen del swing) es la última defensa: "
+                    "pero por poco margen. El 100% de retroceso (mínimo del swing) es la última defensa: "
                     "si el precio lo pierde, el swing queda invalidado y se abre paso a nuevos mínimos."
                 ),
                 "swing_roto": (
@@ -18904,7 +19323,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     _contrib_str = f"{_info['contrib']:.2f}" if _info["disponible"] else "—"
                     _filas.append({
                         "Componente":    _info["icono"] + " " + _info["nombre"],
-                        "Escenario":     _info["escenario"].replace("_", " ").title(),
+                        "Escenario":     escenario_legible(_info["escenario"]),
                         "Puntos (0-10)": _pts_str,
                         "Peso":          _peso_str,
                         "Contribucion":  _contrib_str,
@@ -18923,19 +19342,19 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 import pandas as _pd2
                 _tabla_ref = _pd2.DataFrame({
                     "Componente":    ("ATH", "SMA200", "Resistencias", "Fibonacci", "RSI", "Volumen"),
-                    "Bajista (1-3)": ("Lejos del maximo", "Tendencia bajista",
+                    "Bajista (1-3)": ("Lejos del máximo", "Tendencia bajista",
                                       "En resistencia / sin soporte", "Swing roto / retroceso 78.6%",
                                       "Sobrecompra extrema / zona bajista", "Volumen seco"),
-                    "Neutro (4-6)":  ("Aproximandose", "Plana", "Zona media",
+                    "Neutro (4-6)":  ("Aproximándose", "Plana", "Zona media",
                                       "Retrocesos medios", "Zona neutra", "Normal"),
                     "Alcista (7-9)": ("En ATH / Subida libre", "Tendencia / Giro alcista",
-                                      "En soporte / sin resistencia", "Extension / zona dorada",
+                                      "En soporte / sin resistencia", "Extensión / zona dorada",
                                       "Zona alcista / sobreventa", "Alto / excepcional"),
                 })
                 st.dataframe(_tabla_ref, hide_index=True, use_container_width=True)
                 st.caption(
-                    "Analisis educativo. No constituye asesoramiento personalizado "
-                    "de inversion bajo MiFID II. El analisis tecnico no predice "
+                    "Análisis educativo. No constituye asesoramiento personalizado "
+                    "de inversión bajo MiFID II. El análisis técnico no predice "
                     "el comportamiento futuro de los precios."
                 )
 
@@ -19190,7 +19609,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                horizontal=True, key="fmt_export")
         with col_btn:
             if st.button("⬇️ Generar informe", type="primary", key="btn_export"):
-                ts = datetime.now().strftime("%Y%m%d_%H%M")
+                ts = ahora_madrid("%Y%m%d_%H%M")
                 if fmt_sel == "HTML":
                     with st.spinner("Generando HTML..."):
                         html_str = generar_informe_html(
@@ -19505,7 +19924,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             _st_path = _os.path.join(_os.path.dirname(__file__), "strategy_texts.json")
             try:
                 with open(_st_path, encoding="utf-8") as _stf:
-                    _est_popover = _json.load(_stf)
+                    _est_popover = textos_estrategia(_json.load(_stf))   # PA3-01: umbrales del motor
             except Exception:
                 _est_popover = {}
 
@@ -19545,7 +19964,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
             _mseñal  = ed["macd_señal"]
             _divs    = ed["divergencias"]
             _niv     = ed["niveles_ref"]
-            _tol_est = st.session_state.get("tolerancia_key", 0.20)  # tolerancia activa del tab Análisis Técnico
+            _tol_est = tolerancia_confluencia(ed.get("precio"), st.session_state.get("tolerancia_pct_key"))  # PA3-04
             _sar     = ed["sar_tend"]
             _pctb    = ed["pct_b"]
             _cons    = ed["consenso_dir"]
@@ -19706,24 +20125,24 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "Un yield muy alto puede reflejar que el mercado descuenta un recorte del dividendo o un dato erróneo de la fuente."))
                 c.append(_criterio(2 if _sma200 > 0 and _precio < _sma200 else 1 if _sma200 == 0 else 0,
                     f"Precio vs SMA200 ({_sma200:.2f})" if _sma200 else "SMA200 no disponible",
-                    f"{'El precio está por debajo de su media de los últimos 200 días: condición de entrada favorable para el método ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días — puede que no sea el mejor momento de entrada' if _sma200 > 0 else ''}",
+                    f"{'El precio está por debajo de su media de los últimos 200 días: condición de entrada favorable para el método ✅' if _sma200 > 0 and _precio < _sma200 else f'El precio está un {(_precio/_sma200-1)*100:.1f}% por encima de su media de los últimos 200 días: condición desfavorable para el método' if _sma200 > 0 else ''}",
                     "La SMA200 promedia los últimos 200 cierres diarios y es la referencia de largo plazo más usada. "
                     "Un precio por debajo de la SMA200 indica meses de corrección, lo que suele elevar el yield efectivo (menos precio por el mismo dividendo) y el margen de seguridad. "
-                    "No marca el suelo exacto; históricamente ha sido zona de entrada favorable para el inversor de largo plazo."))
-                c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'El RSI indica una corrección suficiente: condición de entrada favorable para el método ✅' if _rsi < 45 else 'El RSI está en zona neutral, sin señales extremas — entrada aceptable si el resto de indicadores acompañan ⚠️' if _rsi < 55 else 'El RSI refleja una racha alcista fuerte: una entrada a este nivel asume más riesgo de corrección a corto plazo ❌'}",
+                    "No marca el suelo exacto; el método lo puntúa como condición favorable."))
+                c.append(_criterio(2 if _rsi < RSI_DIV_FAV else 1 if _rsi < RSI_DIV_NEUTRO else 0,
+                    f"RSI {_rsi:.0f} · {etiqueta_rsi(_rsi)}",
+                    f"{'El RSI indica una corrección suficiente: condición de entrada favorable para el método ✅' if _rsi < RSI_DIV_FAV else 'El RSI está en zona neutral, sin señales extremas: condición neutra para el método ⚠️' if _rsi < RSI_DIV_NEUTRO else 'El RSI refleja una racha alcista fuerte: una entrada a este nivel asume más riesgo de corrección a corto plazo ❌'}",
                     "El RSI (Relative Strength Index) mide la velocidad y magnitud de los movimientos de precio en las últimas 14 sesiones, en una escala 0-100. "
                     "Por debajo de 45 indica que el valor ha tenido una corrección reciente — los vendedores están agotados y el precio puede estar cerca de un suelo técnico. "
-                    "Para dividendos no buscamos sobreventa extrema (por debajo de 30), sino zona de corrección razonable que mejore el precio de entrada sin que sea señal de deterioro fundamental."))
+                    "Para dividendos el método puntúa mejor una corrección moderada que una sobreventa extrema (por debajo de 30), que puede reflejar deterioro fundamental."))
                 if _pos52 is None:   # S-1: dato ausente → neutro, sin puntuar
                     c.append(_criterio(None, "Posición 52W no disponible — sin puntuar",
                         "Sin rango de 52 semanas en la fuente ni histórico suficiente; el criterio no puntúa.",
                         "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo."))
                 else:
-                    c.append(_criterio(2 if _pos52 < 35 else 1 if _pos52 < 60 else 0,
+                    c.append(_criterio(2 if _pos52 < POS52_DIV[0] else 1 if _pos52 < POS52_DIV[1] else 0,
                         f"Posición 52W: {_pos52:.0f}% del rango",
-                        f"{'El precio está cerca de los mínimos del año: condición favorable para el método ✅' if _pos52 < 35 else 'El precio está en zona media del rango anual ⚠️' if _pos52 < 60 else 'El precio está cerca de los máximos del año: a este nivel se paga más por el mismo dividendo ❌'}",
+                        f"{'El precio está cerca de los mínimos del año: condición favorable para el método ✅' if _pos52 < POS52_DIV[0] else 'El precio está en zona media del rango anual ⚠️' if _pos52 < POS52_DIV[1] else 'El precio está cerca de los máximos del año: a este nivel se paga más por el mismo dividendo ❌'}",
                         "Indica dónde está el precio actual dentro del rango máximo-mínimo de las últimas 52 semanas. 0% = en el mínimo anual, 100% = en el máximo. "
                         "Para dividendos, un precio en el 0-35% del rango es bajo frente a lo pagado por el mercado durante el último año. "
                         "Consecuencia: el yield efectivo es el más alto del período, más dividendo por euro invertido que en máximos."))
@@ -19754,7 +20173,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "Divergencias técnicas",
                     _div_txt(),
                     "Una divergencia alcista ocurre cuando el precio baja a nuevos mínimos pero el OBV (volumen acumulado) o el RSI no confirman esos mínimos — "
-                    "señal de que hay compradores institucionales acumulando discretamente mientras el precio cae. "
+                    "el método lo interpreta como posible acumulación. "
                     "Sin divergencia el criterio puntúa neutro. Una divergencia bajista activa (precio sube pero indicadores no confirman) es señal de alerta: "
                     "sugiere que el movimiento alcista puede agotarse pronto."))
                 _sop0 = _niv_soporte[0]["precio"] if _niv_soporte else None
@@ -19762,9 +20181,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     f"Soporte técnico: {_sop0:.2f}€" if _sop0 else "Soporte técnico no identificado",
                     f"Confluencia pivot+media a ±{_tol_est:.2f}€ — referencia estructural de stop ✅" if _sop0 else f"Sin pivot+media a ±{_tol_est:.2f}€ — stop sin referencia técnica ⚠️",
                     f"Un soporte reforzado existe cuando un nivel pivot (precio donde el mercado ha girado anteriormente) y una media móvil activa coinciden a menos de {_tol_est:.2f}€. "
-                    "Cuando dos métodos independientes señalan la misma zona, los grandes inversores tienden a acumular órdenes ahí, lo que hace que el precio rebote con mayor probabilidad. "
-                    "Es la referencia natural para el stop-loss: si el precio cierra por debajo de ese nivel, la tesis de entrada queda invalidada. "
-                    "Si no existe, el stop debe situarse en otro nivel técnico (SMA200, mínimo reciente)."))
+                    "Dos métodos independientes señalan la misma zona. "
+                    "Para el método es la referencia de invalidación: un cierre por debajo de ese nivel invalida la lectura. "
+                    "Si no existe, la referencia pasa a otro nivel técnico (SMA200, mínimo reciente)."))
                 return c
 
             def _build_swing():
@@ -19788,9 +20207,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     "Cuando es positivo y creciente, el momentum alcista está acelerando: hay fuerza real detrás del movimiento. "
                     "El método exige momentum activo: una tendencia que pierde fuerza antes de la entrada resta calidad al setup. "
                     "Un histograma positivo pero decreciente es señal de alerta: el movimiento existe pero se debilita."))
-                c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
-                    f"RSI {_rsi:.0f}",
-                    f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido ❌'}",
+                c.append(_criterio(2 if SWING_RSI_IDEAL[0] <= _rsi <= SWING_RSI_IDEAL[1] else 1 if SWING_RSI_ACEPT[0] <= _rsi <= SWING_RSI_ACEPT[1] else 0,
+                    f"RSI {_rsi:.0f} · {etiqueta_rsi(_rsi)}",
+                    f"{'Dentro de la ventana del método ✅' if SWING_RSI_IDEAL[0] <= _rsi <= SWING_RSI_IDEAL[1] else 'Zona intermedia ⚠️' if SWING_RSI_ACEPT[0] <= _rsi <= SWING_RSI_ACEPT[1] else 'Sobreextendido ❌'}",
                     "En swing tendencial, el RSI de referencia está entre 45-62: lejos de la sobrecompra (por encima de 70, precio maduro) "
                     "y sin llegar a la sobreventa (por debajo de 35, debilidad real). "
                     "Es la zona en la que el precio ha retrocedido dentro de la tendencia: el 'retroceso saludable'. "
@@ -19886,9 +20305,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 ))
                 # 5. RSI sin sobrecompra extrema
                 c.append(_criterio(
-                    2 if _rsi < 70 else 1 if _rsi < 76 else 0,
+                    2 if _rsi < GESTION_RSI[0] else 1 if _rsi < GESTION_RSI[1] else 0,
                     f"RSI: {_rsi:.1f}",
-                    f"{'✅ Sin sobrecompra' if _rsi < 70 else '⚠️ Sobrecomprado' if _rsi < 76 else '❌ Sobrecompra extrema — asimetría desfavorable'}",
+                    f"{'✅ Sin sobrecompra' if _rsi < GESTION_RSI[0] else '⚠️ Sobrecomprado' if _rsi < GESTION_RSI[1] else '❌ Sobrecompra extrema — asimetría desfavorable'}",
                     "Un RSI >70 en una posición abierta no es por sí solo una señal de salida, pero empeora la asimetría: "
                     "el precio ha recorrido ya mucho y las correcciones desde sobrecompra suelen ser más rápidas. "
                     "Con RSI >76 en una posición ganadora, el método cuenta sobrecompra extrema como señal de salida."
@@ -19937,7 +20356,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         puntos.append("✅ Estructura tendencial completa — precio sobre SMA50 sobre SMA200.")
                     else:
                         puntos.append("❌ Estructura tendencial incompleta — el método exige una tendencia previa establecida.")
-                    if 45 <= _rsi <= 62:
+                    if SWING_RSI_IDEAL[0] <= _rsi <= SWING_RSI_IDEAL[1]:
                         puntos.append(f"✅ RSI en {_rsi:.0f} — dentro de la ventana del método, sin sobrecompra.")
                     elif _rsi > 65:
                         puntos.append(f"⚠️ RSI en {_rsi:.0f} — sobreextendido. Riesgo de corrección antes del impulso siguiente.")
@@ -19949,7 +20368,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                         puntos.append("✅ Soporte y resistencia identificados — recorrido definido.")
                     elif not _niv_soporte:
                         puntos.append("⚠️ Sin soporte técnico claro — no hay referencia lógica para el nivel de invalidación.")
-                    _conds_sw = [tend_ok, 45 <= _rsi <= 62, not (_div_rsi_baj or _div_mcd_baj),
+                    _conds_sw = [tend_ok, SWING_RSI_IDEAL[0] <= _rsi <= SWING_RSI_IDEAL[1], not (_div_rsi_baj or _div_mcd_baj),
                                  bool(_niv_soporte), bool(_niv_resist)]
                     rec = lectura_metodo_swing(
                         _niv_soporte[0]["precio"] if _niv_soporte else None,
@@ -19992,7 +20411,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     if _div_rsi_baj or _div_mcd_baj:
                         _tipos_baj = [d["tipo"] for d in _divs if d["direccion"] == "bajista"]
                         _exit_sigs.append(f"Divergencia bajista {', '.join(_tipos_baj)}")
-                    if _rsi > 76:
+                    if _rsi > GESTION_RSI[1]:
                         _exit_sigs.append(f"RSI en sobrecompra extrema ({_rsi:.0f})")
                     if _mval is not None and _mseñal is not None and _mval < _mseñal:
                         _exit_sigs.append("MACD cruzado a bajista")
@@ -20083,7 +20502,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                                 estrategias = _est_data,
                             )
                         _ticker_e = ed["ticker"]
-                        _ts_e = datetime.now().strftime("%Y%m%d_%H%M")
+                        _ts_e = ahora_madrid("%Y%m%d_%H%M")
                         if _fmt_e == "HTML":
                             st.download_button(
                                 "⬇️ Descargar HTML",

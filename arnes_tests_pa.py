@@ -106,17 +106,26 @@ def cargar_app(forzar: bool = False) -> dict:
 # Simulación de un ticker para el screener de dividendos (sin red ni BBDD)
 # ─────────────────────────────────────────────────────────────────────────────
 def serie_dividendos(dpa_ultimo: float, anios: int = 12, crecimiento: float = 0.05):
-    """Un pago anual en junio, creciendo `crecimiento` al año, hasta el año pasado.
-    El año pasado paga exactamente `dpa_ultimo`. Índice tz-aware (como yfinance)."""
-    import datetime as _dt
+    """Un pago anual, creciendo `crecimiento` al año. El ÚLTIMO pago fue hace 60 días y es
+    exactamente `dpa_ultimo` (así el DPA de los últimos 12 meses = dpa_ultimo, como en un
+    pagador real). Los anteriores, un año natural antes cada uno. Índice tz-aware (yfinance).
+    PA3-03: antes la serie terminaba en junio del año pasado, lo que con la regla TTM real
+    se leía como dividendo suspendido."""
     import pandas as pd
-    fin = _dt.datetime.now(_dt.timezone.utc).year - 1
+    ultimo = (pd.Timestamp.now(tz="Europe/Madrid") - pd.Timedelta(days=60)).normalize()
     fechas, importes = [], []
     for k in range(anios):
-        anio = fin - (anios - 1 - k)
-        fechas.append(pd.Timestamp(f"{anio}-06-15", tz="Europe/Madrid"))
-        importes.append(dpa_ultimo / ((1 + crecimiento) ** (anios - 1 - k)))
+        atras = anios - 1 - k
+        fechas.append(ultimo - pd.DateOffset(years=atras))
+        importes.append(dpa_ultimo / ((1 + crecimiento) ** atras))
     return pd.Series(importes, index=pd.DatetimeIndex(fechas), name="Dividends")
+
+
+def serie_pagos(pagos):
+    """Serie de dividendos a partir de [(fecha 'AAAA-MM-DD' o Timestamp, importe), ...]."""
+    import pandas as pd
+    f = [pd.Timestamp(d, tz="Europe/Madrid") if not isinstance(d, pd.Timestamp) else d for d, _ in pagos]
+    return pd.Series([float(v) for _, v in pagos], index=pd.DatetimeIndex(f), name="Dividends")
 
 
 def historico_diario(precio: float, sesiones: int = 252, volumen: float = 1_000_000):

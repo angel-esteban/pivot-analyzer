@@ -227,6 +227,21 @@ RANGO_FREE_FLOAT_PCT = (0.0, 100.0)    # free float = % de acciones en circulaci
 PAYOUT_EXTREMO = 5.0
 
 
+def rango_yield(sector: Any = None) -> tuple[float, float]:
+    """PA3-07 (F-3) — Rango de plausibilidad de nivel 0 del yield TTM: 0–20 % para Real Estate
+    (REIT / SOCIMI) y 0–15 % para el resto. Fuente única: umbrales (yield_techo_reit / yield_techo)."""
+    import umbrales as _u
+    _act = _u.actuales()
+    es_re = "real estate" in str(sector or "").strip().lower()
+    return (0.0, float(_act["yield_techo_reit"] if es_re else _act["yield_techo"]))
+
+
+def validar_yield_ttm(valor: Any, sector: Any = None) -> "ResultadoCampo":
+    """Valida un yield TTM (decimal) con el rango de su sector."""
+    spec = FieldSpec("dividend_yield_ttm", "mercado", "porcentaje", rango_valido=rango_yield(sector))
+    return validar_campo(valor, spec)
+
+
 def resolver_payout(dpa: Any, bpa: Any, payout_crudo: Any) -> dict:
     """PA2-03 — Fuente única del payout. Pura; la usan el screener (app.py) y la ingesta.
 

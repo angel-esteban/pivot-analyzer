@@ -143,7 +143,7 @@
         "p25": 10,
         "p50": 16,
         "p75": 24,
-        "nota": "Muy cíclico: comprar en recesión (PER aparentemente alto por beneficios deprimidos), vender en expansión tardía. Retailers: <12x = zona interesante. Lujo: 20-35x normal por pricing power.",
+        "nota": "Muy cíclico: el PER parece alto en recesión (beneficios deprimidos) y bajo en expansión tardía. Retailers: <12x = zona interesante. Lujo: 20-35x normal por pricing power.",
         "metrica_preferida": "EV/EBITDA + PER normalizado (promedio 5 años)"
       },
       "ev_ebitda": {
@@ -182,7 +182,7 @@
         "p25": 14,
         "p50": 19,
         "p75": 25,
-        "nota": "Prima defensiva: beneficios estables justifican PER más alto que cíclicos. En tipos altos la prima se comprime (compiten con renta fija). <16x = zona de compra histórica.",
+        "nota": "Prima defensiva: beneficios estables justifican PER más alto que cíclicos. En tipos altos la prima se comprime (compiten con renta fija). <16x = zona de valoración baja históricamente.",
         "metrica_preferida": "PER + FCF yield — empresas maduras con dividendos"
       },
       "ev_ebitda": {
@@ -195,7 +195,7 @@
         "p25_pct": 3.5,
         "p50_pct": 5.5,
         "p75_pct": 8.0,
-        "nota": "FCF yield >6% en consumo básico = zona de compra históricamente sólida. Generan FCF consistente.",
+        "nota": "FCF yield >6% en consumo básico = valoración históricamente baja. Generan FCF consistente.",
         "interpretacion": "alto_yield_barato"
       },
       "pb": {
@@ -210,7 +210,7 @@
         "alto": 35
       },
       "alertas": [
-        "En entorno de tipos altos: prima de defensivos se reduce — compiten con bonos",
+        "En entorno de tipos altos: prima de defensivos disminuye — compiten con bonos",
         "Pricing power testado post-2022: las que lo mantuvieron = ventaja competitiva real",
         "Volumen vs precio: crecimiento de ingresos sostenible requiere ambos"
       ]
@@ -267,7 +267,7 @@
         "p25": 3,
         "p50": 6,
         "p75": 10,
-        "nota": "Integradas (Repsol, BP, Shell): 3.5-6x en precio de crudo medio. <4x = zona de compra histórica. >9x = precio del petróleo muy alto descontado."
+        "nota": "Integradas (Repsol, BP, Shell): 3.5-6x en precio de crudo medio. <4x = zona de valoración baja histórica. >9x = precio del petróleo muy alto descontado."
       },
       "fcf_yield": {
         "p25_pct": 5.0,
@@ -351,7 +351,7 @@
         "p25_pct": 3.5,
         "p50_pct": 6.0,
         "p75_pct": 9.0,
-        "nota": "Para REITs usar dividend yield en su lugar. REITs legalmente obligados a distribuir >90% del FFO. Yield >7% históricamente zona de compra.",
+        "nota": "Para REITs usar dividend yield en su lugar. REITs legalmente obligados a distribuir >90% del FFO. Yield >7% históricamente asociado a valoraciones bajas.",
         "interpretacion": "alto_yield_barato"
       },
       "pb": {

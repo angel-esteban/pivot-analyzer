@@ -23,7 +23,7 @@
         "bono_aleman_10y_alto": "negativo — proxy de tipo libre de riesgo; spread de valoración se comprime",
         "USD_fortaleza": "mixto — ingresos globales se ven afectados en conversión, pero Nasdaq en USD se beneficia como destino de flujos",
         "petroleo_alto": "neutral-negativo — incrementa costes de energía en centros de datos",
-        "curva_invertida": "negativo — señala desaceleración económica que reduce gasto empresarial IT",
+        "curva_invertida": "negativo — señala desaceleración económica que recorta el gasto empresarial IT",
         "PMI_manufacturero_alto": "positivo — correlación con ciclo global de inversión tecnológica"
       },
       "comportamiento_ciclo": {
@@ -143,14 +143,14 @@
       "sensibilidad_tipos": {
         "direccion": "negativa",
         "intensidad": "alta",
-        "explicacion": "Tipos altos encarecen el crédito al consumo (hipotecas, tarjetas, financiación de coches). Esto reduce directamente el gasto en bienes no esenciales. Además, el efecto riqueza negativo de tipos altos (caída de activos) contrae el consumo discrecional."
+        "explicacion": "Tipos altos encarecen el crédito al consumo (hipotecas, tarjetas, financiación de coches). Esto recorta directamente el gasto en bienes no esenciales. Además, el efecto riqueza negativo de tipos altos (caída de activos) contrae el consumo discrecional."
       },
       "correlaciones_macro": {
         "BCE_bajada_tipos": "muy positivo — reactiva el crédito al consumo y el efecto riqueza",
         "salarios_reales_positivos": "muy positivo — el consumidor tiene más renta disponible real",
         "confianza_consumidor": "correlación directa — KPI adelantado del sector",
         "tasa_paro": "correlación inversa fuerte — desempleo alto destruye consumo discrecional",
-        "precio_energia": "negativo cuando sube — reduce renta disponible del consumidor",
+        "precio_energia": "negativo cuando sube — recorta la renta disponible del consumidor",
         "turismo_internacional": "positivo para subsector hotelero/aerolíneas cuando hay recuperación de viajes"
       },
       "comportamiento_ciclo": {
@@ -334,7 +334,7 @@
       "riesgos_especificos": [
         "Ciclicidad del capex: las empresas recortan inversión rápidamente en desaceleración",
         "Cadenas de suministro largas y complejas (semiconductores, materias primas)",
-        "Intensidad de capital alta: alto capex de mantenimiento reduce FCF real",
+        "Intensidad de capital alta: alto capex de mantenimiento recorta el FCF real",
         "Competencia global con productores de bajo coste (Asia)",
         "Regulación medioambiental creciente sobre emisiones industriales"
       ],

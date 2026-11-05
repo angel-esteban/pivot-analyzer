@@ -73,7 +73,7 @@
             "tipo": "aviso",
             "nombre": "Payout insostenible — caja comprometida",
             "condicion": "Payout > 100% Y BPA > 0 Y FCF yield < Dividend yield",
-            "efecto": "Alerta visible. Sin efecto sobre veredicto ni score.",
+            "efecto": "Degrada el veredicto máximo a 'Parcial'. No modifica el score (Spec PA v3, PA3-07 F-6; antes era informativa). Prioridad: después de K1-BPA y antes de K1-Payout.",
             "razon": "El beneficio contable es positivo pero el payout supera el 100% y la caja libre no respalda el dividendo. Dos indicadores de insostenibilidad: el contable no cuadra y la caja tampoco. Riesgo elevado de recorte."
           },
           {
@@ -82,7 +82,15 @@
             "nombre": "Colchón contable mínimo",
             "condicion": "Payout entre 85% y 100% Y BPA > 0 Y FCF yield ≥ Dividend yield",
             "efecto": "Degrada veredicto máximo a 'Parcial'. Score capado en 69/100 si el score sería 'Cumple'.",
-            "razon": "La caja aguanta y los beneficios son positivos, pero el margen contable es escaso. Un descenso de beneficios del 15% comprometería la sostenibilidad. Empresa apta para seguimiento activo, no para compra y olvido."
+            "razon": "La caja aguanta y los beneficios son positivos, pero el margen contable es escaso. Un descenso de beneficios del 15% comprometería la sostenibilidad. Empresa apta para seguimiento activo, no para mantener sin seguimiento."
+          },
+          {
+            "codigo": "K-RECENT_CUT",
+            "nombre": "Recorte reciente del dividendo",
+            "tipo": "aviso",
+            "condicion": "DPA de los últimos 12 meses < 0,75 × DPA de los 12 meses anteriores (parámetro k_recent_cut_ratio en umbrales.py)",
+            "efecto": "Degrada el veredicto máximo a 'Parcial'. No modifica el score. Motivo: 'recorte reciente del dividendo (−x%)'. Prioridad: después de K1-Payout y antes de K10.",
+            "razon": "Un recorte reciente del dividendo es una señal que K2 (tendencia de 5 años) todavía no capta. Spec PA v3, PA3-03 (F-9)."
           },
           {
             "codigo": "K2",
@@ -151,7 +159,7 @@
         {
           "peso_pct": "20–30%",
           "nombre": "ETFs o fondos de dividendo UCITS",
-          "descripcion": "Para el inversor que prefiere no analizar empresa por empresa, un ETF de dividendo compra docenas de ellas de golpe. Te da diversificación geográfica y sectorial sin trabajo extra."
+          "descripcion": "Para el inversor que prefiere no analizar empresa por empresa, un ETF de dividendo reúne docenas de ellas de golpe. Te da diversificación geográfica y sectorial sin trabajo extra."
         },
         {
           "peso_pct": "5–10%",
@@ -209,10 +217,10 @@
           "cero_sospechoso": false,
           "operador": "lte",
           "umbral_ok": 0.75,
-          "umbral_warning": 0.9,
+          "umbral_warning": 0.85,
           "peso": 3,
           "textos": {
-            "guia": "**Qué es**: Payout ratio = DPA ÷ BPA (Dividendo Por Acción ÷ Beneficio Por Acción). Indica qué porcentaje del beneficio neto se destina a dividendo. BPA = beneficio neto total ÷ número de acciones en circulación.\n\n**Cómo se calcula**: Campo directo `payoutRatio` de yfinance — dato contable basado en el último ejercicio fiscal completo.\n\n**Umbrales**: OK ≤75% · Warning 75%–90% · KO >90%.\n\n**K1 (killshot duro)**: Si payout > 100% Y BPA < 0 simultáneamente, el veredicto es forzado a 'No cumple' con independencia del score. Significa que la empresa paga más dividendo del que gana en beneficios y encima pierde dinero — el dividendo no puede sostenerse desde ninguna fuente de resultado. Ejemplo: Telefónica con payout 111% y BPA -0,42€.",
+            "guia": "**Qué es**: Payout ratio = DPA ÷ BPA (Dividendo Por Acción ÷ Beneficio Por Acción). Indica qué porcentaje del beneficio neto se destina a dividendo. BPA = beneficio neto total ÷ número de acciones en circulación.\n\n**Cómo se calcula**: Campo directo `payoutRatio` de yfinance — dato contable basado en el último ejercicio fiscal completo.\n\n**Umbrales**: OK <75% · ~OK 75%–85% · KO >85%. Entre 85% y 100% con BPA > 0 y caja que cubre, además, señal K1-Payout (degrada a Parcial); por encima de 100%, KO crítico.\n\n**K1 (killshot duro)**: Si payout > 100% Y BPA < 0 simultáneamente, el veredicto es forzado a 'No cumple' con independencia del score. Significa que la empresa paga más dividendo del que gana en beneficios y encima pierde dinero — el dividendo no puede sostenerse desde ninguna fuente de resultado. Ejemplo: Telefónica con payout 111% y BPA -0,42€.",
             "ok": "Dividendo bien cubierto: la empresa destina el {valor:.0%} de su beneficio, con margen suficiente para imprevistos.",
             "warning": "Cobertura ajustada ({valor:.0%}). El dividendo es sostenible a corto plazo, pero sin margen para sorpresas negativas en resultados.",
             "ko": "Payout excesivo ({valor:.0%}): la empresa está pagando más de lo que puede permitirse de forma sostenida. Alto riesgo de recorte."
@@ -415,9 +423,9 @@
           "umbral_warning": 22.0,
           "peso": 1,
           "textos": {
-            "guia": "**Qué es.** EV/EBITDA = Enterprise Value ÷ EBITDA. EV = capitalización bursátil + deuda neta − caja. EBITDA = resultado operativo antes de amortizaciones — proxy del flujo operativo bruto.\n\n**Cómo se calcula.** Campo `enterpriseToEbitda` directo de yfinance.\n\n**Umbrales.** OK <15× · ~OK 15–22× · KO >22×. No es criterio eliminatorio: reduce el score pero no veta la empresa.\n\n**Por qué importa en dividendos.** El precio de entrada condiciona el yield efectivo. A 25× EBITDA con un 4% de yield hay poco margen de seguridad si los resultados decepcionan. El umbral KO en 22× es deliberadamente generoso: utilities y telecomunicaciones —sectores naturales de cartera de rentas— cotizan habitualmente entre 8× y 14×; superar 22× implica una prima de crecimiento incompatible con un yield atractivo hoy.\n\n**Excepciones.** N/A para REITs/SOCIMIs reales (Colonial, Merlin — valorados por NAV y FFO) y Banca/Seguros (P/BV). Infraestructura inmobiliaria como torres de telecomunicaciones (Cellnex) NO está excluida: EV/EBITDA es la métrica primaria que usan los analistas del sector. La distinción se hace por sub-sector: `industry` con prefijo 'REIT' → excluido; resto de Real Estate → evaluado.",
+            "guia": "**Qué es.** EV/EBITDA = Enterprise Value ÷ EBITDA. EV = capitalización bursátil + deuda neta − caja. EBITDA = resultado operativo antes de amortizaciones — proxy del flujo operativo bruto.\n\n**Cómo se calcula.** Campo `enterpriseToEbitda` directo de yfinance.\n\n**Umbrales.** OK <15× · ~OK 15–22× · KO >22×. No es criterio eliminatorio: rebaja el score pero no veta la empresa.\n\n**Por qué importa en dividendos.** El precio de entrada condiciona el yield efectivo. A 25× EBITDA con un 4% de yield hay poco margen de seguridad si los resultados decepcionan. El umbral KO en 22× es deliberadamente generoso: utilities y telecomunicaciones —sectores naturales de cartera de rentas— cotizan habitualmente entre 8× y 14×; superar 22× implica una prima de crecimiento incompatible con un yield atractivo hoy.\n\n**Excepciones.** N/A para REITs/SOCIMIs reales (Colonial, Merlin — valorados por NAV y FFO) y Banca/Seguros (P/BV). Infraestructura inmobiliaria como torres de telecomunicaciones (Cellnex) NO está excluida: EV/EBITDA es la métrica primaria que usan los analistas del sector. La distinción se hace por sub-sector: `industry` con prefijo 'REIT' → excluido; resto de Real Estate → evaluado.",
             "ok": "EV/EBITDA {valor:.1f}× — valoración razonable. Margen de seguridad compatible con cartera de rentas.",
-            "warning": "EV/EBITDA {valor:.1f}× — valoración algo exigente. El yield de entrada está probablemente comprimido y el margen de seguridad se reduce.",
+            "warning": "EV/EBITDA {valor:.1f}× — valoración algo exigente. El yield de entrada está probablemente comprimido y el margen de seguridad disminuye.",
             "ko": "EV/EBITDA {valor:.1f}× — valoración incompatible con un yield atractivo en horizonte corto. Prima de crecimiento elevada para un perfil de rentas."
           },
           "sectores_na": [
@@ -576,7 +584,7 @@
           "textos": {
             "guia": "Una buena empresa de crecimiento no te paga dividendos porque tiene algo mejor que hacer con ese dinero: expandirse, contratar, desarrollar nuevos productos. Eso es buena señal siempre que el ROE sea alto.",
             "ok": "La empresa reinvierte la mayor parte de su beneficio en el negocio — coherente con una estrategia de crecimiento.",
-            "warning": "La empresa reparte parte del beneficio como dividendo. No es un problema si el crecimiento se mantiene, pero reduce el capital disponible para reinvertir.",
+            "warning": "La empresa reparte parte del beneficio como dividendo. No es un problema si el crecimiento se mantiene, pero disminuye el capital disponible para reinvertir.",
             "ko": "La empresa destina más del 40% del beneficio a dividendos. Difícilmente compatible con una tesis de crecimiento acelerado."
           }
         },
@@ -838,7 +846,7 @@
           "umbral_warning": 300000,
           "peso": 2,
           "textos": {
-            "guia": "El volumen diario negociado indica con qué facilidad puedes comprar o vender sin mover el precio. Un ETF con poco volumen puede tener spreads amplios entre precio de compra y venta, lo que añade coste oculto a cada operación.",
+            "guia": "El volumen diario negociado indica con qué facilidad puedes comprar o vender sin mover el precio. Un ETF con poco volumen puede tener spreads amplios entre los precios de oferta y demanda, lo que añade coste oculto a cada operación.",
             "ok": "Volumen diario de {valor_fmt} — liquidez suficiente para operar sin impacto relevante en el precio.",
             "warning": "Volumen diario de {valor_fmt} — liquidez moderada. Aceptable para aportaciones periódicas, pero evita operaciones grandes en momentos de estrés.",
             "ko": "Volumen diario de {valor_fmt} — liquidez muy baja. El spread puede ser un coste relevante en cada operación."
@@ -859,7 +867,7 @@
           "enlace_referencia": "https://www.justetf.com",
           "peso": 2,
           "textos": {
-            "guia": "Un ETF de réplica física compra directamente las acciones del índice — es lo más transparente. Uno de réplica sintética usa derivados para imitar el comportamiento del índice, lo que añade algo de riesgo de contraparte. Para un inversor particular, la réplica física es más fácil de entender y dormir tranquilo.",
+            "guia": "Un ETF de réplica física adquiere directamente las acciones del índice — es lo más transparente. Uno de réplica sintética usa derivados para imitar el comportamiento del índice, lo que añade algo de riesgo de contraparte. Para un inversor particular, la réplica física es más fácil de entender y dormir tranquilo.",
             "ok": "Réplica física — el ETF posee directamente los activos del índice.",
             "warning": "Verificar en el folleto del fondo o en justETF — no ha sido posible confirmar el método de réplica automáticamente.",
             "ko": "Réplica sintética — el ETF usa derivados (swaps) para replicar el índice. Añade riesgo de contraparte respecto a la réplica física."
@@ -883,7 +891,7 @@
             "guia": "En España, los ETFs de acumulación (Acc) son más eficientes fiscalmente: reinvierten los dividendos internamente y no tributan hasta que vendes. Los ETFs de distribución (Dist) pagan dividendos periódicos, pero cada cobro tributa ese año aunque no necesites el dinero. Para un inversor a largo plazo en España, la acumulación suele ser la mejor opción.",
             "ok": "ETF de acumulación (Acc) — los dividendos se reinvierten automáticamente y no tributan hasta la venta. Óptimo para el inversor a largo plazo en España.",
             "warning": "Verificar en el folleto si es acumulación o distribución — no ha sido posible confirmarlo automáticamente.",
-            "ko": "ETF de distribución (Dist) — los dividendos cobrados tributan cada año en el IRPF, lo que reduce el efecto del interés compuesto."
+            "ko": "ETF de distribución (Dist) — los dividendos cobrados tributan cada año en el IRPF, lo que rebaja el efecto del interés compuesto."
           }
         }
       ]
@@ -954,7 +962,7 @@
           "operador": "computed",
           "peso": 3,
           "textos": {
-            "guia": "Antes de entrar, confirma que la tendencia de fondo te acompaña. En swing largo (compra), lo ideal es que el precio esté por encima de la SMA50, y la SMA50 por encima de la SMA200. Operar contra tendencia multiplica el riesgo.",
+            "guia": "Antes de entrar, confirma que la tendencia de fondo te acompaña. En swing largo (posición alcista), lo ideal es que el precio esté por encima de la SMA50, y la SMA50 por encima de la SMA200. Operar contra tendencia multiplica el riesgo.",
             "ok": "Estructura tendencial alcista confirmada: precio > SMA50 > SMA200. La tendencia de fondo acompaña la operación.",
             "warning": "Estructura tendencial parcial — alguna de las medias no está alineada. El swing es posible pero con mayor cautela.",
             "ko": "Estructura tendencial bajista o sin dirección clara. Operar en largo en estas condiciones va contra la tendencia de fondo."
@@ -1016,7 +1024,7 @@
             "guia": "Un valor en el 20–80% de su rango anual tiene recorrido en ambas direcciones, lo que facilita definir objetivos y stops con sentido. En máximos anuales (>80%), la resistencia histórica limita el recorrido al alza; en mínimos (<20%), puede seguir cayendo.",
             "ok": "El precio está en el {valor:.0f}% de su rango anual — con recorrido suficiente para desarrollar el swing.",
             "warning": "El precio está en el {valor:.0f}% de su rango anual — cerca de un extremo. El recorrido puede ser más limitado.",
-            "ko": "El precio está en el {valor:.0f}% de su rango anual — en un extremo histórico. La asimetría riesgo/beneficio del swing se reduce significativamente."
+            "ko": "El precio está en el {valor:.0f}% de su rango anual — en un extremo histórico. La asimetría riesgo/beneficio del swing disminuye significativamente."
           }
         },
         {
