@@ -14,6 +14,10 @@ USO
   python cron_fundamentales.py                       # todo el universo
   python cron_fundamentales.py --indice "IBEX 35"    # solo un índice
   python cron_fundamentales.py --tickers IBE.MC ACX.MC
+  python cron_fundamentales.py --nivel estructural   # sector, free float, nombre…
+  python cron_fundamentales.py --nivel ambos         # estructural + fundamental
+
+  Desde Windows, doble clic en refrescar_screener.bat (IBEX 35, ambos niveles).
 
 CÓMO PROGRAMARLO
   - GitHub Actions (encaja con tu repo): workflow `schedule: cron` semanal, con
@@ -37,9 +41,19 @@ _DIR = Path(__file__).resolve().parent
 CRITERIA_PATH = str(_DIR / "criteria.json")
 
 
+_LOG_FILE: Path | None = None   # si se usa --log-dir, además de la consola se escribe aquí
+
+
 def _log(msg: str) -> None:
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    linea = f"[{ts}] {msg}"
+    print(linea, flush=True)
+    if _LOG_FILE is not None:
+        try:
+            with open(_LOG_FILE, "a", encoding="utf-8") as fh:
+                fh.write(linea + "\n")
+        except Exception:                            # noqa: BLE001
+            pass
 
 
 def obtener_database_url() -> str:
@@ -50,9 +64,15 @@ def obtener_database_url() -> str:
     secrets = _DIR / ".streamlit" / "secrets.toml"
     if secrets.is_file():
         try:
-            import tomllib  # Python 3.11+
-            with open(secrets, "rb") as f:
-                val = tomllib.load(f).get("DATABASE_URL")
+            try:
+                import tomllib  # Python 3.11+
+                with open(secrets, "rb") as f:
+                    val = tomllib.load(f).get("DATABASE_URL")
+            except ModuleNotFoundError:              # Python < 3.11: lectura mínima de la línea
+                val = None
+                for _ln in secrets.read_text(encoding="utf-8").splitlines():
+                    if _ln.strip().startswith("DATABASE_URL"):
+                        val = _ln.split("=", 1)[1].strip().strip('"').strip("'")
             if val:
                 return val
         except Exception as e:                       # noqa: BLE001
@@ -91,17 +111,30 @@ def cargar_universo(conn, indice: str | None = None) -> list[str]:
     return unicos
 
 
-def ejecutar(conn, tickers: list[str], fuente=None):
-    """Lanza la ingesta fundamental. `fuente` inyectable para test."""
-    return ingesta.ingerir_fundamental(
-        tickers, conn, criteria_path=CRITERIA_PATH, fuente=fuente, disparado_por="cron")
+def ejecutar(conn, tickers: list[str], fuente=None, nivel: str = "fundamental",
+             disparado_por: str = "cron"):
+    """Lanza la ingesta del nivel pedido ('fundamental' o 'estructural'). `fuente` inyectable para test."""
+    fn = ingesta.ingerir_estructural if nivel == "estructural" else ingesta.ingerir_fundamental
+    return fn(tickers, conn, criteria_path=CRITERIA_PATH, fuente=fuente, disparado_por=disparado_por)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Refresco fundamental del screener.")
     ap.add_argument("--indice", help="Nombre exacto del índice (si se omite, todo el universo).")
     ap.add_argument("--tickers", nargs="+", help="Lista explícita de tickers (ignora --indice).")
+    ap.add_argument("--nivel", choices=["fundamental", "estructural", "ambos"], default="fundamental",
+                    help="Qué tablas refrescar (por defecto 'fundamental', como el cron semanal).")
+    ap.add_argument("--origen", default="cron",
+                    help="Etiqueta para ingesta_log (p. ej. 'pc' al lanzarlo a mano).")
+    ap.add_argument("--log-dir", help="Carpeta donde guardar también el registro (p. ej. logs).")
     args = ap.parse_args(argv)
+    if args.log_dir:
+        global _LOG_FILE
+        _d = Path(args.log_dir)
+        if not _d.is_absolute():
+            _d = _DIR / _d
+        _d.mkdir(parents=True, exist_ok=True)
+        _LOG_FILE = _d / f"refresco_{datetime.datetime.now():%Y-%m-%d_%H%M}.log"
 
     import psycopg2
     url = obtener_database_url()
@@ -112,14 +145,19 @@ def main(argv: list[str] | None = None) -> int:
         if not tickers:
             _log("No hay tickers que procesar. Fin.")
             return 1
-        _log(f"Universo: {len(tickers)} tickers. Iniciando ingesta fundamental...")
-        r = ejecutar(conn, tickers)
-        _log(f"Resultado -> ok={r.ok} fallidos={r.fallidos} (log #{r.log_id})")
-        if r.detalle_fallidos:
-            for tk, motivo in r.detalle_fallidos.items():
-                _log(f"  FALLO {tk}: {motivo}")
-        # Éxito si al menos la mitad se procesó bien
-        return 0 if r.ok >= max(1, r.procesados // 2) else 2
+        niveles = ["estructural", "fundamental"] if args.nivel == "ambos" else [args.nivel]
+        codigo = 0
+        for nivel in niveles:
+            _log(f"Universo: {len(tickers)} tickers. Iniciando ingesta {nivel}...")
+            r = ejecutar(conn, tickers, nivel=nivel, disparado_por=args.origen)
+            _log(f"Resultado {nivel} -> ok={r.ok} fallidos={r.fallidos} (log #{r.log_id})")
+            if r.detalle_fallidos:
+                for tk, motivo in r.detalle_fallidos.items():
+                    _log(f"  FALLO {tk}: {motivo}")
+            # Éxito si al menos la mitad se procesó bien
+            if r.ok < max(1, r.procesados // 2):
+                codigo = 2
+        return codigo
     finally:
         conn.close()
         _log("Conexión cerrada.")

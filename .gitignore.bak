@@ -1,0 +1,36 @@
+# ─── Secretos (NUNCA subir — repo público) ───────────────────────────
+secrets.toml
+.streamlit/secrets.toml
+.env
+*.key
+*.pem
+
+# ─── Datos sensibles de la app en disco ──────────────────────────────
+.pivot_sessions.json          # almacén de sesiones: contiene tokens de usuarios
+
+# ─── Backups y copias manuales (basura, no versionar) ────────────────
+*.bak
+*.bak.json
+app.py.bak*
+criteria*.bak*
+
+# ─── Python / cachés ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# ─── Entornos virtuales ──────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ─── Sistema operativo / editor ──────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# NOTA: .streamlit/config.toml SÍ se versiona (solo tema, sin secretos).
+# Recuerda: al subir ficheros por la web de GitHub, este archivo no bloquea
+# nada automáticamente — evita seleccionar manualmente los de arriba.
