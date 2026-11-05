@@ -571,6 +571,53 @@ st.markdown("""
         [data-testid="stSidebarCollapseButton"],
         button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
     }
+    /* ── CAPTURA DE DATOS: desplegables visibles y fuentes más grandes ─────────
+       Streamlit actual dibuja st.selectbox como un combobox (react-aria): el control
+       visible es [role="group"], no div[data-baseweb="select"]. Sin esta regla el
+       desplegable quedaba sin fondo ni borde y casi no se veía. Mismo aspecto que la
+       caja de texto (fondo blanco, borde, foco azul). */
+    [data-testid="stSelectbox"] [role="group"] {
+        background: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 7px !important;
+        min-height: 42px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    [data-testid="stSelectbox"] [role="group"]:focus-within {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
+    }
+    [data-testid="stSelectbox"] input {
+        font-size: 1rem !important; color: #0f172a !important;
+        background: transparent !important;
+    }
+    [role="listbox"] [role="option"] { font-size: 1rem !important; }
+    /* Cajas de texto/número: el borde va en el contenedor del input (así no se recorta). */
+    [data-testid="stTextInput"] div:has(> input),
+    [data-testid="stNumberInput"] div:has(> input) {
+        background: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 7px !important;
+        min-height: 42px !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    [data-testid="stTextInput"] div:has(> input):focus-within,
+    [data-testid="stNumberInput"] div:has(> input):focus-within {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
+    }
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stNumberInput"] input:focus {
+        font-size: 1rem !important;
+        border: none !important; box-shadow: none !important;
+        background: transparent !important;
+    }
+    [data-testid="stWidgetLabel"] p {
+        font-size: 0.95rem !important; font-weight: 600 !important; color: #1e293b !important;
+    }
+    .stButton > button p { font-size: 1rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1799,6 +1846,15 @@ def pantalla_login():
             border-color: #2563eb !important;
             box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
             background: #fff !important;
+        }
+        /* El login conserva su diseño: sin el borde de contenedor del estilo general. */
+        .login-col [data-testid="stTextInput"] div:has(> input) {
+            border: none !important; background: transparent !important;
+            box-shadow: none !important; min-height: 0 !important;
+        }
+        .login-col [data-testid="stTextInput"] input {
+            border: 1.5px solid #e2e8f0 !important; background: #f8fafc !important;
+            font-size: 0.92rem !important;
         }
         /* ── RESPONSIVE MOVIL ─────────────────────────────────────── */
         @media (max-width: 640px) {
