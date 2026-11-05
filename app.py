@@ -7692,43 +7692,43 @@ tr:nth-child(even) td { background:#f8fafc; }
     _li_score_h = (puntuacion_tec or {}).get("score_total", 5.0)
     _li_nivel_h = "alto" if _li_score_h >= 7 else ("medio" if _li_score_h >= 4 else "bajo")
     _li_key_h   = (_li_nivel_h, semaforo)
-    _LI_M = {
+    _LI_M = {   # PA2-01: implicaciones descriptivas, sin imperativos
         ("alto",   "verde"):    ("#f0fdf4", "#16a34a", "🟢", "Todo en verde: estructura y momento alineados",
-            f"El valor tiene posicion estructural solida (score {_li_score_h:.1f}/10) y el momentum acompaña. "
+            f"El valor tiene posición estructural sólida (score {_li_score_h:.1f}/10) y el momentum acompaña. "
             "Los indicadores técnicos están mayoritariamente alineados al alza.",
-            "Es el entorno técnico más favorable. Si ya tienes posicion, las senales respaldan mantenerla. "
-            "Si no has entrado, busca una zona de soporte cercana para hacerlo."),
+            "Es el entorno técnico más favorable que describe el método: estructura y momento apuntan en la misma dirección. "
+            "El soporte más cercano actúa como referencia de invalidación de esta lectura."),
         ("alto",   "amarillo"): ("#fefce8", "#ca8a04", "🟡", "Buena estructura, pero el impulso duda",
             f"La posición estructural es fuerte (score {_li_score_h:.1f}/10). Sin embargo, el momentum envía señales contradictorias.",
-            "No es el momento de entrar con todo el capital de golpe. Si ya tienes posición, no hay por qué salir. "
-            "Espera a que el semáforo mejore antes de entrar."),
-        ("alto",   "rojo"):     ("#fefce8", "#ca8a04", "🟡", "Buena estructura, pero correccion en marcha",
+            "La estructura sigue siendo favorable, pero el momento no la confirma. "
+            "Para el método, la lectura pasaría a alineada si el semáforo de momentum mejora."),
+        ("alto",   "rojo"):     ("#fefce8", "#ca8a04", "🟡", "Buena estructura, pero corrección en marcha",
             f"La estructura técnica de largo plazo es positiva (score {_li_score_h:.1f}/10), pero el precio pasa por una corrección temporal.",
-            "Las correcciones en valores con buena estructura son oportunidades para quien tiene paciencia. "
-            "Vigila el soporte más cercano: si lo pierde con mucho volumen, la corrección puede profundizarse."),
-        ("medio",  "verde"):    ("#fefce8", "#ca8a04", "🟡", "El precio sube, pero la base no es solida",
+            "La corrección se produce dentro de una estructura positiva. El soporte más cercano es la referencia: "
+            "una pérdida con volumen elevado indicaría que la corrección puede profundizarse."),
+        ("medio",  "verde"):    ("#fefce8", "#ca8a04", "🟡", "El precio sube, pero la base no es sólida",
             f"El momentum a corto plazo es favorable, pero la posición estructural es neutral (score {_li_score_h:.1f}/10).",
-            "Cuidado con las subidas sin estructura sólida: pueden bajar igual de rápido. "
-            "Si tienes beneficios, ajusta tu stop-loss. Si no tienes posición, espera mejora estructural."),
+            "Las subidas sin estructura sólida son más frágiles: el método no las considera confirmadas "
+            "mientras la posición estructural no mejore."),
         ("medio",  "amarillo"): ("#f8fafc", "#94a3b8", "⚪", "Sin señal clara en ningún sentido",
             f"Ni la estructura (score {_li_score_h:.1f}/10) ni el momentum apuntan en una dirección definida.",
-            "Estamos en mercado lateral. Lo más prudente es esperar ruptura clara por encima o debajo de un nivel relevante."),
+            "Mercado lateral. El método no identifica dirección; la confirmaría un cierre por encima del nivel de "
+            "confirmación alcista o por debajo del de invalidación bajista (ver Capa Operativa)."),
         ("medio",  "rojo"):     ("#fff7ed", "#ea580c", "🟠", "Impulso bajista sin base que amortigüe",
             f"El momentum está deteriorado y la posición estructural es neutral (score {_li_score_h:.1f}/10).",
-            "Entorno técnico desfavorable sin red de seguridad estructural. Si ya tienes posición, "
-            "revisa los soportes más cercanos. Si estás fuera, espera estabilización."),
+            "Entorno técnico desfavorable sin respaldo estructural. Los soportes más cercanos son las referencias "
+            "que el método utiliza para valorar si el deterioro continúa o se estabiliza."),
         ("bajo",   "verde"):    ("#fff7ed", "#ea580c", "🟠", "Rebote puntual en valor con problemas de fondo",
             f"El precio sube a corto plazo, pero la estructura de largo plazo es débil (score {_li_score_h:.1f}/10).",
-            "Este tipo de rebote suele ser temporal. Históricamente son momentos en los que los inversores "
-            "que ya tienen posición aprovechan para vender, no para comprar."),
+            "Para el método, un rebote sobre una estructura débil no constituye cambio de tendencia: "
+            "históricamente este patrón tiende a ser temporal."),
         ("bajo",   "amarillo"): ("#fef2f2", "#dc2626", "🔴", "Estructura débil y sin dirección",
             f"La estructura técnica de largo plazo es claramente negativa (score {_li_score_h:.1f}/10) y el momentum no muestra recuperación.",
-            "Alto riesgo técnico. Si tienes posición, revisa tu stop-loss. "
-            "Si estás fuera, no hay señal que justifique entrar."),
+            "Riesgo técnico alto. El método no identifica ninguna señal de entrada en este entorno."),
         ("bajo",   "rojo"):     ("#fef2f2", "#dc2626", "🔴", "Todos los indicadores en contra",
             f"La estructura técnica es negativa (score {_li_score_h:.1f}/10) y el momentum confirma la presión bajista.",
-            "Es el entorno técnico más desfavorable. Entrar ahora sería ir contra todos los indicadores disponibles. "
-            "Si ya tienes posición, valora honestamente si lo que esperabas al entrar sigue siendo válido."),
+            "Es el entorno técnico más desfavorable que describe el método: estructura y momento coinciden a la baja "
+            "y ningún indicador disponible señala lo contrario."),
     }
     _li_bg_h, _li_brd_h, _li_ico_h, _li_tit_h, _li_sit_h, _li_imp_h = _LI_M.get(
         _li_key_h, ("#f8fafc", "#94a3b8", "⚪", "Analisis en proceso", "Datos insuficientes.", "")
@@ -8124,7 +8124,7 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         rec_html = (
             f'<div class="rec-box">'
             f'<div class="rec-lbl">{ROTULO_LECTURA_METODO}</div>'
-            f'<div class="rec-txt">{rec}</div>'
+            f'<div class="rec-txt">{_sin_rotulo_metodo(rec)}</div>'
             f'<div style="font-size:10px;color:#64748b;margin-top:6px">{PIE_LECTURA_METODO}</div>'
             f'</div>'
         ) if rec else f'<div style="font-size:10px;color:#64748b">{PIE_LECTURA_METODO}</div>'  # PA2-01
@@ -8406,7 +8406,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
 
         if rec:   # PA2-01: "Lectura del método" + pie fijo (sin campo recomendación)
             punto_items.append(Paragraph(f"{ROTULO_LECTURA_METODO}:", S_REC_H))
-            punto_items.append(Paragraph(_esc(rec), S_REC))
+            punto_items.append(Paragraph(_esc(_sin_rotulo_metodo(rec)), S_REC))
         punto_items.append(Paragraph(_esc(PIE_LECTURA_METODO), S_PUNTO))
 
         body = Table(
@@ -8751,35 +8751,36 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
     _lip_score = (puntuacion_tec or {}).get("score_total", 5.0)
     _lip_nivel = "alto" if _lip_score >= 7 else ("medio" if _lip_score >= 4 else "bajo")
     _lip_key   = (_lip_nivel, semaforo)
-    _LIP_M = {
+    _LIP_M = {   # PA2-01: implicaciones descriptivas, sin imperativos
         ("alto",   "verde"):    (VE, "TODO EN VERDE: estructura y momento alineados",
             f"Posición estructural sólida (score {_lip_score:.1f}/10) y momentum acompañando. "
-            "Entorno técnico más favorable. Si tienes posición, las señales respaldan mantenerla. "
-            "Si no has entrado, busca zona de soporte cercana."),
+            "Entorno técnico más favorable que describe el método. "
+            "El soporte más cercano actúa como referencia de invalidación."),
         ("alto",   "amarillo"): (colors.HexColor("#ca8a04"), "BUENA ESTRUCTURA, PERO EL IMPULSO DUDA",
             f"Estructura fuerte (score {_lip_score:.1f}/10) pero momentum con señales contradictorias. "
-            "No es momento de entrar con todo el capital. Si tienes posicion, no hay por que salir."),
+            "La lectura pasaría a alineada si el momentum mejora."),
         ("alto",   "rojo"):     (colors.HexColor("#ca8a04"), "BUENA ESTRUCTURA, CORRECCIÓN EN MARCHA",
             f"Estructura de largo plazo positiva (score {_lip_score:.1f}/10) pero corrección temporal activa. "
-            "Vigila el soporte más cercano: si lo pierde con volumen, la corrección puede profundizarse."),
+            "Una pérdida del soporte más cercano con volumen indicaría que la corrección puede profundizarse."),
         ("medio",  "verde"):    (colors.HexColor("#ca8a04"), "EL PRECIO SUBE PERO LA BASE NO ES SÓLIDA",
             f"Momentum favorable a corto plazo, pero posición estructural neutral (score {_lip_score:.1f}/10). "
-            "Cuidado: subidas sin estructura sólida pueden bajar igual de rápido."),
+            "Las subidas sin estructura sólida son más frágiles."),
         ("medio",  "amarillo"): (colors.grey, "SIN SEÑAL CLARA EN NINGÚN SENTIDO",
             f"Ni estructura (score {_lip_score:.1f}/10) ni momentum apuntan en dirección definida. "
-            "Espera ruptura clara de un nivel relevante antes de actuar."),
+            "El método no identifica dirección; la confirmaría un cierre por encima del nivel de confirmación "
+            "alcista o por debajo del de invalidación bajista (ver Capa Operativa)."),
         ("medio",  "rojo"):     (colors.HexColor("#ea580c"), "IMPULSO BAJISTA SIN BASE QUE AMORTIGÜE",
             f"Momentum deteriorado y posición estructural neutral (score {_lip_score:.1f}/10). "
-            "Sin red de seguridad estructural. Revisa soportes más cercanos."),
+            "Sin respaldo estructural; los soportes más cercanos son la referencia del método."),
         ("bajo",   "verde"):    (colors.HexColor("#ea580c"), "REBOTE PUNTUAL EN VALOR CON PROBLEMAS DE FONDO",
             f"El precio sube a corto plazo pero la estructura es débil (score {_lip_score:.1f}/10). "
             "Este tipo de rebote suele ser temporal."),
-        ("bajo",   "amarillo"): (RO, "ESTRUCTURA DEBIL Y SIN DIRECCION",
+        ("bajo",   "amarillo"): (RO, "ESTRUCTURA DÉBIL Y SIN DIRECCIÓN",
             f"Estructura claramente negativa (score {_lip_score:.1f}/10) y momentum sin recuperación. "
-            "Alto riesgo técnico. Revisa tu stop-loss si tienes posición."),
+            "Riesgo técnico alto; el método no identifica señal de entrada."),
         ("bajo",   "rojo"):     (RO, "TODOS LOS INDICADORES EN CONTRA",
             f"Estructura negativa (score {_lip_score:.1f}/10) y momentum confirma presión bajista. "
-            "Entorno técnico más desfavorable. No hay señal técnica que justifique entrar."),
+            "Entorno técnico más desfavorable que describe el método."),
     }
     _lip_col, _lip_tit, _lip_txt = _LIP_M.get(
         _lip_key, (colors.grey, "ANALISIS EN PROCESO", "Datos insuficientes.")
@@ -12406,6 +12407,15 @@ def lectura_yield_dividendos(yield_pct: float) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 PIE_LECTURA_METODO = "Lectura automática de un método. No es una recomendación de inversión."
 ROTULO_LECTURA_METODO = "Lectura del método"
+
+
+def _sin_rotulo_metodo(texto):
+    """PA2-01: evita 'Lectura del método: Lectura del método: …' cuando el texto ya trae el rótulo."""
+    t = (texto or "").strip()
+    for pref in (f"**{ROTULO_LECTURA_METODO}:**", f"{ROTULO_LECTURA_METODO}:"):
+        if t.startswith(pref):
+            return t[len(pref):].strip()
+    return t
 INVALIDACION_SWING_PCT = 2.0   # % bajo el soporte (antes el texto decía "stop 2-3% por debajo")
 
 # Términos que no pueden aparecer en los textos generados de estos bloques
@@ -19703,9 +19713,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 c.append(_criterio(2 if _rsi < 45 else 1 if _rsi < 55 else 0,
                     f"RSI {_rsi:.0f}",
                     f"{'El RSI indica una corrección suficiente: condición de entrada favorable para el método ✅' if _rsi < 45 else 'El RSI está en zona neutral, sin señales extremas — entrada aceptable si el resto de indicadores acompañan ⚠️' if _rsi < 55 else 'El RSI refleja una racha alcista fuerte: una entrada a este nivel asume más riesgo de corrección a corto plazo ❌'}",
-                    "El RSI (Relative Strength Index) mide la velocidad y magnitud de los movimientos de precio en los últimos 14 sesiones, en una escala 0-100. "
+                    "El RSI (Relative Strength Index) mide la velocidad y magnitud de los movimientos de precio en las últimas 14 sesiones, en una escala 0-100. "
                     "Por debajo de 45 indica que el valor ha tenido una corrección reciente — los vendedores están agotados y el precio puede estar cerca de un suelo técnico. "
-                    "Para dividendos no buscamos sobreventa extrema (&lt;30), sino zona de corrección razonable que mejore el precio de entrada sin que sea señal de deterioro fundamental."))
+                    "Para dividendos no buscamos sobreventa extrema (por debajo de 30), sino zona de corrección razonable que mejore el precio de entrada sin que sea señal de deterioro fundamental."))
                 if _pos52 is None:   # S-1: dato ausente → neutro, sin puntuar
                     c.append(_criterio(None, "Posición 52W no disponible — sin puntuar",
                         "Sin rango de 52 semanas en la fuente ni histórico suficiente; el criterio no puntúa.",
@@ -19768,9 +19778,9 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                     _tend_lbl,
                     f"{'Precio>SMA50>SMA200 ✅' if tend_ok else 'Precio>SMA50 pero SMA50<SMA200 ⚠️' if tend_par else f'Precio bajo SMA50 ({_sma50:.2f}) ❌'}",
                     "Las SMAs (medias móviles simples) promedian los últimos N cierres para mostrar la dirección del precio sin el ruido diario. "
-                    "Precio &gt; SMA50 &gt; SMA200 es la 'alineación alcista perfecta': el corto plazo confirma al largo plazo y el precio está por encima de ambos. "
+                    "Precio > SMA50 > SMA200 es la 'alineación alcista perfecta': el corto plazo confirma al largo plazo y el precio está por encima de ambos. "
                     "En swing tendencial, una entrada contra la tendencia principal tiene estadísticamente menor probabilidad de éxito: el método exige la estructura alineada. "
-                    "SMA50 &gt; SMA200 sin el precio encima indica una tendencia emergente con mayor riesgo."))
+                    "SMA50 > SMA200 sin el precio encima indica una tendencia emergente con mayor riesgo."))
                 c.append(_criterio(2 if _mhist > 0 and _mval > _mseñal else 1 if _mhist > 0 else 0,
                     f"MACD histograma {_mhist:+.4f}",
                     f"{'Positivo y acelerando ✅' if _mhist > 0 and _mval > _mseñal else 'Positivo pero perdiendo fuerza ⚠️' if _mhist > 0 else 'Negativo — sin momentum ❌'}",
@@ -19781,10 +19791,10 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 c.append(_criterio(2 if 45 <= _rsi <= 62 else 1 if 38 <= _rsi <= 68 else 0,
                     f"RSI {_rsi:.0f}",
                     f"{'Ventana ideal de entrada ✅' if 45 <= _rsi <= 62 else 'Zona aceptable ⚠️' if 38 <= _rsi <= 68 else 'Sobreextendido ❌'}",
-                    "En swing tendencial, el RSI de referencia está entre 45-62: lejos de la sobrecompra (&gt;70, precio maduro) "
-                    "y sin llegar a la sobreventa (&lt;35, debilidad real). "
+                    "En swing tendencial, el RSI de referencia está entre 45-62: lejos de la sobrecompra (por encima de 70, precio maduro) "
+                    "y sin llegar a la sobreventa (por debajo de 35, debilidad real). "
                     "Es la zona en la que el precio ha retrocedido dentro de la tendencia: el 'retroceso saludable'. "
-                    "Con RSI &gt;68 la entrada se produce en la parte más cara del impulso, con mayor riesgo de corrección inminente."))
+                    "Con RSI por encima de 68 la entrada se produce en la parte más cara del impulso, con mayor riesgo de corrección inminente."))
                 _vol_conf = "creciente" if _vslope > 0.001 else "estable" if _vslope > -0.001 else "cayendo"
                 c.append(_criterio(2 if _vslope > 0.001 else 1 if _vslope > -0.001 else 0,
                     f"Volumen ({_vol_conf})",

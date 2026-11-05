@@ -372,6 +372,42 @@ def test_pa2_01_redaccion():
                 if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value != doc:
                     t = prohib(n.value)
                     _check(not t, f"PA2-01: término prohibido {t} en {fn.name} (línea {n.lineno})")
+    # d) Lectura Integrada (informe técnico HTML _LI_M y PDF _LIP_M): textos descriptivos,
+    #    sin términos PA2-01 ni imperativos dirigidos al usuario.
+    import re as _re
+    _IMPERATIVOS = ("mantenerla", "busca", "espera", "vigila", "revisa", "ajusta", "valora",
+                    "no es el momento", "para vender", "antes de actuar", "si tienes posicion",
+                    "si ya tienes posicion", "si no has entrado", "si estas fuera", "cuidado")
+    import unicodedata as _ud
+    _nrm = lambda x: "".join(c for c in _ud.normalize("NFD", x.lower()) if _ud.category(c) != "Mn")
+    vistos = 0
+    for fn in ast.walk(arbol):
+        if isinstance(fn, ast.FunctionDef) and fn.name in ("generar_informe_html", "generar_pdf"):
+            for n in ast.walk(fn):
+                if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                        and isinstance(n.targets[0], ast.Name) and n.targets[0].id in ("_LI_M", "_LIP_M")):
+                    vistos += 1
+                    for c in ast.walk(n.value):
+                        if isinstance(c, ast.Constant) and isinstance(c.value, str):
+                            t = prohib(c.value)
+                            _check(not t, f"PA2-01: término prohibido {t} en {n.targets[0].id} (línea {c.lineno})")
+                            v = _nrm(c.value)
+                            imp = [w for w in _IMPERATIVOS if _re.search(r"(?<!\w)" + w + r"(?!\w)", v)]
+                            _check(not imp, f"PA2-01: imperativo {imp} en {n.targets[0].id} (línea {c.lineno})")
+    _check(vistos == 2, f"PA2-01: deben encontrarse _LI_M y _LIP_M (encontrados {vistos})")
+    # e) Ayudas de criterios: sin entidades HTML escapadas ni "los últimos 14 sesiones"
+    for fn in ast.walk(arbol):
+        if isinstance(fn, ast.FunctionDef) and fn.name in ("_build_dividendos", "_build_swing"):
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                    _check("&lt;" not in n.value and "&gt;" not in n.value,
+                           f"PA2-01: entidad HTML literal en {fn.name} (línea {n.lineno})")
+                    _check("los últimos 14 sesiones" not in n.value,
+                           f"PA2-01: concordancia 'los últimos 14 sesiones' en {fn.name}")
+    # f) Rótulo no duplicado
+    _sr = _APP["_sin_rotulo_metodo"]
+    _check(_sr("Lectura del método: X") == "X" and _sr("**Lectura del método:** X") == "X"
+           and _sr("X") == "X", "PA2-01: _sin_rotulo_metodo elimina el rótulo inicial")
     # c) Informe de estrategia: sin "Recomendación final"/"Recomendación"; con "Lectura del método"
     est = [{"nombre": "🗂️ Gestión de posición", "color": "#7c3aed",
             "criterios": [("<b>SAR</b> bajista", 0)], "puntos": ["✅ Posición en beneficio"],
@@ -382,6 +418,11 @@ def test_pa2_01_redaccion():
            "T-PA2-01c: el HTML no debe contener 'Recomendación final'")
     _check("Lectura del método" in html, "T-PA2-01c: el HTML debe contener 'Lectura del método'")
     _check(_APP["PIE_LECTURA_METODO"] in html, "PA2-01: pie fijo en el informe de estrategia HTML")
+    _est_d = [dict(est[0], nombre="💰 Dividendos", rec=d)]   # d ya empieza por "Lectura del método:"
+    _html_d = _APP["generar_informe_estrategia_html"](ticker="TEST.MC", nombre="Test", precio=10.0,
+                                                      ts="04/11/2026 12:00", estrategias=_est_d)
+    _check(_html_d.count("Lectura del método") == 1,
+           f"PA2-01: rótulo 'Lectura del método' duplicado en el HTML ({_html_d.count('Lectura del método')} veces)")
     import importlib.util as _ilu
     pdf = None
     if _ilu.find_spec("reportlab") is not None:      # sin reportlab no se puede generar el PDF
