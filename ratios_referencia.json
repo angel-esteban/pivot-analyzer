@@ -273,7 +273,7 @@
         "p25_pct": 5.0,
         "p50_pct": 9.0,
         "p75_pct": 15.0,
-        "nota": "FCF yield >10% en integradas = señal de infravaloración o ciclo de precio alto. Verificar precio del crudo implícito en el FCF.",
+        "nota": "FCF yield >10% en integradas = señal de infravaloración o ciclo de precio alto. El FCF depende del precio del crudo implícito.",
         "interpretacion": "alto_yield_barato"
       },
       "pb": {
@@ -288,7 +288,7 @@
         "alto": 20
       },
       "alertas": [
-        "Siempre indicar precio del crudo/gas implícito en la valoración",
+        "La valoración depende del precio del crudo/gas implícito",
         "Stranded assets: riesgo de deterioro de reservas por transición energética",
         "Breakeven de producción: comparar vs precio spot — empresas con <$35/b son robustas"
       ]

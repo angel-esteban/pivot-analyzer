@@ -1032,6 +1032,68 @@ def test_pa3_06_ficha_unidades_horas():
            "PA3-06 (D-10): texto")
 
 
+def test_v3_validacion_polaris():
+    """Validación 10 de Polaris (Spec PA v3): V3-1 … V3-12."""
+    import pandas as pd
+    ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
+    # V3-1 — MRL con los pagos de la validación (fecha ex): la ventana TTM es correcta
+    mrl = _A.serie_pagos([("2024-11-22", 0.1458), ("2025-05-08", 0.21637),
+                          ("2025-11-21", 0.162), ("2026-05-07", 0.21716)])
+    _check(abs(_APP["dpa_ttm"](mrl, ref=ref) - 0.37916) < 1e-6, "V3-1: TTM MRL a 05/11/2026 = 0,379")
+    _check(abs(_APP["dpa_ttm"](mrl, ref=ref, desfase_dias=365) - 0.36217) < 1e-6, "V3-1: TTM previo MRL = 0,362")
+    r = _APP["evaluar_recorte_reciente"](mrl, ref=ref)
+    _check(r["estado"] == "sin_recorte" and r["f_homologo"] == "08/05/2025",
+           f"V3-2: MRL sin K-RECENT_CUT, homólogo 08/05/2025 ({r})")
+    # V3-2 — calendario irregular (FER: 2 pagos frente a 4) → no dispara, va a K8
+    fer = _A.serie_pagos([("2024-11-06", 0.4597), ("2024-12-13", 0.0346), ("2025-05-22", 0.3182),
+                          ("2025-10-24", 0.4769), ("2025-12-04", 0.0770), ("2026-05-18", 0.5578)])
+    r = _APP["evaluar_recorte_reciente"](fer, ref=ref)
+    _check(r["estado"] == "irregular" and (r["n_act"], r["n_prev"]) == (2, 4), f"V3-2: FER {r}")
+    # V3-2 — recorte real: último pago < 0,75 × homólogo y TTM −33 %
+    cut = _A.serie_pagos([("2025-05-10", 0.60), ("2025-10-10", 0.60), ("2026-05-08", 0.40), ("2026-10-09", 0.40)])
+    _check(_APP["evaluar_recorte_reciente"](cut, ref=ref)["estado"] == "recorte", "V3-2: recorte real no detectado")
+    # Recorte solo en el último pago pero TTM estable → no dispara
+    uno = _A.serie_pagos([("2025-05-10", 0.30), ("2025-10-10", 0.90), ("2026-05-08", 0.85), ("2026-10-09", 0.20)])
+    _check(_APP["evaluar_recorte_reciente"](uno, ref=ref)["estado"] == "sin_recorte",
+           "V3-2: con el TTM estable no debe dispararse")
+    # V3-3 — K1-BPA sin cifra de payout
+    rr = _A.simular_screening(_A.info_sana(bpa=-0.40))
+    k1 = next((k for k in rr["killshots"] if k.get("codigo") == "K1-BPA"), {})
+    _check(k1 and "DPA/BPA =" not in k1.get("razon", "") and "%" not in k1.get("razon", ""),
+           f"V3-3: K1-BPA muestra cifra: {k1.get('razon')!r}")
+    # V3-4 — redacción y nombres
+    _check(_APP["nombre_breve"]("Repsol, S.A.") == "Repsol" and _APP["tipo_activo_legible"]("accion") == "Acción",
+           "V3-4: nombre corto / tipo de activo")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    for frase in ("payout ratio <80%", "~3-4%", "participación institucional elevada"):
+        _check(frase not in src, f"V3-4: queda {frase!r}")
+    _check(_APP["resumen_alertas"]([{"nivel": "verde"}]) == "1 nota informativa", "V3-4: recuento de la lente fundamental")
+    # V3-7 — beta propia fuera de rango con aviso
+    _check(_APP["beta_txt"](-0.05).startswith("[VERIFICAR]") and _APP["beta_txt"](0.8) == "0.80", "V3-7: beta")
+    # V3-8 — semáforo con los puntos reales
+    _check(_APP["puntos_semaforo_txt"]([("a", "", 1), ("b", "", 1), ("c", "", 0.5), ("d", "", 0)]) == "2,5",
+           "V3-8: puntos del semáforo")
+    # V3-6 — misma extensión 127,2 % en ATH y Fibonacci
+    import numpy as np
+    idx = pd.bdate_range(end=pd.Timestamp.now().normalize(), periods=400, tz="Europe/Madrid")
+    c = np.concatenate([np.linspace(14, 18, 148), np.linspace(15.21, 31.64, 252)])
+    h = pd.DataFrame({"Open": c, "High": c, "Low": c, "Close": c, "Volume": 1e6}, index=idx)
+    ath = _APP["analizar_maximos_historicos"](h, 31.5, "Repsol, S.A.")
+    fib = _APP["analizar_fibonacci"](h, 31.5, "Repsol, S.A.")
+    _check(ath and ath.get("target") is not None and abs(ath["target"] - fib["niveles"]["127.2%"]) < 1e-3,
+           f"V3-6: ATH {ath and ath.get('target')} vs Fibonacci {fib['niveles']['127.2%']:.4f}")
+    _check("Repsol," not in (ath or {}).get("texto", ""), "V3-4: 'Repsol,' con coma en el diagnóstico")
+    # V3-9 — pivots anuales con el año natural anterior completo
+    idx2 = pd.bdate_range("2025-01-02", "2026-11-04", tz="Europe/Madrid")
+    c2 = np.linspace(20, 30, len(idx2))
+    h2 = pd.DataFrame({"Open": c2, "High": c2 + .1, "Low": c2 - .1, "Close": c2, "Volume": 1e6}, index=idx2)
+    H, L, C, O = _APP["datos_sesion"](h2, "Anual")
+    y25 = h2[h2.index.year == 2025]
+    _check(abs(H - y25["High"].max()) < 1e-9 and abs(L - y25["Low"].min()) < 1e-9, "V3-9: rango anual 2025")
+    # V3-11 — RSI con una decimal en la estrategia
+    _check('f"RSI {_rsi:.1f} · {etiqueta_rsi(_rsi)}"' in src, "V3-11: RSI con una decimal")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
