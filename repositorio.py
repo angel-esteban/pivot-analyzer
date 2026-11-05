@@ -165,3 +165,121 @@ def etiqueta_frescura(frescura: dict, nivel: str) -> str:
         "ausente":    "[SIN DATO PERSISTIDO — en vivo]",
     }
     return etiquetas.get(estado, "")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pagos manuales de remuneración al accionista (decisión 3 de Pólaris, 05/11/2026)
+# Tabla `dividendo_manual` (migracion_dividendo_manual.sql). Importes BRUTOS por acción.
+# Solo fuentes de rango 1 (CNMV o web de inversores); el alta la hace un admin.
+# ─────────────────────────────────────────────────────────────────────────────
+TIPOS_PAGO_MANUAL = ("dividendo", "prima", "scrip", "extraordinario")
+# Agregadores y prensa: NO son fuente de rango 1 para un pago manual.
+DOMINIOS_NO_ADMITIDOS = ("stockanalysis.", "finect.", "investing.", "yahoo.", "dividendmax.",
+                         "divvydiary.", "dividendpedia.", "stockevents.", "rankia.", "marketscreener.",
+                         "tradingview.", "morningstar.", "bolsamania.", "expansion.", "cincodias.",
+                         "eleconomista.", "estrategiasdeinversion.", "tipranks.", "getquin.",
+                         "digrin.", "parqet.", "tradersunion.", "seekingalpha.", "google.")
+
+
+def validar_pago_manual(d: dict) -> str | None:
+    """Valida un pago manual antes de guardarlo. Devuelve el motivo de error o None."""
+    try:
+        imp = float(d.get("importe_bruto"))
+    except (TypeError, ValueError):
+        return "importe bruto no numérico"
+    if not imp > 0:
+        return "el importe bruto debe ser > 0"
+    if not d.get("ticker"):
+        return "falta el ticker"
+    if not d.get("fecha_ex"):
+        return "falta la fecha ex"
+    if d.get("tipo") not in TIPOS_PAGO_MANUAL:
+        return f"tipo no válido (uno de: {', '.join(TIPOS_PAGO_MANUAL)})"
+    url = str(d.get("url_origen") or "").strip().lower()
+    if not url.startswith("https://"):
+        return "falta la URL del documento de origen (https://…)"
+    _host = url.split("/")[2] if len(url.split("/")) > 2 else ""
+    if any(x in _host for x in DOMINIOS_NO_ADMITIDOS):
+        return ("fuente no admitida: solo CNMV o la web de inversores de la empresa "
+                "(los agregadores y la prensa no son fuente de rango 1)")
+    if d.get("fecha_pago") and d.get("fecha_ex") and str(d["fecha_pago"]) < str(d["fecha_ex"]):
+        return "la fecha de pago no puede ser anterior a la fecha ex"
+    return None
+
+
+def leer_dividendos_manuales(ticker: str, conn) -> list[dict]:
+    """Pagos manuales ACTIVOS del ticker. Lista vacía si la tabla aún no existe."""
+    cur = conn.cursor(cursor_factory=_FACTORY) if _FACTORY else conn.cursor()
+    try:
+        cur.execute("SELECT * FROM dividendo_manual WHERE ticker = %s AND activo "
+                    "ORDER BY fecha_ex", [ticker])
+        rows = cur.fetchall() or []
+        if rows and not isinstance(rows[0], dict):
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, r)) for r in rows]
+        return [dict(r) for r in rows]
+    except Exception:                        # noqa: BLE001 — tabla ausente (migración no aplicada)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+
+def guardar_pago_manual(conn, d: dict, usuario: str) -> str | None:
+    """Alta de un pago manual (validado). Devuelve error o None."""
+    err = validar_pago_manual(d)
+    if err:
+        return err
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO dividendo_manual (ticker, fecha_ex, fecha_pago, importe_bruto, tipo, "
+            "url_origen, nota, alta_usuario) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            [d["ticker"].upper().strip(), d["fecha_ex"], d.get("fecha_pago") or None,
+             float(d["importe_bruto"]), d["tipo"], d["url_origen"].strip(), d.get("nota") or None,
+             usuario])
+        conn.commit()
+    except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if "uq_dividendo_manual" in str(e) or "duplicate key" in str(e):
+            return "ya existe un pago de ese tipo para ese ticker y fecha ex (modifícalo en vez de duplicarlo)"
+        if "dividendo_manual" in str(e) and "does not exist" in str(e):
+            return "la tabla dividendo_manual no existe: ejecuta migracion_dividendo_manual.sql en Neon"
+        return f"error al guardar: {e}"
+    return None
+
+
+def modificar_pago_manual(conn, pago_id: int, cambios: dict, usuario: str) -> str | None:
+    """Modifica importe, fechas, URL, nota o activo (baja lógica) de un pago manual."""
+    permitidos = {"importe_bruto", "fecha_pago", "url_origen", "nota", "activo"}
+    cambios = {k: v for k, v in (cambios or {}).items() if k in permitidos}
+    if not cambios:
+        return "nada que modificar"
+    if "importe_bruto" in cambios or "url_origen" in cambios:
+        _base = {"ticker": "X", "fecha_ex": "2000-01-01", "tipo": "dividendo",
+                 "importe_bruto": cambios.get("importe_bruto", 1), "url_origen": cambios.get("url_origen", "https://x")}
+        err = validar_pago_manual(_base)
+        if err:
+            return err
+    sets = ", ".join(f"{k} = %s" for k in cambios) + ", modificado_por = %s, modificado_en = now()"
+    try:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE dividendo_manual SET {sets} WHERE id = %s",
+                    list(cambios.values()) + [usuario, int(pago_id)])
+        conn.commit()
+    except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return f"error al modificar: {e}"
+    return None

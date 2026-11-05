@@ -6799,7 +6799,8 @@ def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None
             "BPA (TTM)": _fmt_precio(info.get("trailingEps")),
             "BPA forward": _fmt_precio(info.get("forwardEps")),
             "Dividendo": _fmt_precio(div_ttm if div_ttm else info.get("dividendRate")),
-            "Rentab. dividendo": (
+            **({"Desglose remuneración (TTM)": info["_div_manual_txt"]} if info.get("_div_manual_txt") else {}),
+            "Yield bruto (TTM)": (
                 _fmt_pct(div_ttm / (info.get("currentPrice") or info.get("regularMarketPrice") or 1))
                 if div_ttm and (info.get("currentPrice") or info.get("regularMarketPrice"))
                 else _fmt_pct(info.get("dividendYield"))
@@ -8361,7 +8362,7 @@ body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px;
         dates = (
             date_card("📅", "Fecha ex-dividendo", exdiv)
             + date_card("📊", "Próximos resultados", earn)
-            + date_card("💰", "Yield (rentabilidad) actual", f"{yld:.2f}%")
+            + date_card("💰", "Yield bruto (TTM)", f"{yld:.2f}%")
             + date_card("🎯", "Yield (rentabilidad) sobre objetivo", f"{(div_r/t_mn*100):.2f}%" if t_mn else "—")
         )
         return (
@@ -8789,7 +8790,7 @@ def generar_pdf_estrategia(ticker: str, nombre: str, precio: float,
             row2 = [
                 _de_cell("Fecha ex-div.",  exdiv),
                 _de_cell("Prox. resultados", earn),
-                _de_cell("Yield (rentabilidad) actual",   f"{yld:.2f}%"),
+                _de_cell("Yield bruto (TTM)",   f"{yld:.2f}%"),
                 _de_cell("Yield (rent.)/Objetivo", yield_on_tgt),
             ]
 
@@ -10331,6 +10332,74 @@ def _admin_calidad():
                 st.error(f"No se pudo calcular el monitor: {_e}")
 
 
+def _admin_pagos_manuales():
+    """Decisión 3 de Pólaris — alta y modificación de pagos manuales (solo admin).
+    Importes BRUTOS por acción; fuente de rango 1 (CNMV o web de inversores)."""
+    import repositorio as _repo_a
+    import pandas as _pd_a
+    _usr = st.session_state.get("usuario", {}) or {}
+    if _usr.get("rol") not in ("admin", "superadmin"):
+        st.warning("Solo el rol admin puede dar de alta o modificar pagos manuales.")
+        return
+    st.markdown("### 💶 Pagos manuales de dividendo")
+    st.caption("Sustituyen al pago de Yahoo del mismo evento (fecha ex ± 7 días) en el yield, el TTM, "
+               "el CAGR y K-RECENT_CUT. Importe BRUTO por acción. Fuente obligatoria: anuncio en la CNMV "
+               "o web de inversores de la empresa (no se admiten agregadores ni prensa).")
+    with st.form("_frm_pago_manual", clear_on_submit=False):
+        _c1, _c2, _c3 = st.columns(3)
+        _tk = _c1.text_input("Ticker (p. ej. MRL.MC)").upper().strip()
+        _fex = _c2.date_input("Fecha ex", value=None, format="DD/MM/YYYY")
+        _fpg = _c3.date_input("Fecha de pago", value=None, format="DD/MM/YYYY")
+        _c4, _c5 = st.columns(2)
+        _imp = _c4.number_input("Importe bruto por acción (€)", min_value=0.0, value=0.0,
+                                step=0.0001, format="%.6f")
+        _tip = _c5.selectbox("Tipo", list(_repo_a.TIPOS_PAGO_MANUAL))
+        _url = st.text_input("URL del documento de origen (CNMV o web de inversores)")
+        _not = st.text_input("Nota (opcional)")
+        if st.form_submit_button("💾 Dar de alta", use_container_width=True):
+            _cn = get_db_connection()
+            try:
+                _err = _repo_a.guardar_pago_manual(_cn, {
+                    "ticker": _tk, "fecha_ex": _fex, "fecha_pago": _fpg, "importe_bruto": _imp,
+                    "tipo": _tip, "url_origen": _url, "nota": _not}, _usr.get("username", "?"))
+            finally:
+                release_db_connection(_cn)
+            if _err:
+                st.error(f"No se ha guardado: {_err}")
+            else:
+                st.success(f"Pago manual guardado ({_tk} · {_tip} · {_imp:.6f} € · ex {_fex}).")
+    _tk_f = st.text_input("Ver pagos manuales de un ticker", key="_pm_ver").upper().strip()
+    if _tk_f:
+        _cn = get_db_connection()
+        try:
+            _rows = _repo_a.leer_dividendos_manuales(_tk_f, _cn)
+        finally:
+            release_db_connection(_cn)
+        if not _rows:
+            st.info("Sin pagos manuales activos para ese ticker.")
+        else:
+            _df = _pd_a.DataFrame(_rows)[["id", "fecha_ex", "fecha_pago", "importe_bruto", "tipo",
+                                         "url_origen", "alta_usuario", "alta_en", "modificado_por"]]
+            st.dataframe(_df, hide_index=True, use_container_width=True)
+            _cm1, _cm2, _cm3 = st.columns([1, 1.4, 1])
+            _id = _cm1.number_input("Id a modificar", min_value=0, step=1, value=0)
+            _nimp = _cm2.number_input("Nuevo importe bruto (0 = sin cambio)", min_value=0.0,
+                                      value=0.0, step=0.0001, format="%.6f")
+            _baja = _cm3.checkbox("Dar de baja (no se borra)")
+            if st.button("Aplicar cambio", key="_pm_mod") and _id:
+                _cambios = {}
+                if _nimp > 0:
+                    _cambios["importe_bruto"] = _nimp
+                if _baja:
+                    _cambios["activo"] = False
+                _cn = get_db_connection()
+                try:
+                    _err = _repo_a.modificar_pago_manual(_cn, int(_id), _cambios, _usr.get("username", "?"))
+                finally:
+                    release_db_connection(_cn)
+                st.error(_err) if _err else st.success("Cambio aplicado.")
+
+
 def _admin_umbrales():
     """Sub-página de Administración: umbrales de coherencia (fuente única). Ver/editar
     con validación de input y auditoría (usuario+fecha). Defaults = valores desplegados."""
@@ -10417,6 +10486,9 @@ def panel_admin():
         return
     if _adm_sub == "🎚️ Umbrales de coherencia":
         _admin_umbrales()
+        return
+    if _adm_sub == "💶 Pagos manuales de dividendo":
+        _admin_pagos_manuales()
         return
     # Por defecto (👥 Gestión de Usuarios): continúa con la gestión de usuarios.
 
@@ -10782,13 +10854,17 @@ def calcular_beta_vs_indice(ticker: str, indice_ticker: str, periodo: str = "2y"
     except Exception:
         return None
 
+_DESGLOSE_DIV: dict = {}   # ticker → desglose de pagos manuales del último cálculo
+
+
 def calcular_div_ttm(ticker: str) -> float:
     """Dividendo anual real (TTM): suma de pagos reales en los últimos 12 meses.
     Evita el error de Yahoo Finance que suma 4 pagos aunque la empresa pague 3 veces al año."""
     try:
         import pandas as pd
         t = yf.Ticker(ticker)
-        divs = t.dividends
+        divs, _ev = aplicar_dividendos_manuales(ticker, t.dividends)   # decisión 3 de Pólaris
+        _DESGLOSE_DIV[ticker] = desglose_remuneracion(_ev)
         if divs is None or len(divs) == 0:
             return 0.0
         ttm = dpa_ttm(divs)   # PA3-03: misma regla TTM que el screener
@@ -12421,6 +12497,82 @@ def dpa_ttm(dividends, ref=None, desfase_dias: int = 0) -> float:
         return 0.0
 
 
+def aplicar_dividendos_manuales(ticker, dividends, manuales=None):
+    """Decisión 3 de Pólaris — Combina la serie de Yahoo con los pagos manuales de
+    `dividendo_manual` (importes BRUTOS, fuente de rango 1).
+    - Un pago manual sustituye a los de Yahoo del MISMO evento (fecha ex ± 7 días); las filas
+      de Yahoo no se borran de la base de datos, solo dejan de usarse en el cálculo.
+    - Dividendo, prima y scrip del mismo día se suman (remuneración total en efectivo).
+    - Extraordinario: no entra en la serie (ni yield ni K-RECENT_CUT); se informa aparte.
+    Devuelve (serie, eventos). Sin pagos manuales devuelve la serie de Yahoo intacta."""
+    import pandas as _pd_m
+    if manuales is None:
+        manuales = []
+        try:
+            import repositorio as _repo_m
+            _cn = get_db_connection()
+            try:
+                manuales = _repo_m.leer_dividendos_manuales(ticker, _cn) or []
+            finally:
+                release_db_connection(_cn)
+        except Exception:
+            manuales = []
+    manuales = [m for m in (manuales or []) if isinstance(m, dict) and m.get("activo", True)]
+    if not manuales:
+        return dividends, []
+    if dividends is None or len(dividends) == 0:
+        dividends = _pd_m.Series([], dtype=float, index=_pd_m.DatetimeIndex([], tz="Europe/Madrid"),
+                                 name="Dividends")
+    _tz = getattr(dividends.index, "tz", None) or "Europe/Madrid"
+    ser = dividends.copy()
+    eventos = []
+    _por_fecha = {}
+    for m in manuales:
+        _por_fecha.setdefault(_pd_m.Timestamp(str(m["fecha_ex"])[:10]), []).append(m)
+    for _f, _ms in sorted(_por_fecha.items()):
+        _fz = _f.tz_localize(_tz) if _f.tzinfo is None else _f.tz_convert(_tz)
+        _dias = ser.index.normalize()
+        _mask = (abs((_dias - _fz.normalize()).days) <= 7) if len(ser) else []
+        _yh = float(ser[_mask].sum()) if len(ser) else 0.0
+        if len(ser):
+            ser = ser[~_mask]
+        _rec = [(str(m["tipo"]), float(m["importe_bruto"])) for m in _ms if m["tipo"] != "extraordinario"]
+        _ext = sum(float(m["importe_bruto"]) for m in _ms if m["tipo"] == "extraordinario")
+        _tot = sum(v for _, v in _rec)
+        if _tot > 0:
+            ser = _pd_m.concat([ser, _pd_m.Series([_tot], index=_pd_m.DatetimeIndex([_fz]))]).sort_index()
+        eventos.append({"fecha_ex": _fz, "total": _tot, "desglose": _rec, "extraordinario": _ext,
+                        "yahoo": _yh, "difiere_yahoo": abs((_tot + _ext) - _yh) > 0.0005,
+                        "urls": sorted({str(m.get("url_origen") or "") for m in _ms}),
+                        "incluye_prima": any(t == "prima" for t, _ in _rec)})
+    ser.name = "Dividends"
+    return ser, eventos
+
+
+def desglose_remuneracion(eventos, ref=None) -> str:
+    """'0,2200 € = 0,0151 dividendo + 0,2049 prima (ex 07/05/2026) · dato manual · fuente: …'
+    para los eventos manuales de los últimos 12 meses (y extraordinarios aparte)."""
+    import pandas as _pd_d
+    if not eventos:
+        return ""
+    _ref = _pd_d.Timestamp(ref) if ref is not None else _pd_d.Timestamp.now(tz=eventos[0]["fecha_ex"].tz)
+    if _ref.tzinfo is None:
+        _ref = _ref.tz_localize(eventos[0]["fecha_ex"].tz)
+    _n = lambda v: f"{v:.4f}".replace(".", ",")
+    partes = []
+    for e in eventos:
+        if not (_ref - _pd_d.Timedelta(days=365) < e["fecha_ex"] <= _ref):
+            continue
+        _d = " + ".join(f"{_n(v)} {t}" for t, v in e["desglose"])
+        _txt = (f"{_n(e['total'])} € = {_d}" if len(e["desglose"]) > 1 else f"{_n(e['total'])} € ({_d})")
+        _txt += f" (ex {e['fecha_ex'].strftime('%d/%m/%Y')})"
+        if e["extraordinario"]:
+            _txt += f"; extraordinario aparte: {_n(e['extraordinario'])} € (no cuenta en el yield)"
+        _txt += " · dato manual · fuente: " + ", ".join(u for u in e["urls"] if u)
+        partes.append(_txt)
+    return " | ".join(partes)
+
+
 def evaluar_recorte_reciente(dividends, ref=None, ratio=None) -> dict:
     """V3-2 (Polaris) — K-RECENT_CUT por homólogo. Devuelve {"estado": "recorte" | "sin_recorte"
     | "irregular" | "sin_datos", ...}. Recorte si el último pago < ratio × su homólogo (fecha ex
@@ -13272,6 +13424,16 @@ def _evaluar_criterio(crit: dict, info: dict, hist=None, dividends=None, cashflo
     if "payout_crudo_inconsistente" in _payout_marcas:
         mensaje = mensaje + (" Incidencia: payout crudo inconsistente (payoutRatio de yfinance "
                              "negativo con BPA positivo); se usa DPA/BPA.")
+    if info.get("_div_manual") and cid in ("dividend_yield", "payout_ratio"):
+        _dsg = desglose_remuneracion(info["_div_manual"])
+        if _dsg:
+            mensaje = (mensaje + " Remuneración bruta TTM con pagos manuales: " + _dsg + ".").strip()
+        if any(e.get("difiere_yahoo") for e in info["_div_manual"]):
+            _payout_marcas = list(_payout_marcas) + ["dividendo_manual_difiere_yahoo"]
+        if cid == "payout_ratio" and any(e.get("incluye_prima") for e in info["_div_manual"]) \
+                and not str(valor_fmt).endswith(chr(42)) and not str(valor_fmt).startswith("n/i"):
+            valor_fmt = valor_fmt + chr(42)   # payout sobre el total distribuido, incluye prima
+            mensaje = ("* Payout sobre el total distribuido (incluye devolución de prima). " + mensaje)
     return {"estado": _estado_final, "valor_raw": valor, "valor_fmt": valor_fmt, "mensaje": mensaje,
             "marcas": _payout_marcas}
 
@@ -13501,6 +13663,17 @@ def _evaluar_ticker_screening(ticker: str, criterios: list) -> dict:
         necesita_cashflow = any(c.get("id") == "free_cash_flow" for c in criterios)
         hist      = t.history(period="6mo", auto_adjust=False) if necesita_hist else None   # PA3-02
         dividends = t.dividends                if necesita_div  else None
+        if dividends is not None:
+            # Decisión 3 de Pólaris: pagos manuales (bruto, rango 1) sustituyen al evento de Yahoo
+            dividends, _ev_man = aplicar_dividendos_manuales(ticker, dividends)
+            if _ev_man:
+                info["_div_manual"] = _ev_man
+                _ttm_m = dpa_ttm(dividends)
+                if _ttm_m > 0:   # el DPA del payout y del yield sale de la misma serie corregida
+                    info["trailingAnnualDividendRate"] = _ttm_m
+                    _pz = info.get("regularMarketPrice") or info.get("currentPrice")
+                    if _pz:
+                        info["trailingAnnualDividendYield"] = _ttm_m / float(_pz)
         cashflow  = None
         if necesita_cashflow:
             try:
@@ -16423,7 +16596,8 @@ def pantalla_analisis():
             st.radio(
                 "admin_sub",
                 ["👥 Gestión de Usuarios", "🗄️ Refresco de datos del screener",
-                 "📊 Calidad de datos", "🎚️ Umbrales de coherencia"],
+                 "📊 Calidad de datos", "🎚️ Umbrales de coherencia",
+                 "💶 Pagos manuales de dividendo"],
                 label_visibility="collapsed", key="_adm_sub_sel",
             )
 
@@ -16982,6 +17156,8 @@ def pantalla_analisis():
 
             # ---- FUNDAMENTALES ----
             div_ttm = calcular_div_ttm(ticker_activo)
+            if _DESGLOSE_DIV.get(ticker_activo):
+                info["_div_manual_txt"] = _DESGLOSE_DIV[ticker_activo]
             fundamentales = bloque_fundamentales(info, tipo_activo, div_ttm=div_ttm)
 
             # ---- GUARDAR PARA PESTAÑA ESTRATEGIA ----

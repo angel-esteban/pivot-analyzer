@@ -170,7 +170,7 @@
       "criterios": [
         {
           "id": "dividend_yield",
-          "nombre": "Rentabilidad por dividendo",
+          "nombre": "Yield bruto (TTM)",
           "fuente": "yfinance_historia",
           "campo": "dividends",
           "funcion": "calcular_dividendo_yield_ttm",

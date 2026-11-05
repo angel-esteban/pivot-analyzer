@@ -1094,6 +1094,62 @@ def test_v3_validacion_polaris():
     _check('f"RSI {_rsi:.1f} · {etiqueta_rsi(_rsi)}"' in src, "V3-11: RSI con una decimal")
 
 
+def test_pagos_manuales_decision3():
+    """Decisión 3 de Pólaris: pagos manuales (bruto, prima incluida) — aceptación MRL."""
+    import pandas as pd
+    import repositorio as repo
+    ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
+    URL = "https://ir.merlinproperties.com/wp-content/uploads/2026/03/acuerdo.pdf"
+    yahoo = _A.serie_pagos([("2024-11-22", 0.18), ("2025-05-08", 0.22), ("2025-11-21", 0.20), ("2026-05-07", 0.0151)])
+    man = [{"ticker": "MRL.MC", "fecha_ex": "2026-05-07", "importe_bruto": 0.0151, "tipo": "dividendo",
+            "url_origen": URL, "activo": True},
+           {"ticker": "MRL.MC", "fecha_ex": "2026-05-07", "importe_bruto": 0.20492995, "tipo": "prima",
+            "url_origen": URL, "activo": True}]
+    ser, ev = _APP["aplicar_dividendos_manuales"]("MRL.MC", yahoo, manuales=man)
+    ttm = _APP["dpa_ttm"](ser, ref=ref)
+    _check(abs(ttm - 0.42002995) < 1e-6, f"Decisión 3: TTM bruto MRL con prima = {ttm} (esperado 0,4200)")
+    rc = _APP["evaluar_recorte_reciente"](ser, ref=ref)
+    _check(rc["estado"] == "sin_recorte", f"Decisión 3: MRL sin K-RECENT_CUT ({rc})")
+    _check(len(ser) == 4, "Decisión 3: el pago manual sustituye al de Yahoo del mismo evento (no se suma)")
+    dsg = _APP["desglose_remuneracion"](ev, ref=ref)
+    _check("0,2200 € = 0,0151 dividendo + 0,2049 prima" in dsg and "dato manual · fuente: " + URL in dsg,
+           f"Decisión 3: desglose {dsg!r}")
+    _check(ev[0]["difiere_yahoo"] is True and ev[0]["incluye_prima"], "Decisión 3: incidencia frente a Yahoo")
+    # Extraordinario: fuera del yield y de K-RECENT_CUT
+    ser2, ev2 = _APP["aplicar_dividendos_manuales"]("X", _A.serie_pagos([("2026-06-01", 1.0)]),
+        manuales=[{"fecha_ex": "2026-06-02", "importe_bruto": 1.0, "tipo": "extraordinario", "url_origen": URL}])
+    _check(len(ser2) == 0 and ev2[0]["extraordinario"] == 1.0, "Decisión 3: el extraordinario no entra en la serie")
+    # Sin pagos manuales: la serie de Yahoo no cambia
+    s3, e3 = _APP["aplicar_dividendos_manuales"]("X", yahoo, manuales=[])
+    _check(s3 is yahoo and e3 == [], "Decisión 3: sin pagos manuales no cambia nada")
+    # Screener: MRL con los pagos manuales → yield ~3,65 %, sin K3 ni K-RECENT_CUT, payout con "*"
+    orig = _APP["aplicar_dividendos_manuales"]
+    _APP["aplicar_dividendos_manuales"] = lambda tk, d, manuales=None: orig(tk, d, manuales=man)
+    try:
+        hoy = pd.Timestamp.now(tz="Europe/Madrid").normalize()
+        desf = hoy - ref
+        yahoo_rel = pd.Series(yahoo.values, index=yahoo.index + desf)
+        man_rel = [dict(m, fecha_ex=str((pd.Timestamp(m["fecha_ex"]) + desf).date())) for m in man]
+        _APP["aplicar_dividendos_manuales"] = lambda tk, d, manuales=None: orig(tk, d, manuales=man_rel)
+        r = _A.simular_screening(_A.info_sana(dpa=0.215, bpa=0.60, yield_obj=0.0187, sector="Real Estate",
+                                              industry="REIT - Office"), dividendos=yahoo_rel)
+    finally:
+        _APP["aplicar_dividendos_manuales"] = orig
+    cy = _crit(r, "dividend_yield"); cp = _crit(r, "payout_ratio")
+    _check("K3" not in _codigos(r) and "K-RECENT_CUT" not in _codigos(r),
+           f"Decisión 3: MRL con pagos manuales no debe tener K3 ni K-RECENT_CUT ({_codigos(r)})")
+    _check(cy.get("valor_fmt", "").startswith("3.6") and "dato manual" in cy.get("mensaje", ""),
+           f"Decisión 3: yield {cy.get('valor_fmt')} · {cy.get('mensaje','')[-80:]!r}")
+    _check(str(cp.get("valor_fmt", "")).endswith("*"), f"Decisión 3: payout con prima sin '*': {cp.get('valor_fmt')}")
+    # Validación del alta
+    ok = {"ticker": "MRL.MC", "fecha_ex": "2026-05-07", "importe_bruto": 0.2, "tipo": "prima", "url_origen": URL}
+    _check(repo.validar_pago_manual(ok) is None, "Decisión 3: alta válida rechazada")
+    for mal, k, v in (("importe 0", "importe_bruto", 0), ("tipo", "tipo", "otro"), ("sin fecha", "fecha_ex", None),
+                      ("agregador", "url_origen", "https://stockanalysis.com/quote/bme/MRL/dividend"),
+                      ("prensa", "url_origen", "https://www.finect.com/x"), ("sin https", "url_origen", "ir.merlin.com")):
+        _check(repo.validar_pago_manual(dict(ok, **{k: v})) is not None, f"Decisión 3: debería rechazar ({mal})")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
