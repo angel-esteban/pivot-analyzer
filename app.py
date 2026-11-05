@@ -15933,8 +15933,15 @@ def pantalla_analisis():
             st.session_state["ultimo_mercado"]   = mercado_sel
 
         ticker_activo = st.session_state.get("ultimo_ticker", ticker_input)
-        sistema_activo = st.session_state.get("ultimo_sistema", sistema_sel)
-        tol_activa = st.session_state.get("ultima_tolerancia", tolerancia)
+        # Sistema Pivot y Tolerancia: manda lo que el usuario tiene seleccionado AHORA en los
+        # controles (claves del widget). Antes se usaba el valor guardado al pulsar "Analizar",
+        # así que cambiar a Camarilla tras analizar no cambiaba ni la pantalla ni los informes.
+        sistema_activo = st.session_state.get("sistema_sel_key",
+                                              st.session_state.get("ultimo_sistema", sistema_sel))
+        if sistema_activo not in SISTEMAS_PIVOT:
+            sistema_activo = list(SISTEMAS_PIVOT.keys())[0]
+        tol_activa = st.session_state.get("tolerancia_key",
+                                          st.session_state.get("ultima_tolerancia", tolerancia))
 
         # ---- OBTENER DATOS ----
         with st.spinner(f"Obteniendo datos de {ticker_activo}..."):
