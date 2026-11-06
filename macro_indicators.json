@@ -5,9 +5,7 @@
     "descripcion": "Base de conocimiento de indicadores macroeconómicos clave. Umbrales históricos, señales de alarma e interpretación pedagógica para el inversor particular hispanohablante. Marco temporal: 1979–2026.",
     "ultima_revision": "2026-01"
   },
-
   "indicadores": {
-
     "tipos_bce": {
       "nombre": "Tipo de interés BCE (Deposit Facility Rate)",
       "emoji": "🏛️",
@@ -16,10 +14,26 @@
       "unidad": "porcentaje anual",
       "fuente": "BCE — Consejo de Gobierno (reuniones cada ~6 semanas)",
       "umbrales": {
-        "expansion_monetaria": { "rango": "< 1.0%", "descripcion": "Política muy acomodaticia. Dinero barato, incentivo al crédito y al riesgo. Entorno favorable para activos de riesgo.", "color": "verde" },
-        "neutral": { "rango": "1.0% – 2.5%", "descripcion": "Zona de neutralidad estimada. Ni estimula ni frena activamente la economía.", "color": "amarillo" },
-        "restrictivo": { "rango": "2.5% – 4.0%", "descripcion": "Política restrictiva. Frena la inflación pero también el crecimiento. Presión sobre sectores sensibles a tipos (inmobiliario, utilities, tech growth).", "color": "naranja" },
-        "muy_restrictivo": { "rango": "> 4.0%", "descripcion": "Zona de máxima restricción. Históricamente asociada a recesión inducida o crisis financiera. Referencia: BCE a 4.0% en 2023-2024.", "color": "rojo" }
+        "expansion_monetaria": {
+          "rango": "< 1.0%",
+          "descripcion": "Política muy acomodaticia. Dinero barato, incentivo al crédito y al riesgo. Entorno favorable para activos de riesgo.",
+          "color": "verde"
+        },
+        "neutral": {
+          "rango": "1.0% – 2.5%",
+          "descripcion": "Zona de neutralidad estimada. Ni estimula ni frena activamente la economía.",
+          "color": "amarillo"
+        },
+        "restrictivo": {
+          "rango": "2.5% – 4.0%",
+          "descripcion": "Política restrictiva. Frena la inflación pero también el crecimiento. Presión sobre sectores sensibles a tipos (inmobiliario, utilities, tech growth).",
+          "color": "naranja"
+        },
+        "muy_restrictivo": {
+          "rango": "> 4.0%",
+          "descripcion": "Zona de máxima restricción. Históricamente asociada a recesión inducida o crisis financiera. Referencia: BCE a 4.0% en 2023-2024.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "Subida >75pb en una sola reunión (señal de urgencia antiinflacionaria — ver BCE sept. 2022)",
@@ -42,7 +56,6 @@
         "oro": "Mixto: negativo por coste de oportunidad; positivo si señala crisis"
       }
     },
-
     "tipos_fed": {
       "nombre": "Fed Funds Rate (Tipo objetivo de la Reserva Federal)",
       "emoji": "🏦",
@@ -51,10 +64,26 @@
       "unidad": "porcentaje anual (rango objetivo)",
       "fuente": "FOMC — Federal Open Market Committee (reuniones cada ~6 semanas)",
       "umbrales": {
-        "expansion": { "rango": "0% – 1.5%", "descripcion": "Política acomodaticia. Entorno de riesgo favorable. Carry trade activo.", "color": "verde" },
-        "neutral": { "rango": "1.5% – 3.0%", "descripcion": "Zona neutral estimada para la economía estadounidense.", "color": "amarillo" },
-        "restrictivo": { "rango": "3.0% – 5.0%", "descripcion": "Política restrictiva. Presión sobre mercados de renta fija y activos de larga duración.", "color": "naranja" },
-        "volcker_zone": { "rango": "> 5.0%", "descripcion": "Zona extrema. Históricamente asociada a recesión o crisis financiera. Referencia: 19-20% en 1981 (Volcker), 5.25-5.50% en 2023-2024.", "color": "rojo" }
+        "expansion": {
+          "rango": "0% – 1.5%",
+          "descripcion": "Política acomodaticia. Entorno de riesgo favorable. Carry trade activo.",
+          "color": "verde"
+        },
+        "neutral": {
+          "rango": "1.5% – 3.0%",
+          "descripcion": "Zona neutral estimada para la economía estadounidense.",
+          "color": "amarillo"
+        },
+        "restrictivo": {
+          "rango": "3.0% – 5.0%",
+          "descripcion": "Política restrictiva. Presión sobre mercados de renta fija y activos de larga duración.",
+          "color": "naranja"
+        },
+        "volcker_zone": {
+          "rango": "> 5.0%",
+          "descripcion": "Zona extrema. Históricamente asociada a recesión o crisis financiera. Referencia: 19-20% en 1981 (Volcker), 5.25-5.50% en 2023-2024.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "Fed Funds > 10Y Treasury Yield: inversión de curva = señal recesiva (ver historial 1968-presente)",
@@ -76,7 +105,6 @@
         "credito_corporativo": "Spreads se amplían en fases restrictivas → mayor coste de refinanciación"
       }
     },
-
     "curva_2y10y": {
       "nombre": "Diferencial de tipos 2Y-10Y (Curva de rendimientos EE.UU.)",
       "emoji": "📉",
@@ -85,11 +113,31 @@
       "unidad": "puntos básicos (pb) — positivo = curva normal; negativo = invertida",
       "fuente": "US Treasury / FRED (Federal Reserve St. Louis)",
       "umbrales": {
-        "empinada_positiva": { "rango": "> +150pb", "descripcion": "Curva muy empinada. Mercado espera crecimiento y/o inflación futura. Óptimo para banca. Señal de recuperación económica.", "color": "verde" },
-        "normal": { "rango": "+50pb a +150pb", "descripcion": "Curva normal. Entorno saludable para el ciclo económico.", "color": "verde" },
-        "aplanamiento": { "rango": "0 a +50pb", "descripcion": "Aplanamiento. El mercado empieza a descontar desaceleración o bajada de tipos a futuro. Señal de alerta temprana.", "color": "amarillo" },
-        "invertida_leve": { "rango": "-100pb a 0", "descripcion": "Curva invertida. Señal recesiva. Históricamente el período pre-recesión dura 6-18 meses desde la inversión.", "color": "naranja" },
-        "invertida_profunda": { "rango": "< -100pb", "descripcion": "Inversión profunda. Señal recesiva de alta convicción. Máxima en 2022-2023: -108pb. Comparable a 1980 (-241pb).", "color": "rojo" }
+        "empinada_positiva": {
+          "rango": "> +150pb",
+          "descripcion": "Curva muy empinada. Mercado espera crecimiento y/o inflación futura. Óptimo para banca. Señal de recuperación económica.",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "+50pb a +150pb",
+          "descripcion": "Curva normal. Entorno saludable para el ciclo económico.",
+          "color": "verde"
+        },
+        "aplanamiento": {
+          "rango": "0 a +50pb",
+          "descripcion": "Aplanamiento. El mercado empieza a descontar desaceleración o bajada de tipos a futuro. Señal de alerta temprana.",
+          "color": "amarillo"
+        },
+        "invertida_leve": {
+          "rango": "-100pb a 0",
+          "descripcion": "Curva invertida. Señal recesiva. Históricamente el período pre-recesión dura 6-18 meses desde la inversión.",
+          "color": "naranja"
+        },
+        "invertida_profunda": {
+          "rango": "< -100pb",
+          "descripcion": "Inversión profunda. Señal recesiva de alta convicción. Máxima en 2022-2023: -108pb. Comparable a 1980 (-241pb).",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "Inversión > 6 meses consecutivos: históricamente precede recesión en 100% de casos desde 1968",
@@ -104,7 +152,6 @@
       },
       "nota_analitica": "La curva es un indicador adelantado, no inmediato. El error clásico del inversor es actuar en el momento de la inversión — la recesión llega meses después, y el mercado puede seguir subiendo en ese período. Úsala para ajustar la asignación de activos defensivos/cíclicos, no para vender todo."
     },
-
     "curva_bund_2y10y": {
       "nombre": "Diferencial Bund alemán 2Y-10Y (Curva europea)",
       "emoji": "🇩🇪",
@@ -113,9 +160,21 @@
       "unidad": "puntos básicos",
       "fuente": "BCE / Bundesbank / Bloomberg",
       "umbrales": {
-        "normal": { "rango": "> +50pb", "color": "verde", "descripcion": "Entorno de ciclo sano en Europa." },
-        "aplanamiento": { "rango": "0 a +50pb", "color": "amarillo", "descripcion": "Mercado descontando desaceleración europea." },
-        "invertida": { "rango": "< 0", "color": "rojo", "descripcion": "Señal de estrés. Impacto directo en márgenes de banca española y europea." }
+        "normal": {
+          "rango": "> +50pb",
+          "color": "verde",
+          "descripcion": "Entorno de ciclo sano en Europa."
+        },
+        "aplanamiento": {
+          "rango": "0 a +50pb",
+          "color": "amarillo",
+          "descripcion": "Mercado descontando desaceleración europea."
+        },
+        "invertida": {
+          "rango": "< 0",
+          "color": "rojo",
+          "descripcion": "Señal de estrés. Impacto directo en márgenes de banca española y europea."
+        }
       },
       "señales_alarma": [
         "Inversión Bund 2Y-10Y + spread BTP-Bund > 200pb: doom loop Italia activado",
@@ -124,7 +183,6 @@
       ],
       "impacto_ibex": "La banca española (>30% del IBEX) depende directamente de la curva europea. Curva plana o invertida = compresión de márgenes = menor beneficio bancario = IBEX bajo presión."
     },
-
     "pmi_manufacturero": {
       "nombre": "PMI Manufacturero (Purchasing Managers Index)",
       "emoji": "🏭",
@@ -133,11 +191,31 @@
       "unidad": "índice 0-100 (50 = sin cambio)",
       "fuente": "S&P Global / ISM (EE.UU.) — publicación mensual el primer día hábil del mes",
       "umbrales": {
-        "expansion_fuerte": { "rango": "> 55", "descripcion": "Expansión manufacturera robusta. Ciclo industrial en aceleración.", "color": "verde" },
-        "expansion": { "rango": "52 – 55", "descripcion": "Expansión moderada. Condiciones de negocio mejorando.", "color": "verde" },
-        "frontera": { "rango": "50 – 52", "descripcion": "Zona de frontera. Crecimiento mínimo. Vigilar tendencia.", "color": "amarillo" },
-        "contraccion_leve": { "rango": "47 – 50", "descripcion": "Contracción leve. El sector manufacturero se contrae. Señal de alerta.", "color": "naranja" },
-        "contraccion_fuerte": { "rango": "< 47", "descripcion": "Contracción severa. Recesión industrial probable. Niveles <45 históricamente asociados a recesión económica amplia.", "color": "rojo" }
+        "expansion_fuerte": {
+          "rango": "> 55",
+          "descripcion": "Expansión manufacturera robusta. Ciclo industrial en aceleración.",
+          "color": "verde"
+        },
+        "expansion": {
+          "rango": "52 – 55",
+          "descripcion": "Expansión moderada. Condiciones de negocio mejorando.",
+          "color": "verde"
+        },
+        "frontera": {
+          "rango": "50 – 52",
+          "descripcion": "Zona de frontera. Crecimiento mínimo. Vigilar tendencia.",
+          "color": "amarillo"
+        },
+        "contraccion_leve": {
+          "rango": "47 – 50",
+          "descripcion": "Contracción leve. El sector manufacturero se contrae. Señal de alerta.",
+          "color": "naranja"
+        },
+        "contraccion_fuerte": {
+          "rango": "< 47",
+          "descripcion": "Contracción severa. Recesión industrial probable. Niveles <45 históricamente asociados a recesión económica amplia.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "PMI manufacturero eurozona < 45 durante > 3 meses consecutivos: recesión industrial confirmada",
@@ -152,7 +230,6 @@
         "señal_2019": "PMI manufacturero eurozona < 50 durante 12 meses antes de COVID — ya señalaba desaceleración"
       }
     },
-
     "ipc_subyacente": {
       "nombre": "IPC Subyacente (Inflación subyacente)",
       "emoji": "📊",
@@ -161,12 +238,36 @@
       "unidad": "variación interanual (%)",
       "fuente": "INE (España), Eurostat (Eurozona), BLS (EE.UU.) — publicación mensual",
       "umbrales": {
-        "deflacion": { "rango": "< 0%", "descripcion": "Deflación. Peligro de espiral recesiva (consumidores posponen compras esperando precios menores). Peor escenario para la banca.", "color": "rojo" },
-        "bajo_objetivo": { "rango": "0% – 1.5%", "descripcion": "Por debajo del objetivo del BCE (2%). Política monetaria tenderá a ser acomodaticia.", "color": "amarillo" },
-        "objetivo": { "rango": "1.5% – 2.5%", "descripcion": "Zona objetivo. El BCE estima el 2% como nivel óptimo para anclar expectativas.", "color": "verde" },
-        "elevado": { "rango": "2.5% – 4.0%", "descripcion": "Por encima del objetivo. BCE tenderá a subir tipos o mantenerlos altos.", "color": "amarillo" },
-        "alto": { "rango": "4.0% – 7.0%", "descripcion": "Inflación alta. El BCE se ve forzado a actuar agresivamente para recuperar credibilidad.", "color": "naranja" },
-        "critico": { "rango": "> 7.0%", "descripcion": "Inflación de crisis. Comparable a 1973-74 o 2022. Riesgo de desanclar expectativas inflacionarias.", "color": "rojo" }
+        "deflacion": {
+          "rango": "< 0%",
+          "descripcion": "Deflación. Peligro de espiral recesiva (consumidores posponen compras esperando precios menores). Peor escenario para la banca.",
+          "color": "rojo"
+        },
+        "bajo_objetivo": {
+          "rango": "0% – 1.5%",
+          "descripcion": "Por debajo del objetivo del BCE (2%). Política monetaria tenderá a ser acomodaticia.",
+          "color": "amarillo"
+        },
+        "objetivo": {
+          "rango": "1.5% – 2.5%",
+          "descripcion": "Zona objetivo. El BCE estima el 2% como nivel óptimo para anclar expectativas.",
+          "color": "verde"
+        },
+        "elevado": {
+          "rango": "2.5% – 4.0%",
+          "descripcion": "Por encima del objetivo. BCE tenderá a subir tipos o mantenerlos altos.",
+          "color": "amarillo"
+        },
+        "alto": {
+          "rango": "4.0% – 7.0%",
+          "descripcion": "Inflación alta. El BCE se ve forzado a actuar agresivamente para recuperar credibilidad.",
+          "color": "naranja"
+        },
+        "critico": {
+          "rango": "> 7.0%",
+          "descripcion": "Inflación de crisis. Comparable a 1973-74 o 2022. Riesgo de desanclar expectativas inflacionarias.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "IPC subyacente > IPC general durante > 3 meses: inflación estructural, no solo energía",
@@ -181,7 +282,6 @@
         "nota_metodologica": "Core PCE (Personal Consumption Expenditures) es la métrica preferida de la Fed; Core CPI es la más publicada mediáticamente"
       }
     },
-
     "tasa_paro": {
       "nombre": "Tasa de Desempleo",
       "emoji": "👥",
@@ -190,15 +290,43 @@
       "unidad": "porcentaje de la población activa",
       "fuente": "INE (España, trimestral/EPA), Eurostat, BLS (EE.UU., mensual)",
       "umbrales_españa": {
-        "pleno_empleo": { "rango": "< 8%", "descripcion": "Pleno empleo estructural para España (NAIRU española estimada: 7-9% por rigideces del mercado laboral).", "color": "verde" },
-        "normal": { "rango": "8% – 12%", "descripcion": "Tasa normal para España. Alta en comparación europea pero estructural.", "color": "amarillo" },
-        "elevado": { "rango": "12% – 18%", "descripcion": "Paro elevado. Presión social y fiscal. Consumo bajo presión.", "color": "naranja" },
-        "crisis": { "rango": "> 18%", "descripcion": "Paro de crisis. España llegó al 26.9% en 2013. Destrucción masiva del consumo interno.", "color": "rojo" }
+        "pleno_empleo": {
+          "rango": "< 8%",
+          "descripcion": "Pleno empleo estructural para España (NAIRU española estimada: 7-9% por rigideces del mercado laboral).",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "8% – 12%",
+          "descripcion": "Tasa normal para España. Alta en comparación europea pero estructural.",
+          "color": "amarillo"
+        },
+        "elevado": {
+          "rango": "12% – 18%",
+          "descripcion": "Paro elevado. Presión social y fiscal. Consumo bajo presión.",
+          "color": "naranja"
+        },
+        "crisis": {
+          "rango": "> 18%",
+          "descripcion": "Paro de crisis. España llegó al 26.9% en 2013. Destrucción masiva del consumo interno.",
+          "color": "rojo"
+        }
       },
       "umbrales_eeuu": {
-        "pleno_empleo": { "rango": "< 4%", "descripcion": "Pleno empleo. Presión salarial = riesgo inflacionario.", "color": "verde" },
-        "normal": { "rango": "4% – 5.5%", "descripcion": "Rango normal histórico.", "color": "amarillo" },
-        "recesion": { "rango": "> 6%", "descripcion": "Señal de recesión en curso o inicio.", "color": "naranja" }
+        "pleno_empleo": {
+          "rango": "< 4%",
+          "descripcion": "Pleno empleo. Presión salarial = riesgo inflacionario.",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "4% – 5.5%",
+          "descripcion": "Rango normal histórico.",
+          "color": "amarillo"
+        },
+        "recesion": {
+          "rango": "> 6%",
+          "descripcion": "Señal de recesión en curso o inicio.",
+          "color": "naranja"
+        }
       },
       "señales_alarma": [
         "Regla de Sahm (EE.UU.): si la media de 3 meses del paro sube ≥ 0.5pp sobre el mínimo de los últimos 12 meses → recesión con ~80% de probabilidad histórica",
@@ -212,7 +340,6 @@
         "minimo_eeuu_reciente": "3.4% en enero 2023 — mínimo en 54 años"
       }
     },
-
     "vix": {
       "nombre": "VIX — Índice de Volatilidad del S&P 500 (Fear Index)",
       "emoji": "😰",
@@ -221,12 +348,36 @@
       "unidad": "puntos (equivale aproximadamente a % de movimiento anualizado esperado)",
       "fuente": "CBOE — cotización en tiempo real",
       "umbrales": {
-        "complacencia": { "rango": "< 12", "descripcion": "Complacencia extrema. El mercado no está comprando protección. Históricamente precede correcciones. Señal contraria de cautela.", "color": "amarillo" },
-        "bajo": { "rango": "12 – 18", "descripcion": "Volatilidad baja. Mercado tranquilo. Entorno de subida gradual.", "color": "verde" },
-        "normal": { "rango": "18 – 25", "descripcion": "Volatilidad normal. Rango habitual en mercado sin tendencia clara.", "color": "verde" },
-        "elevado": { "rango": "25 – 35", "descripcion": "Volatilidad elevada. Estrés en el mercado. Movimientos bruscos intradía frecuentes.", "color": "naranja" },
-        "crisis": { "rango": "35 – 60", "descripcion": "Zona de crisis. Pánico inversor. Históricamente, niveles > 35 son oportunidades de compra de largo plazo para el inversor paciente.", "color": "rojo" },
-        "panico_extremo": { "rango": "> 60", "descripcion": "Pánico extremo. Históricamente se ha tocado en los peores momentos del mercado: VIX 80 en octubre 2008, VIX 85 en marzo 2020.", "color": "rojo" }
+        "complacencia": {
+          "rango": "< 12",
+          "descripcion": "Complacencia extrema. El mercado no está comprando protección. Históricamente precede correcciones. Señal contraria de cautela.",
+          "color": "amarillo"
+        },
+        "bajo": {
+          "rango": "12 – 18",
+          "descripcion": "Volatilidad baja. Mercado tranquilo. Entorno de subida gradual.",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "18 – 25",
+          "descripcion": "Volatilidad normal. Rango habitual en mercado sin tendencia clara.",
+          "color": "verde"
+        },
+        "elevado": {
+          "rango": "25 – 35",
+          "descripcion": "Volatilidad elevada. Estrés en el mercado. Movimientos bruscos intradía frecuentes.",
+          "color": "naranja"
+        },
+        "crisis": {
+          "rango": "35 – 60",
+          "descripcion": "Zona de crisis. Pánico inversor. Históricamente, niveles > 35 son oportunidades de compra de largo plazo para el inversor paciente.",
+          "color": "rojo"
+        },
+        "panico_extremo": {
+          "rango": "> 60",
+          "descripcion": "Pánico extremo. Históricamente se ha tocado en los peores momentos del mercado: VIX 80 en octubre 2008, VIX 85 en marzo 2020.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "VIX > 30 durante > 5 sesiones consecutivas: mercado en modo risk-off, venta generalizada de activos de riesgo",
@@ -243,7 +394,6 @@
       },
       "vstoxx": "El equivalente europeo es el VSTOXX (volatilidad del Eurostoxx 50). Mismo uso, mismos umbrales aproximados, pero con menor liquidez."
     },
-
     "spread_bono_bund": {
       "nombre": "Spread Bono español 10Y vs Bund alemán 10Y",
       "emoji": "🇪🇸",
@@ -252,11 +402,31 @@
       "unidad": "puntos básicos (pb)",
       "fuente": "Bloomberg / Banco de España / BCE",
       "umbrales": {
-        "comprimido": { "rango": "< 60pb", "descripcion": "Prima de riesgo muy baja. Mercado no diferencia prácticamente entre España y Alemania. Entorno de alta confianza en la eurozona.", "color": "verde" },
-        "normal": { "rango": "60 – 120pb", "descripcion": "Spread normal en entorno post-crisis. Refleja diferencial de fundamentos pero sin estrés.", "color": "verde" },
-        "alerta": { "rango": "120 – 200pb", "descripcion": "Spread elevado. Mercado empieza a preocuparse por deuda española. Presión sobre banca.", "color": "amarillo" },
-        "estres": { "rango": "200 – 300pb", "descripcion": "Estrés. Recuerda a los períodos de crisis 2011-2012. Coste de financiación del Estado se dispara.", "color": "naranja" },
-        "crisis": { "rango": "> 300pb", "descripcion": "Crisis de deuda soberana. Referencia: spread llegó a 638pb en julio 2012 antes del 'whatever it takes' de Draghi.", "color": "rojo" }
+        "comprimido": {
+          "rango": "< 60pb",
+          "descripcion": "Prima de riesgo muy baja. Mercado no diferencia prácticamente entre España y Alemania. Entorno de alta confianza en la eurozona.",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "60 – 120pb",
+          "descripcion": "Spread normal en entorno post-crisis. Refleja diferencial de fundamentos pero sin estrés.",
+          "color": "verde"
+        },
+        "alerta": {
+          "rango": "120 – 200pb",
+          "descripcion": "Spread elevado. Mercado empieza a preocuparse por deuda española. Presión sobre banca.",
+          "color": "amarillo"
+        },
+        "estres": {
+          "rango": "200 – 300pb",
+          "descripcion": "Estrés. Recuerda a los períodos de crisis 2011-2012. Coste de financiación del Estado se dispara.",
+          "color": "naranja"
+        },
+        "crisis": {
+          "rango": "> 300pb",
+          "descripcion": "Crisis de deuda soberana. Referencia: spread llegó a 638pb en julio 2012 antes del 'whatever it takes' de Draghi.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "Spread > 200pb: mercado empieza a activar memorias de 2012; banca española bajo presión fuerte",
@@ -271,7 +441,6 @@
         "whatever_it_takes": "El discurso de Draghi de julio 2012 comprimió el spread 200pb en dos semanas sin gastar un euro"
       }
     },
-
     "precio_petroleo": {
       "nombre": "Precio del Petróleo Brent",
       "emoji": "🛢️",
@@ -280,11 +449,31 @@
       "unidad": "dólares por barril (USD/bbl)",
       "fuente": "ICE Futures Europe — cotización continua",
       "umbrales": {
-        "muy_bajo": { "rango": "< 40$/bbl", "descripcion": "Precio destructivo para productores. Muchas empresas shale EE.UU. no son rentables < 50$. Señal de demanda global débil o sobresupply extremo.", "color": "rojo" },
-        "bajo": { "rango": "40 – 65$/bbl", "descripcion": "Rango favorable para consumidores y economías importadoras de energía. Inflación energética contenida.", "color": "verde" },
-        "equilibrio": { "rango": "65 – 90$/bbl", "descripcion": "Zona de equilibrio histórico. OPEP+ suele defender el rango 70-90$.", "color": "verde" },
-        "alto": { "rango": "90 – 120$/bbl", "descripcion": "Presión inflacionaria real. Impacto en consumo y márgenes industriales.", "color": "amarillo" },
-        "shock": { "rango": "> 120$/bbl", "descripcion": "Shock de oferta. Históricamente asociado a eventos geopolíticos extremos (Ucrania 2022: 139$/bbl). Riesgo recesivo.", "color": "rojo" }
+        "muy_bajo": {
+          "rango": "< 40$/bbl",
+          "descripcion": "Precio destructivo para productores. Muchas empresas shale EE.UU. no son rentables < 50$. Señal de demanda global débil o sobresupply extremo.",
+          "color": "rojo"
+        },
+        "bajo": {
+          "rango": "40 – 65$/bbl",
+          "descripcion": "Rango favorable para consumidores y economías importadoras de energía. Inflación energética contenida.",
+          "color": "verde"
+        },
+        "equilibrio": {
+          "rango": "65 – 90$/bbl",
+          "descripcion": "Zona de equilibrio histórico. OPEP+ suele defender el rango 70-90$.",
+          "color": "verde"
+        },
+        "alto": {
+          "rango": "90 – 120$/bbl",
+          "descripcion": "Presión inflacionaria real. Impacto en consumo y márgenes industriales.",
+          "color": "amarillo"
+        },
+        "shock": {
+          "rango": "> 120$/bbl",
+          "descripcion": "Shock de oferta. Históricamente asociado a eventos geopolíticos extremos (Ucrania 2022: 139$/bbl). Riesgo recesivo.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "Subida > 30% en < 3 meses sin crecimiento de demanda: shock de oferta geopolítico en curso",
@@ -300,7 +489,6 @@
       },
       "impacto_esp": "España importa ~100% de su petróleo. Cada 10$/bbl de subida en el Brent añade ~0.3-0.4pp de inflación y reduce el PIB en ~0.1-0.2pp. Repsol y el sector energético IBEX se benefician directamente."
     },
-
     "m2": {
       "nombre": "M2 — Agregado Monetario Amplio",
       "emoji": "💰",
@@ -309,11 +497,31 @@
       "unidad": "variación interanual (%)",
       "fuente": "BCE (M3 es más usado en Europa), Fed / FRED",
       "umbrales": {
-        "contraccion": { "rango": "< 0%", "descripcion": "Contracción monetaria. Sin precedentes en época moderna salvo 2022-2023 en EE.UU. (-4.6%). Históricamente precede deflación o crisis bancaria.", "color": "rojo" },
-        "bajo": { "rango": "0% – 4%", "descripcion": "Crecimiento monetario bajo. Entorno deflacionario o de desinflación.", "color": "amarillo" },
-        "normal": { "rango": "4% – 8%", "descripcion": "Rango histórico normal. Consistent con inflación cercana al objetivo del BCE/Fed.", "color": "verde" },
-        "alto": { "rango": "8% – 15%", "descripcion": "Expansión monetaria elevada. Riesgo inflacionario si la velocidad del dinero aumenta.", "color": "amarillo" },
-        "critico": { "rango": "> 15%", "descripcion": "Expansión monetaria extrema. COVID 2020-2021: M2 EE.UU. creció al 27% interanual. Combustible de la inflación 2022.", "color": "rojo" }
+        "contraccion": {
+          "rango": "< 0%",
+          "descripcion": "Contracción monetaria. Sin precedentes en época moderna salvo 2022-2023 en EE.UU. (-4.6%). Históricamente precede deflación o crisis bancaria.",
+          "color": "rojo"
+        },
+        "bajo": {
+          "rango": "0% – 4%",
+          "descripcion": "Crecimiento monetario bajo. Entorno deflacionario o de desinflación.",
+          "color": "amarillo"
+        },
+        "normal": {
+          "rango": "4% – 8%",
+          "descripcion": "Rango histórico normal. Consistent con inflación cercana al objetivo del BCE/Fed.",
+          "color": "verde"
+        },
+        "alto": {
+          "rango": "8% – 15%",
+          "descripcion": "Expansión monetaria elevada. Riesgo inflacionario si la velocidad del dinero aumenta.",
+          "color": "amarillo"
+        },
+        "critico": {
+          "rango": "> 15%",
+          "descripcion": "Expansión monetaria extrema. COVID 2020-2021: M2 EE.UU. creció al 27% interanual. Combustible de la inflación 2022.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "M2 > 15% interanual con economía en pleno empleo: inflación casi garantizada con 12-18 meses de retardo",
@@ -327,7 +535,6 @@
         "regla_cantidad_dinero": "Milton Friedman: 'La inflación es siempre y en todas partes un fenómeno monetario' — M2 es la evidencia empírica de esta afirmación"
       }
     },
-
     "indice_dolar_dxy": {
       "nombre": "Índice del Dólar DXY",
       "emoji": "💵",
@@ -336,11 +543,31 @@
       "unidad": "índice (base 100 en 1973)",
       "fuente": "ICE / Bloomberg — cotización continua",
       "umbrales": {
-        "muy_debil": { "rango": "< 90", "descripcion": "Dólar muy débil. Commodities suben en USD. Flujos hacia emergentes. Alivio para deudores en USD.", "color": "amarillo" },
-        "debil": { "rango": "90 – 98", "descripcion": "Dólar débil-neutral. Entorno favorable para materias primas y mercados emergentes.", "color": "verde" },
-        "normal": { "rango": "98 – 105", "descripcion": "Rango central histórico post-2000.", "color": "verde" },
-        "fuerte": { "rango": "105 – 112", "descripcion": "Dólar fuerte. Presión sobre materias primas y emergentes. Flujos hacia activos USD.", "color": "amarillo" },
-        "muy_fuerte": { "rango": "> 112", "descripcion": "Dólar muy fuerte. Referencia: DXY a 114.8 en sept.2022 (máximo 20 años). Crisis en emergentes, presión sobre exportaciones europeas.", "color": "rojo" }
+        "muy_debil": {
+          "rango": "< 90",
+          "descripcion": "Dólar muy débil. Commodities suben en USD. Flujos hacia emergentes. Alivio para deudores en USD.",
+          "color": "amarillo"
+        },
+        "debil": {
+          "rango": "90 – 98",
+          "descripcion": "Dólar débil-neutral. Entorno favorable para materias primas y mercados emergentes.",
+          "color": "verde"
+        },
+        "normal": {
+          "rango": "98 – 105",
+          "descripcion": "Rango central histórico post-2000.",
+          "color": "verde"
+        },
+        "fuerte": {
+          "rango": "105 – 112",
+          "descripcion": "Dólar fuerte. Presión sobre materias primas y emergentes. Flujos hacia activos USD.",
+          "color": "amarillo"
+        },
+        "muy_fuerte": {
+          "rango": "> 112",
+          "descripcion": "Dólar muy fuerte. Referencia: DXY a 114.8 en sept.2022 (máximo 20 años). Crisis en emergentes, presión sobre exportaciones europeas.",
+          "color": "rojo"
+        }
       },
       "señales_alarma": [
         "DXY > 110: presión sistémica sobre emergentes con deuda en USD (reminiscencia crisis asiática 1997)",
@@ -351,35 +578,165 @@
       "impacto_ibex": "El IBEX tiene alta exposición a LatAm (BBVA, Santander, Telefónica). Dólar fuerte = peso y real bajo presión = resultados latinoamericanos valen menos en EUR."
     }
   },
-
   "categorias": {
-    "politica_monetaria": { "nombre": "Política Monetaria", "emoji": "🏛️", "indicadores": ["tipos_bce", "tipos_fed", "m2"] },
-    "renta_fija_macro": { "nombre": "Renta Fija / Curvas", "emoji": "📉", "indicadores": ["curva_2y10y", "curva_bund_2y10y", "spread_bono_bund"] },
-    "actividad_economica": { "nombre": "Actividad Económica", "emoji": "🏭", "indicadores": ["pmi_manufacturero"] },
-    "inflacion": { "nombre": "Inflación", "emoji": "📊", "indicadores": ["ipc_subyacente"] },
-    "mercado_laboral": { "nombre": "Mercado Laboral", "emoji": "👥", "indicadores": ["tasa_paro"] },
-    "sentimiento_riesgo": { "nombre": "Sentimiento / Riesgo", "emoji": "😰", "indicadores": ["vix"] },
-    "commodities": { "nombre": "Materias Primas", "emoji": "🛢️", "indicadores": ["precio_petroleo"] },
-    "divisas": { "nombre": "Divisas", "emoji": "💵", "indicadores": ["indice_dolar_dxy"] }
+    "politica_monetaria": {
+      "nombre": "Política Monetaria",
+      "emoji": "🏛️",
+      "indicadores": [
+        "tipos_bce",
+        "tipos_fed",
+        "m2"
+      ]
+    },
+    "renta_fija_macro": {
+      "nombre": "Renta Fija / Curvas",
+      "emoji": "📉",
+      "indicadores": [
+        "curva_2y10y",
+        "curva_bund_2y10y",
+        "spread_bono_bund"
+      ]
+    },
+    "actividad_economica": {
+      "nombre": "Actividad Económica",
+      "emoji": "🏭",
+      "indicadores": [
+        "pmi_manufacturero"
+      ]
+    },
+    "inflacion": {
+      "nombre": "Inflación",
+      "emoji": "📊",
+      "indicadores": [
+        "ipc_subyacente"
+      ]
+    },
+    "mercado_laboral": {
+      "nombre": "Mercado Laboral",
+      "emoji": "👥",
+      "indicadores": [
+        "tasa_paro"
+      ]
+    },
+    "sentimiento_riesgo": {
+      "nombre": "Sentimiento / Riesgo",
+      "emoji": "😰",
+      "indicadores": [
+        "vix"
+      ]
+    },
+    "commodities": {
+      "nombre": "Materias Primas",
+      "emoji": "🛢️",
+      "indicadores": [
+        "precio_petroleo"
+      ]
+    },
+    "divisas": {
+      "nombre": "Divisas",
+      "emoji": "💵",
+      "indicadores": [
+        "indice_dolar_dxy"
+      ]
+    }
   },
-
   "regimen_actual_señales": {
     "descripcion": "Marco para determinar el régimen macro actual cruzando indicadores",
     "expansion": {
-      "condiciones": ["PMI > 52", "Curva 2Y10Y positiva", "VIX < 20", "IPC subyacente ~2%", "Paro bajando"],
-      "activos_favorecidos": ["Renta variable cíclica", "Crédito corporativo HY", "Materias primas industriales"]
+      "condiciones": [
+        "PMI > 52",
+        "Curva 2Y10Y positiva",
+        "VIX < 20",
+        "IPC subyacente ~2%",
+        "Paro bajando"
+      ],
+      "activos_favorecidos": [
+        "Renta variable cíclica",
+        "Crédito corporativo HY",
+        "Materias primas industriales"
+      ]
     },
     "final_ciclo": {
-      "condiciones": ["PMI aplanando o girando < 50", "Curva 2Y10Y aplanándose", "VIX 20-30", "BCE/Fed subiendo tipos", "IPC subyacente > objetivo"],
-      "activos_favorecidos": ["Energía", "Materiales", "Renta fija corto plazo", "Oro"]
+      "condiciones": [
+        "PMI aplanando o girando < 50",
+        "Curva 2Y10Y aplanándose",
+        "VIX 20-30",
+        "BCE/Fed subiendo tipos",
+        "IPC subyacente > objetivo"
+      ],
+      "activos_favorecidos": [
+        "Energía",
+        "Materiales",
+        "Renta fija corto plazo",
+        "Oro"
+      ]
     },
     "recesion": {
-      "condiciones": ["PMI < 47", "Curva 2Y10Y normalizing (re-empinando desde inversión)", "VIX > 30", "Paro subiendo", "BCE/Fed pivotando"],
-      "activos_favorecidos": ["Bonos soberanos larga duración", "Defensivos (healthcare, consumer staples)", "Oro", "Cash"]
+      "condiciones": [
+        "PMI < 47",
+        "Curva 2Y10Y normalizing (re-empinando desde inversión)",
+        "VIX > 30",
+        "Paro subiendo",
+        "BCE/Fed pivotando"
+      ],
+      "activos_favorecidos": [
+        "Bonos soberanos larga duración",
+        "Defensivos (healthcare, consumer staples)",
+        "Oro",
+        "Cash"
+      ]
     },
     "recuperacion": {
-      "condiciones": ["PMI rebotando desde < 50", "BCE/Fed bajando tipos", "VIX cayendo desde > 30", "Crédito reabriendo", "Yield curve empinándose"],
-      "activos_favorecidos": ["Financieros", "Consumo cíclico", "Small caps", "Emergentes (si USD débil)"]
+      "condiciones": [
+        "PMI rebotando desde < 50",
+        "BCE/Fed bajando tipos",
+        "VIX cayendo desde > 30",
+        "Crédito reabriendo",
+        "Yield curve empinándose"
+      ],
+      "activos_favorecidos": [
+        "Financieros",
+        "Consumo cíclico",
+        "Small caps",
+        "Emergentes (si USD débil)"
+      ]
     }
+  },
+  "fase_ciclo_metodo": {
+    "_descripcion": "Spec PE v1 (PE-05). Regla del método para la fase actual del ciclo. Cada indicador se lee en su dirección de los últimos 'ventana_meses'. Asignación: la fase con más indicadores coincidentes; empate o diferencia de 'diferencia_transicion' o menos → «Transición entre X e Y».",
+    "ventana_meses": 6,
+    "ventana_extremos_meses": 24,
+    "diferencia_transicion": 1,
+    "max_antiguedad_meses": {
+      "trimestral": 7,
+      "mensual": 4,
+      "diaria": 1
+    },
+    "pib": {
+      "estable_pp": 0.3,
+      "desaceleracion_fuerte_pp": 1.0,
+      "bajo_pct": 1.0
+    },
+    "inflacion": {
+      "objetivo_pct": 2.0,
+      "banda_cerca_pp": 0.5,
+      "estable_pp": 0.2
+    },
+    "tipo_oficial": {
+      "estable_pb": 25,
+      "tolerancia_extremo_pb": 10
+    },
+    "curva": {
+      "estable_pp": 0.15
+    },
+    "paro": {
+      "estable_pp": 0.2,
+      "tolerancia_minimo_pp": 0.2
+    },
+    "nota_fija": "Lectura orientativa: las fases del ciclo solo se confirman con certeza a posteriori.",
+    "min_indicadores": 4,
+    "reparto_voto": "cada indicador reparte 1 voto entre las fases con las que coincide",
+    "nota_subyacente_pp": 1.0,
+    "nota_subyacente_texto": "inflación impulsada sobre todo por la energía (general {general} · subyacente {subyacente})"
   }
 }

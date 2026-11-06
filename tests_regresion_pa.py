@@ -681,7 +681,7 @@ def test_pa3_03_dividendos():
     _check(c.get("valor_fmt") == "CAGR n/d (historial de 3 años)" and c.get("na_estructural"),
            f"T-PA3-03c: CAGR {c.get('valor_fmt')!r}")
     _k8 = next((k for k in r["killshots"] if k.get("codigo") == "K8"), None)
-    _check(_k8 is None or "rec" not in (_k8.get("razon") or "").lower(),
+    _check(_k8 is None or "cagr" not in (_k8.get("razon") or "").lower(),
            f"T-PA3-03c: el CAGR n/d no debe entrar en K8 ({_k8})")
     _check(r["n_na_cap"] == 0, f"T-PA3-03c: el CAGR n/d no penaliza como N/A (n_na_cap {r['n_na_cap']})")
     # T-PA3-03d / e — K-RECENT_CUT
@@ -1037,7 +1037,8 @@ def test_v3_validacion_polaris():
     import pandas as pd
     ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
     # V3-1 — MRL con los pagos de la validación (fecha ex): la ventana TTM es correcta
-    mrl = _A.serie_pagos([("2024-11-22", 0.1458), ("2025-05-08", 0.21637),
+    mrl = _A.serie_pagos([("2023-05-05", 0.196), ("2023-11-24", 0.162), ("2024-05-17", 0.194),
+                          ("2024-11-22", 0.1458), ("2025-05-08", 0.21637),
                           ("2025-11-21", 0.162), ("2026-05-07", 0.21716)])
     _check(abs(_APP["dpa_ttm"](mrl, ref=ref) - 0.37916) < 1e-6, "V3-1: TTM MRL a 05/11/2026 = 0,379")
     _check(abs(_APP["dpa_ttm"](mrl, ref=ref, desfase_dias=365) - 0.36217) < 1e-6, "V3-1: TTM previo MRL = 0,362")
@@ -1050,10 +1051,12 @@ def test_v3_validacion_polaris():
     r = _APP["evaluar_recorte_reciente"](fer, ref=ref)
     _check(r["estado"] == "irregular" and (r["n_act"], r["n_prev"]) == (2, 4), f"V3-2: FER {r}")
     # V3-2 — recorte real: último pago < 0,75 × homólogo y TTM −33 %
-    cut = _A.serie_pagos([("2025-05-10", 0.60), ("2025-10-10", 0.60), ("2026-05-08", 0.40), ("2026-10-09", 0.40)])
+    cut = _A.serie_pagos([("2023-05-10", 0.50), ("2023-10-10", 0.50), ("2024-05-10", 0.50), ("2024-10-10", 0.50),
+                          ("2025-05-10", 0.60), ("2025-10-10", 0.60), ("2026-05-08", 0.40), ("2026-10-09", 0.30)])
     _check(_APP["evaluar_recorte_reciente"](cut, ref=ref)["estado"] == "recorte", "V3-2: recorte real no detectado")
     # Recorte solo en el último pago pero TTM estable → no dispara
-    uno = _A.serie_pagos([("2025-05-10", 0.30), ("2025-10-10", 0.90), ("2026-05-08", 0.85), ("2026-10-09", 0.20)])
+    uno = _A.serie_pagos([("2023-05-10", 0.30), ("2023-10-10", 0.90), ("2024-05-10", 0.30), ("2024-10-10", 0.90),
+                          ("2025-05-10", 0.30), ("2025-10-10", 0.90), ("2026-05-08", 0.85), ("2026-10-09", 0.20)])
     _check(_APP["evaluar_recorte_reciente"](uno, ref=ref)["estado"] == "sin_recorte",
            "V3-2: con el TTM estable no debe dispararse")
     # V3-3 — K1-BPA sin cifra de payout
@@ -1100,7 +1103,8 @@ def test_pagos_manuales_decision3():
     import repositorio as repo
     ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
     URL = "https://ir.merlinproperties.com/wp-content/uploads/2026/03/acuerdo.pdf"
-    yahoo = _A.serie_pagos([("2024-11-22", 0.18), ("2025-05-08", 0.22), ("2025-11-21", 0.20), ("2026-05-07", 0.0151)])
+    yahoo = _A.serie_pagos([("2023-05-05", 0.242), ("2023-11-24", 0.20), ("2024-05-17", 0.24),
+                            ("2024-11-22", 0.18), ("2025-05-08", 0.22), ("2025-11-21", 0.20), ("2026-05-07", 0.0151)])
     man = [{"ticker": "MRL.MC", "fecha_ex": "2026-05-07", "importe_bruto": 0.0151, "tipo": "dividendo",
             "url_origen": URL, "activo": True},
            {"ticker": "MRL.MC", "fecha_ex": "2026-05-07", "importe_bruto": 0.20492995, "tipo": "prima",
@@ -1110,7 +1114,7 @@ def test_pagos_manuales_decision3():
     _check(abs(ttm - 0.42002995) < 1e-6, f"Decisión 3: TTM bruto MRL con prima = {ttm} (esperado 0,4200)")
     rc = _APP["evaluar_recorte_reciente"](ser, ref=ref)
     _check(rc["estado"] == "sin_recorte", f"Decisión 3: MRL sin K-RECENT_CUT ({rc})")
-    _check(len(ser) == 4, "Decisión 3: el pago manual sustituye al de Yahoo del mismo evento (no se suma)")
+    _check(len(ser) == 7, "Decisión 3: el pago manual sustituye al de Yahoo del mismo evento (no se suma)")
     dsg = _APP["desglose_remuneracion"](ev, ref=ref)
     _check("0,2200 € = 0,0151 dividendo + 0,2049 prima" in dsg and "dato manual · fuente: " + URL in dsg,
            f"Decisión 3: desglose {dsg!r}")
@@ -1150,6 +1154,362 @@ def test_pagos_manuales_decision3():
         _check(repo.validar_pago_manual(dict(ok, **{k: v})) is not None, f"Decisión 3: debería rechazar ({mal})")
 
 
+def test_decision12_r2_ciclo():
+    """Decisión 12 de Pólaris (R2): yield por ciclo de pagos con calendario irregular (FER)."""
+    import pandas as pd
+    ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
+    fer = _A.serie_pagos([("2023-05-22", 0.30), ("2023-11-06", 0.43), ("2024-05-20", 0.3033), ("2024-11-06", 0.4597),
+                          ("2024-12-13", 0.0346), ("2025-05-22", 0.3182), ("2025-10-24", 0.4769),
+                          ("2025-12-04", 0.0770), ("2026-05-18", 0.5578)])
+    r = _APP["remuneracion_para_yield"](fer, ref=ref)
+    _check(r["metodo"] == "ciclo" and r["n"] == 3 and abs(r["importe"] - 1.1117) < 1e-6, f"R2 FER: {r}")
+    _check(_APP["evaluar_recorte_reciente"](fer, ref=ref)["estado"] == "irregular", "R2 FER: K8 calendario irregular")
+    ntgy = _A.serie_pagos([("2023-04-03", .4), ("2023-07-31", .4), ("2023-11-06", .5), ("2024-04-01", .4),
+                           ("2024-07-29", .5), ("2024-11-04", .6), ("2025-04-07", .6), ("2025-07-28", .6),
+                           ("2025-11-03", .6), ("2026-03-27", .57), ("2026-07-27", .6), ("2026-11-03", .6)])
+    r = _APP["remuneracion_para_yield"](ntgy, ref=ref)
+    _check(r["metodo"] == "ttm" and abs(r["importe"] - 1.77) < 1e-6, f"R2 NTGY sigue en TTM 1,77: {r}")
+    # n pagos que no caben en 15 meses → se mantiene el TTM
+    raro = _A.serie_pagos([("2023-03-01", .5), ("2024-03-01", .5), ("2025-03-01", .5), ("2026-10-01", .5)])
+    _check(_APP["dpa_ciclo"](raro, ref=ref) is None or _APP["dpa_ciclo"](raro, ref=ref)[1] == 1, "R2: ciclo fuera de 15 meses")
+    # Screener: el rótulo del método aparece en el criterio
+    hoy = pd.Timestamp.now(tz="Europe/Madrid").normalize()
+    fer_rel = pd.Series(fer.values, index=fer.index + (hoy - ref))
+    rr = _A.simular_screening(_A.info_sana(dpa=1.1117, bpa=2.5, yield_obj=0.04), dividendos=fer_rel)
+    c = _crit(rr, "dividend_yield")
+    _check("ciclo 3 pagos" in c.get("valor_fmt", "") and c.get("valor_fmt", "").startswith("4.0")
+           and "K3" not in _codigos(rr), f"R2 screener FER: {c.get('valor_fmt')} {_codigos(rr)}")
+
+
+def test_decision14_r1_r3():
+    """Decisión 14 de Pólaris: R1 solo Yahoo (calendario regular) y R3 importe anunciado."""
+    import pandas as pd
+    import repositorio as repo
+    ref = pd.Timestamp("2026-11-05", tz="Europe/Madrid")
+    ev = _APP["evaluar_recorte_reciente"]
+    # GRF solo Yahoo → K8 sin homólogo comparable, sin K-RECENT_CUT
+    grf = _A.serie_pagos([("2018-11-30", .2), ("2019-06-07", .145), ("2019-12-02", .2), ("2020-10-26", .1616),
+                          ("2021-06-03", .364), ("2025-08-11", .15), ("2026-06-30", .0824)])
+    r = ev(grf, ref=ref)
+    _check(r["estado"] == "irregular" and "homólogo comparable" in r.get("motivo_k8", ""), f"D14 GRF: {r}")
+    # REP (ene/jul, ≥ 3 ciclos) → por fecha, 0,551 frente a 0,50 → sin recorte
+    rep = _A.serie_pagos([("2023-01-09", .35), ("2023-07-04", .35), ("2024-01-09", .40), ("2024-07-04", .50),
+                          ("2025-01-10", .475), ("2025-07-04", .50), ("2026-01-12", .50), ("2026-07-06", .551)])
+    r = ev(rep, ref=ref)
+    _check(r["estado"] == "sin_recorte" and r.get("base") == "fecha" and r["homologo"] == 0.50, f"D14 REP: {r}")
+    # Sintético regular: 3 ciclos de 2 pagos, último 0,30 frente a 0,50 y TTM −40 % → recorte
+    sin = _A.serie_pagos([("2023-04-10", .5), ("2023-10-10", .5), ("2024-04-10", .5), ("2024-10-10", .5),
+                          ("2025-04-10", .5), ("2025-10-10", .5), ("2026-04-10", .30), ("2026-10-09", .30)])
+    r = ev(sin, ref=ref)
+    _check(r["estado"] == "recorte" and abs(r["pct_ttm"] + 0.40) < 1e-9, f"D14 sintético: {r}")
+    # R1 con pagos tipados (GRF): a cuenta 0,15 (2025) y complementario 0,0824 (2025) → sin homólogo del
+    # mismo tipo en el ejercicio anterior → K8, sin disparo
+    URL = "https://www.cnmv.es/x"
+    tip = [{"fecha_ex": "2025-08-11", "importe_bruto": .15, "tipo": "dividendo_a_cuenta", "ejercicio": 2025, "url_origen": URL},
+           {"fecha_ex": "2026-06-30", "importe_bruto": .0824, "tipo": "dividendo_complementario", "ejercicio": 2025, "url_origen": URL}]
+    ser, _ = _APP["aplicar_dividendos_manuales"]("GRF.MC", grf, manuales=tip)
+    r = ev(ser, ref=ref, manuales=tip)
+    _check(r["estado"] == "irregular" and "mismo tipo" in r.get("motivo_k8", ""), f"D14 R1 tipados GRF: {r}")
+    # R3 — TEF con anuncio 0,15 € (ejercicio 2026)
+    tef = _A.serie_pagos([("2023-06-13", .15), ("2023-12-12", .15), ("2024-06-18", .15), ("2024-12-17", .15),
+                          ("2025-06-17", .15), ("2025-12-16", .15), ("2026-06-16", .15)])
+    an = [{"tipo": "anunciado", "ejercicio": 2026, "importe_bruto": 0.15, "fecha_anuncio": "2025-11-04",
+           "url_origen": URL, "activo": True}]
+    a = _APP["evaluar_anunciado"](tef, an, ref=ref)
+    _check(a["estado"] == "activo" and a["recorte"] and abs(a["pct"] + 0.5) < 1e-9
+           and a["base_txt"] == "DPA de los últimos 12 meses", f"D14 R3 TEF: {a}")
+    _check(_APP["evaluar_anunciado"](tef, an, ref=pd.Timestamp("2027-12-31", tz="Europe/Madrid"))["estado"] == "activo"
+           and _APP["evaluar_anunciado"](tef, an, ref=pd.Timestamp("2028-01-01", tz="Europe/Madrid"))["estado"] == "caducado",
+           "D14 R3: caducidad 31/12/2027 → 01/01/2028")
+    pag = an + [{"tipo": "dividendo_a_cuenta", "ejercicio": 2026, "importe_bruto": 0.144, "fecha_ex": "2026-12-15",
+                 "url_origen": URL}]
+    _check(_APP["evaluar_anunciado"](tef, pag, ref=pd.Timestamp("2026-12-20", tz="Europe/Madrid"))["estado"] == "cerrado",
+           "D14 R3: pagos tipados del 96 % cierran el anuncio")
+    # Screener TEF: K-RECENT_CUT "recorte anunciado (−50%)", yield ≈ 4,3 %, "TTM 8,7% · anunciado 4,3%"
+    hoy = pd.Timestamp.now(tz="Europe/Madrid").normalize()
+    tef_rel = pd.Series(tef.values, index=tef.index + (hoy - ref))
+    prev = _APP.get("leer_pagos_manuales")
+    _APP["leer_pagos_manuales"] = lambda tk: an
+    try:
+        rr = _A.simular_screening(_A.info_sana(dpa=0.30, bpa=0.40, yield_obj=0.0871,
+                                               sector="Communication Services", industry="Telecom Services"),
+                                  dividendos=tef_rel)
+    finally:
+        _APP["leer_pagos_manuales"] = prev
+    c = _crit(rr, "dividend_yield")
+    _check("K-RECENT_CUT" in _codigos(rr) and "recorte anunciado (−50%)" in rr["motivo"]
+           and c.get("valor_fmt", "").startswith("4.4") and "TTM 8,7% · anunciado 4,4%" in c.get("valor_fmt", ""),
+           f"D14 R3 screener TEF: {rr['motivo']} · {c.get('valor_fmt')}")
+    # Validación del alta de tipos nuevos
+    ok = {"ticker": "TEF.MC", "tipo": "anunciado", "importe_bruto": 0.15, "url_origen": URL,
+          "ejercicio": 2026, "fecha_anuncio": "2025-11-04"}
+    _check(repo.validar_pago_manual(ok) is None, "D14: alta de anunciado válida rechazada")
+    _check(repo.validar_pago_manual(dict(ok, ejercicio=None)) is not None, "D14: anunciado sin ejercicio")
+    _check(repo.validar_pago_manual({"ticker": "GRF.MC", "tipo": "dividendo_a_cuenta", "importe_bruto": .15,
+                                     "fecha_ex": "2025-08-11", "url_origen": URL}) is not None,
+           "D14: a cuenta sin ejercicio")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Spec PE v1 — «¿Por dónde empiezo?» · Paso 1 (T-PE-01a … T-PE-07a)
+# ═════════════════════════════════════════════════════════════════════════════
+def _textos_paso1_sector(sec: dict) -> list:
+    """Textos del Contexto Sectorial en el orden de lectura del Paso 1 (igual que la UI)."""
+    ciclo = sec.get("comportamiento_ciclo", {})
+    fases = [p for p in _APP["FASES_CICLO"] if p in ciclo] + [p for p in ciclo if p not in _APP["FASES_CICLO"]]
+    sens = _APP["sensibilidad_tipos_didactica"](sec)
+    return ([sec.get("descripcion", "")] + [ciclo[p] for p in fases]
+            + [sens["motivo"], sec.get("sensibilidad_tipos", {}).get("explicacion", "")]
+            + list((sec.get("riesgos_especificos") or [])[:4]) + [sec.get("leccion_historica", "")])
+
+
+def test_pe01_06_datos_y_formulas():
+    import pandas as pd
+    t = _APP["textos_tarjetas_paso1"]({"precio": 29.74, "sma200": 28.0493, "dist_pct": (29.74 / 28.0493 - 1) * 100,
+                                       "h52": 31.12, "l52": 24.30, "pos_pct": (29.74 - 24.30) / (31.12 - 24.30) * 100,
+                                       "vol_pct": 19.9, "vol_n": 249}, "€", "cierre del 05/11/2026")
+    _check("+6,0%" in t["tend_valor"] and "SMA200 28,05 €" in t["tend_datos"] and "Precio 29,74 €" in t["tend_datos"],
+           f"T-PE-01a tendencia: {t['tend_valor']} | {t['tend_datos']}")
+    _check(t["rng_valor"].startswith("79,8%") and "Mín. 24,30 €" in t["rng_datos"] and "Máx. 31,12 €" in t["rng_datos"]
+           and "(29,74 − 24,30) / (31,12 − 24,30) = 79,8%" in t["rng_formula"], f"T-PE-01a rango: {t}")
+    _check("249" in t["vol_datos"] and "√252" in t["vol_formula"], f"T-PE-01c ventana de volatilidad: {t['vol_datos']}")
+    # Hora y retraso: durante la sesión se muestra hora + '~15 min de retraso'
+    _m = _APP["momento_cotizacion_txt"](pd.Timestamp("2026-11-06", tz="Europe/Madrid"),
+                                       pd.Timestamp("2026-11-06 12:30", tz="Europe/Madrid"))
+    _check("12:30" in _m and "15 min" in _m, f"T-PE-01a hora y retraso: {_m}")
+    _m2 = _APP["momento_cotizacion_txt"](pd.Timestamp("2026-11-05", tz="Europe/Madrid"),
+                                        pd.Timestamp("2026-11-06 12:30", tz="Europe/Madrid"))
+    _check(_m2 == "cierre del 05/11/2026", f"T-PE-01a cierre anterior: {_m2}")
+    # T-PE-01b / T-PE-06a — mismas funciones y datos que Análisis Técnico
+    hist = _A.historico_diario(29.74, sesiones=252)
+    for info in ({"fiftyTwoWeekHigh": 31.12, "fiftyTwoWeekLow": 24.30}, {}):
+        d = _APP["datos_largo_plazo"](hist, info)
+        h, l, dh = _APP["rango_52s"](info, hist)
+        _check(d["precio"] == _APP["precio_actual"](hist)
+               and d["sma200"] == _APP["calcular_sma_ema"](hist["Close"])[200][0]
+               and (d["h52"], d["l52"], d["rango_desde_hist"]) == (h, l, dh)
+               and d["vol_n"] == 251, f"T-PE-06a mismos valores que Análisis Técnico: {d}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check(src.count("rango_52s(info, hist)") >= 1 and "_lp = datos_largo_plazo(hist, _info)" in src,
+           "T-PE-06a: Análisis Técnico y Paso 1 usan rango_52s / datos_largo_plazo")
+
+
+def test_pe02_tramos():
+    import copy
+    crit = _APP["_cargar_criteria"]()
+    cfg = crit.get("contexto_macro_tramos", {})
+    _check(bool(cfg), "T-PE-02: criteria.json sin 'contexto_macro_tramos'")
+    td = _APP["tramo_de"]
+    _check(cfg["dist_sma200"]["tramos"][td(6.0, cfg["dist_sma200"]["tramos"])]["etiqueta"] == "Por encima", "T-PE-02a +6,0% → Por encima")
+    _check(cfg["pos_52s"]["tramos"][td(79.8, cfg["pos_52s"]["tramos"])]["etiqueta"] == "Zona alta del año", "T-PE-02a 79,8% → Zona alta")
+    _check(cfg["volatilidad"]["tramos"][td(19.9, cfg["volatilidad"]["tramos"])]["etiqueta"] == "Moderada", "T-PE-02a 19,9% → Moderada")
+    _check(td(100, cfg["pos_52s"]["tramos"]) == 2 and td(-3, cfg["pos_52s"]["tramos"]) == 0
+           and td(-10, cfg["dist_sma200"]["tramos"]) == 2 and td(10, cfg["dist_sma200"]["tramos"]) == 0,
+           "T-PE-02: límites de tramo (desde ≤ v < hasta; extremos)")
+    h = _APP["html_bloque_tramos"]("pos_52s", 79.8, "79,8%", crit)
+    _check("Zona alta del año ◀ valor analizado" in h and "Tramos de referencia del método" in h,
+           "T-PE-02a: tramo resaltado y rótulo del método")
+    hv = _APP["html_bloque_tramos"]("volatilidad", 19.9, "19,9%", crit)
+    _check("±19,9%" in hv and "no una previsión" in hv and "oscila el doble en euros" in hv,
+           "T-PE-02: ejemplo de volatilidad y nota de tamaño")
+    # mismos tramos que el informe de estrategia de Dividendos
+    _b = [t["hasta"] for t in cfg["pos_52s"]["tramos"][:2]]
+    _check(tuple(_b) == tuple(_APP["POS52_DIV"]), f"T-PE-02: tramos 52s {_b} ≠ POS52_DIV {_APP['POS52_DIV']}")
+    # T-PE-02b — cambiar un tramo en criteria.json cambia la tabla sin tocar código
+    c2 = copy.deepcopy(crit)
+    c2["contexto_macro_tramos"]["pos_52s"]["tramos"][2]["desde"] = 85
+    c2["contexto_macro_tramos"]["pos_52s"]["tramos"][1]["hasta"] = 85
+    c2["contexto_macro_tramos"]["pos_52s"]["tramos"][1]["rango"] = "35% – 85%"
+    h2 = _APP["html_bloque_tramos"]("pos_52s", 79.8, "79,8%", c2)
+    _check("Zona media ◀ valor analizado" in h2 and "35% – 85%" in h2, "T-PE-02b: el tramo sale de criteria.json")
+
+
+def test_pe03_sensibilidad_tipos():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    u = _APP["sensibilidad_tipos_didactica"](sec["Utilities"])
+    _check(u["intensidad"] == "alta" and "suben</b>, suele <b>perjudicar" in u["frase"]
+           and "bajan</b>, suele <b>favorecerlo" in u["frase"] and "compite con los bonos" in u["motivo"],
+           f"T-PE-03a Utilities: {u}")
+    b = _APP["sensibilidad_tipos_didactica"](sec["Financial Services"])
+    _check(b["si_suben"] == "favorece" and "suele <b>favorecer</b> al sector" in b["frase"], f"T-PE-03b banca: {b}")
+    for k, v in sec.items():
+        s = _APP["sensibilidad_tipos_didactica"](v)
+        _txt = (s["frase"] + s["badge"]).lower()
+        _check(s["intensidad"] in ("alta", "media", "baja") and "muy negativa" not in _txt and "muy positiva" not in _txt,
+               f"T-PE-03c {k}: {s['badge']}")
+    # compatibilidad hacia atrás: formato antiguo solo con 'direccion'
+    old = _APP["sensibilidad_tipos_didactica"]({"sensibilidad_tipos": {"direccion": "muy negativa"}})
+    _check((old["intensidad"], old["si_suben"]) == ("alta", "perjudica"), f"T-PE-03: conversión direccion → {old}")
+
+
+_INGLES_PASO1 = ("underperform", "outperform", "biotech", "tech growth", "e-commerce", "commodities", "driver",
+                 "shale", "pricing power", "fintech", "top-5", "whatever it takes", "heavy weight", "cap rate",
+                 "streaming wars", "patent cliff", "on-balance", "stranded assets", "timing", "retail", "mix de")
+
+
+def test_pe04_terminos_en_linea():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    out, inf = _APP["explicar_terminos"](_textos_paso1_sector(sec["Utilities"]))
+    _check("proxy de bono (" in out[0].lower(), f"T-PE-04a: {out[0][:200]}")
+    _todo = " ".join(out).lower()
+    _check(_todo.count("proxy de bono (") == 1, "T-PE-04a: la explicación no se repite")
+    # T-PE-04b — en todos los sectores, cada término del glosario presente se explica en su 1.ª aparición
+    gl = _APP["GLOSARIO_KB"]["terminos"]
+    for k, v in sec.items():
+        orig = _textos_paso1_sector(v)
+        pres = _APP["terminos_presentes"](orig)
+        out, inf = _APP["explicar_terminos"](orig)
+        falta = sorted(pres - set(inf))
+        _check(not falta, f"T-PE-04b {k}: términos sin explicación {falta}")
+        for c, estado in inf.items():
+            if estado == "insertado":
+                _check(sum(o.count("(" + gl[c]["en_linea"] + ")") for o in out) == 1,
+                       f"T-PE-04b {k}: '{c}' debe explicarse exactamente una vez")
+        _ing = [w for w in _INGLES_PASO1 if w in " ".join(orig).lower()]
+        _check(not _ing, f"T-PE-04 {k}: término en inglés sin traducir {_ing}")
+
+
+def _ind(valor, previo, mx=None, mn=None, fuente="BCE"):
+    return {"nombre": "x", "valor": valor, "previo": previo, "max_ref": mx if mx is not None else max(valor, previo),
+            "min_ref": mn if mn is not None else min(valor, previo), "fecha": "10/2026", "fuente": fuente,
+            "unidad": "%", "desactualizado": False}
+
+
+
+
+
+
+def test_pe05_fase_ciclo():
+    import copy
+    p = _APP["params_fase_ciclo"]()
+    _check(bool(p) and p.get("min_indicadores") == 4, "T-PE-05: macro_indicators.json sin 'fase_ciclo_metodo' completo")
+    ev = _APP["evaluar_fase_ciclo"]
+    exp = {"pib": _ind(2.0, 1.5), "inflacion": _ind(2.0, 2.0), "tipo_oficial": _ind(2.0, 2.0, 4.0, 2.0),
+           "curva": _ind(1.0, 1.0), "paro": _ind(6.0, 6.5, 7.0, 6.0)}
+    r = ev(exp, p)
+    _check(r["fase"] == "expansion" and r["resaltar"] == ["expansion"] and r["votos"]["expansion"] == 4.0,
+           f"T-PE-05a Expansión: {r['titulo']} {r['votos']}")
+    mix = {"pib": _ind(2.0, 1.5), "inflacion": _ind(3.5, 2.5), "tipo_oficial": _ind(2.5, 2.0, 2.5, 1.5),
+           "curva": _ind(1.0, 1.0), "paro": _ind(6.5, 6.0, 7.0, 6.0)}
+    r2 = ev(mix, p)
+    _check(r2["transicion"] == ("expansion", "pico") and r2["titulo"] == "Transición entre Expansión y Pico"
+           and set(r2["resaltar"]) == {"expansion", "pico"}, f"T-PE-05b transición: {r2['titulo']} {r2['votos']}")
+    h = _APP["html_fase_ciclo"](r, "zona_euro", p)
+    _check(all(s in h for s in ("10/2026", "BCE", "2,0%", "Lectura orientativa")), "T-PE-05c: valor/fecha/fuente/nota")
+    d = copy.deepcopy(exp); d["pib"]["desactualizado"] = True
+    _check(ev(d, p)["votos"]["expansion"] == 3.0, "T-PE-05: dato desactualizado no cuenta")
+    p2 = copy.deepcopy(p); p2["inflacion"]["objetivo_pct"] = 3.0; p2["inflacion"]["banda_cerca_pp"] = 0.2
+    _check(ev(exp, p2)["votos"]["expansion"] == 3.5, "T-PE-05d: umbral de inflación desde el JSON")
+    import pandas as pd
+    s = pd.Series([1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4], index=pd.date_range("2026-03-01", periods=8, freq="MS"))
+    rs = _APP["_resumen_serie"](s, 6, 24, "mensual", {"mensual": 4}, hoy="2026-11-06")
+    _check(rs["valor"] == 2.4 and rs["previo"] == 1.2 and rs["fecha"] == "10/2026" and not rs["desactualizado"],
+           f"T-PE-05: resumen de serie {rs}")
+    rs2 = _APP["_resumen_serie"](s, 6, 24, "mensual", {"mensual": 4}, hoy="2027-06-01")
+    _check(rs2["desactualizado"], "T-PE-05: antigüedad > máximo → desactualizado")
+    _check(_APP["region_macro"]("NTGY.MC") == "zona_euro" and _APP["region_macro"]("AAPL") == "eeuu",
+           "T-PE-05: región por ticker")
+
+
+def test_pe_decision18_votos_y_minimo():
+    p = _APP["params_fase_ciclo"](); ev = _APP["evaluar_fase_ciclo"]
+    # Datos reales del 06/11/2026 (decisión 18 §3): Expansión 1,5 · Pico 2,5 · Recuperación 1
+    real = {"pib": _ind(1.3, 0.6, 1.6, 0.6), "inflacion": {**_ind(4.0, 3.0), "subyacente": {"valor": 2.5, "fecha": "10/2026"}},
+            "tipo_oficial": _ind(2.5, 2.0, 3.25, 2.0), "curva": _ind(0.33, 0.49, 0.8, 0.2),
+            "paro": _ind(6.6, 6.5, 6.8, 6.2)}
+    r = ev(real, p)
+    _check(r["votos"] == {"expansion": 1.5, "pico": 2.5, "contraccion": 0.0, "recuperacion": 1.0}
+           and r["titulo"] == "Transición entre Expansión y Pico", f"D18 §3 votos: {r['votos']} {r['titulo']}")
+    h = _APP["html_fase_ciclo"](r, "zona_euro", p)
+    _check("Expansión 1,5 · Pico 2,5" in h and "Expansión 0,5 · Pico 0,5" in h, "D18 §3: votos con decimales")
+    _check("general 4,0% · subyacente 2,5%" in h and "subyacente 2,5%" in h, "D17 §1: nota de inflación subyacente")
+    _check(_APP["nota_subyacente"]({"valor": 3.0, "subyacente": {"valor": 2.5}}, p) == "", "D17 §1: sin nota si la diferencia ≤ 1")
+    # Decisión 17 §5 — mínimo 4 de 5
+    tres = {k: v for k, v in real.items() if k not in ("pib", "curva")}
+    r3 = ev(tres, p)
+    _check(r3["fase"] is None and not r3["resaltar"] and r3["titulo"] == "Fase no determinable: datos insuficientes"
+           and len(r3["faltan"]) == 2, f"D17 §5: {r3['titulo']} {r3.get('faltan')}")
+    cuatro = {k: v for k, v in real.items() if k != "pib"}
+    _check(ev(cuatro, p)["titulo"] != "Fase no determinable: datos insuficientes", "D17 §5: con 4 de 5 sí se asigna")
+
+
+def test_pe_decision18_tipos_tramos_formulas():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    tabla = {"Utilities": ("alta", "perjudica"), "Real Estate": ("alta", "perjudica"), "Technology": ("alta", "perjudica"),
+             "Consumer Cyclical": ("media", "perjudica"), "Communication Services": ("media", "perjudica"),
+             "Industrials": ("media", "perjudica"), "Basic Materials": ("media", "perjudica"),
+             "Energy": ("baja", "perjudica"), "Consumer Defensive": ("baja", "perjudica"), "Healthcare": ("baja", "perjudica")}
+    sd = _APP["sensibilidad_tipos_didactica"]
+    for k, (i, su) in tabla.items():
+        r = sd(sec[k])
+        _check((r["intensidad"], r["si_suben"]) == (i, su) and r["rotulo"] == "Orientación cualitativa del método",
+               f"D18 §2 {k}: {r['intensidad']} {r['si_suben']}")
+    b = sd(sec["Financial Services"]); b2 = sd(sec["Financial Services"], "Banks - Diversified")
+    s_ = sd(sec["Financial Services"], "Insurance - Life")
+    _check((b["intensidad"], b["si_suben"], b["subtipo"]) == ("alta", "favorece", "banca") and b2["subtipo"] == "banca",
+           f"D18 §2 banca (por defecto y por industria): {b['badge']}")
+    _check((s_["intensidad"], s_["si_suben"]) == ("media", "mixto") and "mixto" in s_["frase"], f"D18 §2 seguros: {s_['badge']}")
+    # P-1 — «Cómo leerlo» del tramo analizado
+    crit = _APP["_cargar_criteria"]()
+    hb = _APP["html_bloque_tramos"]
+    _check("Estar por debajo indica que el precio lleva meses corrigiendo" in hb("dist_sma200", -5.7, "−5,7%", crit)
+           and "Estar por encima indica" not in hb("dist_sma200", -5.7, "−5,7%", crit), "D18 P-1: SMA200 por debajo")
+    _check("En zona media" in hb("pos_52s", 43.6, "43,6%", crit), "D18 P-1: rango 52 s, zona media")
+    hv = hb("volatilidad", 32.0, "32,0%", crit)
+    _check("Volatilidad alta" in hv and "±32,0%" in hv, "D18 P-1: volatilidad alta + ejemplo")
+    # P-2 — fórmula con precios sin redondear
+    t = _APP["textos_tarjetas_paso1"]({"precio": 10.6449, "sma200": 11.28, "dist_pct": -5.63, "h52": 13.1249, "l52": 8.7151,
+                                       "pos_pct": 43.5, "vol_pct": 32.0, "vol_n": 255}, "€")
+    _check("sin redondear" in t["rng_formula"] and "sin redondear" in t["tend_formula"], "D18 P-2: aviso de redondeo")
+
+
+def test_pe07_lecciones_fuente():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    lc = _APP["leccion_con_fuente"]
+    _check(not _APP["leccion_tiene_cifra"]("En julio de 2012, entre 2000-2002 y el 25/05/2022") and
+           _APP["leccion_tiene_cifra"]("cayó un 19,3%"), "T-PE-07: detección de cifras (años y fechas no cuentan)")
+    for k, v in sec.items():
+        r = lc(v.get("leccion_historica", ""), v.get("leccion_fuente"), v.get("leccion_periodo"),
+               v.get("leccion_cualitativa"), v.get("leccion_validada"))
+        if not r["verificar"]:
+            _check(not _APP["leccion_tiene_cifra"](r["texto"]) or (v.get("leccion_fuente") and v.get("leccion_periodo")),
+                   f"T-PE-07a {k}: cifra mostrada sin fuente y periodo")
+        else:
+            _check(not _APP["leccion_tiene_cifra"](r["texto"]) and r["marca"].startswith("[VERIFICAR"),
+                   f"T-PE-07a {k}: con [VERIFICAR] no se muestran cifras ({r['texto'][:60]})")
+        _check(_APP["leccion_tiene_cifra"](v.get("leccion_historica", "")) <= bool(v.get("leccion_fuente") and v.get("leccion_periodo")),
+               f"T-PE-07a {k}: lección con cifras sin campos fuente/periodo")
+    u = lc(sec["Utilities"]["leccion_historica"], sec["Utilities"]["leccion_fuente"], sec["Utilities"]["leccion_periodo"],
+           sec["Utilities"].get("leccion_cualitativa"), sec["Utilities"].get("leccion_validada"))
+    _check("19,3%" in u["texto"] and "25/05/2022" in u["texto"] and not u["verificar"], "D17 §2: lección de Iberdrola")
+    f = lc(sec["Financial Services"]["leccion_historica"], None, "2012", None, True)
+    _check("41.000" not in f["texto"] and "OCR" not in f["texto"] and "Bankia" in f["texto"] and not f["verificar"],
+           "D18 §4: lección de Bankia")
+    for k, c in _APP["CRISIS_PATTERNS"].get("crisis", {}).items():
+        r = lc(c.get("leccion_operativa", ""), c.get("fuente"), c.get("periodo"), ocultar_cifras=False)
+        _check(r["verificar"] == (_APP["leccion_tiene_cifra"](c.get("leccion_operativa", "")) and not c.get("fuente")),
+               f"T-PE-07a crisis {k}")
+
+
+def test_d17_macro_ipca_y_frescura():
+    """Decisión 17 §6 — IPCA de Eurostat en Macro y control de frescura de las series."""
+    import pandas as pd
+    fr = _APP["frescura_serie"]
+    m = lambda a, b: pd.Series(1.0, index=pd.date_range(a, b, freq="MS"))
+    r = fr(m("2025-01-01", "2025-12-01"), "mensual", "2026-11-06")
+    _check(r["desactualizado"] and r["aviso"] == "dato desactualizado (último: 12/2025)", f"D17 §6 mensual antiguo: {r}")
+    _check(not fr(m("2026-01-01", "2026-09-01"), "mensual", "2026-11-06")["desactualizado"], "D17 §6: 09/2026 al 06/11 está al día (37 días)")
+    _check(fr(m("2026-01-01", "2026-09-01"), "mensual", "2026-11-20")["desactualizado"], "D17 §6: 09/2026 al 20/11 desactualizado (51 días)")
+    q = pd.Series(1.0, index=pd.to_datetime(["2026-01-01", "2026-04-01"]))
+    _check(not fr(q, "trimestral", "2026-10-20")["desactualizado"] and fr(q, "trimestral", "2026-11-06")["desactualizado"],
+           "D17 §6: trimestral, margen de 120 días")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _ini = src.index("def pestaña_macro():"); _fin = src.index("# ── DIVISAS", _ini)
+    _check('obtener_hicp_eurostat("EA"' in src[_ini:_fin] and '"M.U2.N.000000.4.ANR", "ICP"' not in src[_ini:_fin]
+           and 'obtener_historico_ecb("FM", "B.U2.EUR.4F.KR.DFR.LEV"' in src[_ini:_fin],
+           "D17 §6: la pestaña Macro usa Eurostat (ECOICOP v2) y el DFR del flow FM")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
@@ -1179,7 +1539,7 @@ def main():
         return 1
     for _a in _avisos:
         print("ℹ️ ", _a)
-    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 — TODOS los tests unitarios PASAN.")
+    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 + Spec PE v1 — TODOS los tests unitarios PASAN.")
     print("   (PA-A-06/PA-M-02/03/04 y la revisión visual de PA2-01 se verifican sobre informes reales.)")
     print("   ⏸  T-PA2-03c pendiente de decisión de Polaris (payout crudo 7,5 sin DPA/BPA: el")
     print("      normalizador lo lee como 7,5 % y la spec espera N/A + K8).")

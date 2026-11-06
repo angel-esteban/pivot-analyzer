@@ -1249,5 +1249,123 @@
         }
       ]
     }
+  },
+  "contexto_macro_tramos": {
+    "_descripcion": "Spec PE v1 (PE-02). Tramos de referencia del método para el Paso 1 de «¿Por dónde empiezo?». Son parámetros del método, no una norma de mercado. Convención: desde ≤ valor < hasta (el último tramo incluye su 'hasta').",
+    "rotulo": "Tramos de referencia del método",
+    "dist_sma200": {
+      "titulo": "Tendencia frente a la SMA200",
+      "columna": "Distancia a la SMA200",
+      "que_es": "La SMA200 es la media de los últimos 200 cierres diarios, unos 10 meses de cotización. Es la referencia de tendencia de largo plazo más usada.",
+      "como_leerlo": "Estar por encima indica que el mercado viene revalorizando el valor. Estar muy por encima también significa que el precio se ha alejado de su media, y las correcciones hacia ella son habituales.",
+      "tramos": [
+        {
+          "desde": 10,
+          "hasta": null,
+          "rango": "Más de +10%",
+          "etiqueta": "Muy por encima",
+          "lectura": "Muy por encima: tendencia alcista y precio alejado de su media",
+          "como_leerlo": "Estar muy por encima indica que el mercado viene revalorizando el valor, y también que el precio se ha alejado de su media; las correcciones hacia ella son habituales."
+        },
+        {
+          "desde": 0,
+          "hasta": 10,
+          "rango": "De 0% a +10%",
+          "etiqueta": "Por encima",
+          "lectura": "Por encima: tendencia alcista",
+          "como_leerlo": "Estar por encima indica que el mercado viene revalorizando el valor en los últimos meses: la tendencia de largo plazo es alcista."
+        },
+        {
+          "desde": -10,
+          "hasta": 0,
+          "rango": "De −10% a 0%",
+          "etiqueta": "Por debajo",
+          "lectura": "Por debajo: tendencia débil o en corrección",
+          "como_leerlo": "Estar por debajo indica que el precio lleva meses corrigiendo; la media actúa como referencia que el precio tendría que recuperar para volver a tendencia alcista."
+        },
+        {
+          "desde": null,
+          "hasta": -10,
+          "rango": "Menos de −10%",
+          "etiqueta": "Muy por debajo",
+          "lectura": "Muy por debajo: tendencia bajista",
+          "como_leerlo": "Estar muy por debajo indica una tendencia bajista prolongada: el precio está lejos de su media y tendría que recuperar mucho terreno para volver a tendencia alcista."
+        }
+      ]
+    },
+    "pos_52s": {
+      "titulo": "Posición en el rango de 52 semanas",
+      "columna": "Posición",
+      "que_es": "Dónde está el precio entre el mínimo (0%) y el máximo (100%) del último año.",
+      "como_leerlo": "En zona alta el mercado paga más que en la mayor parte del año. Con el mismo dividendo, la rentabilidad por dividendo es menor.",
+      "nota": "Los mismos tramos que usa el informe de estrategia de Dividendos.",
+      "tramos": [
+        {
+          "desde": 0,
+          "hasta": 35,
+          "rango": "0% – 35%",
+          "etiqueta": "Zona baja del año",
+          "lectura": "Zona baja del año",
+          "como_leerlo": "En zona baja el mercado paga menos que en la mayor parte del año. Con el mismo dividendo, la rentabilidad por dividendo es mayor; conviene revisar por qué ha caído el precio."
+        },
+        {
+          "desde": 35,
+          "hasta": 60,
+          "rango": "35% – 60%",
+          "etiqueta": "Zona media",
+          "lectura": "Zona media",
+          "como_leerlo": "En zona media el precio está cerca de lo habitual del último año: ni en la parte alta ni en la baja de su propio rango."
+        },
+        {
+          "desde": 60,
+          "hasta": 100,
+          "rango": "60% – 100%",
+          "etiqueta": "Zona alta del año",
+          "lectura": "Zona alta del año",
+          "como_leerlo": "En zona alta el mercado paga más que en la mayor parte del año. Con el mismo dividendo, la rentabilidad por dividendo es menor."
+        }
+      ]
+    },
+    "volatilidad": {
+      "titulo": "Volatilidad histórica anualizada",
+      "columna": "Volatilidad anualizada",
+      "que_es": "Cuánto suele oscilar el precio en un año, medido con las variaciones diarias pasadas.",
+      "como_leerlo": "Una volatilidad del {vol} significa que, si las oscilaciones se comportasen como en el pasado, en aproximadamente dos de cada tres años el precio acabaría dentro de un ±{vol} respecto al inicio. Es una aproximación estadística basada en datos pasados, no una previsión.",
+      "nota": "Alta volatilidad = tamaño de posición más pequeño para el mismo riesgo real: con el doble de volatilidad, la misma cantidad invertida oscila el doble en euros.",
+      "tramos": [
+        {
+          "desde": null,
+          "hasta": 15,
+          "rango": "Menos de 15%",
+          "etiqueta": "Baja",
+          "lectura": "Baja",
+          "como_leerlo": "Volatilidad baja: el precio suele moverse poco. "
+        },
+        {
+          "desde": 15,
+          "hasta": 25,
+          "rango": "15% – 25%",
+          "etiqueta": "Moderada",
+          "lectura": "Moderada",
+          "como_leerlo": "Volatilidad moderada: oscilaciones habituales en un valor cotizado. "
+        },
+        {
+          "desde": 25,
+          "hasta": 40,
+          "rango": "25% – 40%",
+          "etiqueta": "Alta",
+          "lectura": "Alta",
+          "como_leerlo": "Volatilidad alta: el precio puede moverse con fuerza en pocas semanas. "
+        },
+        {
+          "desde": 40,
+          "hasta": null,
+          "rango": "Más de 40%",
+          "etiqueta": "Muy alta",
+          "lectura": "Muy alta",
+          "como_leerlo": "Volatilidad muy alta: movimientos bruscos frecuentes. "
+        }
+      ]
+    }
   }
 }

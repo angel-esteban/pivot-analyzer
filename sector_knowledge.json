@@ -5,9 +5,7 @@
     "descripcion": "Base de conocimiento sectorial GICS. La clave de cada sector coincide con el valor que devuelve yfinance info.get('sector'). Aplicable a cualquier índice mundial.",
     "ultima_revision": "2026-01"
   },
-
   "sectores": {
-
     "Technology": {
       "nombre_es": "Tecnología",
       "emoji": "💻",
@@ -15,8 +13,12 @@
       "descripcion": "Empresas de hardware, software, semiconductores y servicios IT. Motor de crecimiento secular pero muy sensible a tipos y sentimiento de riesgo. Múltiplos elevados implican alta dependencia de flujos de caja futuros.",
       "sensibilidad_tipos": {
         "direccion": "negativa",
-        "intensidad": "muy alta",
-        "explicacion": "Las empresas tecnológicas generan gran parte de su valor en flujos de caja lejanos. Al descontarlos con tipos más altos, su valoración cae matemáticamente. La relación inversa tipos↑ = tech↓ es de las más consistentes históricamente."
+        "intensidad": "alta",
+        "explicacion": "Las empresas tecnológicas generan gran parte de su valor en flujos de caja lejanos. Al descontarlos con tipos más altos, su valoración cae matemáticamente. La relación inversa tipos↑ = tecnológicas↓ es de las más consistentes históricamente.",
+        "intensidad_v1": "muy alta",
+        "si_suben": "perjudica",
+        "motivo": "su valor depende de beneficios lejanos en el tiempo, y con tipos más altos esos beneficios futuros valen menos hoy",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_subida_tipos": "negativo — compresión de múltiplos (PER cae), especialmente en growth puro",
@@ -42,15 +44,21 @@
       },
       "riesgos_especificos": [
         "Obsolescencia tecnológica acelerada",
-        "Concentración: top-5 empresas representan >25% del S&P 500",
+        "Concentración: las 5 mayores empresas representan >25% del S&P 500",
         "Regulación antimonopolio (UE, FTC)",
         "Ciclos de semiconductores muy volátiles (inventarios)",
         "Trampa de la narrativa sin flujos de caja reales (dotcom 1999)"
       ],
-      "leccion_historica": "En 2000-2002 el Nasdaq cayó un 78%. En 2022 un 33%. En ambos casos el detonante fue la subida de tipos combinada con múltiplos insostenibles. La diferencia: en 2022 las grandes tech tenían beneficios reales.",
-      "yfinance_keys": ["Technology", "Information Technology"]
+      "leccion_historica": "Entre el 10/03/2000 y el 09/10/2002, tras la burbuja puntocom, el Nasdaq Composite cayó un 77,9% (de 5.048,62 a 1.114,11 puntos). Entre el 19/11/2021 y el 28/12/2022, en plena subida de tipos de la Reserva Federal, cayó un 36,4% (de 16.057,44 a 10.213,29). Las valoraciones muy altas del sector pueden corregir con fuerza, aunque cada caída tuvo varias causas.",
+      "yfinance_keys": [
+        "Technology",
+        "Information Technology"
+      ],
+      "leccion_cualitativa": "Las tecnológicas han sufrido caídas muy fuertes cuando sus valoraciones estaban muy altas, como tras la burbuja puntocom de 2000-2002 o durante la subida de tipos de 2022.",
+      "leccion_fuente": "Yahoo Finance (índice ^IXIC, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "10/03/2000 – 09/10/2002 y 19/11/2021 – 28/12/2022",
+      "leccion_validada": false
     },
-
     "Financial Services": {
       "nombre_es": "Servicios Financieros",
       "emoji": "🏦",
@@ -58,8 +66,37 @@
       "descripcion": "Bancos, aseguradoras, gestoras de activos y servicios financieros diversificados. Beneficiarios directos de tipos altos (margen de intereses) pero vulnerables a deterioro crediticio en recesión. En España representa >30% del IBEX 35.",
       "sensibilidad_tipos": {
         "direccion": "positiva (banca comercial) / mixta (aseguradoras, gestoras)",
-        "intensidad": "muy alta",
-        "explicacion": "La banca gana más cuando los tipos suben porque el margen entre lo que cobra por préstamos y lo que paga por depósitos se amplía. Sin embargo, tipos muy altos durante mucho tiempo generan morosidad. La curva empinada (corto bajo, largo alto) es el escenario ideal para la banca."
+        "intensidad": "alta",
+        "explicacion": "La banca gana más cuando los tipos suben porque el margen entre lo que cobra por préstamos y lo que paga por depósitos se amplía. Sin embargo, tipos muy altos durante mucho tiempo generan morosidad. La curva empinada (corto bajo, largo alto) es el escenario ideal para la banca.",
+        "intensidad_v1": "muy alta",
+        "si_suben": "favorece",
+        "motivo": "mejora el margen de intereses, el motor del beneficio bancario; si suben demasiado, puede aumentar la morosidad",
+        "rotulo": "Orientación cualitativa del método",
+        "subtipos": {
+          "banca": {
+            "nombre": "banca",
+            "intensidad": "alta",
+            "si_suben": "favorece",
+            "motivo": "mejora el margen de intereses, el motor del beneficio bancario; si suben demasiado, puede aumentar la morosidad",
+            "por_defecto": true
+          },
+          "seguros_gestoras": {
+            "nombre": "seguros y gestoras",
+            "intensidad": "media",
+            "si_suben": "mixto",
+            "motivo": "las aseguradoras reinvierten sus carteras de renta fija a mayor rentabilidad, mientras que las gestoras pueden ver caer el valor de los activos que gestionan y, con él, sus comisiones",
+            "industrias_yahoo": [
+              "Insurance - Diversified",
+              "Insurance - Life",
+              "Insurance - Property & Casualty",
+              "Insurance - Reinsurance",
+              "Insurance - Specialty",
+              "Insurance Brokers",
+              "Asset Management",
+              "Capital Markets"
+            ]
+          }
+        }
       },
       "correlaciones_macro": {
         "BCE_subida_tipos": "muy positivo para banca comercial — ampliación inmediata del NIM (Net Interest Margin)",
@@ -87,13 +124,17 @@
         "Ciclo crediticio: la morosidad siempre llega tarde al balance",
         "Concentración en inmobiliario (España: recuerdo 2008-2012)",
         "Regulación creciente (Basilea IV, requerimientos de capital)",
-        "Disrupción fintech en márgenes de comisiones",
+        "Competencia de las empresas tecnológicas financieras en los márgenes de comisiones",
         "Doom loop banca-soberano en crisis de deuda pública"
       ],
-      "leccion_historica": "Bankia 2012: OCR (on-balance sheet credit risk) oculto en activos inmobiliarios valorados a precio de burbuja. El rescate de 41.000M€ ilustra que el análisis del balance bancario requiere descuento agresivo de activos ilíquidos. El 'whatever it takes' de Draghi en julio 2012 fue la válvula.",
-      "yfinance_keys": ["Financial Services", "Financials"]
+      "leccion_historica": "En 2012 la banca española necesitó ayuda europea porque sus balances tenían activos inmobiliarios valorados muy por encima de lo que se podía obtener por ellos. Bankia fue el caso más grave. Enseña a leer con cautela el valor contable de los activos poco líquidos. En julio de 2012, la frase de Mario Draghi («haremos lo que sea necesario») marcó el punto de giro de la crisis del euro.",
+      "yfinance_keys": [
+        "Financial Services",
+        "Financials"
+      ],
+      "leccion_periodo": "2012",
+      "leccion_validada": true
     },
-
     "Healthcare": {
       "nombre_es": "Salud",
       "emoji": "🏥",
@@ -102,7 +143,11 @@
       "sensibilidad_tipos": {
         "direccion": "neutral-negativa leve",
         "intensidad": "baja",
-        "explicacion": "Como defensivo, soporta bien subidas de tipos porque su demanda no depende del ciclo. Sin embargo, el subsector biotech (sin beneficios) sufre compresión de múltiplos similar a tech growth cuando los tipos suben."
+        "explicacion": "Como defensivo, soporta bien subidas de tipos porque su demanda no depende del ciclo. Sin embargo, el subsector de biotecnología (sin beneficios) sufre compresión de múltiplos similar a las tecnológicas de crecimiento cuando los tipos suben.",
+        "intensidad_v1": "baja",
+        "si_suben": "perjudica",
+        "motivo": "su demanda no depende del ciclo, pero las biotecnológicas sin beneficios se valoran peor con tipos altos",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_subida_tipos": "neutral para pharma/dispositivos; negativo para biotech sin beneficios",
@@ -112,9 +157,9 @@
         "envejecimiento_demografico": "estructuralmente positivo a largo plazo"
       },
       "comportamiento_ciclo": {
-        "expansion": "neutral — underperforms en expansión frente a cíclicos",
+        "expansion": "neutral — rendimiento inferior en expansión frente a cíclicos",
         "pico": "positivo — inversores rotan hacia defensivos anticipando desaceleración",
-        "contraccion": "muy positivo — refugio clásico; outperformance consistente",
+        "contraccion": "muy positivo — refugio clásico; rendimiento superior consistente",
         "recuperacion": "neutral-negativo — cíclicos lideran el rebote"
       },
       "metricas_referencia": {
@@ -125,25 +170,35 @@
         "margen_neto": ">20% en pharma top; caída consistente señala presión de genéricos"
       },
       "riesgos_especificos": [
-        "Expiración de patentes ('patent cliff') con entrada de genéricos",
+        "Expiración de patentes con entrada de genéricos",
         "Riesgo regulatorio FDA/EMA en aprobación de nuevos fármacos",
         "Presión política sobre precios de medicamentos (especialmente EEUU)",
-        "Ensayos clínicos fallidos: pérdida de valor repentina en biotech",
+        "Ensayos clínicos fallidos: pérdida de valor repentina en biotecnología",
         "Concentración de ingresos en un solo blockbuster"
       ],
-      "leccion_historica": "Durante la recesión de 2008-2009 el sector healthcare cayó solo un 23% frente al -57% del S&P 500. En COVID (marzo 2020) fue de los primeros en recuperarse. Su rol como refugio está bien documentado históricamente.",
-      "yfinance_keys": ["Healthcare", "Health Care"]
+      "leccion_historica": "Entre el 09/10/2007 y el 09/03/2009, durante la crisis financiera, el S&P 500 cayó un 56,8% (de 1.565,15 a 676,53 puntos). En el mismo periodo, el fondo cotizado XLV, que replica el sector sanitario del S&P 500, cayó un 40,6% desde su máximo del 10/12/2007. El sector también cayó, pero bastante menos que el mercado.",
+      "yfinance_keys": [
+        "Healthcare",
+        "Health Care"
+      ],
+      "leccion_cualitativa": "En la crisis financiera de 2007-2009 el sector sanitario también cayó, pero bastante menos que el conjunto del mercado: su demanda depende poco del ciclo.",
+      "leccion_fuente": "Yahoo Finance (^GSPC y XLV, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "09/10/2007 – 09/03/2009 (XLV: desde el 10/12/2007)",
+      "leccion_validada": false
     },
-
     "Consumer Cyclical": {
       "nombre_es": "Consumo Cíclico",
       "emoji": "🛍️",
       "caracter": "cíclico",
-      "descripcion": "Automoción, distribución, ocio, hostelería, lujo y retail no esencial. Muy sensible a la renta disponible del consumidor, confianza del consumidor y tipos de interés (crédito al consumo). Incluye el sector turismo, muy relevante en el IBEX.",
+      "descripcion": "Automoción, distribución, ocio, hostelería, lujo y comercio minorista no esencial. Muy sensible a la renta disponible del consumidor, confianza del consumidor y tipos de interés (crédito al consumo). Incluye el sector turismo, muy relevante en el IBEX.",
       "sensibilidad_tipos": {
         "direccion": "negativa",
-        "intensidad": "alta",
-        "explicacion": "Tipos altos encarecen el crédito al consumo (hipotecas, tarjetas, financiación de coches). Esto recorta directamente el gasto en bienes no esenciales. Además, el efecto riqueza negativo de tipos altos (caída de activos) contrae el consumo discrecional."
+        "intensidad": "media",
+        "explicacion": "Tipos altos encarecen el crédito al consumo (hipotecas, tarjetas, financiación de coches). Esto recorta directamente el gasto en bienes no esenciales. Además, el efecto riqueza negativo de tipos altos (caída de activos) contrae el consumo discrecional.",
+        "intensidad_v1": "alta",
+        "si_suben": "perjudica",
+        "motivo": "los tipos altos encarecen el crédito al consumo (hipotecas, tarjetas, coches) y recortan el gasto no esencial",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_bajada_tipos": "muy positivo — reactiva el crédito al consumo y el efecto riqueza",
@@ -167,25 +222,35 @@
         "deuda_neta_EBITDA": "<3x holgado; >4x vigilar en sector con alta estacionalidad"
       },
       "riesgos_especificos": [
-        "Alta palanca operativa en retail (costes fijos elevados)",
-        "Disrupción del e-commerce sobre retail tradicional",
+        "Alta palanca operativa en el comercio minorista (costes fijos elevados)",
+        "Competencia del comercio electrónico sobre el comercio tradicional",
         "Estacionalidad fuerte (hostelería, turismo)",
         "Sensibilidad a tipos de cambio (turismo, importaciones)",
         "Concentración de ventas en temporadas clave (Navidad, verano)"
       ],
-      "leccion_historica": "En España, el turismo supone ~12-13% del PIB. La pandemia de 2020 destruyó el sector en semanas. IAG, Meliá y NH Hotels perdieron >60%. La recuperación de 2021-2023 fue igualmente violenta al alza. Volatilidad estructuralmente alta.",
-      "yfinance_keys": ["Consumer Cyclical", "Consumer Discretionary"]
+      "leccion_historica": "En España, el turismo supuso el 12,6% del PIB en 2024 (estimación avance del INE). En 2020, con la pandemia, IAG cayó un 76,8% entre el 17/01/2020 y el 03/08/2020 (de 5,22 a 1,21 €) y Meliá un 67,1% entre el 15/01/2020 y el 18/03/2020 (de 8,34 a 2,74 €). Es un sector muy expuesto a un frenazo brusco de la demanda.",
+      "yfinance_keys": [
+        "Consumer Cyclical",
+        "Consumer Discretionary"
+      ],
+      "leccion_cualitativa": "El turismo tiene mucho peso en la economía española. En 2020, la pandemia hundió en pocas semanas la cotización de aerolíneas y hoteleras: es un sector muy expuesto a un frenazo brusco de la demanda.",
+      "leccion_fuente": "INE, Cuenta Satélite del Turismo de España (nota de prensa del 22/12/2025); Yahoo Finance (IAG.MC, MEL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+      "leccion_periodo": "PIB: 2024 · cotizaciones: 15/01/2020 – 03/08/2020",
+      "leccion_validada": false
     },
-
     "Consumer Defensive": {
       "nombre_es": "Consumo Defensivo",
       "emoji": "🛒",
       "caracter": "defensivo",
-      "descripcion": "Alimentación, bebidas, tabaco, higiene y distribución de productos básicos. Demanda inelástica. Capacidad de traslación de precios en inflación. Dividendos estables y crecientes. Underperformer en expansión, refugio en contracción.",
+      "descripcion": "Alimentación, bebidas, tabaco, higiene y distribución de productos básicos. Demanda inelástica. Capacidad de traslación de precios en inflación. Dividendos estables y crecientes. Rendimiento inferior en expansión, refugio en contracción.",
       "sensibilidad_tipos": {
         "direccion": "neutral-negativa leve",
-        "intensidad": "baja-moderada",
-        "explicacion": "Como defensivo, la demanda no cae con tipos altos. Sin embargo, el sector se financia con deuda (distribución, retail alimentario) y tipos altos aumentan costes financieros. Además, compite con bonos soberanos por el inversor de renta: cuando el bono paga bien, el defensivo pierde atractivo relativo."
+        "intensidad": "baja",
+        "explicacion": "Como defensivo, la demanda no cae con tipos altos. Sin embargo, el sector se financia con deuda (distribución, comercio de alimentación) y tipos altos aumentan costes financieros. Además, compite con bonos soberanos por el inversor de renta: cuando el bono paga bien, el defensivo pierde atractivo relativo.",
+        "intensidad_v1": "baja-moderada",
+        "si_suben": "perjudica",
+        "motivo": "la demanda se mantiene, pero tienen deuda y su dividendo compite con los bonos",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "inflacion_alta": "positivo — pueden trasladar precios; márgenes se mantienen o mejoran",
@@ -194,9 +259,9 @@
         "confianza_consumidor_baja": "positivo relativo — rotación hacia básicos desde discrecional"
       },
       "comportamiento_ciclo": {
-        "expansion": "negativo relativo — underperformance frente a cíclicos",
+        "expansion": "negativo relativo — rendimiento inferior frente a cíclicos",
         "pico": "positivo — rotación defensiva anticipatoria",
-        "contraccion": "muy positivo — outperformance clásico, dividendos como soporte",
+        "contraccion": "muy positivo — rendimiento superior clásico, dividendos como soporte",
         "recuperacion": "negativo relativo — cíclicos y financieros lideran"
       },
       "metricas_referencia": {
@@ -212,10 +277,16 @@
         "Regulación sobre azúcar, sal, tabaco (riesgo político)",
         "Concentración geográfica en mercados maduros"
       ],
-      "leccion_historica": "En 2022 el consumo defensivo fue uno de los pocos sectores con retorno positivo mientras el S&P 500 caía un 18%. Inditex, sin ser estrictamente defensivo, demostró pricing power extraordinario durante la inflación 2021-2023.",
-      "yfinance_keys": ["Consumer Defensive", "Consumer Staples"]
+      "leccion_historica": "En 2022, mientras el S&P 500 bajaba un 19,4% (del 31/12/2021 al 30/12/2022, de 4.766,18 a 3.839,50 puntos), el fondo XLP, que replica el consumo básico del S&P 500, bajó un 3,3%. El sector también cayó, pero mucho menos que el mercado.",
+      "yfinance_keys": [
+        "Consumer Defensive",
+        "Consumer Staples"
+      ],
+      "leccion_cualitativa": "En 2022 el consumo básico estadounidense también cayó, pero mucho menos que el conjunto del mercado.",
+      "leccion_fuente": "Yahoo Finance (^GSPC y XLP, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "31/12/2021 – 30/12/2022",
+      "leccion_validada": false
     },
-
     "Energy": {
       "nombre_es": "Energía",
       "emoji": "⚡",
@@ -223,8 +294,12 @@
       "descripcion": "Petroleras integradas, exploración y producción, refino y servicios petroleros. Correlación directa con el precio del crudo y el gas. Muy sensible a geopolítica. Las utilities renovables tienen perfil radicalmente distinto.",
       "sensibilidad_tipos": {
         "direccion": "negativa moderada",
-        "intensidad": "moderada",
-        "explicacion": "El sector energía es más sensible al precio del petróleo que a los tipos. Sin embargo, las grandes inversiones en capex (refinerías, plataformas) se financian con deuda, y tipos altos encarecen esa financiación. En la transición energética, las renovables son muy sensibles a tipos (activos de larga vida financiados con deuda)."
+        "intensidad": "baja",
+        "explicacion": "El sector energía es más sensible al precio del petróleo que a los tipos. Sin embargo, las grandes inversiones en capex (refinerías, plataformas) se financian con deuda, y tipos altos encarecen esa financiación. En la transición energética, las renovables son muy sensibles a tipos (activos de larga vida financiados con deuda).",
+        "intensidad_v1": "moderada",
+        "si_suben": "perjudica",
+        "motivo": "depende sobre todo del precio del crudo y del gas; los tipos encarecen la financiación de sus grandes inversiones",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "precio_petroleo": "correlación directa muy fuerte — es el principal driver del sector",
@@ -248,16 +323,21 @@
         "deuda_neta_EBITDA": "<2x es cómodo; >3x con ciclo alto de crudo = alerta"
       },
       "riesgos_especificos": [
-        "Volatilidad extrema del precio del crudo (OPEP+, geopolítica, shale)",
-        "Riesgo de activos varados (stranded assets) en transición energética",
+        "Volatilidad extrema del precio del crudo (OPEP+, geopolítica, petróleo de esquisto)",
+        "Riesgo de activos varados en la transición energética",
         "Impuesto sobre beneficios extraordinarios (windfall tax, España 2023)",
         "Ciclicidad del capex: inversión insuficiente → escasez futura → precio alto",
         "Riesgo reputacional ESG creciente"
       ],
-      "leccion_historica": "El desplome del petróleo a precios negativos en abril 2020 (-37$/barril) fue un evento histórico sin precedentes. En el otro extremo, el crudo a 130$/barril en 2022 tras la invasión de Ucrania catapultó al sector energía como el único con retorno positivo ese año en el S&P 500.",
-      "yfinance_keys": ["Energy"]
+      "leccion_historica": "El 20/04/2020 el contrato de futuros de petróleo WTI más próximo a vencer cerró a −37,63 $ por barril, algo sin precedentes. El 08/03/2022, tras la invasión de Ucrania, el Brent cerró a 127,98 $. En 2022 el fondo XLE (energía del S&P 500) subió un 57,6% y fue el único de los 11 fondos sectoriales del S&P 500 que acabó el año en positivo.",
+      "yfinance_keys": [
+        "Energy"
+      ],
+      "leccion_cualitativa": "El precio del petróleo puede moverse de forma extrema: en 2020 llegó a cotizar en negativo en el mercado de futuros y en 2022 se disparó tras la invasión de Ucrania. El sector energético sigue sobre todo al crudo.",
+      "leccion_fuente": "Yahoo Finance (CL=F, BZ=F y fondos Select Sector SPDR, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "20/04/2020; 08/03/2022; 31/12/2021 – 30/12/2022",
+      "leccion_validada": false
     },
-
     "Utilities": {
       "nombre_es": "Utilities / Servicios Públicos",
       "emoji": "🔌",
@@ -265,8 +345,12 @@
       "descripcion": "Eléctricas, distribuidoras de gas y agua. Ingresos regulados o semirregulados. Muy predecibles. Alta deuda estructural por inversión en infraestructuras. Muy sensibles a tipos de interés. Proxy de bono para muchos inversores. En el IBEX: Iberdrola, Endesa, Red Eléctrica.",
       "sensibilidad_tipos": {
         "direccion": "muy negativa",
-        "intensidad": "muy alta",
-        "explicacion": "Las utilities son el sector más sensible a tipos de todos. Tienen enormes deudas para financiar infraestructuras y sus ingresos regulados crecen poco. Cuando los tipos suben, el coste de refinanciación aumenta y, simultáneamente, compiten con bonos soberanos por el inversor de renta (si el bono paga 4%, la utility a 4% de dividendo pierde atractivo). Doble impacto."
+        "intensidad": "alta",
+        "explicacion": "Las utilities son el sector más sensible a tipos de todos. Tienen enormes deudas para financiar infraestructuras y sus ingresos regulados crecen poco. Cuando los tipos suben, el coste de refinanciación aumenta y, simultáneamente, compiten con bonos soberanos por el inversor de renta (si el bono paga 4%, la utility a 4% de dividendo pierde atractivo). Doble impacto.",
+        "intensidad_v1": "muy alta",
+        "si_suben": "perjudica",
+        "motivo": "tienen mucha deuda (subidas de tipos encarecen la financiación) y su dividendo compite con los bonos (si los bonos pagan más, el dividendo pierde atractivo)",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_subida_tipos": "muy negativo — doble impacto: mayor coste de deuda + menor atractivo relativo del dividendo",
@@ -277,7 +361,7 @@
         "regulacion_tarifaria": "factor clave — los cambios regulatorios pueden alterar ingresos de golpe"
       },
       "comportamiento_ciclo": {
-        "expansion": "negativo relativo — underperformance frente a cíclicos",
+        "expansion": "negativo relativo — rendimiento inferior frente a cíclicos",
         "pico": "positivo — rotación defensiva, bajan tipos a futuro = compresión de spread",
         "contraccion": "muy positivo — dividendo estable, demanda de electricidad inelástica",
         "recuperacion": "neutral-negativo — cíclicos lideran"
@@ -293,13 +377,18 @@
         "Riesgo regulatorio: cambios de retribución regulada (CNMC en España)",
         "Alta deuda estructural sensible a subidas de tipos",
         "Riesgo de ejecución en grandes proyectos renovables (retrasos, sobrecostes)",
-        "Cambio en mix de generación (cierre nuclear, intermitencia renovable)",
+        "Cambio en la combinación de fuentes de generación (cierre nuclear, intermitencia renovable)",
         "Impuestos extraordinarios sobre el sector energético"
       ],
-      "leccion_historica": "En el ciclo de subidas de tipos 2022-2023, Iberdrola cayó ~25% desde máximos pese a resultados récord, puramente por la presión de tipos sobre la valoración. Fue el ejemplo perfecto del doble impacto sobre utilities: mayor coste de deuda + menor atractivo del dividendo frente al bono.",
-      "yfinance_keys": ["Utilities"]
+      "leccion_historica": "Entre el 25/05/2022 y el 12/10/2022, en plena subida de tipos del BCE, Iberdrola cayó un 19,3% desde su máximo (cierres diarios sin ajustar; fuente: Yahoo Finance, cálculo de PivotAnalyzer). Es un ejemplo de cómo una utility puede corregir cuando suben los tipos, aunque la caída tuviera también otras causas.",
+      "yfinance_keys": [
+        "Utilities"
+      ],
+      "leccion_cualitativa": "En 2022, en plena subida de tipos del BCE, Iberdrola corrigió con fuerza desde su máximo: un ejemplo de cómo una utility puede corregir cuando suben los tipos, aunque la caída tuviera también otras causas.",
+      "leccion_fuente": "Yahoo Finance (IBE.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+      "leccion_periodo": "25/05/2022 (11,415 €) – 12/10/2022 (9,208 €)",
+      "leccion_validada": true
     },
-
     "Industrials": {
       "nombre_es": "Industriales",
       "emoji": "🏭",
@@ -307,8 +396,12 @@
       "descripcion": "Aeroespacial, defensa, maquinaria industrial, infraestructura, transporte y logística. Muy correlacionado con el ciclo de inversión empresarial (capex) y el comercio global. Los PMI manufactureros son el indicador adelantado más relevante.",
       "sensibilidad_tipos": {
         "direccion": "negativa moderada",
-        "intensidad": "moderada",
-        "explicacion": "El sector industrial se financia con deuda para proyectos de larga duración. Tipos altos encarecen la financiación de proyectos de infraestructura y capex. Sin embargo, si la subida de tipos acompaña a una expansión económica, la demanda de servicios industriales compensa."
+        "intensidad": "media",
+        "explicacion": "El sector industrial se financia con deuda para proyectos de larga duración. Tipos altos encarecen la financiación de proyectos de infraestructura y capex. Sin embargo, si la subida de tipos acompaña a una expansión económica, la demanda de servicios industriales compensa.",
+        "intensidad_v1": "moderada",
+        "si_suben": "perjudica",
+        "motivo": "financian proyectos largos con deuda; si la subida acompaña a una economía fuerte, la demanda puede compensarlo",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "PMI_manufacturero": "correlación directa muy fuerte — el mejor predictor del sector",
@@ -338,19 +431,26 @@
         "Competencia global con productores de bajo coste (Asia)",
         "Regulación medioambiental creciente sobre emisiones industriales"
       ],
-      "leccion_historica": "Los PMI manufactureros cayeron por debajo de 50 en agosto 2019 anticipando desaceleración. El sector industrial europeo (DAX heavy weight) lo reflejó con corrección del 15-20% antes de que los datos macroeconómicos se deterioraran. El PMI como adelantado funcionó.",
-      "yfinance_keys": ["Industrials"]
+      "leccion_historica": "Los índices de gestores de compras (PMI) manufactureros suelen girar antes que los datos de producción. En la desaceleración industrial europea de 2018-2019 dieron la señal antes de que empeoraran otros indicadores.",
+      "yfinance_keys": [
+        "Industrials"
+      ],
+      "leccion_periodo": "2018-2019",
+      "leccion_validada": false
     },
-
     "Basic Materials": {
       "nombre_es": "Materiales Básicos",
       "emoji": "⛏️",
       "caracter": "cíclico-commodity",
-      "descripcion": "Minería, siderurgia, química, papel y materiales de construcción. Máxima correlación con el ciclo económico global y el crecimiento chino. Los precios de commodities (cobre, acero, aluminio) son el principal driver.",
+      "descripcion": "Minería, siderurgia, química, papel y materiales de construcción. Máxima correlación con el ciclo económico global y el crecimiento chino. Los precios de las materias primas (cobre, acero, aluminio) son el factor principal.",
       "sensibilidad_tipos": {
         "direccion": "negativa moderada",
-        "intensidad": "moderada",
-        "explicacion": "El cobre es el mejor barómetro de crecimiento global ('Dr. Copper'). Tipos altos frenan el crecimiento global y con él la demanda de materiales. Además, el USD fuerte (correlacionado con tipos altos) encarece las commodities en dólares para compradores en otras divisas."
+        "intensidad": "media",
+        "explicacion": "El cobre es el mejor barómetro de crecimiento global (en el mercado lo llaman «doctor cobre»). Tipos altos frenan el crecimiento global y con él la demanda de materiales. Además, el USD fuerte (correlacionado con tipos altos) encarece las materias primas en dólares para compradores en otras divisas.",
+        "intensidad_v1": "moderada",
+        "si_suben": "perjudica",
+        "motivo": "los tipos altos frenan el crecimiento global y la demanda de materiales, y suelen fortalecer el dólar, que encarece las materias primas",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "crecimiento_China": "correlación muy alta — China consume ~50% de los metales industriales mundiales",
@@ -361,8 +461,8 @@
       },
       "comportamiento_ciclo": {
         "expansion": "muy favorable — demanda global de materiales en máximos",
-        "pico": "neutral — precios de commodities tienden a mantenerse en cima del ciclo",
-        "contraccion": "muy negativo — caída brutal de precios de commodities",
+        "pico": "neutral — precios de las materias primas tienden a mantenerse en cima del ciclo",
+        "contraccion": "muy negativo — caída brutal de precios de las materias primas",
         "recuperacion": "muy favorable — el cobre sube antes que el PIB se recupere"
       },
       "metricas_referencia": {
@@ -373,16 +473,21 @@
         "dividendo_ciclico": "muchas mineras pagan dividendo variable según FCF — no comparar con defensivos"
       },
       "riesgos_especificos": [
-        "Ciclicidad extrema: precios de commodities muy volátiles",
+        "Ciclicidad extrema: precios de las materias primas muy volátiles",
         "Riesgo geopolítico y de concesiones mineras",
         "Intensidad de capex y larga duración de proyectos",
         "Riesgo ambiental y social (ESG) creciente",
         "Dependencia del ciclo chino"
       ],
-      "leccion_historica": "El superciclo de commodities 2003-2008 impulsado por China multiplicó por 5 el precio del cobre. El colapso de 2015-2016 recordó que China puede frenar abruptamente. El nuevo superciclo de transición energética (cobre, litio) tiene fundamentos distintos pero riesgos similares de timing.",
-      "yfinance_keys": ["Basic Materials"]
+      "leccion_historica": "Entre el 07/11/2001 y el 02/07/2008 el precio del cobre en el mercado de futuros pasó de 0,604 a 4,078 $ por libra: se multiplicó por 6,8, en un ciclo muy ligado a la demanda de China. Entre el 02/01/2014 y el 15/01/2016 cayó un 43,5% (de 3,43 a 1,94 $). El sector sigue de cerca estos ciclos de precios.",
+      "yfinance_keys": [
+        "Basic Materials"
+      ],
+      "leccion_cualitativa": "El cobre y otras materias primas viven ciclos largos de subidas y caídas, muy ligados a la demanda de China. El sector sigue de cerca esos ciclos.",
+      "leccion_fuente": "Yahoo Finance (futuros de cobre HG=F, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "07/11/2001 – 02/07/2008 y 02/01/2014 – 15/01/2016",
+      "leccion_validada": false
     },
-
     "Real Estate": {
       "nombre_es": "Inmobiliario / REITs",
       "emoji": "🏢",
@@ -390,8 +495,12 @@
       "descripcion": "SOCIMIs (España), REITs (EEUU), promotoras y servicios inmobiliarios. Activos de larga vida que generan rentas recurrentes. Estructura de deuda alta y obligación de distribución de dividendos >80% del beneficio distribuible. Proxy de bono para el inversor.",
       "sensibilidad_tipos": {
         "direccion": "muy negativa",
-        "intensidad": "muy alta",
-        "explicacion": "Las SOCIMIs/REITs son el sector más afectado por los tipos junto con utilities. Doble impacto: el coste de la deuda sube (financian activos con apalancamiento) y el dividendo compite con el bono soberano. Además, la valoración de los activos inmobiliarios cae cuando los tipos suben (cap rate se expande → valor del activo cae)."
+        "intensidad": "alta",
+        "explicacion": "Las SOCIMIs/REITs son el sector más afectado por los tipos junto con utilities. Doble impacto: el coste de la deuda sube (financian activos con apalancamiento) y el dividendo compite con el bono soberano. Además, la valoración de los activos inmobiliarios cae cuando los tipos suben (la tasa de capitalización sube → el valor del activo cae).",
+        "intensidad_v1": "muy alta",
+        "si_suben": "perjudica",
+        "motivo": "tienen mucha deuda, su dividendo compite con los bonos y el valor de los inmuebles baja cuando suben los tipos",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_bajada_tipos": "muy positivo — el escenario ideal; deuda más barata + activos se revalorizan",
@@ -416,14 +525,19 @@
       "riesgos_especificos": [
         "Riesgo de refinanciación en entorno de tipos altos",
         "Cambio estructural en oficinas (teletrabajo post-COVID)",
-        "Deterioro del retail físico por e-commerce",
+        "Deterioro del comercio físico por el comercio electrónico",
         "Regulación de alquileres (España: Ley de Vivienda 2023)",
         "Concentración geográfica de activos"
       ],
-      "leccion_historica": "En 2022-2023 las SOCIMIs españolas (Merlin, Colonial) cayeron 30-40% pese a resultados operativos sólidos. El motivo fue exclusivamente la subida de tipos. Ejemplo perfecto de cómo el contexto macro puede superar cualquier análisis fundamental del activo individual.",
-      "yfinance_keys": ["Real Estate"]
+      "leccion_historica": "En 2022, en un periodo de subidas de tipos del BCE, Merlin Properties cayó un 31,1% entre el 20/04/2022 y el 27/09/2022 (de 10,85 a 7,48 €) y Colonial un 44,7% entre el 04/01/2022 y el 12/10/2022 (de 8,43 a 4,66 €). Muestra lo sensible que es el sector a los tipos, aunque la caída tuviera también otras causas.",
+      "yfinance_keys": [
+        "Real Estate"
+      ],
+      "leccion_cualitativa": "En 2022, con el BCE subiendo tipos, las SOCIMI cotizadas españolas corrigieron con fuerza: el sector es muy sensible a los tipos, aunque la caída tuviera también otras causas.",
+      "leccion_fuente": "Yahoo Finance (MRL.MC, COL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+      "leccion_periodo": "04/01/2022 – 12/10/2022",
+      "leccion_validada": false
     },
-
     "Communication Services": {
       "nombre_es": "Comunicaciones",
       "emoji": "📡",
@@ -431,8 +545,12 @@
       "descripcion": "Telecomunicaciones (Telefónica, Orange), media, entretenimiento y plataformas digitales (Google, Meta). El sector se divide entre telecos tradicionales (defensivas, alto dividendo, mucha deuda) y plataformas digitales (crecimiento, sin dividendo, modelo tech).",
       "sensibilidad_tipos": {
         "direccion": "negativa moderada",
-        "intensidad": "moderada-alta",
-        "explicacion": "Las telecos tradicionales tienen perfil similar a utilities: alta deuda para infraestructuras de red, dividendo competidor del bono. Las plataformas digitales se parecen más a tech growth. El sector agregado tiene sensibilidad moderada-alta a tipos."
+        "intensidad": "media",
+        "explicacion": "Las telecos tradicionales tienen perfil similar a utilities: alta deuda para infraestructuras de red, dividendo competidor del bono. Las plataformas digitales se parecen más a las tecnológicas de crecimiento. El sector agregado tiene sensibilidad moderada-alta a tipos.",
+        "intensidad_v1": "moderada-alta",
+        "si_suben": "perjudica",
+        "motivo": "las telecos tienen mucha deuda y su dividendo compite con los bonos; las plataformas digitales se comportan como las tecnológicas",
+        "rotulo": "Orientación cualitativa del método"
       },
       "correlaciones_macro": {
         "BCE_subida_tipos": "negativo para telecos (deuda + dividendo); moderado para plataformas",
@@ -457,14 +575,19 @@
         "Telecos: guerra de precios estructural en mercado maduro",
         "Capex 5G masivo con retorno incierto y largo plazo",
         "Plataformas: riesgo regulatorio DMA/DSA en Europa",
-        "Fragmentación del entretenimiento (streaming wars)",
+        "Fragmentación del entretenimiento (guerra entre plataformas de vídeo en línea)",
         "Telefónica España: exposición a LatAm con riesgo divisa"
       ],
-      "leccion_historica": "Telefónica en 2000 cotizaba a más de 20€ en plena euforia puntocom. En 2012 llegó a 6€. En 2024 rondaba los 4€. 24 años después de máximos, la acción no ha recuperado. Ilustra cómo una empresa puede ser sólida operativamente pero destruir valor para el accionista por exceso de deuda y entorno competitivo difícil.",
-      "yfinance_keys": ["Communication Services"]
+      "leccion_historica": "Telefónica cerró a 32,23 € el 06/03/2000, en plena euforia puntocom; el 24/07/2012 cotizaba a 8,53 € y el 09/02/2024 a 3,55 €. Una empresa puede seguir operando con normalidad y, aun así, su acción no recuperar sus máximos durante décadas. Las cifras no incluyen los dividendos cobrados.",
+      "yfinance_keys": [
+        "Communication Services"
+      ],
+      "leccion_cualitativa": "Telefónica marcó máximos en la euforia puntocom de 2000 y más de veinte años después su acción seguía muy lejos de ellos: una empresa puede seguir operando con normalidad y su acción no recuperar sus máximos durante décadas.",
+      "leccion_fuente": "Yahoo Finance (TEF.MC, cierres diarios sin ajustar por dividendos ni ampliaciones liberadas), cálculo de PivotAnalyzer",
+      "leccion_periodo": "06/03/2000; 24/07/2012; 09/02/2024",
+      "leccion_validada": false
     }
   },
-
   "mapeo_ibex_a_gics": {
     "Petróleo y Energía": "Energy",
     "Materiales Básicos, Industria y Construcción": "Industrials",
@@ -475,32 +598,90 @@
     "Servicios de Utilidad Pública": "Utilities",
     "Sanidad": "Healthcare"
   },
-
   "fases_ciclo": {
     "descripcion": "Marco de 4 fases para contextualizar el momento macroeconómico",
     "expansion": {
       "nombre": "Expansión",
-      "señales": ["PIB creciendo >2%", "PMI >52", "Empleo en máximos", "Inflación moderada", "BCE neutral/acomodaticio"],
-      "sectores_favorecidos": ["Technology", "Consumer Cyclical", "Industrials", "Basic Materials"],
-      "sectores_penalizados": ["Consumer Defensive", "Utilities", "Real Estate"]
+      "señales": [
+        "PIB creciendo >2%",
+        "PMI >52",
+        "Empleo en máximos",
+        "Inflación moderada",
+        "BCE neutral/acomodaticio"
+      ],
+      "sectores_favorecidos": [
+        "Technology",
+        "Consumer Cyclical",
+        "Industrials",
+        "Basic Materials"
+      ],
+      "sectores_penalizados": [
+        "Consumer Defensive",
+        "Utilities",
+        "Real Estate"
+      ]
     },
     "pico": {
       "nombre": "Pico de ciclo",
-      "señales": ["Inflación acelerando", "BCE subiendo tipos", "PMI en máximos o girando", "Curva aplanándose", "Mercado laboral muy tenso"],
-      "sectores_favorecidos": ["Energy", "Basic Materials", "Financial Services"],
-      "sectores_penalizados": ["Technology", "Real Estate", "Utilities", "Consumer Cyclical"]
+      "señales": [
+        "Inflación acelerando",
+        "BCE subiendo tipos",
+        "PMI en máximos o girando",
+        "Curva aplanándose",
+        "Mercado laboral muy tenso"
+      ],
+      "sectores_favorecidos": [
+        "Energy",
+        "Basic Materials",
+        "Financial Services"
+      ],
+      "sectores_penalizados": [
+        "Technology",
+        "Real Estate",
+        "Utilities",
+        "Consumer Cyclical"
+      ]
     },
     "contraccion": {
       "nombre": "Contracción / Recesión",
-      "señales": ["PIB negativo", "PMI <50", "Desempleo subiendo", "BCE pausando o bajando", "Curva invertida se normalizando"],
-      "sectores_favorecidos": ["Consumer Defensive", "Healthcare", "Utilities"],
-      "sectores_penalizados": ["Industrials", "Basic Materials", "Consumer Cyclical", "Financial Services"]
+      "señales": [
+        "PIB negativo",
+        "PMI <50",
+        "Desempleo subiendo",
+        "BCE pausando o bajando",
+        "Curva invertida se normalizando"
+      ],
+      "sectores_favorecidos": [
+        "Consumer Defensive",
+        "Healthcare",
+        "Utilities"
+      ],
+      "sectores_penalizados": [
+        "Industrials",
+        "Basic Materials",
+        "Consumer Cyclical",
+        "Financial Services"
+      ]
     },
     "recuperacion": {
       "nombre": "Recuperación",
-      "señales": ["PMI rebotando desde <50", "BCE bajando tipos", "Crédito reactiv ándose", "Beneficios tocando suelo", "Yield curve empinándose"],
-      "sectores_favorecidos": ["Financial Services", "Consumer Cyclical", "Real Estate", "Industrials"],
-      "sectores_penalizados": ["Consumer Defensive", "Utilities"]
+      "señales": [
+        "PMI rebotando desde <50",
+        "BCE bajando tipos",
+        "Crédito reactiv ándose",
+        "Beneficios tocando suelo",
+        "Yield curve empinándose"
+      ],
+      "sectores_favorecidos": [
+        "Financial Services",
+        "Consumer Cyclical",
+        "Real Estate",
+        "Industrials"
+      ],
+      "sectores_penalizados": [
+        "Consumer Defensive",
+        "Utilities"
+      ]
     }
   }
 }

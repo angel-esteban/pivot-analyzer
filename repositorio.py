@@ -172,7 +172,10 @@ def etiqueta_frescura(frescura: dict, nivel: str) -> str:
 # Tabla `dividendo_manual` (migracion_dividendo_manual.sql). Importes BRUTOS por acción.
 # Solo fuentes de rango 1 (CNMV o web de inversores); el alta la hace un admin.
 # ─────────────────────────────────────────────────────────────────────────────
-TIPOS_PAGO_MANUAL = ("dividendo", "prima", "scrip", "extraordinario")
+TIPOS_PAGO_MANUAL = ("dividendo", "dividendo_a_cuenta", "dividendo_complementario", "prima",
+                     "scrip", "extraordinario", "anunciado")
+# Tipos que necesitan migracion_dividendo_manual_v2.sql (columnas ejercicio / fecha_anuncio)
+TIPOS_V2 = ("dividendo_a_cuenta", "dividendo_complementario", "anunciado")
 # Agregadores y prensa: NO son fuente de rango 1 para un pago manual.
 DOMINIOS_NO_ADMITIDOS = ("stockanalysis.", "finect.", "investing.", "yahoo.", "dividendmax.",
                          "divvydiary.", "dividendpedia.", "stockevents.", "rankia.", "marketscreener.",
@@ -191,10 +194,24 @@ def validar_pago_manual(d: dict) -> str | None:
         return "el importe bruto debe ser > 0"
     if not d.get("ticker"):
         return "falta el ticker"
-    if not d.get("fecha_ex"):
-        return "falta la fecha ex"
     if d.get("tipo") not in TIPOS_PAGO_MANUAL:
         return f"tipo no válido (uno de: {', '.join(TIPOS_PAGO_MANUAL)})"
+    if d.get("tipo") == "anunciado":
+        # R3 (Pólaris): importe ANUAL total anunciado para un ejercicio; sin fecha ex
+        if not d.get("ejercicio"):
+            return "un importe anunciado necesita el ejercicio al que se refiere"
+        if not d.get("fecha_anuncio"):
+            return "un importe anunciado necesita la fecha del anuncio"
+    elif not d.get("fecha_ex"):
+        return "falta la fecha ex"
+    if d.get("tipo") in ("dividendo_a_cuenta", "dividendo_complementario") and not d.get("ejercicio"):
+        return "un dividendo a cuenta o complementario necesita el ejercicio al que se imputa"
+    if d.get("ejercicio") not in (None, ""):
+        try:
+            if not 1990 <= int(d["ejercicio"]) <= 2100:
+                return "ejercicio fuera de rango"
+        except (TypeError, ValueError):
+            return "ejercicio no numérico"
     url = str(d.get("url_origen") or "").strip().lower()
     if not url.startswith("https://"):
         return "falta la URL del documento de origen (https://…)"
@@ -238,12 +255,18 @@ def guardar_pago_manual(conn, d: dict, usuario: str) -> str | None:
         return err
     try:
         cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO dividendo_manual (ticker, fecha_ex, fecha_pago, importe_bruto, tipo, "
-            "url_origen, nota, alta_usuario) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-            [d["ticker"].upper().strip(), d["fecha_ex"], d.get("fecha_pago") or None,
-             float(d["importe_bruto"]), d["tipo"], d["url_origen"].strip(), d.get("nota") or None,
-             usuario])
+        cols = ["ticker", "fecha_ex", "fecha_pago", "importe_bruto", "tipo", "url_origen", "nota",
+                "alta_usuario"]
+        vals = [d["ticker"].upper().strip(), d.get("fecha_ex") or None, d.get("fecha_pago") or None,
+                float(d["importe_bruto"]), d["tipo"], d["url_origen"].strip(), d.get("nota") or None,
+                usuario]
+        # Columnas de la migración v2: solo si se informan (así funciona también sin ella)
+        for c in ("ejercicio", "fecha_anuncio"):
+            if d.get(c) not in (None, ""):
+                cols.append(c)
+                vals.append(int(d[c]) if c == "ejercicio" else d[c])
+        cur.execute(f"INSERT INTO dividendo_manual ({', '.join(cols)}) "
+                    f"VALUES ({', '.join(['%s'] * len(cols))})", vals)
         conn.commit()
     except Exception as e:                   # noqa: BLE001
         try:
@@ -254,6 +277,12 @@ def guardar_pago_manual(conn, d: dict, usuario: str) -> str | None:
             return "ya existe un pago de ese tipo para ese ticker y fecha ex (modifícalo en vez de duplicarlo)"
         if "dividendo_manual" in str(e) and "does not exist" in str(e):
             return "la tabla dividendo_manual no existe: ejecuta migracion_dividendo_manual.sql en Neon"
+        if ("ejercicio" in str(e) or "fecha_anuncio" in str(e) or "tipo_check" in str(e)
+                or "fecha_ex" in str(e)):
+            return ("este tipo de pago necesita la migración v2: ejecuta "
+                    "migracion_dividendo_manual_v2.sql en Neon")
+        if "uq_dividendo_manual_anunciado" in str(e):
+            return "ya hay un importe anunciado activo para ese ticker y ejercicio"
         return f"error al guardar: {e}"
     return None
 
