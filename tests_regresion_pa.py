@@ -1510,6 +1510,69 @@ def test_d17_macro_ipca_y_frescura():
            "D17 §6: la pestaña Macro usa Eurostat (ECOICOP v2) y el DFR del flow FM")
 
 
+_PROHIBIDOS_PE2 = ("comprar", "compra ", "vender", "venta ", "entrar", "salir", "reducir")
+
+
+def _lp_pe(precio, sma, h52, l52, vol):
+    return {"precio": precio, "sma200": sma, "dist_pct": (precio / sma - 1) * 100, "h52": h52, "l52": l52,
+            "pos_pct": (precio - l52) / (h52 - l52) * 100, "vol_pct": vol, "vol_n": 255}
+
+
+def test_pe08_conclusion_valor():
+    cv = _APP["conclusion_valor"]
+    itx = cv(_lp_pe(58.90, 54.52, 60.64, 46.11, 25.6), "Industria de Diseño Textil", "€")
+    _check(itx["clave"] == "a_favor" and "cerca de máximos del año" in itx["texto"] and "con oscilaciones amplias" in itx["texto"]
+           and "un cierre por debajo de 54,52 €" in itx["texto"], f"T-PE-08 ITX: {itx['texto']}")
+    san = cv(_lp_pe(10.64, 11.28, 13.12, 8.72, 32.0), "Banco Santander, S.A.", "€")
+    _check(san["clave"] == "en_contra" and "en la zona media del año" in san["texto"] and "con oscilaciones amplias" in san["texto"]
+           and "un cierre por encima de 11,28 €" in san["texto"], f"T-PE-08 SAN: {san['texto']}")
+    ntgy = cv(_lp_pe(29.50, 28.07, 31.12, 24.30, 19.9), "Naturgy Energy Group", "€")
+    _check(ntgy["clave"] == "a_favor" and "cerca de máximos del año" in ntgy["texto"] and "oscilaciones" not in ntgy["texto"]
+           and "un cierre por debajo de 28,07 €" in ntgy["texto"], f"T-PE-08 NTGY: {ntgy['texto']}")
+    neu = cv(_lp_pe(10.12, 10.0, 11.0, 9.0, 18.0), "X", "€")
+    _check(neu["clave"] == "neutra" and "neutra (precio pegado a su media)" in neu["texto"], f"T-PE-08 neutra: {neu['texto']}")
+    alto = cv(_lp_pe(11.5, 10.0, 11.6, 9.0, 18.0), "X", "€")
+    _check("las correcciones hacia ella son habituales" in alto["texto"], "T-PE-08: matiz 'muy por encima'")
+
+
+def test_pe09_pe10_conclusiones():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    sd, cs, cg = _APP["sensibilidad_tipos_didactica"], _APP["conclusion_sector"], _APP["conclusion_general"]
+    trans = {"resaltar": ["expansion", "pico"], "titulo": "Transición entre Expansión y Pico"}
+    san_s = cs(sec["Financial Services"], trans, "subiendo", sd(sec["Financial Services"]), "Servicios Financieros")
+    itx_s = cs(sec["Consumer Cyclical"], trans, "subiendo", sd(sec["Consumer Cyclical"]), "Consumo Cíclico")
+    ntg_s = cs(sec["Utilities"], trans, "subiendo", sd(sec["Utilities"]), "Utilities")
+    _check(san_s["suma"] == 2.5 and san_s["clave"] == "a_favor", f"T-PE-09 SAN: {san_s['suma']} {san_s['clave']}")
+    _check(itx_s["suma"] == 0.5 and itx_s["clave"] == "neutro", f"T-PE-09 ITX: {itx_s['suma']} {itx_s['clave']}")
+    _check(ntg_s["suma"] == -1 and ntg_s["clave"] == "en_contra", f"T-PE-09 NTGY: {ntg_s['suma']} {ntg_s['clave']}")
+    nd = cs(sec["Utilities"], {"resaltar": [], "titulo": "Fase no determinable: datos insuficientes"}, "subiendo",
+            sd(sec["Utilities"]), "Utilities")
+    _check(not nd["fase_determinable"] and nd["suma"] == -1 and "Fase del ciclo no determinable" in nd["texto"],
+           f"T-PE-09 fase no determinable: {nd['texto']}")
+    _check(cs(sec["Utilities"], trans, "bajando", sd(sec["Utilities"]), "U")["c_tipos"] == 1.0
+           and cs(sec["Utilities"], trans, "estable", sd(sec["Utilities"]), "U")["c_tipos"] == 0.0, "T-PE-09: tipos bajando / estables")
+    # tabla de efecto completa (4 fases × 11 sectores, valores −2…+2)
+    for k, v in sec.items():
+        ef = v.get("efecto_ciclo") or {}
+        _check(set(ef) == {"expansion", "pico", "contraccion", "recuperacion"} and all(x in (-2, -1, 0, 1, 2) for x in ef.values()),
+               f"T-PE-09 efecto_ciclo {k}: {ef}")
+    cv = _APP["conclusion_valor"]
+    v_itx = cv(_lp_pe(58.90, 54.52, 60.64, 46.11, 25.6), "Inditex", "€")
+    v_san = cv(_lp_pe(10.64, 11.28, 13.12, 8.72, 32.0), "Santander", "€")
+    v_ntg = cv(_lp_pe(29.50, 28.07, 31.12, 24.30, 19.9), "Naturgy", "€")
+    g_itx, g_san, g_ntg = cg(v_itx, itx_s), cg(v_san, san_s), cg(v_ntg, ntg_s)
+    _check(g_itx["clave"] == "mayoritariamente a favor", f"T-PE-10 ITX: {g_itx['clave']}")
+    _check(g_san["clave"] == "señales cruzadas" and "domina ahora" in g_san["texto"], f"T-PE-10 SAN: {g_san['clave']}")
+    _check(g_ntg["clave"] == "señales cruzadas", f"T-PE-10 NTGY: {g_ntg['clave']}")
+    _check(cg(v_itx, None)["clave"] is None, "T-PE-10: sin ficha sectorial no se combina")
+    # Redacción: sin términos de operativa (PA3-01 + lista de la spec)
+    textos = " ".join(c["texto"] + " " + c.get("por_que", "") for c in
+                      (v_itx, v_san, v_ntg, san_s, itx_s, ntg_s, nd, g_itx, g_san, g_ntg)).lower()
+    textos += " " + _APP["params_conclusiones"]().get("nota_fija", "").lower()
+    _malos = [t for t in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 if t in textos]
+    _check(not _malos, f"T-PE-10 redacción: términos de operativa {_malos}")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
@@ -1539,7 +1602,7 @@ def main():
         return 1
     for _a in _avisos:
         print("ℹ️ ", _a)
-    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 + Spec PE v1 — TODOS los tests unitarios PASAN.")
+    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 + Spec PE v1 + v2 — TODOS los tests unitarios PASAN.")
     print("   (PA-A-06/PA-M-02/03/04 y la revisión visual de PA2-01 se verifican sobre informes reales.)")
     print("   ⏸  T-PA2-03c pendiente de decisión de Polaris (payout crudo 7,5 sin DPA/BPA: el")
     print("      normalizador lo lee como 7,5 % y la spec espera N/A + K8).")

@@ -57,7 +57,13 @@
       "leccion_cualitativa": "Las tecnológicas han sufrido caídas muy fuertes cuando sus valoraciones estaban muy altas, como tras la burbuja puntocom de 2000-2002 o durante la subida de tipos de 2022.",
       "leccion_fuente": "Yahoo Finance (índice ^IXIC, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "10/03/2000 – 09/10/2002 y 19/11/2021 – 28/12/2022",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 2,
+        "pico": -1,
+        "contraccion": -1,
+        "recuperacion": 2
+      }
     },
     "Financial Services": {
       "nombre_es": "Servicios Financieros",
@@ -133,7 +139,13 @@
         "Financials"
       ],
       "leccion_periodo": "2012",
-      "leccion_validada": true
+      "leccion_validada": true,
+      "efecto_ciclo": {
+        "expansion": 1,
+        "pico": 2,
+        "contraccion": -2,
+        "recuperacion": 1
+      }
     },
     "Healthcare": {
       "nombre_es": "Salud",
@@ -184,7 +196,13 @@
       "leccion_cualitativa": "En la crisis financiera de 2007-2009 el sector sanitario también cayó, pero bastante menos que el conjunto del mercado: su demanda depende poco del ciclo.",
       "leccion_fuente": "Yahoo Finance (^GSPC y XLV, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "09/10/2007 – 09/03/2009 (XLV: desde el 10/12/2007)",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 0,
+        "pico": 1,
+        "contraccion": 2,
+        "recuperacion": -1
+      }
     },
     "Consumer Cyclical": {
       "nombre_es": "Consumo Cíclico",
@@ -236,7 +254,13 @@
       "leccion_cualitativa": "El turismo tiene mucho peso en la economía española. En 2020, la pandemia hundió en pocas semanas la cotización de aerolíneas y hoteleras: es un sector muy expuesto a un frenazo brusco de la demanda.",
       "leccion_fuente": "INE, Cuenta Satélite del Turismo de España (nota de prensa del 22/12/2025); Yahoo Finance (IAG.MC, MEL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
       "leccion_periodo": "PIB: 2024 · cotizaciones: 15/01/2020 – 03/08/2020",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 2,
+        "pico": 0,
+        "contraccion": -2,
+        "recuperacion": 1
+      }
     },
     "Consumer Defensive": {
       "nombre_es": "Consumo Defensivo",
@@ -285,7 +309,13 @@
       "leccion_cualitativa": "En 2022 el consumo básico estadounidense también cayó, pero mucho menos que el conjunto del mercado.",
       "leccion_fuente": "Yahoo Finance (^GSPC y XLP, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "31/12/2021 – 30/12/2022",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": -1,
+        "pico": 1,
+        "contraccion": 2,
+        "recuperacion": -1
+      }
     },
     "Energy": {
       "nombre_es": "Energía",
@@ -336,7 +366,13 @@
       "leccion_cualitativa": "El precio del petróleo puede moverse de forma extrema: en 2020 llegó a cotizar en negativo en el mercado de futuros y en 2022 se disparó tras la invasión de Ucrania. El sector energético sigue sobre todo al crudo.",
       "leccion_fuente": "Yahoo Finance (CL=F, BZ=F y fondos Select Sector SPDR, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "20/04/2020; 08/03/2022; 31/12/2021 – 30/12/2022",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 1,
+        "pico": 0,
+        "contraccion": -1,
+        "recuperacion": 2
+      }
     },
     "Utilities": {
       "nombre_es": "Utilities / Servicios Públicos",
@@ -387,7 +423,13 @@
       "leccion_cualitativa": "En 2022, en plena subida de tipos del BCE, Iberdrola corrigió con fuerza desde su máximo: un ejemplo de cómo una utility puede corregir cuando suben los tipos, aunque la caída tuviera también otras causas.",
       "leccion_fuente": "Yahoo Finance (IBE.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
       "leccion_periodo": "25/05/2022 (11,415 €) – 12/10/2022 (9,208 €)",
-      "leccion_validada": true
+      "leccion_validada": true,
+      "efecto_ciclo": {
+        "expansion": -1,
+        "pico": 1,
+        "contraccion": 2,
+        "recuperacion": -1
+      }
     },
     "Industrials": {
       "nombre_es": "Industriales",
@@ -436,7 +478,13 @@
         "Industrials"
       ],
       "leccion_periodo": "2018-2019",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 2,
+        "pico": 0,
+        "contraccion": -1,
+        "recuperacion": 2
+      }
     },
     "Basic Materials": {
       "nombre_es": "Materiales Básicos",
@@ -486,7 +534,13 @@
       "leccion_cualitativa": "El cobre y otras materias primas viven ciclos largos de subidas y caídas, muy ligados a la demanda de China. El sector sigue de cerca esos ciclos.",
       "leccion_fuente": "Yahoo Finance (futuros de cobre HG=F, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "07/11/2001 – 02/07/2008 y 02/01/2014 – 15/01/2016",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 2,
+        "pico": 0,
+        "contraccion": -2,
+        "recuperacion": 2
+      }
     },
     "Real Estate": {
       "nombre_es": "Inmobiliario / REITs",
@@ -536,7 +590,13 @@
       "leccion_cualitativa": "En 2022, con el BCE subiendo tipos, las SOCIMI cotizadas españolas corrigieron con fuerza: el sector es muy sensible a los tipos, aunque la caída tuviera también otras causas.",
       "leccion_fuente": "Yahoo Finance (MRL.MC, COL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
       "leccion_periodo": "04/01/2022 – 12/10/2022",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 1,
+        "pico": -1,
+        "contraccion": -1,
+        "recuperacion": 2
+      }
     },
     "Communication Services": {
       "nombre_es": "Comunicaciones",
@@ -585,7 +645,13 @@
       "leccion_cualitativa": "Telefónica marcó máximos en la euforia puntocom de 2000 y más de veinte años después su acción seguía muy lejos de ellos: una empresa puede seguir operando con normalidad y su acción no recuperar sus máximos durante décadas.",
       "leccion_fuente": "Yahoo Finance (TEF.MC, cierres diarios sin ajustar por dividendos ni ampliaciones liberadas), cálculo de PivotAnalyzer",
       "leccion_periodo": "06/03/2000; 24/07/2012; 09/02/2024",
-      "leccion_validada": false
+      "leccion_validada": false,
+      "efecto_ciclo": {
+        "expansion": 0,
+        "pico": 0,
+        "contraccion": 0,
+        "recuperacion": 0
+      }
     }
   },
   "mapeo_ibex_a_gics": {

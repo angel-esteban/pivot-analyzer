@@ -1367,5 +1367,82 @@
         }
       ]
     }
+  },
+  "conclusiones_paso1": {
+    "_descripcion": "Spec PE v2 (PE-08, PE-09, PE-10). Parámetros del método para las conclusiones del Paso 1. Describen el contexto; la decisión corresponde al usuario.",
+    "rotulo": "Parámetros del método",
+    "valor": {
+      "umbral_sma200_pct": 2.0,
+      "muy_por_encima_pct": 10.0,
+      "tramos_vol_amplias": [
+        "Alta",
+        "Muy alta"
+      ],
+      "matiz_rango": {
+        "Zona baja del año": "cerca de mínimos del año",
+        "Zona media": "en la zona media del año",
+        "Zona alta del año": "cerca de máximos del año"
+      }
+    },
+    "sector": {
+      "intensidad_valor": {
+        "alta": 1.0,
+        "media": 0.5,
+        "baja": 0.0
+      },
+      "corte_viento": 1.0,
+      "texto_efecto": {
+        "2": "muy favorable",
+        "1": "favorable",
+        "0": "neutral",
+        "-1": "desfavorable",
+        "-2": "muy desfavorable"
+      }
+    },
+    "matriz_general": {
+      "a_favor|a_favor": {
+        "texto": "viento a favor en los dos niveles",
+        "grupo": "a_favor"
+      },
+      "a_favor|neutro": {
+        "texto": "mayoritariamente a favor",
+        "grupo": "a_favor"
+      },
+      "a_favor|en_contra": {
+        "texto": "señales cruzadas",
+        "grupo": "cruzadas"
+      },
+      "neutra|a_favor": {
+        "texto": "mayoritariamente a favor",
+        "grupo": "a_favor"
+      },
+      "neutra|neutro": {
+        "texto": "sin dirección clara",
+        "grupo": "sin_direccion"
+      },
+      "neutra|en_contra": {
+        "texto": "mayoritariamente en contra",
+        "grupo": "en_contra"
+      },
+      "en_contra|a_favor": {
+        "texto": "señales cruzadas",
+        "grupo": "cruzadas"
+      },
+      "en_contra|neutro": {
+        "texto": "mayoritariamente en contra",
+        "grupo": "en_contra"
+      },
+      "en_contra|en_contra": {
+        "texto": "viento en contra en los dos niveles",
+        "grupo": "en_contra"
+      }
+    },
+    "que_mirar": {
+      "cruzadas": "Cuando valor y sector apuntan en direcciones distintas, la estructura (Paso 2) y el momento (Paso 3) ayudan a ver cuál de las dos fuerzas domina ahora.",
+      "a_favor": "Con el contexto a favor, los pasos siguientes ayudan a ver si el precio está extendido o cerca de niveles de referencia.",
+      "en_contra": "Con el contexto en contra, los pasos siguientes ayudan a ver si hay señales de estabilización o si la debilidad continúa.",
+      "sin_direccion": "Sin dirección de contexto, los niveles (Paso 4) son la referencia principal."
+    },
+    "nota_fija": "Conclusión automática del método a partir de los datos mostrados. Describe el contexto; la decisión corresponde al usuario."
   }
 }

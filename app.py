@@ -12262,6 +12262,180 @@ def html_fase_ciclo(res: dict, region: str, params=None) -> str:
     )
 
 
+# ── Spec PE v2 — Conclusiones del Paso 1 (PE-08, PE-09, PE-10) ──
+def params_conclusiones(criterios=None) -> dict:
+    if criterios is None:
+        criterios = _cargar_criteria()
+    return (criterios or {}).get("conclusiones_paso1", {}) or {}
+
+
+def _num_signo_es(v, dec=1) -> str:
+    """1.5 → '+1,5' · -0.5 → '−0,5' · 0 → '0' · 2.0 → '+2'."""
+    v = round(float(v), dec)
+    if v == 0:
+        return "0"
+    t = (str(int(abs(v))) if abs(v) == int(abs(v)) else f"{abs(v):.{dec}f}".replace(".", ","))
+    return ("+" if v > 0 else "−") + t
+
+
+def nombre_conclusion(nombre) -> str:
+    """Nombre legible para las conclusiones: sin forma jurídica final ('Banco Santander, S.A.' →
+    'Banco Santander'). Si Yahoo no dio nombre, queda el ticker."""
+    import re as _re
+    _n = str(nombre or "").strip()
+    _n2 = _re.sub(r"[,\s]+(S\.?\s?A\.?|S\.?L\.?|Inc\.?|Corp\.?|Corporation|plc|PLC|N\.?V\.?|SE|AG|SpA|S\.p\.A\.)$", "", _n).strip()
+    return _n2 or _n
+
+
+def conclusion_valor(lp: dict, nombre: str, moneda: str = "€", criterios=None) -> "dict | None":
+    """PE-08 — Conclusión del valor. Dirección por la distancia a la SMA200 (±umbral); matices
+    de rango de 52 semanas, 'muy por encima' y volatilidad amplia. None si no hay SMA200."""
+    if not lp or lp.get("dist_pct") is None or not lp.get("sma200"):
+        return None
+    crit = _cargar_criteria() if criterios is None else criterios
+    pv = params_conclusiones(crit).get("valor", {})
+    u = float(pv.get("umbral_sma200_pct", 2.0))
+    d = float(lp["dist_pct"])
+    clave = "a_favor" if d >= u else ("en_contra" if d <= -u else "neutra")
+    etiqueta = {"a_favor": "viento a favor", "en_contra": "viento en contra",
+                "neutra": "neutra (precio pegado a su media)"}[clave]
+    tr = tramos_contexto(crit)
+    matices = []
+    _tp = (tr.get("pos_52s") or {}).get("tramos") or []
+    _ip = tramo_de(lp.get("pos_pct"), _tp)
+    if _ip is not None:
+        _m = (pv.get("matiz_rango") or {}).get(_tp[_ip].get("etiqueta"))
+        if _m:
+            matices.append(_m)
+    if d > float(pv.get("muy_por_encima_pct", 10.0)):
+        matices.append("precio alejado de su media; las correcciones hacia ella son habituales")
+    _tv = (tr.get("volatilidad") or {}).get("tramos") or []
+    _iv = tramo_de(lp.get("vol_pct"), _tv)
+    if _iv is not None and _tv[_iv].get("etiqueta") in (pv.get("tramos_vol_amplias") or []):
+        matices.append("con oscilaciones amplias")
+    _sma = f"{_num_es(lp['sma200'], 2)} {moneda}".strip()
+    _pos = "por encima" if d >= 0 else "por debajo"
+    if clave == "a_favor":
+        cambio = f"un cierre por debajo de {_sma} (su media de 200 sesiones)"
+    elif clave == "en_contra":
+        cambio = f"un cierre por encima de {_sma} (su media de 200 sesiones)"
+    else:
+        cambio = (f"un cierre a más de un {_num_es(u, 0)}% de {_sma} (su media de 200 sesiones): por "
+                  f"encima, viento a favor; por debajo, viento en contra")
+    _nom = nombre_conclusion(nombre)
+    texto = (f"<b>Conclusión del valor: {etiqueta}.</b> {_nom} cotiza un {_num_es(abs(d), 1)}% {_pos} "
+             f"de su media de 200 sesiones" + ("".join(", " + m for m in matices)) + ". "
+             f"<b>Qué cambiaría esta lectura:</b> {cambio}.")
+    por_que = (f"Regla del método: distancia a la SMA200 ≥ +{_num_es(u, 0)}% → a favor; entre −{_num_es(u, 0)}% "
+               f"y +{_num_es(u, 0)}% → neutra; ≤ −{_num_es(u, 0)}% → en contra. Distancia actual: "
+               f"{_pct_signo_es(d)}.")
+    return {"clave": clave, "etiqueta": etiqueta, "matices": matices, "texto": texto, "por_que": por_que,
+            "motivo": f"{_pct_signo_es(d)} frente a su media de 200 sesiones"}
+
+
+def direccion_tipo_oficial(ind: dict, params=None) -> "str | None":
+    """'subiendo' / 'bajando' / 'estable' con la misma regla que PE-05 (±estable_pb en la
+    ventana). None si no hay dato utilizable."""
+    if not ind or ind.get("valor") is None or ind.get("previo") is None or ind.get("desactualizado"):
+        return None
+    p = params_fase_ciclo() if params is None else params
+    est = float((p.get("tipo_oficial") or {}).get("estable_pb", 25)) / 100.0
+    dlt = ind["valor"] - ind["previo"]
+    return "subiendo" if dlt > est else ("bajando" if dlt < -est else "estable")
+
+
+def conclusion_sector(sector_info: dict, res_fase: dict, dir_tipo, sens: dict, nombre_sector: str = "",
+                      banco: str = "BCE", criterios=None) -> dict:
+    """PE-09 — Conclusión sectorial = efecto de la fase del ciclo (media si hay transición; 0 y
+    aviso si no es determinable) + componente de tipos (dirección × si_suben × intensidad)."""
+    pc = params_conclusiones(criterios)
+    ps = pc.get("sector", {})
+    txt_ef = ps.get("texto_efecto") or {}
+    ef = (sector_info or {}).get("efecto_ciclo") or {}
+    fases = list((res_fase or {}).get("resaltar") or [])
+    partes = []
+    if fases and all(f in ef for f in fases):
+        c1 = sum(float(ef[f]) for f in fases) / len(fases)
+        _det = ", ".join(f"{NOMBRE_FASE[f]} {txt_ef.get(str(int(ef[f])), '')} ({_num_signo_es(ef[f])})" for f in fases)
+        if len(fases) == 1:
+            partes.append(f"Fase del ciclo ({NOMBRE_FASE[fases[0]]}): {txt_ef.get(str(int(ef[fases[0]])), '')} "
+                          f"({_num_signo_es(c1)}).")
+        else:
+            partes.append(f"Fase del ciclo (transición entre {NOMBRE_FASE[fases[0]]} y {NOMBRE_FASE[fases[1]]}): "
+                          f"{_det} → media {_num_signo_es(c1)}.")
+        fase_ok = True
+    else:
+        c1, fase_ok = 0.0, False
+        partes.append("Fase del ciclo no determinable: se usa solo el componente de tipos.")
+    inten, suben = (sens or {}).get("intensidad"), (sens or {}).get("si_suben")
+    _iv = float((ps.get("intensidad_valor") or {}).get(inten or "", 0.0))
+    if dir_tipo is None or not inten:
+        c2 = 0.0
+        partes.append("Tipos: sin dato del tipo oficial o de la sensibilidad del sector (0).")
+    else:
+        if dir_tipo == "estable" or suben in ("mixto", "neutro"):
+            c2 = 0.0
+        else:
+            _sg = (1 if suben == "favorece" else -1) * (1 if dir_tipo == "subiendo" else -1)
+            c2 = _sg * _iv
+        _dt = {"subiendo": "subiendo", "bajando": "bajando", "estable": "estables"}[dir_tipo]
+        _ef = {"favorece": "favorece", "perjudica": "perjudica", "mixto": "efecto mixto",
+               "neutro": "efecto pequeño"}.get(suben, "")
+        if dir_tipo == "bajando" and suben in ("favorece", "perjudica"):
+            _ef = "perjudica" if suben == "favorece" else "favorece"
+        if dir_tipo == "estable":
+            _ef = "sin efecto mientras no se muevan"
+        partes.append(f"Tipos {_dt} con sensibilidad {inten}: {_ef} ({_num_signo_es(c2)}).")
+    suma = round(c1 + c2, 4)
+    corte = float(ps.get("corte_viento", 1.0))
+    clave = "a_favor" if suma >= corte else ("en_contra" if suma <= -corte else "neutro")
+    etiqueta = {"a_favor": "viento a favor", "en_contra": "viento en contra", "neutro": "neutro / mixto"}[clave]
+    _giro = {"subiendo": f"un giro del {banco} a bajadas", "bajando": f"un giro del {banco} a subidas"}.get(
+        dir_tipo or "", f"un movimiento del {banco} (subidas o bajadas)")
+    cambio = f"un cambio de fase del ciclo o {_giro}"
+    texto = (f"<b>Conclusión sectorial{(' — ' + nombre_sector) if nombre_sector else ''}: {etiqueta}.</b> "
+             + " ".join(partes) + f" Suma: {_num_signo_es(suma)}. <b>Qué cambiaría esta lectura:</b> {cambio}.")
+    por_que = (f"Regla del método: efecto de la fase del ciclo (−2 a +2; media si hay transición) + tipos "
+               f"(alta 1 · media 0,5 · baja 0, con el signo según suban o bajen). Suma ≥ +{_num_es(corte, 0)} → a "
+               f"favor; ≤ −{_num_es(corte, 0)} → en contra; entre medias → neutro / mixto.")
+    _mot_f = ((f"fase {(res_fase or {}).get('titulo', '').lower()}" if fase_ok else "fase no determinable")
+              + (f", tipos {dir_tipo}" if dir_tipo else ""))
+    return {"clave": clave, "etiqueta": etiqueta, "suma": suma, "c_fase": c1, "c_tipos": c2,
+            "fase_determinable": fase_ok, "texto": texto, "por_que": por_que,
+            "motivo": f"suma {_num_signo_es(suma)}: {_mot_f}"}
+
+
+def conclusion_general(cv: "dict | None", cs: "dict | None", criterios=None) -> "dict | None":
+    """PE-10 — Matriz valor × sector de criteria.json."""
+    if not cv:
+        return None
+    pc = params_conclusiones(criterios)
+    if not cs:
+        texto = (f"<b>Conclusión del Paso 1: solo con los datos del valor — {cv['etiqueta']}.</b> "
+                 f"No hay ficha sectorial para este activo, así que no se combina con el sector.")
+        return {"clave": None, "grupo": None, "texto": texto, "que_mirar": ""}
+    celda = (pc.get("matriz_general") or {}).get(f"{cv['clave']}|{cs['clave']}") or {}
+    grupo = celda.get("grupo", "sin_direccion")
+    que = (pc.get("que_mirar") or {}).get(grupo, "")
+    texto = (f"<b>Conclusión del Paso 1: {celda.get('texto', '')}.</b> El valor: {cv['etiqueta']} "
+             f"({cv['motivo']}). El sector: {cs['etiqueta']} ({cs['motivo']}). "
+             f"<b>Qué conviene mirar en los pasos siguientes:</b> {que}")
+    por_que = (f"Regla del método: valor «{cv['etiqueta']}» × sector «{cs['etiqueta']}» → "
+               f"«{celda.get('texto', '')}» (matriz valor × sector de los parámetros del método).")
+    return {"clave": celda.get("texto"), "grupo": grupo, "texto": texto, "que_mirar": que, "por_que": por_que}
+
+
+def html_conclusion(c: "dict | None", estilo: str = "valor") -> str:
+    if not c:
+        return ""
+    _col = {"valor": ("#ecfdf5", "#059669", "#064e3b"), "sector": ("#eef2ff", "#4f46e5", "#1e1b4b"),
+            "general": ("#fff7ed", "#ea580c", "#431407")}[estilo]
+    _pq = (f'<div style="font-size:.76rem;color:#475569;margin-top:.25rem"><b>Por qué:</b> {c["por_que"]}</div>'
+           if c.get("por_que") else "")
+    return (f'<div style="background:{_col[0]};border-left:4px solid {_col[1]};border-radius:0 8px 8px 0;'
+            f'padding:.55rem .8rem;margin:.6rem 0;font-size:.86rem;color:{_col[2]}">🧭 {c["texto"]}{_pq}</div>')
+
+
 @st.fragment
 def _pp_wizard_fragment():
     """Fragmento del wizard ¿Por dónde empiezo?
@@ -12437,6 +12611,7 @@ def _pp_wizard_fragment():
 
         # PE-02 — «¿Qué significa esto para ti?» con tramos de referencia del método (criteria.json)
         _vol_txt = f"{_num_es(_lp['vol_pct'], 1)}%" if _lp.get("vol_pct") is not None else ""
+        _c_valor = conclusion_valor(_lp, nombre, _mon)   # PE-08
         st.markdown(
             '<div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">'
             '&#128161; <b>&#191;Qu&#233; significa esto para ti?</b>'
@@ -12445,6 +12620,7 @@ def _pp_wizard_fragment():
             + html_bloque_tramos("pos_52s", _lp.get("pos_pct"),
                                  f"{_num_es(_lp['pos_pct'], 1)}%" if _lp.get("pos_pct") is not None else "")
             + html_bloque_tramos("volatilidad", _lp.get("vol_pct"), _vol_txt)
+            + html_conclusion(_c_valor, "valor")
             + '</div>', unsafe_allow_html=True)
         # ── Sector context from SECTOR_KNOWLEDGE ─────────────────────
         _sk_data = SECTOR_KNOWLEDGE.get("sectores", {})
@@ -12461,6 +12637,7 @@ def _pp_wizard_fragment():
                 if _sector_yf in (_sv.get("yfinance_keys") or []):
                     _sector_info = _sv
                     break
+        _c_sector = None   # PE-09
         if _sector_info:
             _s_emoji  = _sector_info.get("emoji", "📊")
             _s_nombre = _sector_info.get("nombre_es", _sector_yf)
@@ -12492,9 +12669,13 @@ def _pp_wizard_fragment():
             # PE-05 — fase actual del ciclo (región del valor) y filas resaltadas
             _reg = region_macro(_ticker, _info)
             _fase_html, _resaltar, _fase_linea = "", [], ""
+            _res_fase_pe, _dir_tipo = {}, None
             if _reg:
                 try:
-                    _res_fase = evaluar_fase_ciclo(indicadores_fase_ciclo(_reg))
+                    _ind_fase = indicadores_fase_ciclo(_reg)
+                    _res_fase = evaluar_fase_ciclo(_ind_fase)
+                    _res_fase_pe = _res_fase
+                    _dir_tipo = direccion_tipo_oficial(_ind_fase.get("tipo_oficial"))
                     _resaltar = _res_fase.get("resaltar", [])
                     _fase_html = html_fase_ciclo(_res_fase, _reg)
                     if _resaltar:
@@ -12503,6 +12684,8 @@ def _pp_wizard_fragment():
                 except Exception as _e_fc:
                     _fase_html = (f'<div style="font-size:.8rem;color:#64748b">Fase del ciclo no disponible '
                                   f'({type(_e_fc).__name__}).</div>')
+            _c_sector = conclusion_sector(_sector_info, _res_fase_pe, _dir_tipo, _s_sens, _s_nombre,
+                                          "Fed" if _reg == "eeuu" else "BCE")   # PE-09
             _ciclo_rows = ""
             for ph in _fases_c:
                 _on = ph in _resaltar
@@ -12545,6 +12728,7 @@ def _pp_wizard_fragment():
               <div class="pp-edu" style="background:#fff7ed;border-color:#f97316;color:#7c2d12;margin-top:.6rem">
                 &#128218; <b>Lección histórica:</b> {_s_leccion}{_lec_pie}
               </div>
+              {html_conclusion(_c_sector, "sector")}
             </div>""".splitlines()), unsafe_allow_html=True)
         elif _sector_yf:
             st.markdown(f'<div class="pp-card"><div class="pp-title">&#128202; Sector: {_sector_yf}</div>'
@@ -12555,6 +12739,12 @@ def _pp_wizard_fragment():
                         '<p style="color:#94a3b8;font-size:.86rem">yfinance no devuelve dato sectorial para este activo (ETFs, índices, etc.).</p></div>',
                         unsafe_allow_html=True)
 
+        # PE-10 — Conclusión general del Paso 1 + nota fija
+        _c_gen = conclusion_general(_c_valor, _c_sector)
+        if _c_gen:
+            st.markdown(html_conclusion(_c_gen, "general")
+                        + f'<div style="font-size:.76rem;color:#64748b;font-style:italic;margin:-.2rem 0 .6rem">'
+                        + f'{params_conclusiones().get("nota_fija", "")}</div>', unsafe_allow_html=True)
         st.info("&#128218; Para an&#225;lisis macro completo (BCE, inflaci&#243;n, tipos) visita la pesta&#241;a **&#127758; Macro**.")
 
     # ── PASO 2: DIAGNÓSTICO TÉCNICO ─────────────────────────────────────────
