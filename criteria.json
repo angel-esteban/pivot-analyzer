@@ -1331,7 +1331,7 @@
       "columna": "Volatilidad anualizada",
       "que_es": "Cuánto suele oscilar el precio en un año, medido con las variaciones diarias pasadas.",
       "como_leerlo": "Una volatilidad del {vol} significa que, si las oscilaciones se comportasen como en el pasado, en aproximadamente dos de cada tres años el precio acabaría dentro de un ±{vol} respecto al inicio. Es una aproximación estadística basada en datos pasados, no una previsión.",
-      "nota": "Alta volatilidad = tamaño de posición más pequeño para el mismo riesgo real: con el doble de volatilidad, la misma cantidad invertida oscila el doble en euros.",
+      "nota": "A más volatilidad, más oscila en euros la misma cantidad invertida.",
       "tramos": [
         {
           "desde": null,
@@ -1474,30 +1474,32 @@
         "lejos": "El precio está muy por debajo de su máximo histórico: niveles ya alcanzados en el pasado quedan muy lejos."
       },
       "sma200": {
-        "giro_alcista_reciente": "La media de largo plazo ha empezado a subir hace poco, después de bajar: el método lo interpreta como un posible cambio de tendencia al alza.",
-        "tendencia_alcista": "La media de largo plazo sube de forma sostenida: el método lo interpreta como tendencia alcista de fondo.",
-        "plana": "La media de largo plazo apenas se mueve: el método no ve tendencia de fondo clara.",
-        "giro_bajista_reciente": "La media de largo plazo ha empezado a bajar hace poco, después de subir: el método lo interpreta como un posible cambio de tendencia a la baja.",
-        "tendencia_bajista": "La media de largo plazo baja de forma sostenida: el método lo interpreta como tendencia bajista de fondo."
+        "giro_alcista_encima": "La media de largo plazo ha empezado a subir hace poco y el precio está por encima: el método lo interpreta como un posible cambio de tendencia al alza ya acompañado por el precio.",
+        "tendencia_alcista_encima": "La media de largo plazo sube y el precio está por encima: el método lo interpreta como tendencia alcista de fondo confirmada por el precio.",
+        "plana_encima": "La media de largo plazo apenas se mueve y el precio está por encima: sin tendencia de fondo clara, con el precio en la parte favorable.",
+        "positiva_debajo": "La media de largo plazo sube, pero el precio ha caído por debajo: la tendencia de fondo sigue al alza y el precio no la acompaña ahora.",
+        "plana_debajo": "La media de largo plazo apenas se mueve y el precio está por debajo: sin tendencia de fondo clara, con el precio en la parte débil.",
+        "negativa_encima": "La media de largo plazo baja, aunque el precio está por encima: la tendencia de fondo sigue a la baja y el precio intenta separarse de ella.",
+        "giro_bajista_debajo": "La media de largo plazo ha empezado a bajar hace poco y el precio está por debajo: el método lo interpreta como un posible cambio de tendencia a la baja acompañado por el precio.",
+        "tendencia_bajista_debajo": "La media de largo plazo baja y el precio está por debajo: el método lo interpreta como tendencia bajista de fondo confirmada por el precio."
       },
       "resist": {
         "en_soporte": "El precio está apoyado sobre un nivel reforzado: el análisis técnico lo toma como zona donde la caída se ha frenado otras veces.",
-        "sin_resistencia": "No hay niveles reforzados por encima del precio: el análisis técnico no ve techos cercanos en los niveles calculados.",
+        "sin_resistencia": "No hay niveles reforzados por encima del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros techos.",
         "zona_baja_rango": "El precio está más cerca del soporte que de la resistencia: tiene más margen hasta el techo que hasta el suelo.",
         "zona_media_rango": "El precio está a media distancia entre el soporte y la resistencia más cercanos.",
         "zona_alta_rango": "El precio está más cerca de la resistencia que del soporte: tiene poco margen hasta el techo cercano.",
         "en_resistencia": "El precio está justo debajo de un nivel reforzado: el análisis técnico lo toma como zona donde las subidas se han frenado otras veces.",
-        "sin_soporte": "No hay niveles reforzados por debajo del precio: el análisis técnico no ve suelos cercanos en los niveles calculados."
+        "sin_soporte": "No hay niveles reforzados por debajo del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros suelos."
       },
       "fibo": {
-        "extension_161": "El precio ha superado con amplitud el máximo del swing: los niveles de extensión son la única referencia por encima.",
-        "extension_127": "El precio ha superado el máximo del swing y se mueve en zona de extensión.",
         "en_maximo": "El precio está en la parte alta del recorrido del último año, con un retroceso pequeño desde el máximo.",
-        "retroceso_236": "El precio ha corregido poco desde el máximo del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
-        "retroceso_382": "El precio ha devuelto una parte moderada de la subida del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
-        "retroceso_618": "El precio ha devuelto cerca de la mitad o más de la subida del año. El método puntúa esta zona al alza porque el análisis técnico la usa como posible zona de rebote.",
+        "retroceso_236": "El precio ha corregido poco desde el máximo del año (hasta el 23,6% del recorrido).",
+        "retroceso_382": "El precio ha devuelto una parte moderada de la subida del año (hasta el 38,2%).",
+        "retroceso_500": "El precio ha devuelto hasta la mitad de la subida del año.",
+        "retroceso_618": "El precio ha devuelto más de la mitad de la subida del año: la estructura del swing se debilita.",
         "retroceso_786": "El precio ha devuelto la mayor parte de la subida del año: el recorrido alcista se ha debilitado mucho.",
-        "swing_roto": "El precio está cerca del mínimo del año o por debajo: el recorrido alcista del swing se ha perdido."
+        "swing_roto": "El precio ha devuelto casi toda la subida del año: el recorrido alcista del swing está casi anulado."
       },
       "rsi": {
         "sobrecompra_extrema": "El RSI está en niveles muy altos: el método lo interpreta como subida muy extendida en poco tiempo.",
@@ -1515,6 +1517,61 @@
         "volumen_bajo": "Se negocia menos de lo habitual: el método da menos peso a los movimientos con poca participación.",
         "volumen_seco": "Se negocia muy poco: los movimientos con tan poca participación tienen poca significación para el método."
       }
+    },
+    "_previo_pe_v4": {
+      "como_leerlo": {
+        "ath": {
+          "subida_libre_establecida": "El precio está por encima de cualquier nivel alcanzado antes: no hay máximos previos por encima que sirvan de referencia.",
+          "en_ath": "El precio está prácticamente en su máximo histórico, en la parte más alta de su historia.",
+          "aproximandose_cerca": "Estar cerca del máximo histórico indica que el precio está en la parte alta de su historia.",
+          "aproximandose": "El precio está algo por debajo de su máximo histórico: cerca de la parte alta de su historia, pero sin alcanzarla.",
+          "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados; el máximo queda como referencia lejana.",
+          "lejos": "El precio está muy por debajo de su máximo histórico: niveles ya alcanzados en el pasado quedan muy lejos."
+        },
+        "sma200": {
+          "giro_alcista_reciente": "La media de largo plazo ha empezado a subir hace poco, después de bajar: el método lo interpreta como un posible cambio de tendencia al alza.",
+          "tendencia_alcista": "La media de largo plazo sube de forma sostenida: el método lo interpreta como tendencia alcista de fondo.",
+          "plana": "La media de largo plazo apenas se mueve: el método no ve tendencia de fondo clara.",
+          "giro_bajista_reciente": "La media de largo plazo ha empezado a bajar hace poco, después de subir: el método lo interpreta como un posible cambio de tendencia a la baja.",
+          "tendencia_bajista": "La media de largo plazo baja de forma sostenida: el método lo interpreta como tendencia bajista de fondo."
+        },
+        "resist": {
+          "en_soporte": "El precio está apoyado sobre un nivel reforzado: el análisis técnico lo toma como zona donde la caída se ha frenado otras veces.",
+          "sin_resistencia": "No hay niveles reforzados por encima del precio: el análisis técnico no ve techos cercanos en los niveles calculados.",
+          "zona_baja_rango": "El precio está más cerca del soporte que de la resistencia: tiene más margen hasta el techo que hasta el suelo.",
+          "zona_media_rango": "El precio está a media distancia entre el soporte y la resistencia más cercanos.",
+          "zona_alta_rango": "El precio está más cerca de la resistencia que del soporte: tiene poco margen hasta el techo cercano.",
+          "en_resistencia": "El precio está justo debajo de un nivel reforzado: el análisis técnico lo toma como zona donde las subidas se han frenado otras veces.",
+          "sin_soporte": "No hay niveles reforzados por debajo del precio: el análisis técnico no ve suelos cercanos en los niveles calculados."
+        },
+        "fibo": {
+          "extension_161": "El precio ha superado con amplitud el máximo del swing: los niveles de extensión son la única referencia por encima.",
+          "extension_127": "El precio ha superado el máximo del swing y se mueve en zona de extensión.",
+          "en_maximo": "El precio está en la parte alta del recorrido del último año, con un retroceso pequeño desde el máximo.",
+          "retroceso_236": "El precio ha corregido poco desde el máximo del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
+          "retroceso_382": "El precio ha devuelto una parte moderada de la subida del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
+          "retroceso_618": "El precio ha devuelto cerca de la mitad o más de la subida del año. El método puntúa esta zona al alza porque el análisis técnico la usa como posible zona de rebote.",
+          "retroceso_786": "El precio ha devuelto la mayor parte de la subida del año: el recorrido alcista se ha debilitado mucho.",
+          "swing_roto": "El precio está cerca del mínimo del año o por debajo: el recorrido alcista del swing se ha perdido."
+        },
+        "rsi": {
+          "sobrecompra_extrema": "El RSI está en niveles muy altos: el método lo interpreta como subida muy extendida en poco tiempo.",
+          "sobrecompra": "El RSI está en sobrecompra: el método lo interpreta como subida extendida, en la que las correcciones son habituales.",
+          "zona_alcista": "El RSI está en la banda alcista: las subidas recientes pesan más que las bajadas, sin llegar a extremos.",
+          "zona_neutra": "El RSI está en la banda neutra: subidas y bajadas recientes están equilibradas.",
+          "zona_bajista": "El RSI está en la banda bajista: las bajadas recientes pesan más que las subidas.",
+          "sobreventa": "El RSI está en sobreventa: el método lo interpreta como caída extendida, tras la que los rebotes son habituales.",
+          "sobreventa_extrema": "El RSI está en niveles muy bajos: el método lo interpreta como caída muy extendida en poco tiempo."
+        },
+        "vol": {
+          "volumen_excepcional": "Se negocia el doble o más de lo habitual: el método lo interpreta como un movimiento con mucha participación.",
+          "volumen_alto": "Se negocia claramente más de lo habitual. Cuando las subidas vienen con más volumen que las bajadas, el método lo interpreta como mayor participación compradora.",
+          "volumen_normal": "Se negocia un volumen en línea con lo habitual: el volumen no añade información a la tendencia.",
+          "volumen_bajo": "Se negocia menos de lo habitual: el método da menos peso a los movimientos con poca participación.",
+          "volumen_seco": "Se negocia muy poco: los movimientos con tan poca participación tienen poca significación para el método."
+        }
+      },
+      "nota_vol": "Alta volatilidad = tamaño de posición más pequeño para el mismo riesgo real: con el doble de volatilidad, la misma cantidad invertida oscila el doble en euros."
     }
   }
 }

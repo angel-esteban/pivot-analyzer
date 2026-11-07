@@ -99,7 +99,8 @@
               "Insurance - Specialty",
               "Insurance Brokers",
               "Asset Management",
-              "Capital Markets"
+              "Capital Markets",
+              "Financial Data & Stock Exchanges"
             ]
           }
         }
@@ -196,7 +197,8 @@
           "nombre": "gestoras de activos",
           "industrias_yahoo": [
             "Asset Management",
-            "Capital Markets"
+            "Capital Markets",
+            "Financial Data & Stock Exchanges"
           ],
           "comportamiento_ciclo": {
             "expansion": "muy favorable — suben los activos gestionados y las comisiones",
@@ -306,7 +308,7 @@
         "deuda_neta_EBITDA": "<3x holgado; >4x vigilar en sector con alta estacionalidad"
       },
       "riesgos_especificos": [
-        "Alta palanca operativa en el comercio minorista (costes fijos elevados)",
+        "Alta palanca operativa en el comercio minorista",
         "Competencia del comercio electrónico sobre el comercio tradicional",
         "Estacionalidad fuerte (hostelería, turismo)",
         "Sensibilidad a tipos de cambio (turismo, importaciones)",
@@ -326,6 +328,15 @@
         "pico": 0,
         "contraccion": -2,
         "recuperacion": 1
+      },
+      "lecciones_industria": {
+        "Apparel Retail": {
+          "leccion_historica": "Entre el 19/02/2020 y el 16/03/2020, con el cierre de tiendas por la pandemia, Inditex cayó un 37,1% (de 32,08 a 20,17 €). El comercio de moda depende de que las tiendas estén abiertas y del gasto no esencial de las familias.",
+          "leccion_cualitativa": "En 2020, el cierre de tiendas por la pandemia hundió en pocas semanas la cotización de las empresas de moda: el sector depende del gasto no esencial de las familias.",
+          "leccion_fuente": "Yahoo Finance (ITX.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+          "leccion_periodo": "19/02/2020 (32,08 €) – 16/03/2020 (20,17 €)",
+          "leccion_validada": false
+        }
       }
     },
     "Consumer Defensive": {
@@ -458,7 +469,7 @@
       "nombre_es": "Utilities / Servicios Públicos",
       "emoji": "🔌",
       "caracter": "defensivo-regulado",
-      "descripcion": "Eléctricas, distribuidoras de gas y agua. Ingresos regulados o semirregulados. Muy predecibles. Alta deuda estructural por inversión en infraestructuras. Muy sensibles a tipos de interés. Proxy de bono para muchos inversores. En el IBEX: Iberdrola, Endesa, Red Eléctrica.",
+      "descripcion": "Eléctricas, distribuidoras de gas y agua. Ingresos regulados o semirregulados. Muy predecibles. Alta deuda estructural por inversión en infraestructuras. Muy sensibles a tipos de interés. Proxy de bono para muchos inversores. En el IBEX: Iberdrola, Endesa, Redeia.",
       "sensibilidad_tipos": {
         "direccion": "muy negativa",
         "intensidad": "alta",
@@ -478,7 +489,7 @@
       },
       "comportamiento_ciclo": {
         "expansion": "negativo relativo — rendimiento inferior frente a cíclicos",
-        "pico": "positivo — rotación defensiva, bajan tipos a futuro = compresión de spread",
+        "pico": "positivo — los inversores rotan hacia sectores estables y empiezan a descontar bajadas de tipos, que favorecen a los valores que se comportan como bonos",
         "contraccion": "muy positivo — dividendo estable, demanda de electricidad inelástica",
         "recuperacion": "neutral-negativo — cíclicos lideran"
       },

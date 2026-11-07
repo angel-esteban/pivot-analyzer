@@ -880,12 +880,13 @@ def test_pa3_05_coherencia():
     tab = {"ath": "_PUNTUACIONES_ATH", "sma200": "_PUNTUACIONES_SMA200", "resist": "_PUNTUACIONES_RESIST",
            "fibo": "_PUNTUACIONES_FIBO", "rsi": "_PUNTUACIONES_RSI", "vol": "_PUNTUACIONES_VOL"}
     comps = []
-    for k, objetivo in zip(["ath", "sma200", "resist", "fibo", "rsi", "vol"], [7, 7, 8, 7, 7, 7]):
+    # Doc. 22: la SMA200 ya no tiene un tramo de 7; 7, 6, 8, 7, 7, 7 → 6,95 → 7,0 (redondeo hacia arriba en el 5)
+    for k, objetivo in zip(["ath", "sma200", "resist", "fibo", "rsi", "vol"], [7, 6, 8, 7, 7, 7]):
         t = _APP[tab[k]]
         esc = next(e for e, p in t.items() if p == objetivo)
         comps.append({"escenario": esc})
     pt = _APP["calcular_puntuacion_tecnica"](*comps)
-    _check(f"{pt['score_total']:.1f}" == "7.2", f"T-PA3-05e: diagnóstico {pt['score_total']} (esperado 7,2)")
+    _check(f"{pt['score_total']:.1f}" == "7.0", f"T-PA3-05e: diagnóstico {pt['score_total']} (esperado 7,0)")
     _check("round(_li_score_h*2)/2" not in src and "round(_lip_score*2)/2" not in src
            and "round(_sc2 * 2) / 2" not in src, "T-PA3-05e: queda un redondeo a 0,5 en otra sección")
     # Volumen alto con distribución no puntúa positivo
@@ -1311,7 +1312,7 @@ def test_pe02_tramos():
     _check("Zona alta del año ◀ valor analizado" in h and "Tramos de referencia del método" in h,
            "T-PE-02a: tramo resaltado y rótulo del método")
     hv = _APP["html_bloque_tramos"]("volatilidad", 19.9, "19,9%", crit)
-    _check("±19,9%" in hv and "no una previsión" in hv and "oscila el doble en euros" in hv,
+    _check("±19,9%" in hv and "no una previsión" in hv and "más oscila en euros la misma cantidad" in hv,   # doc. 23 E-10
            "T-PE-02: ejemplo de volatilidad y nota de tamaño")
     # mismos tramos que el informe de estrategia de Dividendos
     _b = [t["hasta"] for t in cfg["pos_52s"]["tramos"][:2]]
@@ -1630,21 +1631,6 @@ def test_d21_subtipos_energy_textos():
            "D21 §2d: historial insuficiente")
 
 
-def _diag_ntgy():
-    res = {"precio": 29.95, "detalle": "R2 Semanal + EMA20", "pivot": "R2 Sem", "tipo": "R"}
-    sop = {"precio": 28.80, "detalle": "PP Diario + SMA50", "pivot": "PP Dia", "tipo": "S"}
-    a = {"ath": {"escenario": "aproximandose", "ath": 31.12, "dist_pct": -4.43, "ath_fecha_dia": "26/10/2026"},
-         "sma200": {"escenario": "tendencia_alcista", "sma200": 28.05, "dist_pct": 6.0, "pend_5_abs": 0.02,
-                    "pend_past_abs": 0.015, "umbral_plano": 0.0084},
-         "resist": {"escenario": "en_resistencia", "resistencia": res, "soporte": sop, "dist_resist": 0.7,
-                    "dist_soporte": 3.2, "pos_rango_pct": 82},
-         "fibo": {"escenario": "retroceso_236", "swing_min": 24.30, "swing_max": 31.12, "fecha_min": "12/12/2025",
-                  "fecha_max": "26/10/2026", "retroceso_max_pct": 20.2, "n_sesiones": 252, "frase_retroceso": "x"},
-         "rsi": {"escenario": "zona_neutra", "rsi_val": 47.7},
-         "vol": {"escenario": "volumen_normal", "vol_5d": 1e6, "vol_20d": 1.2e6, "vol_rel": 83, "acc_dist": "neutral",
-                 "vol_alc": 4e6, "vol_baj": 5e6}}
-    pt = _APP["calcular_puntuacion_tecnica"](a["ath"], a["sma200"], a["resist"], a["fibo"], a["rsi"], a["vol"])
-    return a, pt
 
 
 def test_pe11_fichas_componentes():
@@ -1681,44 +1667,6 @@ def test_pe11_fichas_componentes():
            "T-PE-11: umbrales de resistencias (1,5% y 35/65%)")
 
 
-def test_pe12_pe14_nota_y_conclusion():
-    import copy
-    a, pt = _diag_ntgy()
-    calc = _APP["calculo_nota_global"](pt)
-    _check(pt["score_total"] == 5.3 and calc["formula"].startswith("0,15 × 6") and calc["formula"].endswith("= 5,25 → 5,3"),
-           f"T-PE-12a: {calc['formula']}")
-    crit = _APP["_cargar_criteria"]()
-    h = _APP["html_nota_global"](pt, crit)
-    _check("Estructura mixta: los componentes no coinciden. ◀ nota actual" in h and "≥ 6,5" in h, "T-PE-12a: tramo mixta")
-    c2 = copy.deepcopy(crit); c2["diagnostico_paso2"]["cortes"]["alcista"] = 5.0
-    _check(_APP["tramo_estructura"](5.3, c2) == "alcista" and "≥ 5,0" in _APP["html_nota_global"](pt, c2), "T-PE-12b: corte desde criteria.json")
-    cv = {"clave": "a_favor"}
-    c = _APP["conclusion_paso2"](pt, a, 29.74, cv, crit)
-    for frag in ("estructura mixta (5,3/10)", "Apoyan: Media de 200 sesiones (7/10)", "Restan: Resistencias (2/10)",
-                 "un cierre por encima de 29,95 €", "matiza (Paso 1: a favor)"):
-        _check(frag in c["texto"], f"T-PE-14 NTGY: falta «{frag}» en {c['texto']}")
-    rel = lambda v, sc: _APP["conclusion_paso2"]({**pt, "score_total": sc}, a, 29.74, {"clave": v}, crit)["relacion"]
-    _check(rel("a_favor", 7.0) == "coherente" and rel("en_contra", 3.0) == "coherente" and rel("a_favor", 3.0) == "contradice"
-           and rel("en_contra", 7.0) == "contradice" and rel("neutra", 5.0) == "coherente" and rel("neutra", 7.0) == "matiza",
-           "T-PE-14: regla de relación con el Paso 1")
-    _check("no se puede establecer" in _APP["conclusion_paso2"](pt, a, 29.74, None, crit)["texto"], "T-PE-14: sin conclusión del Paso 1")
-    # T-PE-13a — redacción del Paso 2
-    d2 = crit.get("diagnostico_paso2", {})
-    textos = [c["texto"], c["por_que"], h] + list(d2.get("que_es", {}).values()) + list(d2["cortes"]["rotulos"].values())
-    for comp in d2.get("como_leerlo", {}).values():
-        textos += list(comp.values())
-    for k in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
-        textos.append(_APP["html_ficha_componente"](k, a[k], pt["scores_ind"][k], 29.74, crit))
-    t = " ".join(textos).lower()
-    _malos = [x for x in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 + ("probabilidad",) if x in t] + _hay_compra_venta(t)
-    _check(not _malos, f"T-PE-13a: términos no admitidos {_malos}")
-    src = _A._RUTA_APP.read_text(encoding="utf-8")
-    _i = src.index("    elif _step == 2:\n"); _j = src.index("# ── PASO 3: SEMÁFORO", _i)
-    _check("probabilidades" not in src[_i:_j] and "0.618 es el nivel" not in src[_i:_j], "T-PE-13a: textos antiguos retirados")
-    # T-PE-15a — una sola función para el informe y el Paso 2
-    _check(src.count("diagnostico_tecnico(ticker_activo, hist, precio, nombre, niveles_reforzados") == 1
-           and src.count("diagnostico_tecnico(_ticker, hist, _precio, _nombre, _niv_ref)") == 1
-           and 'yf.Ticker(_ticker).history(period="15y"' not in src, "T-PE-15a: misma función en informe y Paso 2")
 
 
 def test_exportacion_imprimible_pasos():
@@ -1750,6 +1698,147 @@ def test_exportacion_imprimible_pasos():
     src = _A._RUTA_APP.read_text(encoding="utf-8")
     _check("def _pp_wizard_cuerpo(st):" in src and "_pp_wizard_cuerpo(_grab)" in src
            and "_ph_export.download_button(" in src, "Exportación: botón en el fragmento del asistente")
+
+
+def _diag_ntgy():
+    res = {"precio": 29.95, "detalle": "R2 Semanal + EMA20", "pivot": "R2 Sem", "tipo": "R"}
+    sop = {"precio": 28.80, "detalle": "S1 Trimestral + SMA50", "pivot": "S1 Tri", "tipo": "S"}
+    a = {"ath": {"escenario": "aproximandose", "ath": 31.12, "dist_pct": -4.43, "ath_fecha_dia": "26/10/2026"},
+         "sma200": {"escenario": "tendencia_alcista", "escenario_nota": "tendencia_alcista_encima", "precio_sobre": True,
+                    "sma200": 28.05, "dist_pct": 6.0, "pend_5_abs": 0.02, "pend_past_abs": 0.015, "umbral_plano": 0.0084},
+         "resist": {"escenario": "en_resistencia", "resistencia": res, "soporte": sop, "dist_resist": 0.7,
+                    "dist_soporte": 3.2, "pos_rango_pct": 82},
+         "fibo": {"escenario": "retroceso_236", "swing_min": 24.30, "swing_max": 31.12, "fecha_min": "12/12/2025",
+                  "fecha_max": "26/10/2026", "retroceso_max_pct": 20.2, "n_sesiones": 252, "frase_retroceso": "x"},
+         "rsi": {"escenario": "zona_neutra", "rsi_val": 47.7},
+         "vol": {"escenario": "volumen_normal", "vol_5d": 1e6, "vol_20d": 1.2e6, "vol_rel": 83, "acc_dist": "distribucion",
+                 "vol_alc": 1.6e6, "vol_baj": 8.4e6}}
+    pt = _APP["calcular_puntuacion_tecnica"](a["ath"], a["sma200"], a["resist"], a["fibo"], a["rsi"], a["vol"])
+    return a, pt
+
+
+def test_pe12_pe14_nota_y_conclusion():
+    import copy
+    a, pt = _diag_ntgy()
+    calc = _APP["calculo_nota_global"](pt)
+    _check(pt["score_total"] == 5.6 and calc["formula"].startswith("0,15 × 6") and calc["formula"].endswith("= 5,60 → 5,6"),
+           f"T-PE-12a (doc. 22 §3, NTGY 5,6): {calc['formula']}")
+    crit = _APP["_cargar_criteria"]()
+    h = _APP["html_nota_global"](pt, crit)
+    _check("Estructura mixta: los componentes no coinciden. ◀ nota actual" in h and "≥ 6,5" in h, "T-PE-12a: tramo mixta")
+    c2 = copy.deepcopy(crit); c2["diagnostico_paso2"]["cortes"]["alcista"] = 5.0
+    _check(_APP["tramo_estructura"](5.6, c2) == "alcista" and "≥ 5,0" in _APP["html_nota_global"](pt, c2), "T-PE-12b: corte desde criteria.json")
+    c = _APP["conclusion_paso2"](pt, a, 29.74, {"clave": "a_favor"}, crit)
+    for frag in ("estructura mixta (5,6/10)", "Apoyan: Media de 200 sesiones (8/10), Fibonacci (7/10)",
+                 "Restan: Resistencias (2/10)", "Resistencias: un cierre por encima de 29,95 €", "matiza (Paso 1: a favor)"):
+        _check(frag in c["texto"], f"T-PE-14 NTGY: falta «{frag}» en {c['texto']}")
+    rel = lambda v, sc: _APP["conclusion_paso2"]({**pt, "score_total": sc}, a, 29.74, {"clave": v}, crit)["relacion"]
+    _check(rel("a_favor", 7.0) == "coherente" and rel("en_contra", 3.0) == "coherente" and rel("a_favor", 3.0) == "contradice"
+           and rel("en_contra", 7.0) == "contradice" and rel("neutra", 5.0) == "coherente" and rel("neutra", 7.0) == "matiza",
+           "T-PE-14: regla de relación con el Paso 1")
+    _check("no se puede establecer" in _APP["conclusion_paso2"](pt, a, 29.74, None, crit)["texto"], "T-PE-14: sin conclusión del Paso 1")
+    # E-1: con el RSI como componente que resta, el «qué cambiaría» empieza por su nombre
+    a2 = copy.deepcopy(a); a2["rsi"] = {"escenario": "zona_bajista", "rsi_val": 38.8}
+    a2["resist"]["escenario"] = "zona_media_rango"
+    pt2 = _APP["calcular_puntuacion_tecnica"](a2["ath"], a2["sma200"], a2["resist"], a2["fibo"], a2["rsi"], a2["vol"])
+    c3 = _APP["conclusion_paso2"](pt2, a2, 10.7, {"clave": "en_contra"}, crit)
+    _check("Qué cambiaría esta lectura:</b> RSI estructural: que el RSI supere 45 (pasaría a neutro, 5/10)" in c3["texto"],
+           f"Doc. 23 E-1: {c3['texto']}")
+    # T-PE-13a — redacción del Paso 2
+    d2 = crit.get("diagnostico_paso2", {})
+    textos = [c["texto"], c["por_que"], h] + list(d2.get("que_es", {}).values()) + list(d2["cortes"]["rotulos"].values())
+    for comp in d2.get("como_leerlo", {}).values():
+        textos += list(comp.values())
+    for k in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
+        textos.append(_APP["html_ficha_componente"](k, a[k], pt["scores_ind"][k], 29.74, crit))
+    t = " ".join(textos).lower()
+    _malos = [x for x in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 + ("probabilidad",) if x in t] + _hay_compra_venta(t)
+    _check(not _malos, f"T-PE-13a: términos no admitidos {_malos}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _i = src.index("    elif _step == 2:\n"); _j = src.index("# ── PASO 3: SEMÁFORO", _i)
+    _check("probabilidades" not in src[_i:_j] and "0.618 es el nivel" not in src[_i:_j], "T-PE-13a: textos antiguos retirados")
+    _check(src.count("diagnostico_tecnico(ticker_activo, hist, precio, nombre,") == 1
+           and src.count("diagnostico_tecnico(_ticker, hist, _precio, _nombre)") == 1
+           and 'yf.Ticker(_ticker).history(period="15y"' not in src, "T-PE-15a: misma función en informe y Paso 2")
+
+
+def test_doc22_reglas_motor():
+    import pandas as pd, numpy as np
+    P = _APP
+    _check(P["_PUNTUACIONES_SMA200"] == {"giro_alcista_encima": 9, "tendencia_alcista_encima": 8, "plana_encima": 6,
+           "positiva_debajo": 5, "plana_debajo": 4, "negativa_encima": 4, "giro_bajista_debajo": 2,
+           "tendencia_bajista_debajo": 1}, "Doc. 22 §2.1 tabla SMA200")
+    _check(P["_PUNTUACIONES_FIBO"] == {"en_maximo": 8, "retroceso_236": 7, "retroceso_382": 6, "retroceso_500": 5,
+           "retroceso_618": 4, "retroceso_786": 3, "swing_roto": 1}, "Doc. 22 §2.2 tabla Fibonacci")
+    _check(P["_PUNTUACIONES_RSI"] == {"sobrecompra_extrema": 4, "sobrecompra": 6, "zona_alcista": 7, "zona_neutra": 5,
+           "zona_bajista": 3, "sobreventa": 2, "sobreventa_extrema": 2}, "Doc. 22 §2.3 tabla RSI")
+    idx = pd.bdate_range("2025-01-01", periods=260)
+    sube = pd.Series(np.linspace(50, 100, 260), index=idx)
+    h = pd.DataFrame({"Open": sube, "High": sube * 1.01, "Low": sube * 0.99, "Close": sube, "Volume": 1e6})
+    _check(P["analizar_sma200"](h, 100.0, "X")["escenario_nota"] == "tendencia_alcista_encima", "Doc. 22 §2.1: alcista + encima")
+    _check(P["analizar_sma200"](h, 60.0, "X")["escenario_nota"] == "positiva_debajo", "Doc. 22 §2.1: pendiente positiva + precio debajo")
+    # Fibonacci por retroceso real y nota informativa (50–78,6 %)
+    up = np.r_[np.linspace(100, 200, 200), np.linspace(200, 145, 52)]
+    hf = pd.DataFrame({"Open": up, "High": up, "Low": up, "Close": up, "Volume": 1e6}, index=pd.bdate_range("2025-01-01", periods=252))
+    f = P["analizar_fibonacci"](hf, 145.0, "X")
+    _check(f["escenario"] == "retroceso_618" and "posible zona de rebote" in f["nota_informativa"], f"Doc. 22 §2.2: 55% → {f['escenario']}")
+    f2 = P["analizar_fibonacci"](hf, 170.0, "X")
+    _check(f2["escenario"] == "retroceso_382" and not f2["nota_informativa"], f"Doc. 22 §2.2: 30% → {f2['escenario']}")
+    # RSI: sobreventa con nota informativa
+    baja = pd.Series(np.r_[np.linspace(100, 98, 30), np.linspace(98, 60, 30)], index=pd.bdate_range("2025-01-01", periods=60))
+    hr = pd.DataFrame({"Open": baja, "High": baja, "Low": baja, "Close": baja, "Volume": 1e6})
+    r = P["analizar_rsi"](hr, 60.0, "X")
+    _check(r["escenario"] in ("sobreventa", "sobreventa_extrema") and "posible rebote" in r["nota_informativa"]
+           and "entrada" not in r["texto"], f"Doc. 22 §2.3: RSI {r['rsi_val']:.1f} {r['escenario']}")
+    # Máximo anterior a la sesión actual (§2.4) y rótulo «Máximo desde» (E-2)
+    hl = pd.DataFrame({"High": np.r_[np.linspace(50, 100, 99), 105.0], "Low": 40.0, "Close": 60.0},
+                      index=pd.bdate_range("2012-01-02", periods=100))
+    m = P["analizar_maximos_historicos"](hl, 103.0, "X")
+    _check(m["ath"] == 100.0 and m["escenario"] == "subida_libre_establecida", f"Doc. 22 §2.4: {m['ath']} {m['escenario']}")
+    m2 = P["analizar_maximos_historicos"](hl, 99.5, "X")
+    _check(m2["escenario"] == "en_ath" and P["titulo_componente"]("ath", {**m2, "historia_completa": False}) == "Máximo desde " + m2["desde"],
+           "Doc. 23 E-2: máximo desde el inicio del histórico")
+    # Pivots del Diagnóstico: clásicos, sin diario (§2.6, E-8); redondeo hacia arriba en el 5 (§2.7)
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("Diario" not in P["DIAG_TIMEFRAMES_NIVELES"] and 'calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico")' in src,
+           "Doc. 22 §2.6 / doc. 23 E-8: niveles del Diagnóstico")
+    _check(P["diag_1d"](7.25) == 7.3 and P["diag_1d"](5.25) == 5.3 and P["diag_1d"](4.35) == 4.4 and P["diag_1d"](3.65) == 3.7,
+           "Doc. 22 §2.7: redondeo hacia arriba en el 5")
+
+
+def test_doc22_23_respaldo_y_textos():
+    P = _APP
+    sec = P["SECTOR_KNOWLEDGE"]["sectores"]
+    _check(P["TICKER_SECTOR_FALLBACK"]["MRL.MC"] == "Real Estate" and P["TICKER_SECTOR_FALLBACK"]["COL.MC"] == "Real Estate"
+           and P["TICKER_SECTOR_FALLBACK"]["ENG.MC"] == "Utilities" and P["TICKER_SECTOR_FALLBACK"]["VIS.MC"] == "Consumer Defensive",
+           "Doc. 22 §4.5: tabla de sector de respaldo")
+    fi = P["TICKER_INDUSTRIA_FALLBACK"]
+    _check(P["sector_con_subtipo"](sec["Financial Services"], fi["MAP.MC"])["_subtipo_ciclo"] == "seguros"
+           and P["sector_con_subtipo"](sec["Communication Services"], fi["CLNX.MC"])["_subtipo_ciclo"] == "telecos"
+           and all(P["sector_con_subtipo"](sec["Financial Services"], fi[t])["_subtipo_ciclo"] == "banca"
+                   for t in ("SAN.MC", "BBVA.MC", "CABK.MC", "SAB.MC", "BKT.MC", "UNI.MC")), "Doc. 22 §4.2: industria de respaldo")
+    _check(P["sector_con_subtipo"](sec["Financial Services"], "Financial Data & Stock Exchanges")["_subtipo_ciclo"] == "gestoras de activos"
+           and P["sector_con_subtipo"](sec["Financial Services"], "Capital Markets")["_subtipo_ciclo"] == "gestoras de activos",
+           "Doc. 22 §4.1: Capital Markets y Financial Data con gestoras")
+    itx = P["sector_con_subtipo"](sec["Consumer Cyclical"], fi["ITX.MC"])
+    _check("Inditex" in itx["leccion_historica"] and itx["leccion_validada"] is False, "Doc. 23 E-6: lección por industria (ITX)")
+    _check("Redeia" in sec["Utilities"]["descripcion"] and "Red Eléctrica" not in sec["Utilities"]["descripcion"]
+           and sec["Utilities"]["comportamiento_ciclo"]["pico"].startswith("positivo — los inversores rotan"), "Doc. 23 E-11")
+    _check(not any("(costes fijos elevados)" in r for r in sec["Consumer Cyclical"]["riesgos_especificos"]), "Doc. 23 E-7")
+    _check(P["tramos_contexto"]()["volatilidad"]["nota"] == "A más volatilidad, más oscila en euros la misma cantidad invertida.",
+           "Doc. 23 E-10")
+    a, pt = _diag_ntgy()
+    _check("En las últimas 10 sesiones, el volumen se concentra en los días bajistas (84%)" in
+           P["html_ficha_componente"]("vol", a["vol"], pt["scores_ind"]["vol"], 29.74), "Doc. 23 E-3: reparto del volumen")
+    _check("Regla adicional" not in P["html_ficha_componente"]("vol", a["vol"], pt["scores_ind"]["vol"], 29.74)
+           and "retira el tope" not in P["que_cambiaria_componente"]("vol", a["vol"], 29.74), "Doc. 23 E-9: tope que no actúa")
+    alto = {**a["vol"], "escenario": "volumen_alto"}
+    _check("retira el tope" in P["que_cambiaria_componente"]("vol", alto, 29.74), "Doc. 23 E-9: tope que sí actúa")
+    sin = {**a["resist"], "resistencia": None, "soporte": None}
+    _check("sin resistencia reforzada" in P["datos_componente"]("resist", sin, 10) and "sin soporte reforzado" in P["datos_componente"]("resist", sin, 10),
+           "Doc. 23 E-4: concordancia")
+    _check(P["_num_tip"](-0.00001) == "0,0000" and P["_num_tip"](-0.0668) == "−0,0668" and P["_num_tip"](0.0878) == "0,0878",
+           "Doc. 23 E-5: signo y cero")
 
 
 def _dependencias_ok() -> bool:
