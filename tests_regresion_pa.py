@@ -1721,6 +1721,37 @@ def test_pe12_pe14_nota_y_conclusion():
            and 'yf.Ticker(_ticker).history(period="15y"' not in src, "T-PE-15a: misma función en informe y Paso 2")
 
 
+def test_exportacion_imprimible_pasos():
+    """Botón «Descargar el Paso N para imprimir»: el grabador reenvía a Streamlit y guarda el contenido."""
+    class _Ctx:
+        def __enter__(self): return self
+        def __exit__(self, *e): return False
+
+    class _StFalso:
+        def __init__(self): self.n = 0
+        def markdown(self, *a, **k): self.n += 1
+        def caption(self, *a, **k): self.n += 1
+        def info(self, *a, **k): self.n += 1
+        def expander(self, *a, **k): return _Ctx()
+        def columns(self, n, **k): return [_Ctx() for _ in range(n)]
+
+    real = _StFalso()
+    g = _APP["_GrabadorPaso"](real)
+    g.markdown("<div class='pp-card'>Paso</div>", unsafe_allow_html=True)
+    with g.expander("Máximo histórico — Aproximándose (6/10)"):
+        g.markdown("<p>ficha</p>", unsafe_allow_html=True)
+    g.info("**Nota** final")
+    c1, c2 = g.columns(2)
+    _check(real.n == 3, "Exportación: el grabador reenvía las llamadas a Streamlit")
+    h = _APP["html_exportacion_paso"](g.partes, "NTGY.MC", 2, "Estructura", "Naturgy Energy Group")
+    _check(h.startswith("<!doctype html>") and "Paso 2 — Estructura" in h and "Naturgy Energy Group (NTGY.MC)" in h
+           and "<details open><summary>Máximo histórico — Aproximándose (6/10)</summary><p>ficha</p></details>" in h
+           and "<b>Nota</b> final" in h and ".pp-card{" in h, "Exportación: HTML imprimible del paso")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("def _pp_wizard_cuerpo(st):" in src and "_pp_wizard_cuerpo(_grab)" in src
+           and "_ph_export.download_button(" in src, "Exportación: botón en el fragmento del asistente")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""

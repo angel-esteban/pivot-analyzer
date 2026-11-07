@@ -12857,8 +12857,142 @@ def html_historial_insuficiente(n: int) -> str:
             f'media de 200 sesiones ({n} sesiones disponibles): no hay conclusión del valor.</div>')
 
 
+# ── Exportación imprimible de cada paso de «¿Por dónde empiezo?» ──
+_PP_CSS_EXPORT = """
+body{font-family:'Segoe UI',Arial,sans-serif;max-width:1050px;margin:24px auto;padding:0 16px;color:#1e293b;background:#fff}
+.pp-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.2rem 1.4rem;margin:.6rem 0}
+.pp-title{font-size:1.15rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem}
+.pp-edu{background:#eff6ff;border-left:4px solid #2563eb;padding:.7rem 1rem;border-radius:0 8px 8px 0;font-size:.88rem;color:#1e40af;margin:.8rem 0}
+.pp-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;margin:2px}
+.pp-score-bar{height:14px;border-radius:7px;background:#e2e8f0;margin:.4rem 0}
+.pp-score-fill{height:14px;border-radius:7px}
+.exp-cab{border-bottom:2px solid #1e3a5f;margin-bottom:12px;padding-bottom:6px}
+.exp-cab h1{font-size:1.25rem;margin:0;color:#1e3a5f}
+.exp-cab div{font-size:.82rem;color:#475569}
+.exp-caption{font-size:.8rem;color:#64748b;margin:.2rem 0}
+.exp-caja{padding:.6rem .8rem;border-radius:6px;margin:.4rem 0;font-size:.88rem}
+details{border:1px solid #e2e8f0;border-radius:8px;padding:.4rem .7rem;margin:.4rem 0;break-inside:avoid}
+summary{font-weight:700;color:#334155;cursor:pointer}
+.exp-pie{font-size:.75rem;color:#64748b;margin-top:18px;border-top:1px solid #e2e8f0;padding-top:6px}
+@media print{body{margin:0;max-width:none}.exp-noprint{display:none}}
+"""
+
+
+def _md_a_html(t) -> str:
+    """Markdown sencillo de Streamlit (negritas, saltos) → HTML, sin tocar entidades HTML."""
+    import re as _re
+    t = str(t or "")
+    t = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = _re.sub(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", r"<i>\1</i>", t)
+    return t.replace("\n\n", "<br><br>")
+
+
+class _ExpanderGrabado:
+    """Context manager: abre el expander real y registra su contenido como <details open>."""
+    def __init__(self, grab, real, etiqueta):
+        self._g, self._real, self._etq = grab, real, etiqueta
+
+    def __enter__(self):
+        self._g.partes.append(f"<details open><summary>{_md_a_html(self._etq)}</summary>")
+        self._real.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        self._g.partes.append("</details>")
+        return self._real.__exit__(*exc)
+
+    def __getattr__(self, n):
+        return getattr(self._real, n)
+
+
+class _GrabadorPaso:
+    """Reenvía todas las llamadas a Streamlit y guarda lo que se muestra (texto, tablas, fichas)
+    para exportar el paso como HTML imprimible. Botones y controles no se exportan."""
+    _CAJAS = {"info": "#eff6ff", "success": "#f0fdf4", "warning": "#fffbeb", "error": "#fef2f2"}
+
+    def __init__(self, st_real):
+        self._st = st_real
+        self.partes = []
+
+    def __getattr__(self, n):
+        return getattr(self._st, n)
+
+    def markdown(self, body, *a, **k):
+        self.partes.append(str(body) if k.get("unsafe_allow_html") else f"<div>{_md_a_html(body)}</div>")
+        return self._st.markdown(body, *a, **k)
+
+    def caption(self, body, *a, **k):
+        self.partes.append(f'<div class="exp-caption">{_md_a_html(body)}</div>')
+        return self._st.caption(body, *a, **k)
+
+    def code(self, body, *a, **k):
+        import html as _h
+        self.partes.append(f"<pre>{_h.escape(str(body))}</pre>")
+        return self._st.code(body, *a, **k)
+
+    def expander(self, etiqueta, *a, **k):
+        return _ExpanderGrabado(self, self._st.expander(etiqueta, *a, **k), etiqueta)
+
+    def _caja(self, tipo, body, *a, **k):
+        self.partes.append(f'<div class="exp-caja" style="background:{self._CAJAS[tipo]}">{_md_a_html(body)}</div>')
+        return getattr(self._st, tipo)(body, *a, **k)
+
+    def info(self, body, *a, **k):
+        return self._caja("info", body, *a, **k)
+
+    def success(self, body, *a, **k):
+        return self._caja("success", body, *a, **k)
+
+    def warning(self, body, *a, **k):
+        return self._caja("warning", body, *a, **k)
+
+    def error(self, body, *a, **k):
+        return self._caja("error", body, *a, **k)
+
+
+def html_exportacion_paso(partes: list, ticker: str, paso: int, nombre_paso: str, nombre_valor: str = "") -> str:
+    """Documento HTML autónomo con todo el contenido del paso (expanders abiertos), listo para
+    abrir en el navegador e imprimir o guardar como PDF."""
+    import html as _h
+    _cab = (f'<div class="exp-cab"><h1>¿Por dónde empiezo? · Paso {paso} — {_h.escape(nombre_paso)}</h1>'
+            f'<div>{_h.escape(nombre_valor or ticker)} ({_h.escape(ticker)}) · generado el {ahora_madrid()} '
+            f'(hora de Madrid) · PivotAnalyzer</div></div>'
+            f'<div class="exp-noprint exp-caption">Para pasarlo a PDF: Imprimir (Ctrl+P) → «Guardar como PDF».</div>')
+    _pie = ('<div class="exp-pie">Exportado desde PivotAnalyzer. Contenido del paso tal como se muestra en la app, '
+            'con todos los desplegables abiertos. Los botones de navegación no se incluyen.</div>')
+    return ("<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>Paso {paso} · {_h.escape(ticker)}</title><style>{_PP_CSS_EXPORT}</style></head><body>"
+            + _cab + "".join(partes) + _pie + "</body></html>")
+
+
+_PP_NOMBRES_PASO = {1: "Contexto Macro", 2: "Estructura", 3: "Momento", 4: "Niveles"}
+
+
 @st.fragment
 def _pp_wizard_fragment():
+    """Fragmento del wizard ¿Por dónde empiezo? (solo este bloque se re-ejecuta al navegar).
+    Muestra el paso y ofrece descargarlo como HTML imprimible para enviarlo a revisión."""
+    _ph_export = st.empty()
+    _grab = _GrabadorPaso(st)
+    _pp_wizard_cuerpo(_grab)
+    _tk = st.session_state.get("_pp_ticker", "")
+    _paso = int(st.session_state.get("_pp_step", 1) or 1)
+    _d = st.session_state.get("_pp_data") or {}
+    # Las tarjetas de navegación del asistente no se exportan (el título ya indica el paso)
+    _partes = [p for p in _grab.partes if "box-sizing:border-box;min-height:110px" not in p]
+    if _tk and _partes and _d.get("ticker") == _tk:
+        _html = html_exportacion_paso(_partes, _tk, _paso, _PP_NOMBRES_PASO.get(_paso, ""), _d.get("nombre", ""))
+        _ph_export.download_button(
+            f"🖨️ Descargar el Paso {_paso} para imprimir",
+            data=_html.encode("utf-8"),
+            file_name=f"PorDondeEmpiezo_{_tk.replace('.', '_')}_Paso{_paso}_{ahora_madrid('%Y%m%d_%H%M')}.html",
+            mime="text/html", key=f"_pp_export_{_paso}",
+            help="Descarga todo el contenido del paso (desplegables abiertos) en un HTML. Ábrelo en el navegador "
+                 "e imprímelo o guárdalo como PDF con Ctrl+P.")
+
+
+def _pp_wizard_cuerpo(st):
     """Fragmento del wizard ¿Por dónde empiezo?
     Solo este bloque se re-ejecuta al navegar entre pasos.
     La app completa NO se re-ejecuta -> navegación instantánea.
