@@ -44,7 +44,7 @@
       },
       "riesgos_especificos": [
         "Obsolescencia tecnológica acelerada",
-        "Concentración: las 5 mayores empresas representan >25% del S&P 500",
+        "Concentración: unas pocas grandes empresas pesan mucho en los índices, como el S&P 500",
         "Regulación antimonopolio (UE, FTC)",
         "Ciclos de semiconductores muy volátiles (inventarios)",
         "Trampa de la narrativa sin flujos de caja reales (dotcom 1999)"
@@ -69,7 +69,7 @@
       "nombre_es": "Servicios Financieros",
       "emoji": "🏦",
       "caracter": "cíclico",
-      "descripcion": "Bancos, aseguradoras, gestoras de activos y servicios financieros diversificados. Beneficiarios directos de tipos altos (margen de intereses) pero vulnerables a deterioro crediticio en recesión. En España representa >30% del IBEX 35.",
+      "descripcion": "Bancos, aseguradoras, gestoras de activos y servicios financieros diversificados. Beneficiarios directos de tipos altos (margen de intereses) pero vulnerables a deterioro crediticio en recesión. En España es el sector con más peso del IBEX 35.",
       "sensibilidad_tipos": {
         "direccion": "positiva (banca comercial) / mixta (aseguradoras, gestoras)",
         "intensidad": "alta",
@@ -145,6 +145,72 @@
         "pico": 2,
         "contraccion": -2,
         "recuperacion": 1
+      },
+      "subtipos_ciclo": {
+        "banca": {
+          "nombre": "banca",
+          "por_defecto": true,
+          "industrias_yahoo": [
+            "Banks - Diversified",
+            "Banks - Regional",
+            "Credit Services",
+            "Mortgage Finance"
+          ],
+          "comportamiento_ciclo": {
+            "expansion": "favorable — crecimiento del crédito y bajas provisiones",
+            "pico": "muy favorable si los tipos suben — máximo margen de intereses; vigilar la calidad del crédito",
+            "contraccion": "muy negativo — la morosidad dispara las provisiones",
+            "recuperacion": "favorable — las provisiones se reducen y mejora la calidad de los activos"
+          },
+          "efecto_ciclo": {
+            "expansion": 1,
+            "pico": 2,
+            "contraccion": -2,
+            "recuperacion": 1
+          }
+        },
+        "seguros": {
+          "nombre": "seguros",
+          "industrias_yahoo": [
+            "Insurance - Diversified",
+            "Insurance - Life",
+            "Insurance - Property & Casualty",
+            "Insurance - Reinsurance",
+            "Insurance - Specialty",
+            "Insurance Brokers"
+          ],
+          "comportamiento_ciclo": {
+            "expansion": "favorable — las primas crecen con la actividad",
+            "pico": "favorable — reinvierten su renta fija a mayor rentabilidad",
+            "contraccion": "negativo — caen las primas y el valor de sus inversiones",
+            "recuperacion": "favorable — se recuperan la actividad y las primas"
+          },
+          "efecto_ciclo": {
+            "expansion": 1,
+            "pico": 1,
+            "contraccion": -1,
+            "recuperacion": 1
+          }
+        },
+        "gestoras": {
+          "nombre": "gestoras de activos",
+          "industrias_yahoo": [
+            "Asset Management",
+            "Capital Markets"
+          ],
+          "comportamiento_ciclo": {
+            "expansion": "muy favorable — suben los activos gestionados y las comisiones",
+            "pico": "neutral — los mercados pierden impulso",
+            "contraccion": "muy negativo — caen los activos gestionados y los partícipes retiran dinero",
+            "recuperacion": "muy favorable — los mercados se recuperan y vuelven las suscripciones"
+          },
+          "efecto_ciclo": {
+            "expansion": 2,
+            "pico": 0,
+            "contraccion": -2,
+            "recuperacion": 2
+          }
+        }
       }
     },
     "Healthcare": {
@@ -341,9 +407,9 @@
       },
       "comportamiento_ciclo": {
         "expansion": "favorable — demanda energética crece con la economía",
-        "pico": "neutral — depende más de geopolítica y precio del crudo que del ciclo",
-        "contraccion": "negativo — caída de demanda energética industrial y transporte",
-        "recuperacion": "muy favorable — demanda se reactiva antes que los precios se ajusten"
+        "pico": "favorable — precios de la energía y de las materias primas suelen estar altos al final del ciclo",
+        "contraccion": "muy negativo — la demanda y el precio del crudo caen con la actividad",
+        "recuperacion": "favorable — la demanda se recupera con la actividad"
       },
       "metricas_referencia": {
         "PER": "8-15x para integradas; muy variable según precio del crudo",
@@ -369,9 +435,23 @@
       "leccion_validada": false,
       "efecto_ciclo": {
         "expansion": 1,
-        "pico": 0,
-        "contraccion": -1,
-        "recuperacion": 2
+        "pico": 1,
+        "contraccion": -2,
+        "recuperacion": 1
+      },
+      "_pe_v3_prev": {
+        "comportamiento_ciclo": {
+          "expansion": "favorable — demanda energética crece con la economía",
+          "pico": "neutral — depende más de geopolítica y precio del crudo que del ciclo",
+          "contraccion": "negativo — caída de demanda energética industrial y transporte",
+          "recuperacion": "muy favorable — demanda se reactiva antes que los precios se ajusten"
+        },
+        "efecto_ciclo": {
+          "expansion": 1,
+          "pico": 0,
+          "contraccion": -1,
+          "recuperacion": 2
+        }
       }
     },
     "Utilities": {
@@ -382,7 +462,7 @@
       "sensibilidad_tipos": {
         "direccion": "muy negativa",
         "intensidad": "alta",
-        "explicacion": "Las utilities son el sector más sensible a tipos de todos. Tienen enormes deudas para financiar infraestructuras y sus ingresos regulados crecen poco. Cuando los tipos suben, el coste de refinanciación aumenta y, simultáneamente, compiten con bonos soberanos por el inversor de renta (si el bono paga 4%, la utility a 4% de dividendo pierde atractivo). Doble impacto.",
+        "explicacion": "Las utilities son el sector más sensible a tipos de todos. Tienen enormes deudas para financiar infraestructuras y sus ingresos regulados crecen poco. Cuando los tipos suben, el coste de refinanciación aumenta y, simultáneamente, compiten con bonos soberanos por el inversor de renta (por ejemplo, si el bono paga lo mismo que el dividendo, el dividendo pierde atractivo). Doble impacto.",
         "intensidad_v1": "muy alta",
         "si_suben": "perjudica",
         "motivo": "tienen mucha deuda (subidas de tipos encarecen la financiación) y su dividendo compite con los bonos (si los bonos pagan más, el dividendo pierde atractivo)",
@@ -546,7 +626,7 @@
       "nombre_es": "Inmobiliario / REITs",
       "emoji": "🏢",
       "caracter": "defensivo-income",
-      "descripcion": "SOCIMIs (España), REITs (EEUU), promotoras y servicios inmobiliarios. Activos de larga vida que generan rentas recurrentes. Estructura de deuda alta y obligación de distribución de dividendos >80% del beneficio distribuible. Proxy de bono para el inversor.",
+      "descripcion": "SOCIMIs (España), REITs (EEUU), promotoras y servicios inmobiliarios. Activos de larga vida que generan rentas recurrentes. Estructura de deuda alta y obligación legal de repartir como dividendo la mayor parte de su beneficio. Proxy de bono para el inversor.",
       "sensibilidad_tipos": {
         "direccion": "muy negativa",
         "intensidad": "alta",
@@ -651,6 +731,46 @@
         "pico": 0,
         "contraccion": 0,
         "recuperacion": 0
+      },
+      "subtipos_ciclo": {
+        "telecos": {
+          "nombre": "telecos",
+          "por_defecto": true,
+          "industrias_yahoo": [
+            "Telecom Services"
+          ],
+          "comportamiento_ciclo": {
+            "expansion": "neutral — ingresos estables, poco ligados al ciclo",
+            "pico": "neutral — la deuda pesa más con tipos altos, pero los ingresos aguantan",
+            "contraccion": "favorable — refugio relativo por sus ingresos recurrentes",
+            "recuperacion": "neutral — otros sectores lideran la recuperación"
+          },
+          "efecto_ciclo": {
+            "expansion": 0,
+            "pico": 0,
+            "contraccion": 1,
+            "recuperacion": 0
+          }
+        },
+        "plataformas": {
+          "nombre": "plataformas digitales",
+          "industrias_yahoo": [
+            "Internet Content & Information",
+            "Entertainment"
+          ],
+          "comportamiento_ciclo": {
+            "expansion": "favorable — crece la inversión en publicidad",
+            "pico": "negativo — con tipos altos se valoran peor sus beneficios futuros",
+            "contraccion": "neutral — cae la publicidad, pero su modelo de negocio resiste",
+            "recuperacion": "favorable — la publicidad se recupera pronto"
+          },
+          "efecto_ciclo": {
+            "expansion": 1,
+            "pico": -1,
+            "contraccion": 0,
+            "recuperacion": 1
+          }
+        }
       }
     }
   },

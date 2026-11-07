@@ -1444,5 +1444,77 @@
       "sin_direccion": "Sin dirección de contexto, los niveles (Paso 4) son la referencia principal."
     },
     "nota_fija": "Conclusión automática del método a partir de los datos mostrados. Describe el contexto; la decisión corresponde al usuario."
+  },
+  "diagnostico_paso2": {
+    "_descripcion": "Spec PE v3 (Paso 2). Cortes de la nota global del Diagnóstico Técnico (los usa el motor) y textos didácticos por componente y tramo. Las notas de cada tramo están en el código (_PUNTUACIONES_*), tal como puntúa el motor.",
+    "cortes": {
+      "alcista": 6.5,
+      "bajista": 3.5,
+      "rotulos": {
+        "alcista": "Estructura alcista: la mayoría de componentes apoyan la tendencia.",
+        "mixta": "Estructura mixta: los componentes no coinciden.",
+        "bajista": "Estructura bajista: la mayoría de componentes señalan debilidad."
+      }
+    },
+    "que_es": {
+      "ath": "La distancia entre el precio y el máximo más alto que ha marcado el valor en toda su historia.",
+      "sma200": "La pendiente de la media de los últimos 200 cierres: si la media sube, baja o está plana, y si ha cambiado de dirección en las últimas semanas.",
+      "resist": "Dónde está el precio respecto a los niveles reforzados más cercanos: puntos pivote que coinciden con una media móvil, y que el análisis técnico usa como soportes y resistencias.",
+      "fibo": "Cuánto ha retrocedido el precio desde el máximo del último año, medido como porcentaje del recorrido entre el mínimo y el máximo de ese periodo.",
+      "rsi": "El índice de fuerza relativa de 14 sesiones diarias: compara la magnitud de las subidas y de las bajadas recientes en una escala de 0 a 100.",
+      "vol": "El volumen negociado en las últimas 5 sesiones completas frente a su media de 20, y el reparto del volumen entre días de subida y de bajada en las últimas 10 sesiones."
+    },
+    "como_leerlo": {
+      "ath": {
+        "subida_libre_establecida": "El precio está por encima de cualquier nivel alcanzado antes: no hay máximos previos por encima que sirvan de referencia.",
+        "en_ath": "El precio está prácticamente en su máximo histórico, en la parte más alta de su historia.",
+        "aproximandose_cerca": "Estar cerca del máximo histórico indica que el precio está en la parte alta de su historia.",
+        "aproximandose": "El precio está algo por debajo de su máximo histórico: cerca de la parte alta de su historia, pero sin alcanzarla.",
+        "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados; el máximo queda como referencia lejana.",
+        "lejos": "El precio está muy por debajo de su máximo histórico: niveles ya alcanzados en el pasado quedan muy lejos."
+      },
+      "sma200": {
+        "giro_alcista_reciente": "La media de largo plazo ha empezado a subir hace poco, después de bajar: el método lo interpreta como un posible cambio de tendencia al alza.",
+        "tendencia_alcista": "La media de largo plazo sube de forma sostenida: el método lo interpreta como tendencia alcista de fondo.",
+        "plana": "La media de largo plazo apenas se mueve: el método no ve tendencia de fondo clara.",
+        "giro_bajista_reciente": "La media de largo plazo ha empezado a bajar hace poco, después de subir: el método lo interpreta como un posible cambio de tendencia a la baja.",
+        "tendencia_bajista": "La media de largo plazo baja de forma sostenida: el método lo interpreta como tendencia bajista de fondo."
+      },
+      "resist": {
+        "en_soporte": "El precio está apoyado sobre un nivel reforzado: el análisis técnico lo toma como zona donde la caída se ha frenado otras veces.",
+        "sin_resistencia": "No hay niveles reforzados por encima del precio: el análisis técnico no ve techos cercanos en los niveles calculados.",
+        "zona_baja_rango": "El precio está más cerca del soporte que de la resistencia: tiene más margen hasta el techo que hasta el suelo.",
+        "zona_media_rango": "El precio está a media distancia entre el soporte y la resistencia más cercanos.",
+        "zona_alta_rango": "El precio está más cerca de la resistencia que del soporte: tiene poco margen hasta el techo cercano.",
+        "en_resistencia": "El precio está justo debajo de un nivel reforzado: el análisis técnico lo toma como zona donde las subidas se han frenado otras veces.",
+        "sin_soporte": "No hay niveles reforzados por debajo del precio: el análisis técnico no ve suelos cercanos en los niveles calculados."
+      },
+      "fibo": {
+        "extension_161": "El precio ha superado con amplitud el máximo del swing: los niveles de extensión son la única referencia por encima.",
+        "extension_127": "El precio ha superado el máximo del swing y se mueve en zona de extensión.",
+        "en_maximo": "El precio está en la parte alta del recorrido del último año, con un retroceso pequeño desde el máximo.",
+        "retroceso_236": "El precio ha corregido poco desde el máximo del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
+        "retroceso_382": "El precio ha devuelto una parte moderada de la subida del año. Los retrocesos del 38,2%, 50% y 61,8% son los que más usan los analistas técnicos como referencia.",
+        "retroceso_618": "El precio ha devuelto cerca de la mitad o más de la subida del año. El método puntúa esta zona al alza porque el análisis técnico la usa como posible zona de rebote.",
+        "retroceso_786": "El precio ha devuelto la mayor parte de la subida del año: el recorrido alcista se ha debilitado mucho.",
+        "swing_roto": "El precio está cerca del mínimo del año o por debajo: el recorrido alcista del swing se ha perdido."
+      },
+      "rsi": {
+        "sobrecompra_extrema": "El RSI está en niveles muy altos: el método lo interpreta como subida muy extendida en poco tiempo.",
+        "sobrecompra": "El RSI está en sobrecompra: el método lo interpreta como subida extendida, en la que las correcciones son habituales.",
+        "zona_alcista": "El RSI está en la banda alcista: las subidas recientes pesan más que las bajadas, sin llegar a extremos.",
+        "zona_neutra": "El RSI está en la banda neutra: subidas y bajadas recientes están equilibradas.",
+        "zona_bajista": "El RSI está en la banda bajista: las bajadas recientes pesan más que las subidas.",
+        "sobreventa": "El RSI está en sobreventa: el método lo interpreta como caída extendida, tras la que los rebotes son habituales.",
+        "sobreventa_extrema": "El RSI está en niveles muy bajos: el método lo interpreta como caída muy extendida en poco tiempo."
+      },
+      "vol": {
+        "volumen_excepcional": "Se negocia el doble o más de lo habitual: el método lo interpreta como un movimiento con mucha participación.",
+        "volumen_alto": "Se negocia claramente más de lo habitual. Cuando las subidas vienen con más volumen que las bajadas, el método lo interpreta como mayor participación compradora.",
+        "volumen_normal": "Se negocia un volumen en línea con lo habitual: el volumen no añade información a la tendencia.",
+        "volumen_bajo": "Se negocia menos de lo habitual: el método da menos peso a los movimientos con poca participación.",
+        "volumen_seco": "Se negocia muy poco: los movimientos con tan poca participación tienen poca significación para el método."
+      }
+    }
   }
 }

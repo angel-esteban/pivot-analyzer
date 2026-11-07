@@ -607,7 +607,8 @@ def test_pa3_02_precios_sin_ajustar():
                     kw = {k.arg: k.value for k in n.keywords}
                     ok = isinstance(kw.get("auto_adjust"), ast.Constant) and kw["auto_adjust"].value is False
                     _check(ok, f"PA3-02: history() sin auto_adjust=False en {fn.name} (línea {n.lineno})")
-    _check(vistas >= 6, f"PA3-02: se esperaban ≥6 descargas de histórico revisadas (vistas {vistas})")
+    # PE-15: el Paso 2 ya no descarga su propio histórico largo (usa obtener_hist_maximo, revisada arriba)
+    _check(vistas >= 5, f"PA3-02: se esperaban ≥5 descargas de histórico revisadas (vistas {vistas})")
     # Funcional con yfinance simulado.
     raw = _hist_con_maximo_antiguo()
     yf = _YFFalso(raw)
@@ -1510,7 +1511,12 @@ def test_d17_macro_ipca_y_frescura():
            "D17 §6: la pestaña Macro usa Eurostat (ECOICOP v2) y el DFR del flow FM")
 
 
-_PROHIBIDOS_PE2 = ("comprar", "compra ", "vender", "venta ", "entrar", "salir", "reducir")
+_PROHIBIDOS_PE2 = ("comprar", "vender", "entrar", "salir", "reducir")   # + «compra»/«venta» como palabra (ver _hay_compra_venta)
+
+
+def _hay_compra_venta(t: str) -> list:
+    import re
+    return re.findall(r"\b(?:compra|venta)\b", t)
 
 
 def _lp_pe(precio, sma, h52, l52, vol):
@@ -1569,8 +1575,150 @@ def test_pe09_pe10_conclusiones():
     textos = " ".join(c["texto"] + " " + c.get("por_que", "") for c in
                       (v_itx, v_san, v_ntg, san_s, itx_s, ntg_s, nd, g_itx, g_san, g_ntg)).lower()
     textos += " " + _APP["params_conclusiones"]().get("nota_fija", "").lower()
-    _malos = [t for t in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 if t in textos]
+    _malos = [t for t in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 if t in textos] + _hay_compra_venta(textos)
     _check(not _malos, f"T-PE-10 redacción: términos de operativa {_malos}")
+
+
+_EF_TXT = (("muy favorable", 2), ("muy positivo", 2), ("muy negativo", -2), ("negativo relativo", -1),
+           ("neutral-negativo", -1), ("desfavorable", -1), ("favorable", 1), ("positivo", 1), ("negativo", -1),
+           ("neutral", 0))
+
+
+def _efecto_de_texto(t):
+    t = t.split(" — ")[0].lower()
+    for k, v in _EF_TXT:
+        if t.startswith(k):
+            return v
+    return None
+
+
+def test_d21_subtipos_energy_textos():
+    sec = _APP["SECTOR_KNOWLEDGE"]["sectores"]
+    sub = _APP["sector_con_subtipo"]
+    _check(sub(sec["Financial Services"], "Insurance - Life")["efecto_ciclo"] == {"expansion": 1, "pico": 1, "contraccion": -1, "recuperacion": 1},
+           "D21 §2b seguros")
+    _check(sub(sec["Financial Services"], "Asset Management")["efecto_ciclo"]["expansion"] == 2, "D21 §2b gestoras")
+    _check(sub(sec["Financial Services"], None)["_subtipo_ciclo"] == "banca", "D21 §2b sin industria → banca")
+    _check(sub(sec["Communication Services"], "Internet Content & Information")["efecto_ciclo"] ==
+           {"expansion": 1, "pico": -1, "contraccion": 0, "recuperacion": 1}, "D21 §2a plataformas")
+    _check(sub(sec["Communication Services"], "Telecom Services")["efecto_ciclo"]["contraccion"] == 1, "D21 §2a telecos")
+    _check(sec["Energy"]["efecto_ciclo"] == {"expansion": 1, "pico": 1, "contraccion": -2, "recuperacion": 1}, "D21 §3 Energy")
+    # Regla D21 §3: el número y el texto de cada celda dicen lo mismo
+    filas = []
+    for k, v in sec.items():
+        if v.get("subtipos_ciclo"):
+            filas += [(f"{k}/{n}", s_["comportamiento_ciclo"], s_["efecto_ciclo"]) for n, s_ in v["subtipos_ciclo"].items()]
+        else:
+            filas.append((k, v["comportamiento_ciclo"], v["efecto_ciclo"]))
+    for n, cc, ef in filas:
+        for f in ("expansion", "pico", "contraccion", "recuperacion"):
+            _check(_efecto_de_texto(cc[f]) == ef[f], f"D21 §3 {n}.{f}: '{cc[f][:40]}' ≠ {ef[f]}")
+    # C-2: sin cifras sin fuente en los textos sectoriales del Paso 1
+    import re
+    for k, v in sec.items():
+        ts = [v["descripcion"], v["sensibilidad_tipos"]["explicacion"], v["sensibilidad_tipos"].get("motivo", "")] + \
+             list(v["comportamiento_ciclo"].values()) + list(v.get("riesgos_especificos", [])[:4])
+        for t in ts:
+            t2 = re.sub(r"\b5G\b|S&P 500|IBEX 35", "", t)
+            _check(not _APP["leccion_tiene_cifra"](t2), f"D21 C-2 {k}: cifra sin fuente en «{t[:60]}»")
+    # SAN sigue en +2,5 con el subtipo banca
+    trans = {"resaltar": ["expansion", "pico"], "titulo": "Transición entre Expansión y Pico"}
+    sd = _APP["sensibilidad_tipos_didactica"]
+    r = _APP["conclusion_sector"](sub(sec["Financial Services"], None), trans, "subiendo", sd(sec["Financial Services"]), "SF")
+    _check(r["suma"] == 2.5, f"D21: SAN con banca {r['suma']}")
+    _check("Historial insuficiente para la media de 200 sesiones (150 sesiones disponibles)" in _APP["html_historial_insuficiente"](150),
+           "D21 §2d: historial insuficiente")
+
+
+def _diag_ntgy():
+    res = {"precio": 29.95, "detalle": "R2 Semanal + EMA20", "pivot": "R2 Sem", "tipo": "R"}
+    sop = {"precio": 28.80, "detalle": "PP Diario + SMA50", "pivot": "PP Dia", "tipo": "S"}
+    a = {"ath": {"escenario": "aproximandose", "ath": 31.12, "dist_pct": -4.43, "ath_fecha_dia": "26/10/2026"},
+         "sma200": {"escenario": "tendencia_alcista", "sma200": 28.05, "dist_pct": 6.0, "pend_5_abs": 0.02,
+                    "pend_past_abs": 0.015, "umbral_plano": 0.0084},
+         "resist": {"escenario": "en_resistencia", "resistencia": res, "soporte": sop, "dist_resist": 0.7,
+                    "dist_soporte": 3.2, "pos_rango_pct": 82},
+         "fibo": {"escenario": "retroceso_236", "swing_min": 24.30, "swing_max": 31.12, "fecha_min": "12/12/2025",
+                  "fecha_max": "26/10/2026", "retroceso_max_pct": 20.2, "n_sesiones": 252, "frase_retroceso": "x"},
+         "rsi": {"escenario": "zona_neutra", "rsi_val": 47.7},
+         "vol": {"escenario": "volumen_normal", "vol_5d": 1e6, "vol_20d": 1.2e6, "vol_rel": 83, "acc_dist": "neutral",
+                 "vol_alc": 4e6, "vol_baj": 5e6}}
+    pt = _APP["calcular_puntuacion_tecnica"](a["ath"], a["sma200"], a["resist"], a["fibo"], a["rsi"], a["vol"])
+    return a, pt
+
+
+def test_pe11_fichas_componentes():
+    puntos = {"ath": "_PUNTUACIONES_ATH", "sma200": "_PUNTUACIONES_SMA200", "resist": "_PUNTUACIONES_RESIST",
+              "fibo": "_PUNTUACIONES_FIBO", "rsi": "_PUNTUACIONES_RSI", "vol": "_PUNTUACIONES_VOL"}
+    crit = _APP["_cargar_criteria"]()
+    for k, tab in puntos.items():
+        filas = _APP["tabla_componente"](k)
+        _check({e for e, *_ in filas} == set(_APP[tab]), f"T-PE-11: la tabla de {k} cubre todos los tramos del motor")
+        _check(all(p == _APP[tab][e] for e, _t, _c, p in filas), f"T-PE-11: notas de {k} = las del motor")
+        _check(all("_" not in _APP["titulo_escenario"](k, e) for e in _APP[tab]), f"T-PE-11a: títulos de {k} sin códigos")
+        textos = [_APP["como_leerlo_componente"](k, e, crit) for e in _APP[tab]]
+        _check(all(textos) and len(set(textos)) == len(textos), f"T-PE-11c: «cómo leerlo» de {k} por tramo")
+    a, pt = _diag_ntgy()
+    for k in puntos:
+        h = _APP["html_ficha_componente"](k, a[k], pt["scores_ind"][k], 29.74, crit)
+        _check("Datos usados" in h and "◀" in h and "Qué cambiaría esta nota" in h and "Qué es" in h, f"T-PE-11b {k}")
+    _check("30,19 €" in _APP["que_cambiaria_componente"]("ath", a["ath"], 29.74), "T-PE-11: ATH −3% = 30,19 €")
+    _check("29,51 €" in _APP["que_cambiaria_componente"]("fibo", a["fibo"], 29.74), "T-PE-11: perder el 23,6% = 29,51 €")
+    r = _APP["datos_componente"]("rsi", a["rsi"], 29.74)
+    _check("14 sesiones, diario" in r and "neutro 45–55" in r, f"T-PE-11d RSI: {r}")
+    # Umbrales expuestos = umbrales del motor (máximo histórico y resistencias)
+    import pandas as pd, numpy as np
+    hl = pd.DataFrame({"High": np.r_[np.linspace(50, 100, 99), 100.0], "Low": 40.0, "Close": 60.0},
+                      index=pd.bdate_range("2020-01-01", periods=100))
+    esp = {101: "subida_libre_establecida", 99.5: "en_ath", 98: "aproximandose_cerca", 95: "aproximandose",
+           80: "referencia", 70: "lejos"}
+    for pr, e in esp.items():
+        _check(_APP["analizar_maximos_historicos"](hl, pr, "X")["escenario"] == e, f"T-PE-11: ATH {pr} → {e}")
+    niv = [{"precio": 101.0, "tipo": "R"}, {"precio": 90.0, "tipo": "S"}]
+    _check(_APP["analizar_resistencias_estructurales"](niv, 100.0, "X")["escenario"] == "en_resistencia"
+           and _APP["analizar_resistencias_estructurales"](niv, 98.0, "X")["escenario"] == "zona_alta_rango"
+           and _APP["analizar_resistencias_estructurales"](niv, 95.0, "X")["escenario"] == "zona_media_rango",
+           "T-PE-11: umbrales de resistencias (1,5% y 35/65%)")
+
+
+def test_pe12_pe14_nota_y_conclusion():
+    import copy
+    a, pt = _diag_ntgy()
+    calc = _APP["calculo_nota_global"](pt)
+    _check(pt["score_total"] == 5.3 and calc["formula"].startswith("0,15 × 6") and calc["formula"].endswith("= 5,25 → 5,3"),
+           f"T-PE-12a: {calc['formula']}")
+    crit = _APP["_cargar_criteria"]()
+    h = _APP["html_nota_global"](pt, crit)
+    _check("Estructura mixta: los componentes no coinciden. ◀ nota actual" in h and "≥ 6,5" in h, "T-PE-12a: tramo mixta")
+    c2 = copy.deepcopy(crit); c2["diagnostico_paso2"]["cortes"]["alcista"] = 5.0
+    _check(_APP["tramo_estructura"](5.3, c2) == "alcista" and "≥ 5,0" in _APP["html_nota_global"](pt, c2), "T-PE-12b: corte desde criteria.json")
+    cv = {"clave": "a_favor"}
+    c = _APP["conclusion_paso2"](pt, a, 29.74, cv, crit)
+    for frag in ("estructura mixta (5,3/10)", "Apoyan: Media de 200 sesiones (7/10)", "Restan: Resistencias (2/10)",
+                 "un cierre por encima de 29,95 €", "matiza (Paso 1: a favor)"):
+        _check(frag in c["texto"], f"T-PE-14 NTGY: falta «{frag}» en {c['texto']}")
+    rel = lambda v, sc: _APP["conclusion_paso2"]({**pt, "score_total": sc}, a, 29.74, {"clave": v}, crit)["relacion"]
+    _check(rel("a_favor", 7.0) == "coherente" and rel("en_contra", 3.0) == "coherente" and rel("a_favor", 3.0) == "contradice"
+           and rel("en_contra", 7.0) == "contradice" and rel("neutra", 5.0) == "coherente" and rel("neutra", 7.0) == "matiza",
+           "T-PE-14: regla de relación con el Paso 1")
+    _check("no se puede establecer" in _APP["conclusion_paso2"](pt, a, 29.74, None, crit)["texto"], "T-PE-14: sin conclusión del Paso 1")
+    # T-PE-13a — redacción del Paso 2
+    d2 = crit.get("diagnostico_paso2", {})
+    textos = [c["texto"], c["por_que"], h] + list(d2.get("que_es", {}).values()) + list(d2["cortes"]["rotulos"].values())
+    for comp in d2.get("como_leerlo", {}).values():
+        textos += list(comp.values())
+    for k in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
+        textos.append(_APP["html_ficha_componente"](k, a[k], pt["scores_ind"][k], 29.74, crit))
+    t = " ".join(textos).lower()
+    _malos = [x for x in tuple(TERMINOS_PA3) + _PROHIBIDOS_PE2 + ("probabilidad",) if x in t] + _hay_compra_venta(t)
+    _check(not _malos, f"T-PE-13a: términos no admitidos {_malos}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _i = src.index("    elif _step == 2:\n"); _j = src.index("# ── PASO 3: SEMÁFORO", _i)
+    _check("probabilidades" not in src[_i:_j] and "0.618 es el nivel" not in src[_i:_j], "T-PE-13a: textos antiguos retirados")
+    # T-PE-15a — una sola función para el informe y el Paso 2
+    _check(src.count("diagnostico_tecnico(ticker_activo, hist, precio, nombre, niveles_reforzados") == 1
+           and src.count("diagnostico_tecnico(_ticker, hist, _precio, _nombre, _niv_ref)") == 1
+           and 'yf.Ticker(_ticker).history(period="15y"' not in src, "T-PE-15a: misma función en informe y Paso 2")
 
 
 def _dependencias_ok() -> bool:
@@ -1602,7 +1750,7 @@ def main():
         return 1
     for _a in _avisos:
         print("ℹ️ ", _a)
-    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 + Spec PE v1 + v2 — TODOS los tests unitarios PASAN.")
+    print("✅ Contrato de regresión Spec PA v1 + v2 + v3 + Spec PE v1 + v2 + v3 — TODOS los tests unitarios PASAN.")
     print("   (PA-A-06/PA-M-02/03/04 y la revisión visual de PA2-01 se verifican sobre informes reales.)")
     print("   ⏸  T-PA2-03c pendiente de decisión de Polaris (payout crudo 7,5 sin DPA/BPA: el")
     print("      normalizador lo lee como 7,5 % y la spec espera N/A + K8).")

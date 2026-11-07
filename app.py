@@ -2243,6 +2243,7 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
     return {
         "ath":       ath,
         "ath_fecha": ath_fecha,
+        "ath_fecha_dia": idx_ath.strftime("%d/%m/%Y") if hasattr(idx_ath, "strftime") else "",   # PE-11
         "dist_pct":  dist_pct,
         "escenario": escenario,
         "target":    target,
@@ -2395,6 +2396,9 @@ def analizar_sma200(hist, precio: float, nombre: str) -> "dict | None":
         "sma200":        sma200_val,
         "dist_pct":      dist_pct,
         "pendiente_pct": slope_now_pct,
+        "pend_5_abs":    slope_now_abs,     # PE-11
+        "pend_past_abs": slope_past_abs,
+        "umbral_plano":  UMBRAL_PLANO,
         "escenario":     escenario,
         "precio_sobre":  precio_sobre,
         "texto":         texto,
@@ -2769,6 +2773,8 @@ def analizar_fibonacci(hist, precio: float, nombre: str) -> "dict | None":
         "frase_retroceso": frase_retroceso,
         "n_sesiones":    n,
         "swing_periodo": swing_periodo,
+        "fecha_min":     _sw_fmin,   # PE-11
+        "fecha_max":     _sw_fmax,
     }
 
 
@@ -3031,6 +3037,8 @@ def analizar_volumen(hist, nombre: str) -> "dict | None":
         "vol_20d":   vol_20d,
         "vol_rel":   vol_rel,
         "acc_dist":  acc_dist,
+        "vol_alc":   vol_alc,    # PE-11
+        "vol_baj":   vol_baj,
         "escenario": escenario,
         "texto":     texto,
     }
@@ -3178,10 +3186,11 @@ def calcular_puntuacion_tecnica(
     else:
         score_total = 5.0
 
-    # Señal
-    if score_total >= 6.5:
+    # Señal — PE-12: cortes leídos de criteria.json (diagnostico_paso2.cortes; 6,5 / 3,5)
+    _cd = cortes_diagnostico()
+    if score_total >= _cd["alcista"]:
         señal = "alcista"
-    elif score_total <= 3.5:
+    elif score_total <= _cd["bajista"]:
         señal = "bajista"
     else:
         señal = "neutral"
@@ -11558,6 +11567,7 @@ def datos_largo_plazo(hist, info) -> dict:
     if len(ret) > 20:
         out["vol_pct"] = float(ret.std() * (252 ** 0.5) * 100)
         out["vol_n"] = int(len(ret))
+    out["n_sesiones"] = int(len(hist))
     return out
 
 
@@ -11604,7 +11614,8 @@ def textos_tarjetas_paso1(d: dict, moneda: str = "€", momento: str = "") -> di
                              f"{_pct_signo_es(d['dist_pct'])}" + SIN_REDONDEAR_TXT)
     else:
         t["tend_valor"] = "Sin datos"
-        t["tend_datos"] = "Se necesitan al menos 200 sesiones de cotización para la SMA200."
+        t["tend_datos"] = (f"Historial insuficiente para la media de 200 sesiones "
+                           f"({d.get('n_sesiones', 0)} sesiones disponibles).")
         t["tend_formula"] = ""
     if d.get("pos_pct") is not None:
         t["rng_valor"] = f"{_num_es(d['pos_pct'], 1)}% del rango anual"
@@ -12436,6 +12447,416 @@ def html_conclusion(c: "dict | None", estilo: str = "valor") -> str:
             f'padding:.55rem .8rem;margin:.6rem 0;font-size:.86rem;color:{_col[2]}">🧭 {c["texto"]}{_pq}</div>')
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Spec PE v3 — «¿Por dónde empiezo?» · Paso 2 (Diagnóstico técnico)
+# ═════════════════════════════════════════════════════════════════════════════
+def diagnostico_tecnico(ticker: str, hist, precio: float, nombre: str, niveles_reforzados,
+                        divergencias=None) -> dict:
+    """PE-15 — Única función del Diagnóstico Técnico: la usan el informe de Análisis Técnico y
+    el Paso 2 de «¿Por dónde empiezo?». Mismos datos (histórico diario sin ajustar, máximo
+    histórico de obtener_hist_maximo) y mismas reglas (incluido el tope de volumen por OBV)."""
+    if divergencias is None:
+        try:
+            divergencias = detectar_divergencias(hist)
+        except Exception:
+            divergencias = []
+    a_ath = analizar_maximos_historicos(obtener_hist_maximo(ticker), precio, nombre)
+    a_sma = analizar_sma200(hist, precio, nombre)
+    a_res = analizar_resistencias_estructurales(niveles_reforzados, precio, nombre)
+    a_fib = analizar_fibonacci(hist, precio, nombre)
+    a_rsi = analizar_rsi(hist, precio, nombre)
+    a_vol = analizar_volumen(hist, nombre)
+    if a_vol is not None:   # PA3-05: divergencia OBV fuerte bajista → volumen ≤ 5/10
+        a_vol["obv_bajista_fuerte"] = any(
+            d.get("tipo") == "OBV" and d.get("direccion") == "bajista" and d.get("fuerza") == "fuerte"
+            for d in (divergencias or []))
+    pt = calcular_puntuacion_tecnica(a_ath, a_sma, a_res, a_fib, a_rsi, a_vol)
+    return {"ath": a_ath, "sma200": a_sma, "resist": a_res, "fibo": a_fib, "rsi": a_rsi, "vol": a_vol,
+            "puntuacion": pt, "divergencias": divergencias}
+
+
+def cortes_diagnostico(criterios=None) -> dict:
+    """PE-12 — Cortes de la nota global (criteria.json → diagnostico_paso2.cortes)."""
+    try:
+        c = (criterios if criterios is not None else _cargar_criteria()).get("diagnostico_paso2", {}).get("cortes", {})
+    except Exception:
+        c = {}
+    return {"alcista": float(c.get("alcista", 6.5)), "bajista": float(c.get("bajista", 3.5)),
+            "rotulos": c.get("rotulos") or {
+                "alcista": "Estructura alcista: la mayoría de componentes apoyan la tendencia.",
+                "mixta": "Estructura mixta: los componentes no coinciden.",
+                "bajista": "Estructura bajista: la mayoría de componentes señalan debilidad."}}
+
+
+def tramo_estructura(score: float, criterios=None) -> str:
+    c = cortes_diagnostico(criterios)
+    return "alcista" if score >= c["alcista"] else ("bajista" if score <= c["bajista"] else "mixta")
+
+
+# PE-11 — Reglas del motor expuestas: (escenario, título legible, condición). Las notas salen de
+# _PUNTUACIONES_* y los umbrales son los de las funciones analizar_* (un test lo comprueba).
+DIAG_COMPONENTES = {
+    "ath": ("Máximo histórico", [
+        ("subida_libre_establecida", "Por encima del máximo histórico", "distancia > 0%"),
+        ("en_ath", "En máximos históricos", "distancia entre −1% y 0%"),
+        ("aproximandose_cerca", "Muy cerca del máximo", "distancia entre −3% y −1%"),
+        ("aproximandose", "Aproximándose", "distancia entre −8% y −3%"),
+        ("referencia", "A distancia media del máximo", "distancia entre −25% y −8%"),
+        ("lejos", "Lejos del máximo", "distancia de −25% o menos")]),
+    "sma200": ("Media de 200 sesiones", [
+        ("giro_alcista_reciente", "Giro alcista reciente", "pendiente de 5 sesiones positiva ahora y negativa hace 20 sesiones"),
+        ("tendencia_alcista", "Tendencia alcista", "pendiente de 5 sesiones positiva"),
+        ("plana", "Plana", "pendiente de 5 sesiones entre −0,03% y +0,03% de la media"),
+        ("giro_bajista_reciente", "Giro bajista reciente", "pendiente negativa ahora y positiva hace 20 sesiones"),
+        ("tendencia_bajista", "Tendencia bajista", "pendiente de 5 sesiones negativa")]),
+    "resist": ("Resistencias", [
+        ("en_soporte", "En soporte", "soporte reforzado a menos del 1,5% por debajo"),
+        ("sin_resistencia", "Sin resistencias por encima", "ningún nivel reforzado por encima del precio"),
+        ("zona_baja_rango", "Zona baja entre soporte y resistencia", "en el 35% inferior del tramo soporte–resistencia"),
+        ("zona_media_rango", "Zona media entre soporte y resistencia", "entre el 35% y el 65% del tramo"),
+        ("zona_alta_rango", "Zona alta entre soporte y resistencia", "en el 35% superior del tramo"),
+        ("en_resistencia", "En resistencia", "resistencia reforzada a menos del 1,5% por encima"),
+        ("sin_soporte", "Sin soportes por debajo", "ningún nivel reforzado por debajo del precio")]),
+    "fibo": ("Fibonacci", [
+        ("extension_161", "Extensión por encima del 161,8%", "posición en el swing > 161,8%"),
+        ("extension_127", "Extensión por encima del 127,2%", "posición en el swing entre 127,2% y 161,8%"),
+        ("en_maximo", "En la parte alta del swing", "retroceso menor del 10% (posición ≥ 90%)"),
+        ("retroceso_236", "Retroceso hasta el 23,6%", "retroceso entre el 10% y el 23,6%"),
+        ("retroceso_382", "Retroceso moderado", "retroceso entre el 23,6% y el 45%"),
+        ("retroceso_618", "Retroceso profundo", "retroceso entre el 45% y el 65%"),
+        ("retroceso_786", "Retroceso muy profundo", "retroceso entre el 65% y el 85%"),
+        ("swing_roto", "Swing roto", "retroceso de más del 85%")]),
+    "rsi": ("RSI estructural", [
+        ("sobrecompra_extrema", "Sobrecompra extrema", "RSI ≥ 80"),
+        ("sobrecompra", "Sobrecompra", "RSI ≥ {sc} y < 80"),
+        ("zona_alcista", "Alcista", "RSI ≥ {al} y < {sc}"),
+        ("zona_neutra", "Neutro", "RSI entre {bj} y {al}"),
+        ("zona_bajista", "Bajista", "RSI > {sv} y ≤ {bj}"),
+        ("sobreventa", "Sobreventa", "RSI > 20 y ≤ {sv}"),
+        ("sobreventa_extrema", "Sobreventa extrema", "RSI ≤ 20")]),
+    "vol": ("Volumen", [
+        ("volumen_excepcional", "Volumen excepcional", "media 5 sesiones ≥ 200% de la media 20"),
+        ("volumen_alto", "Volumen alto", "entre el 150% y el 200%"),
+        ("volumen_normal", "Volumen normal", "entre el 80% y el 150%"),
+        ("volumen_bajo", "Volumen bajo", "entre el 50% y el 80%"),
+        ("volumen_seco", "Volumen seco", "menos del 50%")]),
+}
+_TABLA_PUNTOS = {"ath": "_PUNTUACIONES_ATH", "sma200": "_PUNTUACIONES_SMA200", "resist": "_PUNTUACIONES_RESIST",
+                 "fibo": "_PUNTUACIONES_FIBO", "rsi": "_PUNTUACIONES_RSI", "vol": "_PUNTUACIONES_VOL"}
+
+
+def tabla_componente(clave: str) -> list:
+    """[(escenario, titulo, condicion, puntos)] tal como puntúa hoy el motor."""
+    _tab = globals()[_TABLA_PUNTOS[clave]]
+    try:
+        _u = umbrales.actuales()
+    except Exception:
+        _u = {"rsi_sobrecompra": 70, "rsi_alcista": 55, "rsi_bajista": 45, "rsi_sobreventa": 30}
+    _fmt = {"sc": _num_es(_u["rsi_sobrecompra"], 0), "al": _num_es(_u["rsi_alcista"], 0),
+            "bj": _num_es(_u["rsi_bajista"], 0), "sv": _num_es(_u["rsi_sobreventa"], 0)}
+    return [(esc, tit, cond.format(**_fmt), _tab.get(esc, 5)) for esc, tit, cond in DIAG_COMPONENTES[clave][1]]
+
+
+def titulo_escenario(clave: str, escenario: str) -> str:
+    for esc, tit, _c in DIAG_COMPONENTES.get(clave, ("", []))[1]:
+        if esc == escenario:
+            return tit
+    return str(escenario or "—").replace("_", " ").capitalize()
+
+
+def _eur(x) -> str:
+    return f"{_num_es(x, 2)} €" if x is not None else "—"
+
+
+def datos_componente(clave: str, a: dict, precio: float) -> str:
+    """PE-11 — «Datos usados» con valores, fechas y fórmula."""
+    if not a:
+        return "Sin datos suficientes para este componente."
+    if clave == "ath":
+        return (f"Máximo histórico {_eur(a.get('ath'))} ({a.get('ath_fecha_dia') or a.get('ath_fecha', '')}) · precio "
+                f"{_eur(precio)} · distancia = (precio − máximo) / máximo = {_pct_signo_es(a.get('dist_pct', 0))}. "
+                f"Histórico diario sin ajustar por dividendos.")
+    if clave == "sma200":
+        _u = a.get("umbral_plano")
+        return (f"SMA200 {_eur(a.get('sma200'))} · precio {_pct_signo_es(a.get('dist_pct', 0))} respecto a ella · "
+                f"pendiente de 5 sesiones = SMA200 hoy − SMA200 hace 5 sesiones = "
+                f"{_num_es(a.get('pend_5_abs', 0), 4)} € · la misma pendiente hace 20 sesiones = "
+                f"{_num_es(a.get('pend_past_abs', 0), 4)} €"
+                + (f" · umbral de «plana»: ±{_num_es(_u, 4)} € (0,03% de la media)" if _u is not None else "") + ".")
+    if clave == "resist":
+        def _n(n, d, lado):
+            if not n:
+                return f"sin {lado} reforzado"
+            return f"{lado} {_eur(n['precio'])} ({n.get('detalle') or n.get('pivot', '')}) a {_num_es(d, 1)}%"
+        _pr = a.get("pos_rango_pct")
+        return (_n(a.get("resistencia"), a.get("dist_resist"), "resistencia") + " · "
+                + _n(a.get("soporte"), a.get("dist_soporte"), "soporte")
+                + (f" · posición entre ambos = (precio − soporte) / (resistencia − soporte) = {_num_es(_pr, 0)}%"
+                   if _pr is not None else "")
+                + ". Nivel reforzado = pivot que coincide con una media móvil (SMA/EMA 20, 50 o 200).")
+    if clave == "fibo":
+        _rt = a.get("retroceso_max_pct")
+        return (f"Swing de las últimas {a.get('n_sesiones', '')} sesiones: mínimo {_eur(a.get('swing_min'))} "
+                f"({a.get('fecha_min', '')}) → máximo {_eur(a.get('swing_max'))} ({a.get('fecha_max', '')}) · "
+                f"retroceso = (máximo − precio) / (máximo − mínimo) = {_num_es(_rt or 0, 1)}% · "
+                f"{a.get('frase_retroceso', '')}.")
+    if clave == "rsi":
+        try:
+            _u = umbrales.actuales()
+        except Exception:
+            _u = {"rsi_sobrecompra": 70, "rsi_alcista": 55, "rsi_bajista": 45, "rsi_sobreventa": 30}
+        return (f"RSI de 14 sesiones, diario (media exponencial de Wilder) = {_num_es(a.get('rsi_val', 0), 1)} · "
+                f"bandas del método: sobreventa ≤ {_u['rsi_sobreventa']:.0f} · bajista ≤ {_u['rsi_bajista']:.0f} · neutro "
+                f"{_u['rsi_bajista']:.0f}–{_u['rsi_alcista']:.0f} · alcista ≥ {_u['rsi_alcista']:.0f} · "
+                f"sobrecompra ≥ {_u['rsi_sobrecompra']:.0f}.")
+    if clave == "vol":
+        _tot = (a.get("vol_alc") or 0) + (a.get("vol_baj") or 0)
+        _rep = (f" · últimas 10 sesiones: volumen en días alcistas {_num_es((a.get('vol_alc') or 0) / _tot * 100, 0)}% / "
+                f"bajistas {_num_es((a.get('vol_baj') or 0) / _tot * 100, 0)}%" if _tot else "")
+        return (f"{(a.get('ventana_txt') or 'media de 5 sesiones frente a la de 20').capitalize()}: "
+                f"{_fmt_numero(a.get('vol_5d', 0))} / {_fmt_numero(a.get('vol_20d', 0))} = "
+                f"{_num_es(a.get('vol_rel', 0), 0)}%{_rep}"
+                + (" · reparto en distribución o divergencia OBV bajista fuerte: la nota se limita a 5/10"
+                   if a.get("acc_dist") == "distribucion" or a.get("obv_bajista_fuerte") else "") + ".")
+    return ""
+
+
+def que_cambiaria_componente(clave: str, a: dict, precio: float) -> str:
+    """PE-11 — El nivel o dato concreto que movería la nota del componente."""
+    if not a:
+        return "Disponer de historial suficiente."
+    esc = a.get("escenario")
+    tab = {e: p for e, _t, _c, p in tabla_componente(clave)}
+    def _p(e):
+        return f"{titulo_escenario(clave, e).lower()} ({tab.get(e, 5)}/10)"
+    if clave == "ath":
+        ath = a["ath"]
+        lims = [(0, "subida_libre_establecida"), (-1, "en_ath"), (-3, "aproximandose_cerca"), (-8, "aproximandose"),
+                (-25, "referencia")]
+        partes = []
+        _orden = [e for _l, e in lims] + ["lejos"]
+        _i = _orden.index(esc) if esc in _orden else None
+        if _i is not None and _i > 0:
+            _l_up = lims[_i - 1][0]
+            partes.append(f"un cierre por encima de {_eur(ath * (1 + _l_up / 100))} → {_p(_orden[_i - 1])}")
+        if _i is not None and _i < len(lims):
+            _l_dn = lims[_i][0]
+            partes.append(f"un cierre por debajo de {_eur(ath * (1 + _l_dn / 100))} → {_p(_orden[_i + 1])}")
+        return " · ".join(partes)
+    if clave == "sma200":
+        if esc in ("tendencia_alcista", "giro_alcista_reciente"):
+            return ("que la pendiente de 5 sesiones de la media deje de ser positiva → " + _p("plana")
+                    + " o negativa → " + _p("giro_bajista_reciente")
+                    + ". La nota no depende de si el precio está por encima o por debajo de la media (eso lo mide el Paso 1)")
+        if esc in ("tendencia_bajista", "giro_bajista_reciente"):
+            return ("que la pendiente de 5 sesiones de la media deje de ser negativa → " + _p("plana")
+                    + " o se vuelva positiva → " + _p("giro_alcista_reciente")
+                    + ". La nota no depende de si el precio está por encima o por debajo de la media (eso lo mide el Paso 1)")
+        return "que la media empiece a subir → " + _p("giro_alcista_reciente") + " o a bajar → " + _p("tendencia_bajista")
+    if clave == "resist":
+        r, s = a.get("resistencia"), a.get("soporte")
+        partes = []
+        if r:
+            partes.append(f"un cierre por encima de {_eur(r['precio'])} (deja atrás la resistencia más cercana)")
+        if s:
+            partes.append(f"un cierre por debajo de {_eur(s['precio'])} (pierde el soporte más cercano)")
+        return " · ".join(partes) or "la aparición de niveles reforzados cerca del precio"
+    if clave == "fibo":
+        mx, mn = a["swing_max"], a["swing_min"]
+        rg = mx - mn
+        bandas = [("en_maximo", 10.0), ("retroceso_236", 23.6), ("retroceso_382", 45.0), ("retroceso_618", 65.0),
+                  ("retroceso_786", 85.0)]
+        orden = [e for e, _x in bandas] + ["swing_roto"]
+        if esc not in orden:
+            return "un nuevo máximo o mínimo del swing"
+        i = orden.index(esc)
+        partes = []
+        if i > 0:
+            _r = bandas[i - 1][1]
+            partes.append(f"recuperar el {_num_es(_r, 1).replace(',0', '')}% de retroceso ({_eur(mx - _r / 100 * rg)}) → {_p(orden[i - 1])}")
+        if i < len(bandas):
+            _r = bandas[i][1]
+            partes.append(f"perder el {_num_es(_r, 1).replace(',0', '')}% ({_eur(mx - _r / 100 * rg)}) → {_p(orden[i + 1])}")
+        return " · ".join(partes)
+    if clave == "rsi":
+        try:
+            _u = umbrales.actuales()
+        except Exception:
+            _u = {"rsi_sobrecompra": 70, "rsi_alcista": 55, "rsi_bajista": 45, "rsi_sobreventa": 30}
+        m = {"zona_neutra": f"superar {_u['rsi_alcista']:.0f} → {_p('zona_alcista')} o bajar de {_u['rsi_bajista']:.0f} → {_p('zona_bajista')}",
+             "zona_alcista": f"llegar a {_u['rsi_sobrecompra']:.0f} → {_p('sobrecompra')} o bajar de {_u['rsi_alcista']:.0f} → {_p('zona_neutra')}",
+             "zona_bajista": f"superar {_u['rsi_bajista']:.0f} → {_p('zona_neutra')} o llegar a {_u['rsi_sobreventa']:.0f} → {_p('sobreventa')}",
+             "sobrecompra": f"bajar de {_u['rsi_sobrecompra']:.0f} → {_p('zona_alcista')} o llegar a 80 → {_p('sobrecompra_extrema')}",
+             "sobrecompra_extrema": f"bajar de 80 → {_p('sobrecompra')}",
+             "sobreventa": f"superar {_u['rsi_sobreventa']:.0f} → {_p('zona_bajista')} o llegar a 20 → {_p('sobreventa_extrema')}",
+             "sobreventa_extrema": f"superar 20 → {_p('sobreventa')}"}
+        return m.get(esc, "")
+    if clave == "vol":
+        m = {"volumen_normal": f"que la media de 5 sesiones supere el 150% de la de 20 → {_p('volumen_alto')} o baje del 80% → {_p('volumen_bajo')}",
+             "volumen_alto": f"bajar del 150% → {_p('volumen_normal')}",
+             "volumen_excepcional": f"bajar del 200% → {_p('volumen_alto')}",
+             "volumen_bajo": f"superar el 80% → {_p('volumen_normal')} o bajar del 50% → {_p('volumen_seco')}",
+             "volumen_seco": f"superar el 50% → {_p('volumen_bajo')}"}
+        _t = m.get(esc, "")
+        if a.get("acc_dist") == "distribucion":
+            _t += " · que el volumen de los días alcistas deje de ser menor que el de los bajistas (retira el tope de 5/10)"
+        return _t
+    return ""
+
+
+def como_leerlo_componente(clave: str, escenario: str, criterios=None) -> str:
+    """PE-11c — «Cómo leerlo» del tramo actual (criteria.json → diagnostico_paso2.como_leerlo)."""
+    try:
+        c = (criterios if criterios is not None else _cargar_criteria()).get("diagnostico_paso2", {})
+    except Exception:
+        c = {}
+    return ((c.get("como_leerlo") or {}).get(clave) or {}).get(escenario, "")
+
+
+def que_es_componente(clave: str, criterios=None) -> str:
+    try:
+        c = (criterios if criterios is not None else _cargar_criteria()).get("diagnostico_paso2", {})
+    except Exception:
+        c = {}
+    return (c.get("que_es") or {}).get(clave, "")
+
+
+def html_ficha_componente(clave: str, a: dict, si: dict, precio: float, criterios=None) -> str:
+    """PE-11 — Ficha: qué es, datos usados, regla del motor con el tramo resaltado, cómo leerlo y
+    qué cambiaría esta nota."""
+    import html as _h
+    esc = (si or {}).get("escenario")
+    filas = ""
+    for e, tit, cond, pts in tabla_componente(clave):
+        _on = (e == esc)
+        _st = "background:#dbeafe;font-weight:700;color:#1e3a8a" if _on else "color:#334155"
+        filas += (f'<tr style="{_st}"><td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(tit)}'
+                  f'{" ◀" if _on else ""}</td><td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(cond)}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0;text-align:center">{pts}/10</td></tr>')
+    _tope = ""
+    if clave == "vol" and a and (a.get("acc_dist") == "distribucion" or a.get("obv_bajista_fuerte")):
+        _tope = '<div style="font-size:.76rem;color:#7c2d12">Regla adicional del motor: con distribución o divergencia OBV bajista fuerte, la nota se limita a 5/10.</div>'
+    return (
+        f'<div style="font-size:.84rem;color:#334155"><b>Qué es:</b> {_h.escape(que_es_componente(clave, criterios))}</div>'
+        f'<div style="font-size:.82rem;color:#334155;margin:.3rem 0"><b>Datos usados:</b> {_h.escape(datos_componente(clave, a, precio))}</div>'
+        f'<table style="border-collapse:collapse;font-size:.8rem;margin:.3rem 0"><thead><tr style="color:#64748b;text-align:left">'
+        f'<th style="padding:2px 8px">Tramo</th><th style="padding:2px 8px">Condición</th><th style="padding:2px 8px">Nota</th>'
+        f'</tr></thead><tbody>{filas}</tbody></table>{_tope}'
+        f'<div style="font-size:.74rem;color:#64748b;font-style:italic">Regla de puntuación del motor</div>'
+        f'<div style="font-size:.84rem;color:#334155;margin-top:.3rem"><b>Cómo leerlo:</b> {_h.escape(como_leerlo_componente(clave, esc, criterios))}</div>'
+        f'<div style="font-size:.84rem;color:#334155;margin-top:.2rem"><b>Qué cambiaría esta nota:</b> {_h.escape(que_cambiaria_componente(clave, a, precio))}.</div>'
+    )
+
+
+def calculo_nota_global(pt: dict) -> dict:
+    """PE-12 — Cálculo visible: «0,15 × 6 (Máx. histórico) + … = 5,25 → 5,3»."""
+    si = (pt or {}).get("scores_ind") or {}
+    terms, suma, peso = [], 0.0, 0.0
+    for k in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
+        v = si.get(k)
+        if not v or not v.get("disponible"):
+            continue
+        terms.append(f"{_num_es(v['peso'], 2)} × {v['puntos']:.0f} ({DIAG_COMPONENTES[k][0].lower()})")
+        suma += v["peso"] * v["puntos"]
+        peso += v["peso"]
+    if not terms:
+        return {"formula": "", "bruto": None, "nota": None}
+    bruto = suma / peso
+    _bruto_txt = _num_es(bruto, 2)
+    _norm = "" if abs(peso - 1.0) < 1e-9 else f" ÷ {_num_es(peso, 2)} (pesos de los componentes con datos)"
+    formula = " + ".join(terms) + f"{_norm} = {_bruto_txt} → {_num_es(pt['score_total'], 1)}"
+    return {"formula": formula, "bruto": bruto, "nota": pt["score_total"]}
+
+
+def html_nota_global(pt: dict, criterios=None) -> str:
+    import html as _h
+    c = cortes_diagnostico(criterios)
+    sc = pt.get("score_total", 5.0)
+    tr = tramo_estructura(sc, criterios)
+    calc = calculo_nota_global(pt)
+    pesos = " · ".join(f"{DIAG_COMPONENTES[k][0]} {_num_es(p * 100, 0)}%" for k, p in _PESOS.items())
+    filas = ""
+    for k, rango in (("alcista", f"≥ {_num_es(c['alcista'], 1)}"),
+                     ("mixta", f"entre {_num_es(c['bajista'], 1)} y {_num_es(c['alcista'], 1)}"),
+                     ("bajista", f"≤ {_num_es(c['bajista'], 1)}")):
+        _on = (k == tr)
+        _st = "background:#dbeafe;font-weight:700;color:#1e3a8a" if _on else "color:#334155"
+        filas += (f'<tr style="{_st}"><td style="padding:2px 10px;border-top:1px solid #e2e8f0">{rango}</td>'
+                  f'<td style="padding:2px 10px;border-top:1px solid #e2e8f0">{_h.escape(c["rotulos"][k])}{" ◀ nota actual" if _on else ""}</td></tr>')
+    return (f'<div style="font-size:.84rem;color:#334155;margin:.4rem 0"><b>Pesos del motor:</b> {pesos}.</div>'
+            f'<div style="font-size:.8rem;color:#334155;font-family:monospace;margin:.2rem 0">Nota global = {_h.escape(calc["formula"])}</div>'
+            f'<table style="border-collapse:collapse;font-size:.82rem;margin:.3rem 0"><tbody>{filas}</tbody></table>'
+            f'<div style="font-size:.74rem;color:#64748b;font-style:italic">Cortes del motor (parámetros del método)</div>')
+
+
+def conclusion_paso2(pt: dict, analisis: dict, precio: float, c_valor: "dict | None", criterios=None) -> dict:
+    """PE-14 — Conclusión del Paso 2 y relación con la conclusión del valor del Paso 1."""
+    sc = pt.get("score_total", 5.0)
+    tr = tramo_estructura(sc, criterios)
+    si = pt.get("scores_ind") or {}
+    orden = ("ath", "sma200", "resist", "fibo", "rsi", "vol")
+    _nom = lambda k: f"{DIAG_COMPONENTES[k][0]} ({si[k]['puntos']:.0f}/10)"
+    apoyan = [k for k in orden if si.get(k, {}).get("disponible") and si[k]["puntos"] >= 7]
+    restan = [k for k in orden if si.get(k, {}).get("disponible") and si[k]["puntos"] <= 3]
+    base = restan or apoyan or [k for k in orden if si.get(k, {}).get("disponible")]
+    clave_qc = max(base, key=lambda k: (_PESOS[k], -orden.index(k))) if base else None
+    qc = que_cambiaria_componente(clave_qc, analisis.get(clave_qc), precio) if clave_qc else ""
+    if qc:
+        qc = qc.split(" · ")[0].split(" → ")[0]
+    rel_txt = ""
+    if c_valor and c_valor.get("clave"):
+        v = c_valor["clave"]
+        if v == "neutra":
+            rel = "coherente" if tr == "mixta" else "matiza"
+        elif tr == "mixta":
+            rel = "matiza"
+        elif (v == "a_favor" and tr == "alcista") or (v == "en_contra" and tr == "bajista"):
+            rel = "coherente"
+        else:
+            rel = "contradice"
+        _pv = {"a_favor": "a favor", "en_contra": "en contra", "neutra": "neutra"}[v]
+        rel_txt = f" <b>Relación con el Paso 1:</b> {rel} (Paso 1: {_pv})."
+    else:
+        rel = None
+        rel_txt = " <b>Relación con el Paso 1:</b> no se puede establecer: el Paso 1 no tiene conclusión del valor (historial insuficiente para la media de 200 sesiones)."
+    texto = (f"<b>Conclusión del Paso 2: estructura {tr} ({_num_es(sc, 1)}/10).</b> "
+             f"Apoyan: {', '.join(_nom(k) for k in apoyan) or 'ningún componente'}. "
+             f"Restan: {', '.join(_nom(k) for k in restan) or 'ningún componente'}. "
+             f"<b>Qué cambiaría esta lectura:</b> {qc}.{rel_txt}")
+    c = cortes_diagnostico(criterios)
+    por_que = (f"Regla del método: nota global ≥ {_num_es(c['alcista'], 1)} estructura alcista; ≤ {_num_es(c['bajista'], 1)} "
+               f"bajista; entre medias, mixta. Apoyan = componentes con 7/10 o más; restan = 3/10 o menos.")
+    return {"tramo": tr, "relacion": rel, "apoyan": apoyan, "restan": restan, "texto": texto, "por_que": por_que}
+
+
+def sector_con_subtipo(sector_info: dict, industria=None) -> dict:
+    """Validación 21 §2 — Si el sector tiene 'subtipos_ciclo' (Financial Services, Communication
+    Services), usa el comportamiento y el efecto del ciclo del subtipo según la industry de Yahoo
+    (sin dato → el subtipo 'por_defecto')."""
+    subs = (sector_info or {}).get("subtipos_ciclo") or {}
+    if not subs:
+        return sector_info
+    elegido = None
+    if industria:
+        elegido = next((v for v in subs.values() if industria in (v.get("industrias_yahoo") or [])), None)
+    if elegido is None:
+        elegido = next((v for v in subs.values() if v.get("por_defecto")), None)
+    if not elegido:
+        return sector_info
+    out = dict(sector_info)
+    out["comportamiento_ciclo"] = elegido.get("comportamiento_ciclo") or sector_info.get("comportamiento_ciclo", {})
+    out["efecto_ciclo"] = elegido.get("efecto_ciclo") or sector_info.get("efecto_ciclo", {})
+    out["_subtipo_ciclo"] = elegido.get("nombre")
+    return out
+
+
+def html_historial_insuficiente(n: int) -> str:
+    """Validación 21 §2d — activo con menos de 200 sesiones."""
+    return (f'<div style="background:#f8fafc;border-left:4px solid #94a3b8;border-radius:0 8px 8px 0;'
+            f'padding:.55rem .8rem;margin:.6rem 0;font-size:.86rem;color:#334155">🧭 Historial insuficiente para la '
+            f'media de 200 sesiones ({n} sesiones disponibles): no hay conclusión del valor.</div>')
+
+
 @st.fragment
 def _pp_wizard_fragment():
     """Fragmento del wizard ¿Por dónde empiezo?
@@ -12514,6 +12935,7 @@ def _pp_wizard_fragment():
                 if hist is None or hist.empty:
                     st.error(f"No se pudieron obtener datos para **{_ticker}**. Verifica el ticker.")
                     return
+                info = completar_ficha_desde_neon(_ticker, info)   # validación 21, C-1 (nombre de Neon)
                 _precio  = precio_actual(hist)
                 _nombre  = info.get("longName") or info.get("shortName") or _ticker
                 _cierre  = hist["Close"]
@@ -12534,13 +12956,8 @@ def _pp_wizard_fragment():
                     tolerancia=_tol_conv
                 )
                 # Análisis técnico estructural (orden correcto)
-                _hist_l = yf.Ticker(_ticker).history(period="15y", auto_adjust=False)   # PA3-02
-                _a_ath  = analizar_maximos_historicos(_hist_l, _precio, _nombre)
-                _a_sma  = analizar_sma200(hist, _precio, _nombre)
-                _a_res  = analizar_resistencias_estructurales(_niv_ref, _precio, _nombre)
-                _a_fib  = analizar_fibonacci(hist, _precio, _nombre)
-                _a_rsi  = analizar_rsi(hist, _precio, _nombre)
-                _pt     = calcular_puntuacion_tecnica(_a_ath, _a_sma, _a_res, _a_fib, _a_rsi, _vol_tec)
+                _diag   = diagnostico_tecnico(_ticker, hist, _precio, _nombre, _niv_ref)   # PE-15
+                _pt     = _diag["puntuacion"]
                 # Semáforo
                 _c_sem, _p_sem, _f_sem = calcular_semaforo(
                     _precio, _pd_d, _rsi, _macd, _macd_s,
@@ -12554,7 +12971,7 @@ def _pp_wizard_fragment():
                     "pct_b": _pct_b, "bb_sup": _bb_sup, "bb_inf": _bb_inf,
                     "sar_val": _sar_val, "sar_tend": _sar_tend,
                     "medias": _medias, "vol_data": _vol_sem,
-                    "puntuacion_tec": _pt,
+                    "puntuacion_tec": _pt, "diag": _diag,
                     "color_sem": _c_sem, "pct_sem": _p_sem, "factores_sem": _f_sem,
                     "pivots_diario": _pd_d, "confluencias": _confs,
                 }
@@ -12620,7 +13037,7 @@ def _pp_wizard_fragment():
             + html_bloque_tramos("pos_52s", _lp.get("pos_pct"),
                                  f"{_num_es(_lp['pos_pct'], 1)}%" if _lp.get("pos_pct") is not None else "")
             + html_bloque_tramos("volatilidad", _lp.get("vol_pct"), _vol_txt)
-            + html_conclusion(_c_valor, "valor")
+            + (html_conclusion(_c_valor, "valor") if _c_valor else html_historial_insuficiente(len(hist)))
             + '</div>', unsafe_allow_html=True)
         # ── Sector context from SECTOR_KNOWLEDGE ─────────────────────
         _sk_data = SECTOR_KNOWLEDGE.get("sectores", {})
@@ -12639,6 +13056,8 @@ def _pp_wizard_fragment():
                     break
         _c_sector = None   # PE-09
         if _sector_info:
+            _sector_info = sector_con_subtipo(_sector_info, _info.get("industry"))   # validación 21 §2
+            _sub_ciclo_txt = f" ({_sector_info['_subtipo_ciclo']})" if _sector_info.get("_subtipo_ciclo") else ""
             _s_emoji  = _sector_info.get("emoji", "📊")
             _s_nombre = _sector_info.get("nombre_es", _sector_yf)
             _s_car    = _sector_info.get("caracter", "").replace("-", " · ").title()
@@ -12714,7 +13133,7 @@ def _pp_wizard_fragment():
               {_fase_html}
               {f'<div style="font-size:.84rem;font-weight:700;color:#713f12;margin:.3rem 0">{_fase_linea}</div>' if _fase_linea else ''}
               <details style="margin:.4rem 0" open>
-                <summary style="font-size:.83rem;font-weight:700;color:#475569;cursor:pointer">&#128202; Comportamiento por fase de ciclo</summary>
+                <summary style="font-size:.83rem;font-weight:700;color:#475569;cursor:pointer">&#128202; Comportamiento por fase de ciclo{_sub_ciclo_txt}</summary>
                 <table style="margin:.4rem 0;border-collapse:collapse"><tbody>{_ciclo_rows}</tbody></table>
               </details>
               <details style="margin:.4rem 0">
@@ -12749,19 +13168,23 @@ def _pp_wizard_fragment():
 
     # ── PASO 2: DIAGNÓSTICO TÉCNICO ─────────────────────────────────────────
     elif _step == 2:
-        _pt = d["puntuacion_tec"]
+        # Spec PE v3 — Paso 2: mismas notas y datos que el informe (diagnostico_tecnico, PE-15)
+        _diag  = d.get("diag") or {}
+        _pt    = d["puntuacion_tec"]
         _score = _pt.get("score_total", 5.0)
         _si    = _pt.get("scores_ind", {})
-        _cc    = "#16a34a" if _score >= 7 else ("#f59e0b" if _score >= 4 else "#dc2626")
-        _cl    = "ESTRUCTURA S&#211;LIDA" if _score >= 7 else ("ESTRUCTURA MIXTA" if _score >= 4 else "ESTRUCTURA D&#201;BIL")
+        _tr2   = tramo_estructura(_score)
+        _cc    = {"alcista": "#16a34a", "mixta": "#f59e0b", "bajista": "#dc2626"}[_tr2]
+        _cl    = {"alcista": "ESTRUCTURA ALCISTA", "mixta": "ESTRUCTURA MIXTA", "bajista": "ESTRUCTURA BAJISTA"}[_tr2]
 
-        st.markdown(f"""
+        st.markdown("""
         <div class="pp-card">
-          <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico: &#191;Est&#225; el activo en buena forma?</div>
+          <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico: &#191;C&#243;mo est&#225; la estructura del valor?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el diagn&#243;stico t&#233;cnico?</b><br>
-          Analiza la <b>estructura de largo y medio plazo</b>: m&#225;ximos hist&#243;ricos, media 200,
-          Fibonacci, RSI estructural y volumen. No mide el <i>momento</i> actual
-          (eso es el Paso 3), sino si el activo est&#225; en <b>buena forma estructural</b>.</div>
+          Resume la <b>estructura de largo y medio plazo</b> con seis componentes: m&#225;ximo hist&#243;rico,
+          media de 200 sesiones, resistencias, Fibonacci, RSI y volumen. Cada uno recibe una nota de 0 a 10
+          seg&#250;n reglas fijas del m&#233;todo, y la nota global es su media ponderada. No mide el
+          <i>momento</i> actual (eso es el Paso 3).</div>
         </div>""", unsafe_allow_html=True)
 
         _bw = int(_score * 10)
@@ -12769,35 +13192,36 @@ def _pp_wizard_fragment():
         <div style="margin:.8rem 0">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
             <span style="font-weight:700;color:{_cc}">{_cl}</span>
-            <span style="font-size:1.4rem;font-weight:800;color:{_cc}">{_score:.1f}/10</span>
+            <span style="font-size:1.4rem;font-weight:800;color:{_cc}">{_num_es(_score, 1)}/10</span>
           </div>
           <div class="pp-score-bar"><div class="pp-score-fill" style="width:{_bw}%;background:{_cc}"></div></div>
         </div>""", unsafe_allow_html=True)
 
-        _comp_edu = {
-            "ath":    ("&#128200; M&#225;x. Hist&#243;rico",  "&#191;Cu&#225;nto dista de su m&#225;ximo hist&#243;rico? Cerca = fuerza; lejos = recorrido potencial."),
-            "sma200": ("&#12336;&#65038; Media 200",           "&#191;Est&#225; por encima de su media de largo plazo? Fundamental para tendencia."),
-            "resist": ("&#129395; Resistencias",               "&#191;Ha roto niveles clave? Las rupturas con volumen son se&#241;ales de fuerza real."),
-            "fibo":   ("&#128208; Fibonacci",                  "&#191;En qu&#233; retroceso de Fibonacci est&#225;? El 0.618 es el nivel m&#225;s relevante para inversores."),
-            "rsi":    ("&#9889; RSI Estructural",              "&#191;Est&#225; el RSI en zona de salud (40-70)? Extremos = se&#241;al de agotamiento."),
-            "vol":    ("&#128266; Volumen",                    "&#191;El volumen confirma el movimiento? Subidas con volumen creciente = convicci&#243;n real."),
-        }
-        for key, si_item in _si.items():
-            _lbl, _edu = _comp_edu.get(key, (key, ""))
-            _cc2 = "#16a34a" if si_item["puntos"] >= 7 else ("#f59e0b" if si_item["puntos"] >= 4 else "#dc2626")
-            _bw2 = int(si_item["puntos"] * 10)
-            with st.expander(f"{_lbl} — **{si_item['escenario']}** ({si_item['puntos']:.0f}/10)"):
-                st.caption(_edu)
-                st.markdown(f"""<div class="pp-score-bar"><div class="pp-score-fill"
-                    style="width:{_bw2}%;background:{_cc2}"></div></div>""", unsafe_allow_html=True)
+        # PE-11 — ficha de cada componente
+        for key in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
+            si_item = _si.get(key) or {}
+            _tit = DIAG_COMPONENTES[key][0]
+            if not si_item.get("disponible"):
+                with st.expander(f"{_tit} — sin datos (no cuenta en la nota global)"):
+                    st.caption("No hay historial suficiente para calcular este componente.")
+                continue
+            _esc_t = titulo_escenario(key, si_item.get("escenario"))
+            with st.expander(f"{_tit} — {_esc_t} ({si_item['puntos']:.0f}/10)"):
+                st.markdown(html_ficha_componente(key, _diag.get(key), si_item, precio), unsafe_allow_html=True)
 
-        st.markdown("""
-        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">
-        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>
-        &#8805; 7/10: estructura s&#243;lida &#8212; probabilidades t&#233;cnicas a favor.<br>
-        4&#8211;6/10: se&#241;ales contradictorias &#8212; m&#225;s cautela y criterios adicionales.<br>
-        &lt; 4/10: estructura d&#233;bil &#8212; no es momento de comprar sin razones muy s&#243;lidas.
-        </div>""", unsafe_allow_html=True)
+        # PE-12 — cálculo visible de la nota global y cortes del motor
+        st.markdown(
+            '<div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">'
+            '&#128161; <b>&#191;Qu&#233; significa esto para ti?</b>' + html_nota_global(_pt) + '</div>',
+            unsafe_allow_html=True)
+
+        # PE-14 — conclusión del Paso 2 y relación con la conclusión del valor del Paso 1
+        _lp2 = datos_largo_plazo(hist, d["info"])
+        _cv2 = conclusion_valor(_lp2, nombre, simbolo_moneda(d["info"], _ticker))
+        _c2 = conclusion_paso2(_pt, _diag, precio, _cv2)
+        st.markdown(html_conclusion(_c2, "general")
+                    + f'<div style="font-size:.76rem;color:#64748b;font-style:italic;margin:-.2rem 0 .6rem">'
+                    + f'{params_conclusiones().get("nota_fija", "")}</div>', unsafe_allow_html=True)
 
     # ── PASO 3: SEMÁFORO ─────────────────────────────────────────────────────
     elif _step == 3:
@@ -18361,34 +18785,28 @@ def pantalla_analisis():
 
             # ---- MÁXIMOS HISTÓRICOS (ATH) ----
             hist_maximo = obtener_hist_maximo(ticker_activo)
-            analisis_ath = analizar_maximos_historicos(hist_maximo, precio, nombre)
+            # PE-15 — Diagnóstico Técnico con la misma función que el Paso 2 de «¿Por dónde empiezo?»
+            _diag_inf = diagnostico_tecnico(ticker_activo, hist, precio, nombre, niveles_reforzados,
+                                            divergencias_tecnicas)
+            analisis_ath = _diag_inf["ath"]
 
             # ---- SMA200 GIRO / TENDENCIA ----
-            analisis_sma200 = analizar_sma200(hist, precio, nombre)
+            analisis_sma200 = _diag_inf["sma200"]
 
             # ---- RESISTENCIAS ESTRUCTURALES ----
-            analisis_resist = analizar_resistencias_estructurales(
-                niveles_reforzados, precio, nombre
-            )
+            analisis_resist = _diag_inf["resist"]
 
             # ---- FIBONACCI RETRACEMENT/EXTENSIÓN ----
-            analisis_fibo = analizar_fibonacci(hist, precio, nombre)
+            analisis_fibo = _diag_inf["fibo"]
 
             # ---- RSI ZONA / TENDENCIA / DIVERGENCIA ----
-            analisis_rsi = analizar_rsi(hist, precio, nombre)
+            analisis_rsi = _diag_inf["rsi"]
 
             # ---- VOLUMEN RELATIVO / ACUMULACIÓN-DISTRIBUCIÓN ----
-            analisis_vol = analizar_volumen(hist, nombre)
-            if analisis_vol is not None:   # PA3-05: divergencia OBV fuerte bajista → volumen ≤ 5/10
-                analisis_vol["obv_bajista_fuerte"] = any(
-                    d.get("tipo") == "OBV" and d.get("direccion") == "bajista" and d.get("fuerza") == "fuerte"
-                    for d in (divergencias_tecnicas or []))
+            analisis_vol = _diag_inf["vol"]
 
             # ---- PUNTUACIÓN TÉCNICA INTEGRADA ----
-            puntuacion_tec = calcular_puntuacion_tecnica(
-                analisis_ath, analisis_sma200, analisis_resist,
-                analisis_fibo, analisis_rsi, analisis_vol
-            )
+            puntuacion_tec = _diag_inf["puntuacion"]
 
 
 
