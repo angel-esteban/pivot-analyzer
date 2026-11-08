@@ -5706,6 +5706,9 @@ SISTEMAS_PIVOT = {
 }
 
 TIMEFRAMES = ["Diario", "Semanal", "Trimestral", "Anual"]
+# Doc. 26 G-1 — la tabla de pivots muestra también el mensual (el que usa el Paso 2), sin que entre en las
+# confluencias ni en la convergencia de la pantalla, que siguen con TIMEFRAMES.
+TIMEFRAMES_TABLA = ["Diario", "Semanal", "Mensual", "Trimestral", "Anual"]
 
 
 def calcular_todos_pivots(hist: pd.DataFrame, sistema: str, timeframes=None):
@@ -13247,6 +13250,10 @@ def _pp_wizard_cuerpo(st):
     if _step > st.session_state.get("_pp_max_step", 1):
         st.session_state["_pp_max_step"] = _step
     _max_step = st.session_state.get("_pp_max_step", _step)
+    # Ticker junto al nombre de cada paso, para saber a qué valor corresponde al cambiar de uno a otro
+    import html as _html_tk
+    _tk_e = _html_tk.escape(str(_ticker))
+    _tk_tit = f' &#183; <span style="white-space:nowrap">{_tk_e}</span>'
 
     # ── Wizard de 4 tarjetas ─────────────────────────────────────────────────
     _PASOS_WIZ = [("🌍", "Contexto Macro"), ("🏗️", "Estructura"),
@@ -13274,7 +13281,7 @@ def _pp_wizard_cuerpo(st):
                 'box-sizing:border-box;min-height:110px;display:flex;flex-direction:column;'
                 'align-items:center;justify-content:center;gap:4px">'
                 '<div style="font-size:1.4rem;opacity:' + _op + '">' + _wico + '</div>'
-                '<div style="font-size:.85rem;font-weight:700;color:' + _tc + '">' + _wnm + '</div>'
+                '<div style="font-size:.85rem;font-weight:700;color:' + _tc + '">' + _wnm + _tk_tit + '</div>'
                 '<div style="font-size:.75rem;font-weight:600;color:' + _paso_color + ';margin-top:4px">Paso ' + str(_wi) + '</div>'
                 '</div>',
                 unsafe_allow_html=True
@@ -13325,6 +13332,11 @@ def _pp_wizard_cuerpo(st):
                 # Pivots + convergencia (necesaria para niveles_reforzados)
                 _rpivots = calcular_todos_pivots(obtener_hist_pivots(_ticker, hist), list(SISTEMAS_PIVOT.keys())[0])   # V3-9
                 _pd_d    = _rpivots.get("Diario")
+                try:   # Doc. 26 G-1 — pivot clásico mensual, el que usa el Paso 2, visible en el Paso 4
+                    _pm_cl = calcular_todos_pivots(obtener_hist_pivots(_ticker, hist), "Clásico",
+                                                   timeframes=("Mensual",)).get("Mensual")
+                except Exception:
+                    _pm_cl = None
                 _tol_conv = tolerancia_confluencia(_precio, st.session_state.get("tolerancia_pct_key"))   # PA3-04
                 _niv_ref, _señales_dir, _consenso = calcular_convergencia_tecnica(
                     _rpivots, _medias, _precio,
@@ -13349,7 +13361,7 @@ def _pp_wizard_cuerpo(st):
                     "medias": _medias, "vol_data": _vol_sem,
                     "puntuacion_tec": _pt, "diag": _diag,
                     "color_sem": _c_sem, "pct_sem": _p_sem, "factores_sem": _f_sem,
-                    "pivots_diario": _pd_d, "confluencias": _confs,
+                    "pivots_diario": _pd_d, "pivots_mensual": _pm_cl, "confluencias": _confs,
                 }
             except Exception as _e:
                 st.error(f"Error al cargar datos: {_e}")
@@ -13368,12 +13380,12 @@ def _pp_wizard_cuerpo(st):
     if _step == 1:
         st.markdown("""
         <div class="pp-card">
-          <div class="pp-title">&#127758; Paso 1 — Contexto Macro: &#191;El viento a favor o en contra?</div>
+          <div class="pp-title">&#127758; Paso 1 — Contexto Macro@@TK@@: &#191;El viento a favor o en contra?</div>
           <div class="pp-edu">&#128218; <b>&#191;Por qu&#233; empezar aqu&#237;?</b><br>
           El contexto macro es el <b>viento del mercado</b>. Puedes tener la mejor empresa del mundo,
           pero si los tipos suben agresivamente o hay recesi&#243;n, el precio puede caer de todas formas.
           Antes de mirar cualquier gr&#225;fico, sit&#250;ate en el mapa grande.</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""".replace("@@TK@@", _tk_tit), unsafe_allow_html=True)
 
         _info   = d["info"]
         # PE-01/PE-06 — mismos datos y funciones que Análisis Técnico (obtener_datos, sin ajustar)
@@ -13556,13 +13568,13 @@ def _pp_wizard_cuerpo(st):
 
         st.markdown("""
         <div class="pp-card">
-          <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico: &#191;C&#243;mo est&#225; la estructura del valor?</div>
+          <div class="pp-title">&#127959;&#65039; Paso 2 — Diagn&#243;stico T&#233;cnico@@TK@@: &#191;C&#243;mo est&#225; la estructura del valor?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el diagn&#243;stico t&#233;cnico?</b><br>
           Resume la <b>estructura de largo y medio plazo</b> con seis componentes: m&#225;ximo hist&#243;rico,
           media de 200 sesiones, resistencias, Fibonacci, RSI y volumen. Cada uno recibe una nota de 0 a 10
           seg&#250;n reglas fijas del m&#233;todo, y la nota global es su media ponderada. No mide el
           <i>momento</i> actual (eso es el Paso 3).</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""".replace("@@TK@@", _tk_tit), unsafe_allow_html=True)
 
         _bw = int(_score * 10)
         st.markdown(f"""
@@ -13616,7 +13628,7 @@ def _pp_wizard_cuerpo(st):
 
         st.markdown(f"""
         <div class="pp-card">
-          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global: &#191;qu&#233; dice el momento actual?</div>
+          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global{_tk_tit}: &#191;qu&#233; dice el momento actual?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el sem&#225;foro?</b><br>
           Mide el <b>momento actual</b>: si RSI, MACD, Bollinger, SAR y Volumen est&#225;n alineados
           a favor o en contra. Buena estructura (Paso 2) con sem&#225;foro rojo = <b>lectura sin confirmar</b>.
@@ -13657,7 +13669,7 @@ def _pp_wizard_cuerpo(st):
 
         st.markdown(f"""
         <div class="pp-card">
-          <div class="pp-title">&#128204; Paso 4 — Niveles concretos: &#191;A qu&#233; precio act&#250;o?</div>
+          <div class="pp-title">&#128204; Paso 4 — Niveles concretos{_tk_tit}: &#191;A qu&#233; precio act&#250;o?</div>
           <div class="pp-edu">&#128218; <b>&#191;Qu&#233; son los niveles?</b><br>
           Los Pivot Points son precios donde el mercado <b>hist&#243;ricamente reacciona</b>.
           Las <b>confluencias</b> son los m&#225;s fiables: varios sistemas o timeframes coinciden
@@ -13679,6 +13691,18 @@ def _pp_wizard_cuerpo(st):
                     st.markdown(f"{_b}`{_k}` {_t2} — **{_v:.4f}** ({_d2:+.2f}%){_b}")
             else:
                 st.caption("Sin datos de Pivot Points.")
+            _pm = d.get("pivots_mensual")
+            if _pm:   # Doc. 26 G-1
+                st.markdown("**Pivot clásico mensual (mes natural anterior; lo usa el Paso 2):**")
+                st.caption(f"Máx. {_pm['_H']:.4f} · mín. {_pm['_L']:.4f} · cierre {_pm['_C']:.4f} → "
+                           f"PP = (máx. + mín. + cierre) / 3 = {_pm['PP']:.4f}")
+                for _k in ["R3", "R2", "R1", "PP", "S1", "S2", "S3"]:
+                    _v = _pm.get(_k)
+                    if _v is None:
+                        continue
+                    _d2 = (_v - precio) / precio * 100
+                    _t2 = "&#128308; Resistencia" if _v > precio else ("&#9878;&#65039; Pivot" if abs(_d2) < 0.1 else "&#128994; Soporte")
+                    st.markdown(f"`{_k}` {_t2} — **{_v:.4f}** ({_d2:+.2f}%)")
         with c2:
             st.markdown("**Confluencias m&#225;s cercanas:**")
             if _confs:
@@ -19111,6 +19135,11 @@ def pantalla_analisis():
         with st.spinner("Calculando análisis técnico..."):
             resultados_pivots = calcular_todos_pivots(obtener_hist_pivots(ticker_activo, hist), sistema_activo)   # V3-9
             pivots_diario = resultados_pivots.get("Diario")
+            try:   # Doc. 26 G-1 — solo para la tabla de pivots
+                _piv_mensual = calcular_todos_pivots(obtener_hist_pivots(ticker_activo, hist), sistema_activo,
+                                                     timeframes=("Mensual",)).get("Mensual")
+            except Exception:
+                _piv_mensual = None
 
             # ---- INDICADORES ----
             cierre_serie = hist["Close"]
@@ -19855,8 +19884,8 @@ La posición del precio respecto al PP marca el **sesgo del día**:
 > 3. No actualizar los niveles — los Pivot Points se recalculan cada sesión/semana/mes.
 """)
                     st.caption("Análisis educativo · No constituye asesoramiento personalizado de inversión bajo MiFID II")
-            for tf in TIMEFRAMES:
-                render_tabla_pivots(tf, resultados_pivots.get(tf), precio)
+            for tf in TIMEFRAMES_TABLA:
+                render_tabla_pivots(tf, _piv_mensual if tf == "Mensual" else resultados_pivots.get(tf), precio)
 
         with col_conf:
             if confluencias:

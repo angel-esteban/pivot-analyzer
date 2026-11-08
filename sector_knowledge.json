@@ -57,12 +57,15 @@
       "leccion_cualitativa": "Las tecnológicas han sufrido caídas muy fuertes cuando sus valoraciones estaban muy altas, como tras la burbuja puntocom de 2000-2002 o durante la subida de tipos de 2022.",
       "leccion_fuente": "Yahoo Finance (índice ^IXIC, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "10/03/2000 – 09/10/2002 y 19/11/2021 – 28/12/2022",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 2,
         "pico": -1,
         "contraccion": -1,
         "recuperacion": 2
+      },
+      "_previo_pe_v6": {
+        "leccion_validada": false
       }
     },
     "Financial Services": {
@@ -256,20 +259,25 @@
         "Ensayos clínicos fallidos: pérdida de valor repentina en biotecnología",
         "Concentración de ingresos en un solo blockbuster"
       ],
-      "leccion_historica": "Entre el 09/10/2007 y el 09/03/2009, durante la crisis financiera, el S&P 500 cayó un 56,8% (de 1.565,15 a 676,53 puntos). En el mismo periodo, el fondo cotizado XLV, que replica el sector sanitario del S&P 500, cayó un 40,6% desde su máximo del 10/12/2007. El sector también cayó, pero bastante menos que el mercado.",
+      "leccion_historica": "Entre el 09/10/2007 y el 09/03/2009, durante la crisis financiera, el S&P 500 cayó un 56,8% (de 1.565,15 a 676,53 puntos) y el fondo cotizado XLV, que replica el sector sanitario del S&P 500, un 39,7% (de 36,30 a 21,88 $). El sector también cayó, pero bastante menos que el mercado.",
       "yfinance_keys": [
         "Healthcare",
         "Health Care"
       ],
       "leccion_cualitativa": "En la crisis financiera de 2007-2009 el sector sanitario también cayó, pero bastante menos que el conjunto del mercado: su demanda depende poco del ciclo.",
       "leccion_fuente": "Yahoo Finance (^GSPC y XLV, cierres diarios), cálculo de PivotAnalyzer",
-      "leccion_periodo": "09/10/2007 – 09/03/2009 (XLV: desde el 10/12/2007)",
-      "leccion_validada": false,
+      "leccion_periodo": "09/10/2007 – 09/03/2009",
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 0,
         "pico": 1,
         "contraccion": 2,
         "recuperacion": -1
+      },
+      "_previo_pe_v6": {
+        "leccion_historica": "Entre el 09/10/2007 y el 09/03/2009, durante la crisis financiera, el S&P 500 cayó un 56,8% (de 1.565,15 a 676,53 puntos). En el mismo periodo, el fondo cotizado XLV, que replica el sector sanitario del S&P 500, cayó un 40,6% desde su máximo del 10/12/2007. El sector también cayó, pero bastante menos que el mercado.",
+        "leccion_periodo": "09/10/2007 – 09/03/2009 (XLV: desde el 10/12/2007)",
+        "leccion_validada": false
       }
     },
     "Consumer Cyclical": {
@@ -314,15 +322,15 @@
         "Sensibilidad a tipos de cambio (turismo, importaciones)",
         "Concentración de ventas en temporadas clave (Navidad, verano)"
       ],
-      "leccion_historica": "En España, el turismo supuso el 12,6% del PIB en 2024 (estimación avance del INE). En 2020, con la pandemia, IAG cayó un 76,8% entre el 17/01/2020 y el 03/08/2020 (de 5,22 a 1,21 €) y Meliá un 67,1% entre el 15/01/2020 y el 18/03/2020 (de 8,34 a 2,74 €). Es un sector muy expuesto a un frenazo brusco de la demanda.",
+      "leccion_historica": "En España, el turismo supuso el 12,6% del PIB en 2024 (estimación avance del INE). En 2020, con la pandemia, IAG cayó un 76,8% entre el 17/01/2020 y el 03/08/2020 y Meliá un 67,1% entre el 15/01/2020 y el 18/03/2020 (de 8,34 a 2,74 €). Es un sector muy expuesto a un frenazo brusco de la demanda.",
       "yfinance_keys": [
         "Consumer Cyclical",
         "Consumer Discretionary"
       ],
       "leccion_cualitativa": "El turismo tiene mucho peso en la economía española. En 2020, la pandemia hundió en pocas semanas la cotización de aerolíneas y hoteleras: es un sector muy expuesto a un frenazo brusco de la demanda.",
-      "leccion_fuente": "INE, Cuenta Satélite del Turismo de España (nota de prensa del 22/12/2025); Yahoo Finance (IAG.MC, MEL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+      "leccion_fuente": "INE, Cuenta Satélite del Turismo de España (nota de prensa del 22/12/2025, 2024 en estimación avance); Yahoo Finance (IAG.MC, MEL.MC, cierres diarios), cálculo de PivotAnalyzer. De IAG solo se da el porcentaje: la serie de Yahoo está ajustada por la ampliación de capital de 2020",
       "leccion_periodo": "PIB: 2024 · cotizaciones: 15/01/2020 – 03/08/2020",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 2,
         "pico": 0,
@@ -337,6 +345,11 @@
           "leccion_periodo": "19/02/2020 (32,08 €) – 16/03/2020 (20,17 €)",
           "leccion_validada": true
         }
+      },
+      "_previo_pe_v6": {
+        "leccion_historica": "En España, el turismo supuso el 12,6% del PIB en 2024 (estimación avance del INE). En 2020, con la pandemia, IAG cayó un 76,8% entre el 17/01/2020 y el 03/08/2020 (de 5,22 a 1,21 €) y Meliá un 67,1% entre el 15/01/2020 y el 18/03/2020 (de 8,34 a 2,74 €). Es un sector muy expuesto a un frenazo brusco de la demanda.",
+        "leccion_fuente": "INE, Cuenta Satélite del Turismo de España (nota de prensa del 22/12/2025); Yahoo Finance (IAG.MC, MEL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
+        "leccion_validada": false
       }
     },
     "Consumer Defensive": {
@@ -386,12 +399,15 @@
       "leccion_cualitativa": "En 2022 el consumo básico estadounidense también cayó, pero mucho menos que el conjunto del mercado.",
       "leccion_fuente": "Yahoo Finance (^GSPC y XLP, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "31/12/2021 – 30/12/2022",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": -1,
         "pico": 1,
         "contraccion": 2,
         "recuperacion": -1
+      },
+      "_previo_pe_v6": {
+        "leccion_validada": false
       }
     },
     "Energy": {
@@ -441,7 +457,7 @@
         "Energy"
       ],
       "leccion_cualitativa": "El precio del petróleo puede moverse de forma extrema: en 2020 llegó a cotizar en negativo en el mercado de futuros y en 2022 se disparó tras la invasión de Ucrania. El sector energético sigue sobre todo al crudo.",
-      "leccion_fuente": "EIA (series RCLC1, futuro WTI contrato 1 en NYMEX, y RBRTE, Brent spot), comprobado por FABER-PA",
+      "leccion_fuente": "EIA (series RCLC1 y RBRTE), comprobación de PivotAnalyzer",
       "leccion_periodo": "20/04/2020; marzo de 2022 (Brent por encima de 120 $ desde el 04/03/2022)",
       "leccion_validada": true,
       "efecto_ciclo": {
@@ -469,6 +485,9 @@
         "leccion_fuente": "Yahoo Finance (CL=F, BZ=F y fondos Select Sector SPDR, cierres diarios), cálculo de PivotAnalyzer",
         "leccion_periodo": "20/04/2020; 08/03/2022; 31/12/2021 – 30/12/2022",
         "leccion_validada": false
+      },
+      "_previo_pe_v6": {
+        "leccion_fuente": "EIA (series RCLC1, futuro WTI contrato 1 en NYMEX, y RBRTE, Brent spot), comprobado por FABER-PA"
       }
     },
     "Utilities": {
@@ -570,18 +589,25 @@
         "Competencia global con productores de bajo coste (Asia)",
         "Regulación medioambiental creciente sobre emisiones industriales"
       ],
-      "leccion_historica": "Los índices de gestores de compras (PMI) manufactureros suelen girar antes que los datos de producción. En la desaceleración industrial europea de 2018-2019 dieron la señal antes de que empeoraran otros indicadores.",
+      "leccion_historica": "Los índices de gestores de compras (PMI) manufactureros se publican antes que los datos oficiales de producción y se usan como indicador adelantado de la actividad industrial. Por debajo de 50 indican contracción.",
       "yfinance_keys": [
         "Industrials"
       ],
-      "leccion_periodo": "2018-2019",
-      "leccion_validada": false,
+      "leccion_periodo": "Metodología vigente",
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 2,
         "pico": 0,
         "contraccion": -1,
         "recuperacion": 2
-      }
+      },
+      "_previo_pe_v6": {
+        "leccion_historica": "Los índices de gestores de compras (PMI) manufactureros suelen girar antes que los datos de producción. En la desaceleración industrial europea de 2018-2019 dieron la señal antes de que empeoraran otros indicadores.",
+        "leccion_fuente": "__falta__",
+        "leccion_periodo": "2018-2019",
+        "leccion_validada": false
+      },
+      "leccion_fuente": "Metodología de S&P Global / HCOB PMI"
     },
     "Basic Materials": {
       "nombre_es": "Materiales Básicos",
@@ -624,19 +650,23 @@
         "Riesgo ambiental y social (ESG) creciente",
         "Dependencia del ciclo chino"
       ],
-      "leccion_historica": "Entre el 07/11/2001 y el 02/07/2008 el precio del cobre en el mercado de futuros pasó de 0,604 a 4,078 $ por libra: se multiplicó por 6,8, en un ciclo muy ligado a la demanda de China. Entre el 02/01/2014 y el 15/01/2016 cayó un 43,5% (de 3,43 a 1,94 $). El sector sigue de cerca estos ciclos de precios.",
+      "leccion_historica": "Entre el 07/11/2001 y el 02/07/2008 el precio del cobre en el mercado de futuros pasó de 0,604 a 4,078 $ por libra: se multiplicó por 6,8, en un periodo de fuerte demanda de China, entre otros factores. Entre el 02/01/2014 y el 15/01/2016 cayó un 43,5% (de 3,43 a 1,94 $). El sector sigue de cerca estos ciclos de precios.",
       "yfinance_keys": [
         "Basic Materials"
       ],
       "leccion_cualitativa": "El cobre y otras materias primas viven ciclos largos de subidas y caídas, muy ligados a la demanda de China. El sector sigue de cerca esos ciclos.",
       "leccion_fuente": "Yahoo Finance (futuros de cobre HG=F, cierres diarios), cálculo de PivotAnalyzer",
       "leccion_periodo": "07/11/2001 – 02/07/2008 y 02/01/2014 – 15/01/2016",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 2,
         "pico": 0,
         "contraccion": -2,
         "recuperacion": 2
+      },
+      "_previo_pe_v6": {
+        "leccion_historica": "Entre el 07/11/2001 y el 02/07/2008 el precio del cobre en el mercado de futuros pasó de 0,604 a 4,078 $ por libra: se multiplicó por 6,8, en un ciclo muy ligado a la demanda de China. Entre el 02/01/2014 y el 15/01/2016 cayó un 43,5% (de 3,43 a 1,94 $). El sector sigue de cerca estos ciclos de precios.",
+        "leccion_validada": false
       }
     },
     "Real Estate": {
@@ -687,12 +717,15 @@
       "leccion_cualitativa": "En 2022, con el BCE subiendo tipos, las SOCIMI cotizadas españolas corrigieron con fuerza: el sector es muy sensible a los tipos, aunque la caída tuviera también otras causas.",
       "leccion_fuente": "Yahoo Finance (MRL.MC, COL.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
       "leccion_periodo": "04/01/2022 – 12/10/2022",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 1,
         "pico": -1,
         "contraccion": -1,
         "recuperacion": 2
+      },
+      "_previo_pe_v6": {
+        "leccion_validada": false
       }
     },
     "Communication Services": {
@@ -735,14 +768,14 @@
         "Fragmentación del entretenimiento (guerra entre plataformas de vídeo en línea)",
         "Telefónica España: exposición a LatAm con riesgo divisa"
       ],
-      "leccion_historica": "Telefónica cerró a 32,23 € el 06/03/2000, en plena euforia puntocom; el 24/07/2012 cotizaba a 8,53 € y el 09/02/2024 a 3,55 €. Una empresa puede seguir operando con normalidad y, aun así, su acción no recuperar sus máximos durante décadas. Las cifras no incluyen los dividendos cobrados.",
+      "leccion_historica": "Telefónica cerró a 32,23 € el 06/03/2000, en plena euforia puntocom; el 24/07/2012 cotizaba a 8,53 € y el 09/02/2024 a 3,55 €. Una empresa puede seguir operando con normalidad y, aun así, su acción no recuperar sus máximos durante décadas. Las cifras no incluyen los dividendos cobrados ni las acciones recibidas en ampliaciones liberadas (scrip).",
       "yfinance_keys": [
         "Communication Services"
       ],
       "leccion_cualitativa": "Telefónica marcó máximos en la euforia puntocom de 2000 y más de veinte años después su acción seguía muy lejos de ellos: una empresa puede seguir operando con normalidad y su acción no recuperar sus máximos durante décadas.",
       "leccion_fuente": "Yahoo Finance (TEF.MC, cierres diarios sin ajustar por dividendos ni ampliaciones liberadas), cálculo de PivotAnalyzer",
       "leccion_periodo": "06/03/2000; 24/07/2012; 09/02/2024",
-      "leccion_validada": false,
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 0,
         "pico": 0,
@@ -788,6 +821,10 @@
             "recuperacion": 1
           }
         }
+      },
+      "_previo_pe_v6": {
+        "leccion_historica": "Telefónica cerró a 32,23 € el 06/03/2000, en plena euforia puntocom; el 24/07/2012 cotizaba a 8,53 € y el 09/02/2024 a 3,55 €. Una empresa puede seguir operando con normalidad y, aun así, su acción no recuperar sus máximos durante décadas. Las cifras no incluyen los dividendos cobrados.",
+        "leccion_validada": false
       }
     }
   },

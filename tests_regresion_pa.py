@@ -1967,6 +1967,47 @@ def test_doc25_maximo_serie_completa_y_lecciones():
            and "precio alejado de su referencia de largo plazo" in t["tramos"][0]["como_leerlo"], "Doc. 25 V-2: tramo «más de +10%»")
 
 
+def test_doc26_ticker_pivot_mensual_y_lecciones():
+    """Doc. 26 — G-1 (pivot mensual visible), G-2, G-3, lecciones sectoriales y ticker junto al nombre del paso."""
+    P = _APP
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    # Ticker a continuación del nombre de cada paso (tarjetas del asistente y títulos)
+    _check("_tk_tit = f' &#183; <span style=\"white-space:nowrap\">{_tk_e}</span>'" in src
+           and "+ _wnm + _tk_tit +" in src and src.count('.replace("@@TK@@", _tk_tit)') == 2
+           and "Sem&#225;foro Global{_tk_tit}:" in src and "Niveles concretos{_tk_tit}:" in src,
+           "Ticker junto al nombre del paso")
+    # G-1
+    _check(P["TIMEFRAMES"] == ["Diario", "Semanal", "Trimestral", "Anual"]
+           and P["TIMEFRAMES_TABLA"] == ["Diario", "Semanal", "Mensual", "Trimestral", "Anual"]
+           and "for tf in TIMEFRAMES_TABLA:" in src and '"pivots_mensual": _pm_cl' in src
+           and "PP = (máx. + mín. + cierre) / 3" in src, "Doc. 26 G-1: pivot mensual en las tablas")
+    # G-2
+    crit = P["_cargar_criteria"]()
+    _check(crit["diagnostico_paso2"]["como_leerlo"]["ath"]["referencia"].startswith("El precio está claramente por debajo del máximo de la serie, pero no lejos"),
+           "Doc. 26 G-2: «Cómo leerlo» del tramo de distancia media")
+    # G-3 y lecciones
+    sec = P["SECTOR_KNOWLEDGE"]["sectores"]
+    _check(all(v.get("leccion_validada") is True for v in sec.values()), "Doc. 26 §3: 11 lecciones sectoriales validadas")
+    _check(not any("FABER" in str(v.get("leccion_fuente", "")) for v in sec.values())
+           and sec["Energy"]["leccion_fuente"] == "EIA (series RCLC1 y RBRTE), comprobación de PivotAnalyzer", "Doc. 26 G-3")
+    _check("un 39,7% (de 36,30 a 21,88 $)" in sec["Healthcare"]["leccion_historica"]
+           and sec["Healthcare"]["leccion_periodo"] == "09/10/2007 – 09/03/2009", "Doc. 26 §3: Healthcare, mismo periodo")
+    _check("5,22" not in sec["Consumer Cyclical"]["leccion_historica"] and "12,6% del PIB" in sec["Consumer Cyclical"]["leccion_historica"]
+           and "ampliación de capital de 2020" in sec["Consumer Cyclical"]["leccion_fuente"], "Doc. 26 §3: Consumer Cyclical")
+    _check("entre otros factores" in sec["Basic Materials"]["leccion_historica"]
+           and "muy ligado a la demanda" not in sec["Basic Materials"]["leccion_historica"], "Doc. 26 §3: Basic Materials")
+    _check("ampliaciones liberadas (scrip)" in sec["Communication Services"]["leccion_historica"], "Doc. 26 §3: Communication Services")
+    _check("Por debajo de 50 indican contracción" in sec["Industrials"]["leccion_historica"] and sec["Industrials"]["leccion_fuente"],
+           "Doc. 26 §3: Industrials reformulada")
+    lc = P["leccion_con_fuente"]
+    for k, v in sec.items():
+        r = lc(v["leccion_historica"], v.get("leccion_fuente"), v.get("leccion_periodo"), v.get("leccion_cualitativa"), v.get("leccion_validada"))
+        _check(not r["verificar"], f"Doc. 26 §3: lección {k} publicable")
+    t = " ".join(v["leccion_historica"] for v in sec.values()).lower()
+    _malos = [x for x in TERMINOS_PA3 if x in t] + _hay_compra_venta(t)
+    _check(not _malos, f"Doc. 26 §3: términos de operativa {_malos}")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""

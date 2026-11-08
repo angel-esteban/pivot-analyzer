@@ -1470,7 +1470,7 @@
         "en_ath": "El precio está prácticamente en el máximo histórico de la serie disponible.",
         "aproximandose_cerca": "Estar cerca del máximo histórico de la serie disponible indica que el precio está en la parte alta de esa serie.",
         "aproximandose": "El precio está algo por debajo del máximo histórico de la serie disponible: cerca de la parte alta, pero sin alcanzarla.",
-        "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados en la serie disponible; el máximo queda como referencia lejana.",
+        "referencia": "El precio está claramente por debajo del máximo de la serie, pero no lejos: el máximo sigue siendo una referencia visible.",
         "lejos": "El precio está muy por debajo del máximo histórico de la serie disponible: niveles ya alcanzados en el pasado quedan muy lejos."
       },
       "sma200": {
@@ -1600,6 +1600,9 @@
         "Zona media": "en la zona media del año",
         "Zona alta del año": "cerca de máximos del año"
       }
+    },
+    "_previo_pe_v6": {
+      "como_ath_referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados en la serie disponible; el máximo queda como referencia lejana."
     }
   }
 }
