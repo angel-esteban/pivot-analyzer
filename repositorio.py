@@ -312,3 +312,65 @@ def modificar_pago_manual(conn, pago_id: int, cambios: dict, usuario: str) -> st
             pass
         return f"error al modificar: {e}"
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Incidencias de calidad de las series de precios (docs. 25-27 de Pólaris)
+# Tabla `incidencia_serie` (migracion_incidencia_serie.sql). Independiente de
+# `incidencias`/`valido` de instrumento y fundamental: no afecta al screener.
+# ─────────────────────────────────────────────────────────────────────────────
+TIPO_SERIE_NO_AJUSTADA_ATH = "serie_no_ajustada_ath"
+
+
+def registrar_incidencia_serie(conn, ticker: str, tipo: str, activa: bool,
+                               detalle: dict | None = None) -> str | None:
+    """Activa (alta o actualización) o desactiva la incidencia (ticker, tipo).
+    · activa=True  → INSERT … ON CONFLICT: detalle y ultima_vez nuevos, activa = true
+                     (primera_vez se conserva).
+    · activa=False → solo desactiva una fila activa existente; si no hay, no hace nada.
+    Devuelve un texto de error o None."""
+    tk = (ticker or "").upper().strip()
+    if not tk or not tipo:
+        return "ticker y tipo son obligatorios"
+    try:
+        cur = conn.cursor()
+        if activa:
+            cur.execute(
+                "INSERT INTO incidencia_serie (ticker, tipo, detalle, activa) "
+                "VALUES (%s, %s, %s::jsonb, true) "
+                "ON CONFLICT (ticker, tipo) DO UPDATE SET detalle = EXCLUDED.detalle, "
+                "ultima_vez = now(), activa = true",
+                [tk, tipo, json.dumps(detalle or {}, ensure_ascii=False, default=str)])
+        else:
+            cur.execute(
+                "UPDATE incidencia_serie SET activa = false, ultima_vez = now() "
+                "WHERE ticker = %s AND tipo = %s AND activa",
+                [tk, tipo])
+        conn.commit()
+    except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if "incidencia_serie" in str(e) and "does not exist" in str(e):
+            return "la tabla incidencia_serie no existe: ejecuta migracion_incidencia_serie.sql en Neon"
+        return f"error al registrar la incidencia de serie: {e}"
+    return None
+
+
+def leer_incidencias_serie(conn, solo_activas: bool = True) -> list[dict]:
+    """Filas de incidencia_serie (las activas primero, más recientes arriba). [] si no hay tabla."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT ticker, tipo, detalle, primera_vez, ultima_vez, activa FROM incidencia_serie"
+            + (" WHERE activa" if solo_activas else "")
+            + " ORDER BY activa DESC, ultima_vez DESC")
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    except Exception:                        # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []

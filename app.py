@@ -2128,6 +2128,24 @@ SERIE_ATH_RATIO_MAX = 20.0
 SERIE_ATH_VENTANA_AÑOS = 15
 
 
+def detalle_serie_ath(hist_largo) -> "dict | None":
+    """Doc. 27 — Datos de la guarda para el registro en incidencia_serie: ratio entre el máximo de toda
+    la serie y el de los últimos 15 años, fechas y umbral. None si la serie no supera los 15 años."""
+    try:
+        import pandas as _pd_s
+        _corte = hist_largo.index[-1] - _pd_s.DateOffset(years=SERIE_ATH_VENTANA_AÑOS)
+        _ventana = hist_largo[hist_largo.index >= _corte]
+        if len(_ventana) < 50 or len(_ventana) >= len(hist_largo):
+            return None
+        _mt, _mv = float(hist_largo["High"].max()), float(_ventana["High"].max())
+        return {"ratio": round(_mt / _mv, 2) if _mv else None, "max_total": round(_mt, 4),
+                "fecha_max_total": hist_largo["High"].idxmax().strftime("%Y-%m-%d"),
+                "max_ventana": round(_mv, 4), "ventana_desde": _ventana.index[0].strftime("%Y-%m-%d"),
+                "serie_desde": hist_largo.index[0].strftime("%Y-%m-%d"), "umbral": SERIE_ATH_RATIO_MAX}
+    except Exception:
+        return None
+
+
 def recortar_serie_no_ajustada(hist_largo):
     """Devuelve (serie, recortada). Recorta al tramo de 15 años si el antiguo no es fiable."""
     try:
@@ -2162,6 +2180,7 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
     if hist_largo is None or len(hist_largo) < 50:
         return None
 
+    serie_detalle = detalle_serie_ath(hist_largo)   # doc. 27: para el registro en incidencia_serie
     hist_largo, serie_recortada = recortar_serie_no_ajustada(hist_largo)
 
     # ── ATH ──────────────────────────────────────────────────────────────
@@ -2293,6 +2312,7 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
         "ath":       ath,
         "ath_fecha": ath_fecha,
         "serie_recortada": serie_recortada,
+        "serie_detalle":   serie_detalle,
         "ath_fecha_dia": idx_ath.strftime("%d/%m/%Y") if hasattr(idx_ath, "strftime") else "",   # PE-11
         "desde":         ath_desde,            # doc. 23 E-2
         "historia_completa": historia_completa,
@@ -10508,6 +10528,49 @@ def _admin_calidad():
                     st.write(", ".join(f"{_k}: {_v}" for _k, _v in _inf.incidencias_tendencia.items()))
             except Exception as _e:
                 st.error(f"No se pudo calcular el monitor: {_e}")
+    _admin_incidencias_serie()
+
+
+def _admin_incidencias_serie():
+    """Doc. 27 — Incidencias de las series de precios (tabla incidencia_serie). Solo lectura."""
+    with st.expander("📉 Incidencias de las series de precios", expanded=False):
+        st.caption("Valores cuya serie completa de Yahoo tiene un tramo antiguo sin ajustar por operaciones de "
+                   f"capital (máximo total más de {SERIE_ATH_RATIO_MAX:.0f} veces el de los últimos "
+                   f"{SERIE_ATH_VENTANA_AÑOS} años). Su máximo histórico usa la ventana de "
+                   f"{SERIE_ATH_VENTANA_AÑOS} años. Se registran al analizar el valor; si Yahoo corrige la "
+                   "serie, la fila pasa a inactiva.")
+        _todas = st.checkbox("Mostrar también las inactivas", key="_adm_inc_serie_todas")
+        try:
+            import repositorio as _repo_is
+            import pandas as _pd_is
+            _cn = get_db_connection()
+            try:
+                _filas = _repo_is.leer_incidencias_serie(_cn, solo_activas=not _todas)
+            finally:
+                release_db_connection(_cn)
+        except Exception as _e:   # noqa: BLE001
+            st.error(f"No se pudo leer incidencia_serie: {_e}")
+            return
+        if not _filas:
+            st.success("Sin incidencias de series registradas (o la tabla aún no existe: "
+                       "migracion_incidencia_serie.sql).")
+            return
+        _rows = []
+        for _f in _filas:
+            _d = _f.get("detalle") or {}
+            if isinstance(_d, str):
+                try:
+                    _d = _json_mod.loads(_d)
+                except Exception:
+                    _d = {}
+            _rows.append({"ticker": _f["ticker"], "activa": "✓" if _f["activa"] else "—",
+                          "ratio": (f"×{_num_es(_d['ratio'], 1)}" if _d.get("ratio") else "—"),
+                          "máximo total": (f"{_num_es(_d['max_total'], 2)} ({_d.get('fecha_max_total', '')})"
+                                           if _d.get("max_total") else "—"),
+                          "máximo 15 años": _num_es(_d["max_ventana"], 2) if _d.get("max_ventana") else "—",
+                          "primera vez": str(_f.get("primera_vez") or "")[:16],
+                          "última vez": str(_f.get("ultima_vez") or "")[:16]})
+        st.dataframe(_pd_is.DataFrame(_rows), use_container_width=True, hide_index=True)
 
 
 def _admin_pagos_manuales():
@@ -12597,6 +12660,13 @@ def diagnostico_tecnico(ticker: str, hist, precio: float, nombre: str, divergenc
     except Exception:
         _anual = None
     a_ath = analizar_maximos_historicos(obtener_hist_maximo(ticker), precio, nombre)
+    if a_ath is not None:   # Doc. 27 — registro de la guarda de series no ajustadas
+        try:
+            _det = a_ath.get("serie_detalle")
+            _registrar_guarda_serie(ticker, bool(a_ath.get("serie_recortada")),
+                                    _json_mod.dumps(_det, sort_keys=True) if a_ath.get("serie_recortada") and _det else "")
+        except Exception:
+            pass
     a_sma = analizar_sma200(hist, precio, nombre)
     a_res = analizar_resistencias_estructurales(niveles, precio, nombre)
     if a_res is None and hist is not None and len(hist) >= 200 and _anual:
@@ -12615,6 +12685,24 @@ def diagnostico_tecnico(ticker: str, hist, precio: float, nombre: str, divergenc
     pt = calcular_puntuacion_tecnica(a_ath, a_sma, a_res, a_fib, a_rsi, a_vol)
     return {"ath": a_ath, "sma200": a_sma, "resist": a_res, "fibo": a_fib, "rsi": a_rsi, "vol": a_vol,
             "puntuacion": pt, "divergencias": divergencias, "niveles": niveles}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _registrar_guarda_serie(ticker: str, activa: bool, detalle_json: str = "") -> "str | None":
+    """Doc. 27 — Activa o desactiva en Neon (tabla incidencia_serie) la guarda del máximo histórico.
+    Caché de 1 hora por (ticker, estado, detalle): como mucho una escritura por hora y valor, y otra
+    en cuanto cambia el estado. Si no hay conexión o tabla, no interrumpe el análisis."""
+    import repositorio as _repo_is
+    try:
+        _cn = get_db_connection()
+    except Exception as _e:   # noqa: BLE001
+        return f"sin conexión: {_e}"
+    try:
+        return _repo_is.registrar_incidencia_serie(
+            _cn, ticker, _repo_is.TIPO_SERIE_NO_AJUSTADA_ATH, activa,
+            _json_mod.loads(detalle_json) if detalle_json else None)
+    finally:
+        release_db_connection(_cn)
 
 
 def cortes_diagnostico(criterios=None) -> dict:

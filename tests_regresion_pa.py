@@ -2008,6 +2008,95 @@ def test_doc26_ticker_pivot_mensual_y_lecciones():
     _check(not _malos, f"Doc. 26 §3: términos de operativa {_malos}")
 
 
+def test_doc27_incidencia_serie():
+    """Doc. 27 — Registro de la guarda de series no ajustadas en incidencia_serie: se activa y se desactiva."""
+    import json, os
+    import pandas as pd, numpy as np
+    import repositorio as R
+    P = _APP
+    idx = pd.bdate_range("2004-01-02", "2026-11-06")
+    hi = np.full(len(idx), 13.0); hi[700] = 1946.42           # caso COL.MC
+    h_mala = pd.DataFrame({"Open": 13.0, "High": hi, "Low": 12.0, "Close": 12.5, "Volume": 1e6}, index=idx)
+    hi2 = hi.copy(); hi2[700] = 15.0
+    h_buena = h_mala.assign(High=hi2)
+    d = P["detalle_serie_ath"](h_mala)
+    _check(d and d["ratio"] > 20 and d["fecha_max_total"] == idx[700].strftime("%Y-%m-%d") and d["umbral"] == 20.0,
+           f"Doc. 27: detalle de la guarda {d}")
+    _check(P["detalle_serie_ath"](h_mala.tail(300)) is None, "Doc. 27: serie de menos de 15 años → sin detalle")
+    # El Diagnóstico (función única) activa y desactiva el registro
+    llamadas = []
+    orig = {k: P[k] for k in ("_registrar_guarda_serie", "obtener_hist_maximo", "niveles_diagnostico", "_hist_pivots_cache")}
+    try:
+        P["_registrar_guarda_serie"] = lambda tk, activa, det="": llamadas.append((tk, activa, det))
+        P["niveles_diagnostico"] = lambda *a, **k: []
+        P["_hist_pivots_cache"] = lambda t: None
+        for h in (h_mala, h_buena):
+            P["obtener_hist_maximo"] = lambda *a, _h=h, **k: _h
+            P["diagnostico_tecnico"]("COL.MC", h.tail(400), 12.5, "Colonial", divergencias=[])
+    finally:
+        P.update(orig)
+    _check(len(llamadas) == 2 and llamadas[0][:2] == ("COL.MC", True) and json.loads(llamadas[0][2])["ratio"] > 20
+           and llamadas[1] == ("COL.MC", False, ""), f"Doc. 27: activa y desactiva desde el Diagnóstico {llamadas}")
+    # Repositorio: SQL emitido (conexión simulada)
+    class _Cur:
+        def __init__(s, log, err=None): s.log, s.err = log, err
+        def execute(s, sql, params=None):
+            if s.err: raise Exception(s.err)
+            s.log.append((sql, params))
+    class _Conn:
+        def __init__(s, err=None): s.log, s.err, s.commits = [], err, 0
+        def cursor(s): return _Cur(s.log, s.err)
+        def commit(s): s.commits += 1
+        def rollback(s): pass
+    c = _Conn()
+    _check(R.registrar_incidencia_serie(c, "col.mc", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 147.12}) is None
+           and "ON CONFLICT (ticker, tipo) DO UPDATE" in c.log[0][0] and c.log[0][1][0] == "COL.MC" and c.commits == 1,
+           "Doc. 27: activar = INSERT … ON CONFLICT")
+    _check(R.registrar_incidencia_serie(c, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, False) is None
+           and c.log[1][0].startswith("UPDATE incidencia_serie SET activa = false") and "primera_vez" not in c.log[0][0].split("DO UPDATE")[1],
+           "Doc. 27: desactivar = UPDATE; primera_vez se conserva")
+    _check("migracion_incidencia_serie.sql" in R.registrar_incidencia_serie(
+               _Conn('relation "incidencia_serie" does not exist'), "COL.MC", "x", True, {}),
+           "Doc. 27: sin tabla, aviso claro y sin excepción")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    sql = (_A._RUTA_APP.parent / "migracion_incidencia_serie.sql").read_text(encoding="utf-8")
+    _check("CREATE TABLE IF NOT EXISTS incidencia_serie" in sql and "CREATE INDEX IF NOT EXISTS" in sql
+           and "-- DROP TABLE IF EXISTS incidencia_serie;" in sql and "incidencias" not in src[src.index("def _registrar_guarda_serie"):src.index("def cortes_diagnostico")].replace("incidencia_serie", ""),
+           "Doc. 27: migración idempotente con reversión y sin tocar `incidencias`")
+    _check(P["_cargar_criteria"]()["diagnostico_paso2"]["que_es"]["sma200"].startswith("Hacia dónde va la media de los últimos 200 cierres"),
+           "Doc. 27 H-2: «Qué es» de la SMA200")
+    # En vivo contra Postgres (opcional): set PA_PG_DSN=postgresql://… (base de pruebas)
+    dsn = os.environ.get("PA_PG_DSN")
+    if not dsn:
+        print("ℹ️  T-D27 en vivo no ejecutado (activa con: set PA_PG_DSN=<base de pruebas>)")
+        return
+    import psycopg2, uuid
+    esq = "pa_test_" + uuid.uuid4().hex[:8]
+    cn = psycopg2.connect(dsn)
+    try:
+        cur = cn.cursor(); cur.execute(f"CREATE SCHEMA {esq}"); cur.execute(f"SET search_path TO {esq}"); cn.commit()
+        for _ in range(2):                                   # idempotente
+            cur.execute(sql); cn.commit()
+        lee = lambda: R.leer_incidencias_serie(cn, solo_activas=False)
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 147.12})
+        f1 = lee()
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 150.0})
+        f2 = lee()
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, False)
+        f3 = lee()
+        R.registrar_incidencia_serie(cn, "ITX.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, False)   # sin fila: no crea nada
+        f4 = lee()
+        _check(len(f1) == 1 and f1[0]["activa"] and f1[0]["detalle"]["ratio"] == 147.12, f"T-D27 vivo: alta {f1}")
+        _check(len(f2) == 1 and f2[0]["detalle"]["ratio"] == 150.0 and f2[0]["primera_vez"] == f1[0]["primera_vez"]
+               and f2[0]["ultima_vez"] >= f1[0]["ultima_vez"], "T-D27 vivo: actualización sin duplicar")
+        _check(len(f3) == 1 and f3[0]["activa"] is False and R.leer_incidencias_serie(cn) == [], "T-D27 vivo: desactivación")
+        _check(len(f4) == 1, "T-D27 vivo: desactivar un valor sin fila no crea nada")
+        cur.execute("DROP TABLE IF EXISTS incidencia_serie"); cn.commit()   # DOWN
+        cur.execute("SELECT to_regclass('incidencia_serie')"); _check(cur.fetchone()[0] is None, "T-D27 vivo: reversión")
+    finally:
+        cn.rollback(); cur = cn.cursor(); cur.execute(f"DROP SCHEMA IF EXISTS {esq} CASCADE"); cn.commit(); cn.close()
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""

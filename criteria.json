@@ -1458,7 +1458,7 @@
     },
     "que_es": {
       "ath": "La distancia entre el precio y el máximo histórico de la serie disponible de Yahoo, que está ajustada por operaciones de capital.",
-      "sma200": "La pendiente de la media de los últimos 200 cierres: si la media sube, baja o está plana, y si ha cambiado de dirección en las últimas semanas.",
+      "sma200": "Hacia dónde va la media de los últimos 200 cierres (sube, baja o está plana, y si ha girado en las últimas semanas) y si el precio está por encima o por debajo de ella.",
       "resist": "Dónde está el precio respecto a los niveles reforzados más cercanos: puntos pivote que coinciden con una media móvil, y que el análisis técnico usa como soportes y resistencias.",
       "fibo": "Cuánto ha retrocedido el precio desde el máximo del último año, medido como porcentaje del recorrido entre el mínimo y el máximo de ese periodo.",
       "rsi": "El índice de fuerza relativa de 14 sesiones diarias: compara la magnitud de las subidas y de las bajadas recientes en una escala de 0 a 100.",
@@ -1603,6 +1603,9 @@
     },
     "_previo_pe_v6": {
       "como_ath_referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados en la serie disponible; el máximo queda como referencia lejana."
+    },
+    "_previo_pe_v7": {
+      "que_es_sma200": "La pendiente de la media de los últimos 200 cierres: si la media sube, baja o está plana, y si ha cambiado de dirección en las últimas semanas."
     }
   }
 }
