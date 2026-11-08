@@ -1257,7 +1257,7 @@
       "titulo": "Tendencia frente a la SMA200",
       "columna": "Distancia a la SMA200",
       "que_es": "La SMA200 es la media de los últimos 200 cierres diarios, unos 10 meses de cotización. Es la referencia de tendencia de largo plazo más usada.",
-      "como_leerlo": "Estar por encima indica que el mercado viene revalorizando el valor. Estar muy por encima también significa que el precio se ha alejado de su media, y las correcciones hacia ella son habituales.",
+      "como_leerlo": "Estar por encima indica que el mercado viene revalorizando el valor. Estar muy por encima también significa que el precio se ha alejado de su media: el método lo interpreta como un precio alejado de su referencia de largo plazo.",
       "tramos": [
         {
           "desde": 10,
@@ -1265,7 +1265,7 @@
           "rango": "Más de +10%",
           "etiqueta": "Muy por encima",
           "lectura": "Muy por encima: tendencia alcista y precio alejado de su media",
-          "como_leerlo": "Estar muy por encima indica que el mercado viene revalorizando el valor, y también que el precio se ha alejado de su media; las correcciones hacia ella son habituales."
+          "como_leerlo": "Estar muy por encima indica que el mercado viene revalorizando el valor; el método lo interpreta como un precio alejado de su referencia de largo plazo."
         },
         {
           "desde": 0,
@@ -1379,9 +1379,9 @@
         "Muy alta"
       ],
       "matiz_rango": {
-        "Zona baja del año": "cerca de mínimos del año",
+        "Zona baja del año": "en la zona baja del año",
         "Zona media": "en la zona media del año",
-        "Zona alta del año": "cerca de máximos del año"
+        "Zona alta del año": "en la zona alta del año"
       }
     },
     "sector": {
@@ -1457,7 +1457,7 @@
       }
     },
     "que_es": {
-      "ath": "La distancia entre el precio y el máximo más alto que ha marcado el valor en toda su historia.",
+      "ath": "La distancia entre el precio y el máximo histórico de la serie disponible de Yahoo, que está ajustada por operaciones de capital.",
       "sma200": "La pendiente de la media de los últimos 200 cierres: si la media sube, baja o está plana, y si ha cambiado de dirección en las últimas semanas.",
       "resist": "Dónde está el precio respecto a los niveles reforzados más cercanos: puntos pivote que coinciden con una media móvil, y que el análisis técnico usa como soportes y resistencias.",
       "fibo": "Cuánto ha retrocedido el precio desde el máximo del último año, medido como porcentaje del recorrido entre el mínimo y el máximo de ese periodo.",
@@ -1466,12 +1466,12 @@
     },
     "como_leerlo": {
       "ath": {
-        "subida_libre_establecida": "El precio está por encima de cualquier nivel alcanzado antes: no hay máximos previos por encima que sirvan de referencia.",
-        "en_ath": "El precio está prácticamente en su máximo histórico, en la parte más alta de su historia.",
-        "aproximandose_cerca": "Estar cerca del máximo histórico indica que el precio está en la parte alta de su historia.",
-        "aproximandose": "El precio está algo por debajo de su máximo histórico: cerca de la parte alta de su historia, pero sin alcanzarla.",
-        "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados; el máximo queda como referencia lejana.",
-        "lejos": "El precio está muy por debajo de su máximo histórico: niveles ya alcanzados en el pasado quedan muy lejos."
+        "subida_libre_establecida": "El precio está por encima de cualquier nivel de la serie disponible: no hay máximos previos por encima que sirvan de referencia.",
+        "en_ath": "El precio está prácticamente en el máximo histórico de la serie disponible.",
+        "aproximandose_cerca": "Estar cerca del máximo histórico de la serie disponible indica que el precio está en la parte alta de esa serie.",
+        "aproximandose": "El precio está algo por debajo del máximo histórico de la serie disponible: cerca de la parte alta, pero sin alcanzarla.",
+        "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados en la serie disponible; el máximo queda como referencia lejana.",
+        "lejos": "El precio está muy por debajo del máximo histórico de la serie disponible: niveles ya alcanzados en el pasado quedan muy lejos."
       },
       "sma200": {
         "giro_alcista_encima": "La media de largo plazo ha empezado a subir hace poco y el precio está por encima: el método lo interpreta como un posible cambio de tendencia al alza ya acompañado por el precio.",
@@ -1485,12 +1485,13 @@
       },
       "resist": {
         "en_soporte": "El precio está apoyado sobre un nivel reforzado: el análisis técnico lo toma como zona donde la caída se ha frenado otras veces.",
-        "sin_resistencia": "No hay niveles reforzados por encima del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros techos.",
+        "sin_resistencia": "No hay niveles reforzados por encima del precio entre los niveles calculados por el método (pivots mensuales, trimestrales y anuales que coinciden con la SMA50 o la SMA200); no significa que no existan otros techos.",
         "zona_baja_rango": "El precio está más cerca del soporte que de la resistencia: tiene más margen hasta el techo que hasta el suelo.",
         "zona_media_rango": "El precio está a media distancia entre el soporte y la resistencia más cercanos.",
         "zona_alta_rango": "El precio está más cerca de la resistencia que del soporte: tiene poco margen hasta el techo cercano.",
         "en_resistencia": "El precio está justo debajo de un nivel reforzado: el análisis técnico lo toma como zona donde las subidas se han frenado otras veces.",
-        "sin_soporte": "No hay niveles reforzados por debajo del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros suelos."
+        "sin_soporte": "No hay niveles reforzados por debajo del precio entre los niveles calculados por el método (pivots mensuales, trimestrales y anuales que coinciden con la SMA50 o la SMA200); no significa que no existan otros suelos.",
+        "sin_niveles": "El método no encuentra soportes ni resistencias reforzados entre sus niveles calculados; el componente no apoya ni resta a la estructura. No significa que no existan otras referencias de precio."
       },
       "fibo": {
         "en_maximo": "El precio está en la parte alta del recorrido del último año, con un retroceso pequeño desde el máximo.",
@@ -1572,6 +1573,33 @@
         }
       },
       "nota_vol": "Alta volatilidad = tamaño de posición más pequeño para el mismo riesgo real: con el doble de volatilidad, la misma cantidad invertida oscila el doble en euros."
+    },
+    "_previo_pe_v5": {
+      "que_es_ath": "La distancia entre el precio y el máximo más alto que ha marcado el valor en toda su historia.",
+      "como_ath": {
+        "subida_libre_establecida": "El precio está por encima de cualquier nivel alcanzado antes: no hay máximos previos por encima que sirvan de referencia.",
+        "en_ath": "El precio está prácticamente en su máximo histórico, en la parte más alta de su historia.",
+        "aproximandose_cerca": "Estar cerca del máximo histórico indica que el precio está en la parte alta de su historia.",
+        "aproximandose": "El precio está algo por debajo de su máximo histórico: cerca de la parte alta de su historia, pero sin alcanzarla.",
+        "referencia": "Estar lejos indica que el precio todavía está por debajo de niveles ya alcanzados; el máximo queda como referencia lejana.",
+        "lejos": "El precio está muy por debajo de su máximo histórico: niveles ya alcanzados en el pasado quedan muy lejos."
+      },
+      "como_resist": {
+        "en_soporte": "El precio está apoyado sobre un nivel reforzado: el análisis técnico lo toma como zona donde la caída se ha frenado otras veces.",
+        "sin_resistencia": "No hay niveles reforzados por encima del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros techos.",
+        "zona_baja_rango": "El precio está más cerca del soporte que de la resistencia: tiene más margen hasta el techo que hasta el suelo.",
+        "zona_media_rango": "El precio está a media distancia entre el soporte y la resistencia más cercanos.",
+        "zona_alta_rango": "El precio está más cerca de la resistencia que del soporte: tiene poco margen hasta el techo cercano.",
+        "en_resistencia": "El precio está justo debajo de un nivel reforzado: el análisis técnico lo toma como zona donde las subidas se han frenado otras veces.",
+        "sin_soporte": "No hay niveles reforzados por debajo del precio entre los niveles calculados por el método (pivots semanales, trimestrales y anuales que coinciden con una media); no significa que no existan otros suelos."
+      },
+      "sma_bloque": "Estar por encima indica que el mercado viene revalorizando el valor. Estar muy por encima también significa que el precio se ha alejado de su media, y las correcciones hacia ella son habituales.",
+      "sma_tramo0": "Estar muy por encima indica que el mercado viene revalorizando el valor, y también que el precio se ha alejado de su media; las correcciones hacia ella son habituales.",
+      "matiz_rango": {
+        "Zona baja del año": "cerca de mínimos del año",
+        "Zona media": "en la zona media del año",
+        "Zona alta del año": "cerca de máximos del año"
+      }
     }
   }
 }

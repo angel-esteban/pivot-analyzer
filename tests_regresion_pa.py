@@ -1528,18 +1528,19 @@ def _lp_pe(precio, sma, h52, l52, vol):
 def test_pe08_conclusion_valor():
     cv = _APP["conclusion_valor"]
     itx = cv(_lp_pe(58.90, 54.52, 60.64, 46.11, 25.6), "Industria de Diseño Textil", "€")
-    _check(itx["clave"] == "a_favor" and "cerca de máximos del año" in itx["texto"] and "con oscilaciones amplias" in itx["texto"]
+    _check(itx["clave"] == "a_favor" and "en la zona alta del año y con oscilaciones amplias" in itx["texto"] and "con oscilaciones amplias" in itx["texto"]
            and "un cierre por debajo de 54,52 €" in itx["texto"], f"T-PE-08 ITX: {itx['texto']}")
     san = cv(_lp_pe(10.64, 11.28, 13.12, 8.72, 32.0), "Banco Santander, S.A.", "€")
     _check(san["clave"] == "en_contra" and "en la zona media del año" in san["texto"] and "con oscilaciones amplias" in san["texto"]
            and "un cierre por encima de 11,28 €" in san["texto"], f"T-PE-08 SAN: {san['texto']}")
     ntgy = cv(_lp_pe(29.50, 28.07, 31.12, 24.30, 19.9), "Naturgy Energy Group", "€")
-    _check(ntgy["clave"] == "a_favor" and "cerca de máximos del año" in ntgy["texto"] and "oscilaciones" not in ntgy["texto"]
+    _check(ntgy["clave"] == "a_favor" and "en la zona alta del año" in ntgy["texto"] and "oscilaciones" not in ntgy["texto"]
            and "un cierre por debajo de 28,07 €" in ntgy["texto"], f"T-PE-08 NTGY: {ntgy['texto']}")
     neu = cv(_lp_pe(10.12, 10.0, 11.0, 9.0, 18.0), "X", "€")
     _check(neu["clave"] == "neutra" and "neutra (precio pegado a su media)" in neu["texto"], f"T-PE-08 neutra: {neu['texto']}")
     alto = cv(_lp_pe(11.5, 10.0, 11.6, 9.0, 18.0), "X", "€")
-    _check("las correcciones hacia ella son habituales" in alto["texto"], "T-PE-08: matiz 'muy por encima'")
+    _check("de su media de 200 sesiones (muy por encima), en la zona alta del año" in alto["texto"]
+           and "habituales" not in alto["texto"], f"T-PE-08 / V-2: matiz 'muy por encima' {alto['texto']}")
 
 
 def test_pe09_pe10_conclusiones():
@@ -1701,7 +1702,7 @@ def test_exportacion_imprimible_pasos():
 
 
 def _diag_ntgy():
-    res = {"precio": 29.95, "detalle": "R2 Semanal + EMA20", "pivot": "R2 Sem", "tipo": "R"}
+    res = {"precio": 29.95, "detalle": "R1 Mensual + SMA50", "pivot": "R1 Men", "tipo": "R"}
     sop = {"precio": 28.80, "detalle": "S1 Trimestral + SMA50", "pivot": "S1 Tri", "tipo": "S"}
     a = {"ath": {"escenario": "aproximandose", "ath": 31.12, "dist_pct": -4.43, "ath_fecha_dia": "26/10/2026"},
          "sma200": {"escenario": "tendencia_alcista", "escenario_nota": "tendencia_alcista_encima", "precio_sobre": True,
@@ -1796,11 +1797,11 @@ def test_doc22_reglas_motor():
     m = P["analizar_maximos_historicos"](hl, 103.0, "X")
     _check(m["ath"] == 100.0 and m["escenario"] == "subida_libre_establecida", f"Doc. 22 §2.4: {m['ath']} {m['escenario']}")
     m2 = P["analizar_maximos_historicos"](hl, 99.5, "X")
-    _check(m2["escenario"] == "en_ath" and P["titulo_componente"]("ath", {**m2, "historia_completa": False}) == "Máximo desde " + m2["desde"],
-           "Doc. 23 E-2: máximo desde el inicio del histórico")
+    _check(m2["escenario"] == "en_ath" and P["titulo_ficha"]("ath", m2) == "Máximo histórico (serie de Yahoo desde " + m2["desde"] + ")",
+           "Doc. 23 E-2 / doc. 25 §3: rótulo del máximo con la serie de Yahoo")
     # Pivots del Diagnóstico: clásicos, sin diario (§2.6, E-8); redondeo hacia arriba en el 5 (§2.7)
     src = _A._RUTA_APP.read_text(encoding="utf-8")
-    _check("Diario" not in P["DIAG_TIMEFRAMES_NIVELES"] and 'calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico")' in src,
+    _check("Diario" not in P["DIAG_TIMEFRAMES_NIVELES"] and 'calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico",' in src,
            "Doc. 22 §2.6 / doc. 23 E-8: niveles del Diagnóstico")
     _check(P["diag_1d"](7.25) == 7.3 and P["diag_1d"](5.25) == 5.3 and P["diag_1d"](4.35) == 4.4 and P["diag_1d"](3.65) == 3.7,
            "Doc. 22 §2.7: redondeo hacia arriba en el 5")
@@ -1821,7 +1822,7 @@ def test_doc22_23_respaldo_y_textos():
            and P["sector_con_subtipo"](sec["Financial Services"], "Capital Markets")["_subtipo_ciclo"] == "gestoras de activos",
            "Doc. 22 §4.1: Capital Markets y Financial Data con gestoras")
     itx = P["sector_con_subtipo"](sec["Consumer Cyclical"], fi["ITX.MC"])
-    _check("Inditex" in itx["leccion_historica"] and itx["leccion_validada"] is False, "Doc. 23 E-6: lección por industria (ITX)")
+    _check("Inditex" in itx["leccion_historica"] and itx["leccion_validada"] is True, "Doc. 23 E-6 / doc. 25 §5: lección ITX validada")
     _check("Redeia" in sec["Utilities"]["descripcion"] and "Red Eléctrica" not in sec["Utilities"]["descripcion"]
            and sec["Utilities"]["comportamiento_ciclo"]["pico"].startswith("positivo — los inversores rotan"), "Doc. 23 E-11")
     _check(not any("(costes fijos elevados)" in r for r in sec["Consumer Cyclical"]["riesgos_especificos"]), "Doc. 23 E-7")
@@ -1839,6 +1840,131 @@ def test_doc22_23_respaldo_y_textos():
            "Doc. 23 E-4: concordancia")
     _check(P["_num_tip"](-0.00001) == "0,0000" and P["_num_tip"](-0.0668) == "−0,0668" and P["_num_tip"](0.0878) == "0,0878",
            "Doc. 23 E-5: signo y cero")
+
+
+def test_doc25_pivots_mensuales_y_niveles():
+    """Doc. 25 §1 — T-E8d (Paso 2 sin pivots semanales ni medias de 20) y T-E8e (pivot mensual)."""
+    import pandas as pd, numpy as np
+    P = _APP
+    idx = pd.bdate_range("2025-01-02", "2026-11-06")
+    rng = np.random.default_rng(7)
+    c = pd.Series(30 + np.cumsum(rng.normal(0, 0.2, len(idx))), index=idx)
+    h = pd.DataFrame({"Open": c.shift(1).fillna(c.iloc[0]), "High": c + 0.3, "Low": c - 0.3, "Close": c, "Volume": 1e6})
+    # T-E8e: mes natural anterior (octubre de 2026)
+    oc = h[(h.index.year == 2026) & (h.index.month == 10)]
+    H, L, C, O = P["datos_sesion"](h, "Mensual")
+    _check((H, L, C, O) == (float(oc["High"].max()), float(oc["Low"].min()), float(oc["Close"].iloc[-1]), float(oc["Open"].iloc[0])),
+           "T-E8e: datos del mes natural anterior")
+    pm = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Mensual",))["Mensual"]
+    _pp = pm.get("PP") if isinstance(pm, dict) else None
+    _check(_pp is not None and abs(_pp - (H + L + C) / 3) < 1e-3, f"T-E8e: PP mensual = (H + L + C) / 3 ({_pp})")
+    hj = h[h.index <= "2026-01-15"]   # enero → diciembre del año anterior
+    dj = hj[(hj.index.year == 2025) & (hj.index.month == 12)]
+    _check(P["datos_sesion"](hj, "Mensual")[0] == float(dj["High"].max()), "T-E8e: en enero usa diciembre del año anterior")
+    _check(P["calcular_todos_pivots"](h, "Clásico").keys() == set(P["TIMEFRAMES"]), "Pivots: sin marcos indicados, los de siempre")
+    # T-E8d: lo que recibe la convergencia desde niveles_diagnostico
+    visto = {}
+    orig_conv, orig_cache = P["calcular_convergencia_tecnica"], P["_hist_pivots_cache"]
+    def _espia(rp, medias, precio, *a, **k):
+        visto["tf"], visto["medias"] = set(rp), medias
+        return [], [], None
+    try:
+        P["calcular_convergencia_tecnica"], P["_hist_pivots_cache"] = _espia, (lambda t: None)
+        P["niveles_diagnostico"]("X.MC", h, float(c.iloc[-1]))
+    finally:
+        P["calcular_convergencia_tecnica"], P["_hist_pivots_cache"] = orig_conv, orig_cache
+    _check(visto.get("tf") == {"Mensual", "Trimestral", "Anual"}, f"T-E8d: marcos del Paso 2 {visto.get('tf')}")
+    _m = visto.get("medias") or {}
+    _check(set(_m) == {50, 200} and all(np.isnan(v[1]) for v in _m.values()), f"T-E8d: solo SMA50 y SMA200 (sin EMA) {_m}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("pivot clásico mensual, trimestral o anual que coincide con la SMA50 o la" in src
+           and "pivot clásico semanal, trimestral o anual" not in src, "T-E8d: texto de la ficha")
+
+
+def test_doc25_sin_niveles_y_redondeo():
+    """Doc. 25 §2 (T-R1), §4 (redondeo) y avisos V-1 y V-3."""
+    import copy
+    import pandas as pd, numpy as np
+    P = _APP
+    _check(P["diag_1d"](6.05) == 6.1 and P["diag_1d"](5.75) == 5.8 and P["diag_1d"](7.25) == 7.3 and P["diag_1d"](3.65) == 3.7
+           and P["diag_1d"](0.15 * 4 + 0.20 * 8 + 0.15 * 5 + 0.15 * 7 + 0.20 * 5 + 0.15 * 5) == 5.8, "Doc. 25 §4: redondeo con Decimal")
+    _check(P["_PUNTUACIONES_RESIST"]["sin_niveles"] == 5, "T-R1: tramo «sin niveles reforzados cerca» = 5")
+    idx = pd.bdate_range("2025-01-02", "2026-11-06")
+    c = pd.Series(np.linspace(20, 30, len(idx)) + np.sin(np.arange(len(idx)) / 3.0) * 0.4, index=idx)
+    h = pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "Volume": 1e6})
+    orig = {k: P[k] for k in ("niveles_diagnostico", "_hist_pivots_cache", "obtener_hist_maximo")}
+    try:
+        P["niveles_diagnostico"] = lambda *a, **k: []
+        P["_hist_pivots_cache"] = lambda t: None
+        P["obtener_hist_maximo"] = lambda *a, **k: h
+        d = P["diagnostico_tecnico"]("X.MC", h, 30.0, "X", divergencias=[])
+        d_corto = P["diagnostico_tecnico"]("X.MC", h.tail(150), 30.0, "X", divergencias=[])
+    finally:
+        P.update(orig)
+    si = d["puntuacion"]["scores_ind"]
+    _check(d["resist"]["escenario"] == "sin_niveles" and si["resist"]["disponible"] and si["resist"]["puntos"] == 5
+           and all(v["disponible"] for v in si.values()), f"T-R1: sin confluencias → 5/10 {d['resist']}")
+    calc = P["calculo_nota_global"](d["puntuacion"], d)
+    _check("÷" not in calc["formula"] and "0,15 × 5 (resistencias" in calc["formula"].lower().replace("resistencias estructurales", "resistencias"),
+           f"T-R1: sin repartir pesos {calc['formula']}")
+    _check(d_corto["resist"] is None, "T-R1: «sin datos» solo si faltan sesiones o el pivot anual")
+    crit = P["_cargar_criteria"]()
+    f = P["html_ficha_componente"]("resist", d["resist"], si["resist"], 30.0, crit)
+    for frag in ("Sin niveles reforzados cerca", "Ningún pivot mensual, trimestral o anual coincide con la SMA50 o la SMA200 (tolerancia: 0,3% del precio).",
+                 "no apoya ni resta a la estructura", "llegue a coincidir con la SMA50 o la SMA200"):
+        _check(frag in f, f"T-R1 ficha: falta «{frag}»")
+    # V-1 y V-3: volumen
+    a, pt = _diag_ntgy()
+    fv = P["html_ficha_componente"]("vol", a["vol"], pt["scores_ind"]["vol"], 29.74, crit)
+    _check("El volumen total está en línea con lo habitual." in fv and "no añade información" not in fv, "Doc. 25 V-1: volumen sin contradicción")
+    _check("1,00 M / 1,20 M" in fv and "1.00M" not in fv, "Doc. 25 V-3: volumen con coma decimal")
+
+
+def test_doc25_maximo_serie_completa_y_lecciones():
+    """Doc. 25 §3 (máximo con toda la serie, guarda de serie no ajustada) y §5 (lecciones)."""
+    import pandas as pd, numpy as np
+    P = _APP
+    idx = pd.bdate_range("2004-01-02", "2026-11-06")
+    hi = np.full(len(idx), 30.0); hi[800] = 38.97            # máximo de 2007, dentro de la serie
+    h = pd.DataFrame({"High": hi, "Low": 25.0, "Close": 29.54}, index=idx)
+    m = P["analizar_maximos_historicos"](h, 29.54, "Naturgy")
+    _check(m["ath"] == 38.97 and m["escenario"] == "referencia" and not m["serie_recortada"]
+           and P["_PUNTUACIONES_ATH"]["referencia"] == 4 and m["desde"] == "02/01/2004", f"Doc. 25 §3: máximo de toda la serie {m['ath']} {m['escenario']}")
+    _check("serie de Yahoo desde el 02/01/2004" in m["texto"] and "ajustada por operaciones de capital" in m["texto"],
+           "Doc. 25 §3: texto del componente (informe y pantalla)")
+    crit = P["_cargar_criteria"]()
+    pt = P["calcular_puntuacion_tecnica"](m, None, None, None, None, None)
+    fa = P["html_ficha_componente"]("ath", m, pt["scores_ind"]["ath"], 29.54, crit)
+    _check("Serie ajustada por operaciones de capital (splits y ampliaciones), por eso puede no coincidir con el precio nominal de la época." in fa
+           and P["titulo_ficha"]("ath", m) == "Máximo histórico (serie de Yahoo desde 02/01/2004)" and "toda su historia" not in fa
+           and "serie disponible" in fa, "Doc. 25 §3: ficha del máximo")
+    hi2 = hi.copy(); hi2[800] = 1946.0                      # tramo antiguo sin ajustar (caso COL.MC)
+    m2 = P["analizar_maximos_historicos"](pd.DataFrame({"High": hi2, "Low": 25.0, "Close": 29.54}, index=idx), 29.54, "X")
+    _check(m2["serie_recortada"] and m2["ath"] == 30.0 and "no está ajustado" in m2["texto"], f"Doc. 25 §3: guarda de serie no ajustada {m2['ath']}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check('history(period="max", auto_adjust=False)' in src and "Máximo desde" not in src, "Doc. 25 §3: periodo máximo")
+    # §5 — lecciones
+    cr = P["CRISIS_PATTERNS"]["crisis"]
+    _check(len(cr) == 12 and all(c.get("leccion_validada") is True and c.get("fuente") and c.get("leccion_periodo") for c in cr.values()),
+           "Doc. 25 §5: 12 lecciones de crisis validadas con fuente y periodo")
+    _check("sin contar los cupones cobrados" in cr["inflacion_tipos_2022"]["leccion_operativa"], "Doc. 25 §5: matiz AGG")
+    lc = P["leccion_con_fuente"]
+    for k, c in cr.items():
+        r = lc(c["leccion_operativa"], c["fuente"], c["leccion_periodo"], validada=c["leccion_validada"], ocultar_cifras=False)
+        _check(not r["verificar"] and r["fuente_txt"].startswith("Fuente: "), f"Doc. 25 §5: lección de crisis {k}")
+    en = P["SECTOR_KNOWLEDGE"]["sectores"]["Energy"]
+    _check("−37,63 $" in en["leccion_historica"] and "120 $" in en["leccion_historica"] and "EIA" in en["leccion_fuente"]
+           and en["leccion_validada"] is True, "Doc. 25 §5: lección de energía con la EIA")
+    textos = " ".join(c["leccion_operativa"] for c in cr.values()).lower() + " " + en["leccion_historica"].lower()
+    # Textos validados por Pólaris: «vender», «entrar» y «salir» aparecen como hechos («al vender todas a la
+    # vez», «salir del mecanismo de cambios»), no como indicaciones; se comprueba la lista PA3.
+    _malos = [t for t in TERMINOS_PA3 if t in textos] + _hay_compra_venta(textos)
+    _check(not _malos, f"Doc. 25 §5: términos de operativa {_malos}")
+    _check("Lección operativa" not in src and "💡 <b>Lección histórica:</b>" in src, "Doc. 25 §5: rótulo de las lecciones de crisis")
+    # V-2 — textos del tramo «más de +10%»
+    t = P["tramos_contexto"]()["dist_sma200"]
+    _check("habituales" not in t["como_leerlo"] and "habituales" not in t["tramos"][0]["como_leerlo"]
+           and "precio alejado de su referencia de largo plazo" in t["tramos"][0]["como_leerlo"], "Doc. 25 V-2: tramo «más de +10%»")
 
 
 def _dependencias_ok() -> bool:

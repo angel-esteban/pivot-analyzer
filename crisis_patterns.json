@@ -41,7 +41,11 @@
         "Precio del petróleo x4 en 1973 y x2 en 1979 sin ajuste estructural de la economía"
       ],
       "resolucion": "La recesión de 1981-82 fue el precio explícito de recuperar la credibilidad antiinflacionaria. El S&P 500 inició un bull market de 18 años en agosto 1982. El Plan Brady en 1989 reestructuró la deuda latinoamericana.",
-      "leccion_operativa": "La credibilidad de un banco central, una vez perdida, solo se recupera causando dolor deliberado. Volcker lo hizo. La lección para 2022-2024: la Fed y el BCE estaban dispuestos a inducir recesión antes que perder credibilidad antiinflacionaria de nuevo.",
+      "leccion_operativa": "Entre 1979 y 1982, la Reserva Federal de Paul Volcker subió los tipos con fuerza para frenar una inflación muy alta, aunque la economía entrara en recesión. Enseña que un banco central puede anteponer la estabilidad de los precios al crecimiento, como volvieron a hacer la Fed y el BCE en 2022-2023.",
+      "fuente": "Reserva Federal (historia de la política monetaria)",
+      "leccion_periodo": "1979 – 1982",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "La credibilidad de un banco central, una vez perdida, solo se recupera causando dolor deliberado. Volcker lo hizo. La lección para 2022-2024: la Fed y el BCE estaban dispuestos a inducir recesión antes que perder credibilidad antiinflacionaria de nuevo.",
       "analogias_2022": {
         "coincidencias": [
           "Inflación >7% con banco central detrás de la curva",
@@ -87,7 +91,11 @@
         "Volatilidad comprimida durante meses antes del evento — complacencia extrema"
       ],
       "resolucion": "Greenspan emitió un comunicado al día siguiente prometiendo liquidez ilimitada al sistema bancario. Fue el nacimiento del 'Fed Put' — la idea de que la Fed intervendrá para salvar los mercados en crisis severas.",
-      "leccion_operativa": "Las estrategias sistemáticas de cobertura no reducen el riesgo del sistema: lo concentran. Cuando todos hacen lo mismo y usan las mismas coberturas, el colapso es simultaneo. Este patrón se repite: Portfolio Insurance 1987, LTCM 1998, vol-mageddon 2018, LDI pensions UK 2022.",
+      "leccion_operativa": "El 19/10/1987 el S&P 500 cayó un 20,5% en una sola sesión (de 282,70 a 224,84 puntos). En los análisis posteriores se señaló que las coberturas automáticas de carteras, al vender todas a la vez, amplificaron la caída. Enseña que, cuando muchos inversores usan la misma cobertura, el riesgo no desaparece: se concentra.",
+      "fuente": "Yahoo Finance (^GSPC, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "16/10/1987 (282,70) – 19/10/1987 (224,84)",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Las estrategias sistemáticas de cobertura no reducen el riesgo del sistema: lo concentran. Cuando todos hacen lo mismo y usan las mismas coberturas, el colapso es simultaneo. Este patrón se repite: Portfolio Insurance 1987, LTCM 1998, vol-mageddon 2018, LDI pensions UK 2022.",
       "legado": "Nacimiento del 'Fed Put' como doctrina implícita de la política monetaria americana. Los circuit breakers del NYSE se implementaron directamente como consecuencia.",
       "analogias_recientes": {
         "volmageddon_2018": "Mismo patrón: estrategia sistemática (venta de volatilidad vía ETN XIV) amplificó el movimiento del mercado. El VIX pasó de 12 a 50 en dos sesiones.",
@@ -127,7 +135,11 @@
         "Bancos prestando contra garantías inmobiliarias sin control del LTV"
       ],
       "resolucion": "Parcial. Abenomics (2013) — política fiscal, monetaria y reformas estructurales — detuvo la deflación. El QE del Banco de Japón se convirtió en el más extremo del mundo (llegó a poseer >50% del mercado de bonos soberanos japoneses). Máximos de 1989 recuperados finalmente en 2024.",
-      "leccion_operativa": "Las burbujas simultáneas en activos financieros e inmobiliarios son las más destructivas porque el efecto riqueza negativo dura décadas. La lección para los análisis de la burbuja inmobiliaria española 2007-2012: las consecuencias se miden en décadas, no en trimestres.",
+      "leccion_operativa": "El Nikkei 225 cayó un 80,5% entre el 29/12/1989 (38.915,87) y el 28/04/2003 (7.607,88), en un periodo en que también se desplomaron los precios inmobiliarios. Enseña que, cuando estallan a la vez burbujas financieras e inmobiliarias, la recuperación puede tardar décadas.",
+      "fuente": "Yahoo Finance (^N225, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "29/12/1989 – 28/04/2003",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Las burbujas simultáneas en activos financieros e inmobiliarios son las más destructivas porque el efecto riqueza negativo dura décadas. La lección para los análisis de la burbuja inmobiliaria española 2007-2012: las consecuencias se miden en décadas, no en trimestres.",
       "analogias_esp": {
         "burbuja_inmobiliaria_2007": "España replicó la mecánica japonesa en escala reducida: banca prestando contra garantías inmobiliarias, sobrevaloración masiva, colapso del suelo que dejó balances bancarios deteriorados. Diferencia: el 'whatever it takes' de Draghi y el mecanismo europeo de rescate evitaron el escenario deflacionario prolongado.",
         "diferencia_clave": "Japón no tuvo prestamista de última instancia externo dispuesto a actuar; España sí (BCE + ESM)"
@@ -161,7 +173,11 @@
         "Seguro de depósitos ilimitado = incentivo al riesgo moral"
       ],
       "resolucion": "Creación del RTC para liquidar activos. Reforma regulatoria (FIRREA 1989). El coste lo pagó el contribuyente americano a lo largo de los 90.",
-      "leccion_operativa": "El riesgo de duración en banca — captar corto, prestar largo — es el mecanismo de quiebra bancaria más antiguo y recurrente. Se repitió en Silicon Valley Bank en 2023: captaba depósitos a la vista, invertía en bonos del Tesoro a 10Y. Cuando los tipos subieron, las pérdidas latentes superaron el capital.",
+      "leccion_operativa": "Muchas cajas de ahorro de EE. UU. financiaban hipotecas a largo plazo con depósitos a corto plazo; cuando subieron los tipos, cientos quebraron. En 2023, Silicon Valley Bank sufrió pérdidas por un desajuste parecido. Enseña que captar a corto y prestar a largo es uno de los riesgos bancarios más antiguos.",
+      "fuente": "FDIC (historia de la crisis de las cajas de ahorro)",
+      "leccion_periodo": "1989 – 1995",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "El riesgo de duración en banca — captar corto, prestar largo — es el mecanismo de quiebra bancaria más antiguo y recurrente. Se repitió en Silicon Valley Bank en 2023: captaba depósitos a la vista, invertía en bonos del Tesoro a 10Y. Cuando los tipos subieron, las pérdidas latentes superaron el capital.",
       "analogias_svb_2023": {
         "coincidencias": ["Mismo mecanismo: riesgo de duración (captar corto, invertir largo)", "Misma complacencia regulatoria ante concentración de riesgo de tipos", "Mismo detonante: subida de tipos"],
         "disanalogias": ["SVB era un evento puntual, no sistémico; las S&L eran un sector entero", "La respuesta de la Fed/FDIC en 2023 fue más rápida y garantizó todos los depósitos", "Redes sociales aceleraron el bank run de SVB en horas vs. semanas en los años 80"]
@@ -195,7 +211,11 @@
         "Referéndum de Maastricht en Dinamarca (negativo en junio 1992): primer crack en la credibilidad europea"
       ],
       "resolucion": "El SME amplió sus bandas de fluctuación al ±15% en agosto 1993, esencialmente abandonando los tipos fijos. España implementó reformas laborales. La economía se recuperó con la devaluación mejorada de competitividad.",
-      "leccion_operativa": "Un banco central no puede defender indefinidamente un tipo de cambio contra la presión del mercado si la política macroeconómica subyacente es inconsistente. La lección para el euro: la unión monetaria sin unión fiscal crea vulnerabilidades estructurales similares — la crisis de deuda soberana 2010-2012 fue la confirmación a mayor escala.",
+      "leccion_operativa": "En septiembre de 1992 la libra esterlina y la lira tuvieron que salir del mecanismo de cambios del Sistema Monetario Europeo, pese a las subidas de tipos para defenderlas. Enseña que un tipo de cambio fijo es difícil de sostener cuando la política económica de fondo no lo acompaña.",
+      "fuente": "Historia del Sistema Monetario Europeo (salida de la libra y la lira del mecanismo de cambios)",
+      "leccion_periodo": "Septiembre de 1992",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Un banco central no puede defender indefinidamente un tipo de cambio contra la presión del mercado si la política macroeconómica subyacente es inconsistente. La lección para el euro: la unión monetaria sin unión fiscal crea vulnerabilidades estructurales similares — la crisis de deuda soberana 2010-2012 fue la confirmación a mayor escala.",
       "relevancia_ibex": "La devaluación de la peseta fue un laboratorio de lo que ocurre cuando España no puede depreciar su moneda para ajustar competitividad — exactamente la restricción que tiene ahora dentro del euro."
     },
 
@@ -227,7 +247,11 @@
         "Modelos de riesgo basados en correlaciones históricas que no contemplaban contagio"
       ],
       "resolucion": "El FMI intervino con paquetes de rescate condicionados a reformas estructurales. La Fed bajó tipos tres veces entre septiembre y noviembre 1998. LTCM fue liquidado ordenadamente.",
-      "leccion_operativa": "Los modelos financieros basados en distribuciones normales fallan exactamente cuando más se necesitan — en crisis, las correlaciones convergen a 1 y los 'fat tails' se materializan. Taleb lo formalizó posteriormente como 'cisnes negros'. LTCM demostró que los premios Nobel no te protegen de la realidad del mercado."
+      "leccion_operativa": "En 1998 el fondo LTCM tuvo que ser rescatado por un grupo de bancos, en una operación coordinada por la Reserva Federal de Nueva York. Sus modelos suponían que los movimientos extremos eran muy raros y que los activos no se moverían todos a la vez. Enseña que en las crisis las correlaciones suben y que los modelos basados en el pasado pueden fallar.",
+      "fuente": "Reserva Federal de Nueva York (rescate de LTCM)",
+      "leccion_periodo": "Septiembre de 1998",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Los modelos financieros basados en distribuciones normales fallan exactamente cuando más se necesitan — en crisis, las correlaciones convergen a 1 y los 'fat tails' se materializan. Taleb lo formalizó posteriormente como 'cisnes negros'. LTCM demostró que los premios Nobel no te protegen de la realidad del mercado."
     },
 
     "burbuja_puntocom_1999_2002": {
@@ -264,7 +288,11 @@
         "Greenspan alertó de 'exuberancia irracional' en diciembre 1996 — el mercado ignoró la advertencia durante 3 años más"
       ],
       "resolucion": "Destrucción masiva de valor. La Fed bajó tipos desde el 6.5% al 1% entre 2001 y 2003 — sembrando la burbuja inmobiliaria que causaría la GFC.",
-      "leccion_operativa": "Una empresa puede tener la mejor tecnología y la narrativa correcta y aun así ser una trampa de valoración. La diferencia entre 'empresa real' y 'empresa puntocom' era simple: flujos de caja positivos. Terra, Webvan, Pets.com no los tenían. Amazon y Google sí.",
+      "leccion_operativa": "El Nasdaq Composite cayó un 77,9% entre el 10/03/2000 y el 09/10/2002. Muchas empresas de internet sin beneficios ni caja positiva desaparecieron, mientras otras con negocio rentable sobrevivieron. Enseña que una buena tecnología no garantiza una valoración sostenible.",
+      "fuente": "Yahoo Finance (^IXIC, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "10/03/2000 – 09/10/2002",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Una empresa puede tener la mejor tecnología y la narrativa correcta y aun así ser una trampa de valoración. La diferencia entre 'empresa real' y 'empresa puntocom' era simple: flujos de caja positivos. Terra, Webvan, Pets.com no los tenían. Amazon y Google sí.",
       "analogia_ia_2023_2025": {
         "coincidencias": ["Narrativa transformacional que justifica múltiplos extremos", "Concentración de flujos en pocas empresas (Magnificent 7 vs AOL/Yahoo/WebMD)", "PER de mercado > 25x"],
         "disanalogias": ["Las grandes empresas de IA (Microsoft, Nvidia, Google) tienen beneficios reales masivos", "La adopción de IA es real y medible — la adopción de internet en 2000 era hipotética", "El ciclo de tipos es diferente: en 2000 los tipos estaban subiendo; la IA rally ocurrió con tipos altos pero con expectativa de bajadas"]
@@ -300,7 +328,11 @@
         "Precios de CDS de Bear Stearns y Lehman disparándose meses antes del colapso"
       ],
       "resolucion": "TARP (700.000M$ de rescate bancario), QE de la Fed (primera vez en historia), rescate de AIG, Fannie Mae, Freddie Mac, Bear Stearns. El S&P 500 tocó suelo en marzo 2009 y comenzó el bull market más largo de la historia (2009-2020).",
-      "leccion_operativa": "El riesgo sistémico oculto en la complejidad de los instrumentos financieros es más peligroso que el riesgo visible. La complejidad del CDO² ocultaba el riesgo de correlación. Cuando el mercado inmobiliario cayó y las correlaciones convergieron, todos los activos 'seguros' resultaron ser el mismo activo empaquetado de formas diferentes.",
+      "leccion_operativa": "El S&P 500 cayó un 56,8% entre el 09/10/2007 y el 09/03/2009. Productos complejos basados en hipotecas, que se consideraban seguros, resultaron estar expuestos al mismo riesgo inmobiliario. Enseña que la complejidad puede ocultar riesgos que solo aparecen cuando todo cae a la vez.",
+      "fuente": "Yahoo Finance (^GSPC, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "09/10/2007 – 09/03/2009",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "El riesgo sistémico oculto en la complejidad de los instrumentos financieros es más peligroso que el riesgo visible. La complejidad del CDO² ocultaba el riesgo de correlación. Cuando el mercado inmobiliario cayó y las correlaciones convergieron, todos los activos 'seguros' resultaron ser el mismo activo empaquetado de formas diferentes.",
       "legado": "Basilea III, regulación de derivados OTC, stress tests bancarios, FSB (Financial Stability Board). El QE como herramienta de política monetaria se normalizó. La semilla de la crisis de deuda soberana europea 2010-2012."
     },
 
@@ -337,7 +369,11 @@
         "efecto": "El spread español cayó 200pb en dos semanas sin que el BCE comprara un solo bono. La credibilidad de la promesa fue suficiente. Punto de inflexión de la crisis."
       },
       "resolucion": "OMT (Outright Monetary Transactions), rescate bancario de 41.000M€, reformas estructurales (laboral 2012), MEDE como mecanismo permanente. España inicia recuperación en 2013-2014.",
-      "leccion_operativa": "En una unión monetaria, la credibilidad del banco central es todo. Draghi no necesitó gastar un euro — la promesa creíble fue suficiente. El 'whatever it takes' es la demostración más potente del poder de la política de comunicación sobre los mercados de bonos."
+      "leccion_operativa": "Entre 2010 y 2012 se dispararon las primas de riesgo de varios países del euro. En julio de 2012, la frase de Mario Draghi («haremos lo que sea necesario») marcó el punto de giro. Enseña el peso que tiene la credibilidad de un banco central en los mercados de deuda.",
+      "fuente": "BCE (discurso de Mario Draghi en Londres, 26/07/2012)",
+      "leccion_periodo": "2010 – 2012",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "En una unión monetaria, la credibilidad del banco central es todo. Draghi no necesitó gastar un euro — la promesa creíble fue suficiente. El 'whatever it takes' es la demostración más potente del poder de la política de comunicación sobre los mercados de bonos."
     },
 
     "covid_crash_2020": {
@@ -372,7 +408,11 @@
         "Los modelos epidemiológicos de enero-febrero 2020 eran accesibles pero ignorados por el mercado"
       ],
       "resolucion": "La Fed bajó tipos a cero en emergencia el 15 de marzo. QE ilimitado. Gobierno americano: 2.2 billones $ en estímulo fiscal (CARES Act). BCE: PEPP de 1.85 billones €. La combinación de política monetaria y fiscal más agresiva de la historia moderna. El exceso monetario sembró la inflación de 2021-2022.",
-      "leccion_operativa": "Los crashes de liquidez — donde todo cae a la vez incluyendo activos refugio — son diferentes a los crashes fundamentales. Son cortos y violentos, y la recuperación es igualmente violenta si el problema subyacente se resuelve (en este caso, vacunas + estímulo fiscal). La lección para el inversor: los crashes de pánico puro son oportunidades históricas si tienes liquidez y horizonte temporal.",
+      "leccion_operativa": "El S&P 500 cayó un 33,9% entre el 19/02/2020 y el 23/03/2020, y recuperó el máximo anterior el 18/08/2020, con vacunas y estímulos públicos. Enseña que una caída por pánico, en la que bajan casi todos los activos a la vez, puede comportarse de forma distinta a una causada por un deterioro duradero de los beneficios.",
+      "fuente": "Yahoo Finance (^GSPC, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "19/02/2020 – 23/03/2020; máximo recuperado el 18/08/2020",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "Los crashes de liquidez — donde todo cae a la vez incluyendo activos refugio — son diferentes a los crashes fundamentales. Son cortos y violentos, y la recuperación es igualmente violenta si el problema subyacente se resuelve (en este caso, vacunas + estímulo fiscal). La lección para el inversor: los crashes de pánico puro son oportunidades históricas si tienes liquidez y horizonte temporal.",
       "efecto_secundario": "El exceso monetario de 2020-2021 (M2 +27% interanual) sembró la mayor inflación en 40 años. El crash de 2020 causó indirectamente el ciclo de subidas de 2022."
     },
 
@@ -410,7 +450,11 @@
         "M2 habiendo crecido un 27% en 2020-2021 — el exceso monetario tarde o temprano genera inflación"
       ],
       "resolucion": "Inflación alcanzó el objetivo del 2% en 2024 sin recesión profunda en EE.UU. ('aterrizaje suave'). El BCE completó el ciclo de subidas en septiembre 2023. La combinación de política monetaria restrictiva + resiliencia del mercado laboral fue el escenario más benigno posible dado el punto de partida.",
-      "leccion_operativa": "La correlación positiva entre bonos y acciones (ambos cayendo) demostró que el supuesto de diversificación 60/40 solo funciona en entornos de inflación baja/moderada. En inflación alta, los bancos centrales tienen que subir tipos aunque dañen la economía — y eso daña simultáneamente bonos y acciones. Las materias primas y activos reales son la cobertura genuina contra este escenario.",
+      "leccion_operativa": "En 2022 el S&P 500 bajó un 19,4% y el fondo de bonos estadounidenses AGG un 15,0% en precio, sin contar los cupones cobrados (del 31/12/2021 al 30/12/2022). Los bancos centrales subían los tipos con fuerza para frenar la inflación. Enseña que la diversificación entre acciones y bonos protege menos cuando la inflación es alta.",
+      "fuente": "Yahoo Finance (^GSPC y AGG, cierres diarios), cálculo de PivotAnalyzer",
+      "leccion_periodo": "31/12/2021 – 30/12/2022",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "La correlación positiva entre bonos y acciones (ambos cayendo) demostró que el supuesto de diversificación 60/40 solo funciona en entornos de inflación baja/moderada. En inflación alta, los bancos centrales tienen que subir tipos aunque dañen la economía — y eso daña simultáneamente bonos y acciones. Las materias primas y activos reales son la cobertura genuina contra este escenario.",
       "analogia_volcker": {
         "coincidencias": ["Inflación alta con bancos centrales detrás de la curva", "Ciclo de subidas más agresivo en décadas", "Pérdidas masivas en activos de larga duración"],
         "disanalogias": ["La inflación de 2022 partía de un shock de oferta, no de una década de inflación estructural", "El punto de partida fue tipos en 0% con balances enormes (QE), no tipos al 10% como en 1979", "El 'aterrizaje suave' de 2023-2024 no ocurrió en 1980-82 — hubo dos recesiones"]
@@ -444,7 +488,11 @@
         "Subida de tipos más rápida en 40 años hacía matemáticamente inevitable el problema de duración"
       ],
       "resolucion": "FDIC garantizó todos los depósitos (incluso los superiores a 250.000$) para evitar contagio. La Fed creó el BTFP (Bank Term Funding Program) permitiendo a los bancos tomar préstamos al valor nominal de sus bonos (no al valor de mercado). La crisis se contuvo en semanas.",
-      "leccion_operativa": "El riesgo de duración bancario — captar depósitos a la vista e invertir en bonos a largo plazo — es tan viejo como la banca. Se repitió 40 años después de la S&L Crisis con el mismo mecanismo. La diferencia: Twitter y las redes sociales hicieron el bank run 100 veces más rápido. Lección para inversores: verificar siempre la composición de la cartera de bonos de los bancos en períodos de subida rápida de tipos.",
+      "leccion_operativa": "En marzo de 2023 quebraron varios bancos regionales de EE. UU., entre ellos Silicon Valley Bank, por un desajuste parecido al de las cajas de ahorro: depósitos a la vista invertidos en bonos a largo plazo que perdieron valor al subir los tipos. Las retiradas de depósitos fueron especialmente rápidas. Enseña a revisar cómo afectan las subidas de tipos al balance de un banco.",
+      "fuente": "FDIC y Reserva Federal (informes sobre las quiebras de marzo de 2023)",
+      "leccion_periodo": "Marzo de 2023",
+      "leccion_validada": true,
+      "leccion_operativa_previa_pe_v5": "El riesgo de duración bancario — captar depósitos a la vista e invertir en bonos a largo plazo — es tan viejo como la banca. Se repitió 40 años después de la S&L Crisis con el mismo mecanismo. La diferencia: Twitter y las redes sociales hicieron el bank run 100 veces más rápido. Lección para inversores: verificar siempre la composición de la cartera de bonos de los bancos en períodos de subida rápida de tipos.",
       "analogia_sl": {
         "coincidencias": ["Mismo mecanismo (riesgo de duración)", "Misma causa (subida rápida de tipos)", "Mismo detonante (intentos fallidos de recapitalización que revelaron el problema)"],
         "disanalogias": ["SVB fue un evento puntual; S&L fue sistémico (1.000 bancos)", "Las redes sociales aceleraron el contagio a velocidad sin precedentes", "La respuesta del FDIC/Fed fue mucho más rápida y decisiva en 2023"]

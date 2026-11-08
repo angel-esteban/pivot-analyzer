@@ -335,7 +335,7 @@
           "leccion_cualitativa": "En 2020, el cierre de tiendas por la pandemia hundió en pocas semanas la cotización de las empresas de moda: el sector depende del gasto no esencial de las familias.",
           "leccion_fuente": "Yahoo Finance (ITX.MC, cierres diarios sin ajustar), cálculo de PivotAnalyzer",
           "leccion_periodo": "19/02/2020 (32,08 €) – 16/03/2020 (20,17 €)",
-          "leccion_validada": false
+          "leccion_validada": true
         }
       }
     },
@@ -436,14 +436,14 @@
         "Ciclicidad del capex: inversión insuficiente → escasez futura → precio alto",
         "Riesgo reputacional ESG creciente"
       ],
-      "leccion_historica": "El 20/04/2020 el contrato de futuros de petróleo WTI más próximo a vencer cerró a −37,63 $ por barril, algo sin precedentes. El 08/03/2022, tras la invasión de Ucrania, el Brent cerró a 127,98 $. En 2022 el fondo XLE (energía del S&P 500) subió un 57,6% y fue el único de los 11 fondos sectoriales del S&P 500 que acabó el año en positivo.",
+      "leccion_historica": "El 20/04/2020 el contrato de futuros de WTI de mayo cerró en −37,63 $ por barril, por primera vez en negativo; en marzo de 2022, tras la invasión de Ucrania, el Brent superó los 120 $. El sector energético sigue sobre todo al crudo.",
       "yfinance_keys": [
         "Energy"
       ],
       "leccion_cualitativa": "El precio del petróleo puede moverse de forma extrema: en 2020 llegó a cotizar en negativo en el mercado de futuros y en 2022 se disparó tras la invasión de Ucrania. El sector energético sigue sobre todo al crudo.",
-      "leccion_fuente": "Yahoo Finance (CL=F, BZ=F y fondos Select Sector SPDR, cierres diarios), cálculo de PivotAnalyzer",
-      "leccion_periodo": "20/04/2020; 08/03/2022; 31/12/2021 – 30/12/2022",
-      "leccion_validada": false,
+      "leccion_fuente": "EIA (series RCLC1, futuro WTI contrato 1 en NYMEX, y RBRTE, Brent spot), comprobado por FABER-PA",
+      "leccion_periodo": "20/04/2020; marzo de 2022 (Brent por encima de 120 $ desde el 04/03/2022)",
+      "leccion_validada": true,
       "efecto_ciclo": {
         "expansion": 1,
         "pico": 1,
@@ -463,6 +463,12 @@
           "contraccion": -1,
           "recuperacion": 2
         }
+      },
+      "_previo_pe_v5": {
+        "leccion_historica": "El 20/04/2020 el contrato de futuros de petróleo WTI más próximo a vencer cerró a −37,63 $ por barril, algo sin precedentes. El 08/03/2022, tras la invasión de Ucrania, el Brent cerró a 127,98 $. En 2022 el fondo XLE (energía del S&P 500) subió un 57,6% y fue el único de los 11 fondos sectoriales del S&P 500 que acabó el año en positivo.",
+        "leccion_fuente": "Yahoo Finance (CL=F, BZ=F y fondos Select Sector SPDR, cierres diarios), cálculo de PivotAnalyzer",
+        "leccion_periodo": "20/04/2020; 08/03/2022; 31/12/2021 – 30/12/2022",
+        "leccion_validada": false
       }
     },
     "Utilities": {

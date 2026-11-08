@@ -2101,23 +2101,45 @@ def _hist_pivots_cache(ticker: str):
 
 
 @st.cache_data(ttl=3600)
-def obtener_hist_maximo(ticker: str, _v: int = 3) -> "pd.DataFrame | None":
-    """Descarga histórico de 15 años para detectar ATH reales.
+def obtener_hist_maximo(ticker: str, _v: int = 4) -> "pd.DataFrame | None":
+    """Descarga toda la serie diaria de Yahoo (period='max') para el máximo histórico (doc. 25 §3).
 
-    Usamos period='15y' en lugar de 'max' porque Yahoo Finance devuelve datos
-    pre-split sin ajustar correctamente en el histórico completo para algunos
-    tickers (ej: COL.MC). 15 años cubre suficientemente el ATH significativo
-    de cualquier valor del mercado español y tiene datos de calidad fiable.
+    Algunos tickers traen el tramo antiguo sin ajustar (ej.: COL.MC, 1.946 € en 2007 frente a
+    13 € en los últimos 15 años): lo filtra analizar_maximos_historicos con SERIE_ATH_RATIO_MAX.
     El parámetro _v fuerza invalidación de caché al cambiar su valor.
     """
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period="15y", auto_adjust=False)   # PA3-02: precios que cotizaron
+        # Doc. 25 §3 (Pólaris): toda la serie disponible de Yahoo para el máximo histórico. Yahoo la
+        # ajusta por operaciones de capital (splits y ampliaciones): los precios antiguos pueden no
+        # coincidir con los nominales de la época (se avisa en la ficha y en el texto del componente).
+        hist = t.history(period="max", auto_adjust=False)   # PA3-02: sin ajustar por dividendos
         if hist.empty or len(hist) < 50:
             return None
         return hist
     except Exception:
         return None
+
+
+# Doc. 25 §3 — guarda de calidad de la serie completa: si el máximo anterior a los últimos 15 años
+# multiplica por más de 20 el máximo de esos 15 años, el tramo antiguo se considera no ajustado
+# (COL.MC: ×147) y se usa solo la ventana de 15 años. Mayor ratio real del IBEX: Sacyr ×9,5 (2006).
+SERIE_ATH_RATIO_MAX = 20.0
+SERIE_ATH_VENTANA_AÑOS = 15
+
+
+def recortar_serie_no_ajustada(hist_largo):
+    """Devuelve (serie, recortada). Recorta al tramo de 15 años si el antiguo no es fiable."""
+    try:
+        import pandas as _pd_s
+        _corte = hist_largo.index[-1] - _pd_s.DateOffset(years=SERIE_ATH_VENTANA_AÑOS)
+        _ventana = hist_largo[hist_largo.index >= _corte]
+        if len(_ventana) >= 50 and len(_ventana) < len(hist_largo):
+            if float(hist_largo["High"].max()) > SERIE_ATH_RATIO_MAX * float(_ventana["High"].max()):
+                return _ventana, True
+    except Exception:
+        pass
+    return hist_largo, False
 
 
 def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict | None":
@@ -2140,20 +2162,19 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
     if hist_largo is None or len(hist_largo) < 50:
         return None
 
+    hist_largo, serie_recortada = recortar_serie_no_ajustada(hist_largo)
+
     # ── ATH ──────────────────────────────────────────────────────────────
     # Doc. 22 §2.4 — máximo ANTERIOR a la sesión actual: «por encima del máximo» solo si hoy marca uno nuevo
     _hl_prev = hist_largo.iloc[:-1] if len(hist_largo) > 1 else hist_largo
     idx_ath = _hl_prev["High"].idxmax()
     ath = float(_hl_prev["High"].max())
-    # Doc. 23 E-2 — el histórico es de 15 años: si empieza antes, no cubre toda la vida del valor
+    # Doc. 25 §3 — serie completa de Yahoo: se indica desde qué fecha empieza
     try:
-        import pandas as _pd_ath
-        _ini = _pd_ath.Timestamp(hist_largo.index[0])
-        _ini_n = _ini.tz_localize(None) if _ini.tz is not None else _ini
-        ath_desde = _ini.strftime("%d/%m/%Y")
-        historia_completa = _ini_n > _pd_ath.Timestamp.now() - _pd_ath.DateOffset(years=14, months=6)
+        ath_desde = hist_largo.index[0].strftime("%d/%m/%Y")
     except Exception:
-        ath_desde, historia_completa = "", False
+        ath_desde = ""
+    historia_completa = not serie_recortada
     try:
         ath_fecha = idx_ath.strftime("%B %Y")
     except Exception:
@@ -2262,9 +2283,16 @@ def analizar_maximos_historicos(hist_largo, precio: float, nombre: str) -> "dict
             f"a sus máximos históricos de {ath_fecha} en los {ath_str} euros."
         )
 
+    if serie_recortada:
+        texto = (texto.rstrip() + f" Máximo de la serie de Yahoo desde el {ath_desde}: el tramo anterior de la "
+                 f"serie no está ajustado por operaciones de capital y no se usa.")
+    elif ath_desde:
+        texto = (texto.rstrip() + f" Máximo histórico de la serie de Yahoo desde el {ath_desde}; serie ajustada por "
+                 f"operaciones de capital, por eso puede no coincidir con el precio nominal de la época.")
     return {
         "ath":       ath,
         "ath_fecha": ath_fecha,
+        "serie_recortada": serie_recortada,
         "ath_fecha_dia": idx_ath.strftime("%d/%m/%Y") if hasattr(idx_ath, "strftime") else "",   # PE-11
         "desde":         ath_desde,            # doc. 23 E-2
         "historia_completa": historia_completa,
@@ -3110,6 +3138,7 @@ _PUNTUACIONES_RESIST = {
     "zona_alta_rango":  3,
     "en_resistencia":   2,
     "sin_soporte":      2,
+    "sin_niveles":      5,   # doc. 25 §2: ningún nivel reforzado cerca
 }
 _PUNTUACIONES_FIBO = {   # Doc. 22 §2.2 — tramos sobre los niveles reales; la caída no puntúa al alza
     "en_maximo":      8,
@@ -3149,8 +3178,8 @@ _PESOS = {
 
 def diag_1d(x) -> float:
     """Redondeo a 1 decimal, mitad hacia arriba (7,15 → 7,2), tolerante al error binario."""
-    import math as _m
-    return _m.floor(float(x) * 10 + 0.5 + 1e-9) / 10
+    from decimal import Decimal, ROUND_HALF_UP   # doc. 25 §4: 6,05 → 6,1 y 5,75 → 5,8 sin error binario
+    return float(Decimal(repr(round(float(x), 9))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def calcular_puntuacion_tecnica(
@@ -5450,17 +5479,20 @@ def pestaña_macro():
                                 f'padding:2px 0 2px .8rem;border-left:2px solid #d1d5db">{_s}</div>',
                                 unsafe_allow_html=True
                             )
-                    # Lección operativa
+                    # Lección histórica (doc. 25 §5: validadas, con fuente y periodo)
                     _lec = _crisis.get("leccion_operativa", "")
                     if _lec:
                         st.markdown(
                             f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;'
                             f'padding:.5rem .8rem;border-radius:0 6px 6px 0;margin:.5rem 0;'
                             f'font-size:.83rem;color:#166534">'
-                            f'💡 <b>Lección operativa:</b> {_lec}'
+                            f'💡 <b>Lección histórica:</b> {_lec}'
                             + (lambda _r: (f'<br><span style="font-size:.76rem">{_r["fuente_txt"]}</span>' if _r["fuente_txt"]
                                            else (f' <b style="color:#b91c1c">{_r["marca"]}</b>' if _r["verificar"] else "")))(
-                                leccion_con_fuente(_lec, _crisis.get("fuente"), _crisis.get("periodo"), ocultar_cifras=False))   # PE-07
+                                leccion_con_fuente(_lec, _crisis.get("fuente"),
+                                                   _crisis.get("leccion_periodo") or _crisis.get("periodo"),
+                                                   validada=_crisis.get("leccion_validada"),
+                                                   ocultar_cifras=False))   # PE-07 · doc. 25 §5
                             + '</div>',
                             unsafe_allow_html=True
                         )
@@ -5520,6 +5552,17 @@ def datos_sesion(hist: pd.DataFrame, timeframe: str):
         C = float(ultima_semana["Close"].iloc[-1])
         O = float(ultima_semana["Open"].iloc[0])
         return H, L, C, O
+
+    elif timeframe == "Mensual":
+        # Doc. 25 §1 — mes natural anterior (agregando las velas diarias del mes)
+        mes_actual = hist.index[-1].month
+        año_actual = hist.index[-1].year
+        m_ant, año_m = (12, año_actual - 1) if mes_actual == 1 else (mes_actual - 1, año_actual)
+        datos_m = hist[(hist.index.year == año_m) & (hist.index.month == m_ant)]
+        if datos_m.empty:
+            return None, None, None, None
+        return (float(datos_m["High"].max()), float(datos_m["Low"].min()),
+                float(datos_m["Close"].iloc[-1]), float(datos_m["Open"].iloc[0]))
 
     elif timeframe == "Trimestral":
         # Trimestre natural anterior
@@ -5665,10 +5708,10 @@ SISTEMAS_PIVOT = {
 TIMEFRAMES = ["Diario", "Semanal", "Trimestral", "Anual"]
 
 
-def calcular_todos_pivots(hist: pd.DataFrame, sistema: str):
-    """Calcula pivots para todos los timeframes con el sistema seleccionado."""
+def calcular_todos_pivots(hist: pd.DataFrame, sistema: str, timeframes=None):
+    """Calcula pivots para todos los timeframes (o los indicados) con el sistema seleccionado."""
     resultados = {}
-    for tf in TIMEFRAMES:
+    for tf in (timeframes or TIMEFRAMES):
         H, L, C, O = datos_sesion(hist, tf)
         if H is None:
             resultados[tf] = None
@@ -7627,6 +7670,7 @@ tr:nth-child(even) td { background:#f8fafc; }
         "zona_alta_rango":          ("Zona alta — resistencia próxima", "#ea580c", "#fff7ed"),
         "en_resistencia":           ("Presionando resistencia",         "#dc2626", "#fef2f2"),
         "sin_soporte":              ("Sin soporte bajo el precio",      "#dc2626", "#fef2f2"),
+        "sin_niveles":              ("Sin niveles reforzados cerca",    "#64748b", "#f8fafc"),
         "extension_161":            ("Extensión 161.8%",                "#1d4ed8", "#eff6ff"),
         "extension_127":            ("Extensión 127.2%",                "#2563eb", "#eff6ff"),
         "en_maximo":                ("En máximo del swing",             "#16a34a", "#f0fdf4"),
@@ -9445,6 +9489,7 @@ def generar_pdf(ticker: str, precio: float, sistema: str, resultados_pivots: dic
                 "zona_alta_rango":          "Zona alta",
                 "en_resistencia":           "En resistencia",
                 "sin_soporte":              "Sin soporte",
+                "sin_niveles":              "Sin niveles reforzados cerca",
                 "extension_161":            "Extensión 161.8%",
                 "extension_127":            "Extensión 127.2%",
                 "en_maximo":                "En máximo swing",
@@ -12377,8 +12422,8 @@ def conclusion_valor(lp: dict, nombre: str, moneda: str = "€", criterios=None)
         _m = (pv.get("matiz_rango") or {}).get(_tp[_ip].get("etiqueta"))
         if _m:
             matices.append(_m)
-    if d > float(pv.get("muy_por_encima_pct", 10.0)):
-        matices.append("precio alejado de su media; las correcciones hacia ella son habituales")
+    # Doc. 25 V-2 — «muy por encima» va entre paréntesis tras la media (sin afirmación sobre correcciones)
+    _muy = " (muy por encima)" if d > float(pv.get("muy_por_encima_pct", 10.0)) else ""
     _tv = (tr.get("volatilidad") or {}).get("tramos") or []
     _iv = tramo_de(lp.get("vol_pct"), _tv)
     if _iv is not None and _tv[_iv].get("etiqueta") in (pv.get("tramos_vol_amplias") or []):
@@ -12393,8 +12438,10 @@ def conclusion_valor(lp: dict, nombre: str, moneda: str = "€", criterios=None)
         cambio = (f"un cierre a más de un {_num_es(u, 0)}% de {_sma} (su media de 200 sesiones): por "
                   f"encima, viento a favor; por debajo, viento en contra")
     _nom = nombre_conclusion(nombre)
+    _mat = (", " + (", ".join(matices[:-1]) + " y " + matices[-1] if len(matices) > 1 else matices[0])
+            if matices else "")
     texto = (f"<b>Conclusión del valor: {etiqueta}.</b> {_nom} cotiza un {_num_es(abs(d), 1)}% {_pos} "
-             f"de su media de 200 sesiones" + ("".join(", " + m for m in matices)) + ". "
+             f"de su media de 200 sesiones{_muy}{_mat}. "
              f"<b>Qué cambiaría esta lectura:</b> {cambio}.")
     por_que = (f"Regla del método: distancia a la SMA200 ≥ +{_num_es(u, 0)}% → a favor; entre −{_num_es(u, 0)}% "
                f"y +{_num_es(u, 0)}% → neutra; ≤ −{_num_es(u, 0)}% → en contra. Distancia actual: "
@@ -12509,17 +12556,22 @@ def html_conclusion(c: "dict | None", estilo: str = "valor") -> str:
 # ═════════════════════════════════════════════════════════════════════════════
 # Spec PE v3 — «¿Por dónde empiezo?» · Paso 2 (Diagnóstico técnico) · reglas del documento 22
 # ═════════════════════════════════════════════════════════════════════════════
-DIAG_TIMEFRAMES_NIVELES = ("Semanal", "Trimestral", "Anual")   # doc. 23 E-8: sin pivot diario
+DIAG_TIMEFRAMES_NIVELES = ("Mensual", "Trimestral", "Anual")   # doc. 25 §1: sin diario ni semanal
+DIAG_MEDIAS_NIVELES = (50, 200)                                # doc. 25 §1: solo SMA50 y SMA200
 
 
 def niveles_diagnostico(ticker: str, hist, precio: float) -> list:
-    """Doc. 22 §2.6 y doc. 23 E-8 — Niveles reforzados del Diagnóstico: siempre pivots clásicos,
-    solo marcos semanal, trimestral y anual, y la tolerancia por defecto del método. No dependen
-    del sistema de pivots ni de la tolerancia que elija el usuario para la tabla."""
+    """Doc. 22 §2.6, doc. 23 E-8 y doc. 25 §1 — Niveles reforzados del Diagnóstico: siempre pivots
+    clásicos de los marcos mensual, trimestral y anual que coinciden con la SMA50 o la SMA200, con la
+    tolerancia por defecto del método. No dependen del sistema de pivots ni de la tolerancia que elija
+    el usuario para la tabla."""
     try:
-        _rp = calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico")
-        _rp = {k: v for k, v in (_rp or {}).items() if k in DIAG_TIMEFRAMES_NIVELES}
-        _niv, _s, _c = calcular_convergencia_tecnica(_rp, calcular_sma_ema(hist["Close"]), precio,
+        _rp = calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico",
+                                    timeframes=DIAG_TIMEFRAMES_NIVELES)
+        # Solo SMA50 y SMA200: la EMA se anula con NaN (nunca coincide) y no se pasan las de 20 sesiones
+        _med = {p: (v[0], float("nan")) for p, v in calcular_sma_ema(hist["Close"]).items()
+                if p in DIAG_MEDIAS_NIVELES}
+        _niv, _s, _c = calcular_convergencia_tecnica(_rp, _med, precio,
                                                      None, None, None, None, None, None,
                                                      tolerancia=tolerancia_confluencia(precio, None))
         return _niv or []
@@ -12537,9 +12589,19 @@ def diagnostico_tecnico(ticker: str, hist, precio: float, nombre: str, divergenc
         except Exception:
             divergencias = []
     niveles = niveles_diagnostico(ticker, hist, precio)
+    try:
+        _anual = calcular_todos_pivots(obtener_hist_pivots(ticker, hist), "Clásico", timeframes=("Anual",)).get("Anual")
+    except Exception:
+        _anual = None
     a_ath = analizar_maximos_historicos(obtener_hist_maximo(ticker), precio, nombre)
     a_sma = analizar_sma200(hist, precio, nombre)
     a_res = analizar_resistencias_estructurales(niveles, precio, nombre)
+    if a_res is None and hist is not None and len(hist) >= 200 and _anual:
+        # Doc. 25 §2 — el motor ha buscado y no hay confluencias: tramo propio con 5/10 (no «sin datos»)
+        a_res = {"soporte": None, "resistencia": None, "dist_soporte": None, "dist_resist": None,
+                 "pos_rango_pct": None, "escenario": "sin_niveles",
+                 "texto": (f"{nombre_breve(nombre)}: ningún pivot mensual, trimestral o anual coincide con la "
+                           f"SMA50 o la SMA200 (tolerancia: 0,3% del precio). El componente no apoya ni resta.")}
     a_fib = analizar_fibonacci(hist, precio, nombre)
     a_rsi = analizar_rsi(hist, precio, nombre)
     a_vol = analizar_volumen(hist, nombre)
@@ -12596,7 +12658,8 @@ DIAG_COMPONENTES = {
         ("zona_media_rango", "Zona media entre soporte y resistencia", "entre el 35% y el 65% del tramo"),
         ("zona_alta_rango", "Zona alta entre soporte y resistencia", "en el 35% superior del tramo"),
         ("en_resistencia", "En resistencia", "resistencia reforzada a menos del 1,5% por encima"),
-        ("sin_soporte", "Sin soportes por debajo", "ningún nivel reforzado del método por debajo del precio")]),
+        ("sin_soporte", "Sin soportes por debajo", "ningún nivel reforzado del método por debajo del precio"),
+        ("sin_niveles", "Sin niveles reforzados cerca", "ningún pivot mensual, trimestral o anual coincide con la SMA50 o la SMA200")]),
     "fibo": ("Fibonacci", [
         ("en_maximo", "En la parte alta del swing", "retroceso menor del 10%"),
         ("retroceso_236", "Retroceso hasta el 23,6%", "retroceso entre el 10% y el 23,6%"),
@@ -12648,15 +12711,32 @@ def titulo_escenario(clave: str, escenario: str) -> str:
 
 
 def titulo_componente(clave: str, a: "dict | None" = None) -> str:
-    """Doc. 23 E-2 — Si el histórico descargado no cubre toda la vida del valor, el máximo se
-    rotula «Máximo desde {fecha}» y no «Máximo histórico»."""
-    if clave == "ath" and a and a.get("desde") and not a.get("historia_completa"):
-        return f"Máximo desde {a['desde']}"
+    """Nombre corto del componente (fórmula de la nota y pesos). El rótulo de la ficha, con la fecha
+    de inicio de la serie del máximo, lo da titulo_ficha (doc. 25 §3)."""
+    return DIAG_COMPONENTES[clave][0]
+
+
+def titulo_ficha(clave: str, a: "dict | None" = None) -> str:
+    """Doc. 25 §3 — Rótulo de la ficha: «Máximo histórico (serie de Yahoo desde {primera fecha})»."""
+    if clave == "ath" and a and a.get("desde"):
+        if a.get("serie_recortada"):
+            return f"Máximo de la serie de Yahoo desde {a['desde']} (tramo anterior no ajustado)"
+        return f"Máximo histórico (serie de Yahoo desde {a['desde']})"
     return DIAG_COMPONENTES[clave][0]
 
 
 def _eur(x) -> str:
     return f"{_num_es(x, 2)} €" if x is not None else "—"
+
+
+def _vol_es(x) -> str:
+    """Doc. 25 V-3 — Volumen con coma decimal: «1,46 M», «850 mil»."""
+    x = float(x or 0)
+    if x >= 1e6:
+        return f"{_num_es(x / 1e6, 2)} M"
+    if x >= 1e3:
+        return f"{_num_es(x / 1e3, 0)} mil"
+    return _num_es(x, 0)
 
 
 def _num_tip(x, dec: int = 4) -> str:
@@ -12696,12 +12776,13 @@ def datos_componente(clave: str, a: dict, precio: float) -> str:
     if not a:
         return "Sin datos suficientes para este componente."
     if clave == "ath":
-        _rot = ("máximo histórico" if a.get("historia_completa") else
-                f"máximo desde el {a.get('desde', '')} (inicio del histórico descargado: 15 años)")
-        return (f"{_rot[:1].upper() + _rot[1:]}, anterior a la sesión actual: {_eur(a.get('ath'))} "
-                f"({a.get('ath_fecha_dia') or a.get('ath_fecha', '')}) · precio {_eur(precio)} · distancia = "
-                f"(precio − máximo) / máximo = {_pct_signo_es(a.get('dist_pct', 0))}. "
-                f"Histórico diario sin ajustar por dividendos.")
+        return (f"Máximo histórico de la serie de Yahoo (desde el {a.get('desde', '')}), anterior a la sesión "
+                f"actual: {_eur(a.get('ath'))} ({a.get('ath_fecha_dia') or a.get('ath_fecha', '')}) · precio "
+                f"{_eur(precio)} · distancia = (precio − máximo) / máximo = {_pct_signo_es(a.get('dist_pct', 0))}. "
+                f"Serie ajustada por operaciones de capital (splits y ampliaciones), por eso puede no coincidir "
+                f"con el precio nominal de la época. Sin ajustar por dividendos."
+                + (f" El tramo de la serie anterior al {a.get('desde', '')} no está ajustado por operaciones de "
+                   f"capital y no se usa." if a.get("serie_recortada") else ""))
     if clave == "sma200":
         _u = a.get("umbral_plano")
         return (f"SMA200 {_eur(a.get('sma200'))} · precio {_pct_signo_es(a.get('dist_pct', 0))} respecto a ella "
@@ -12710,6 +12791,9 @@ def datos_componente(clave: str, a: dict, precio: float) -> str:
                 f"{_num_tip(a.get('pend_past_abs'))} €"
                 + (f" · umbral de «plana»: ±{_num_es(_u, 4)} € (0,03% de la media)" if _u is not None else "") + ".")
     if clave == "resist":
+        if a.get("escenario") == "sin_niveles":
+            return "Ningún pivot mensual, trimestral o anual coincide con la SMA50 o la SMA200 (tolerancia: 0,3% del precio)."
+
         def _n(n, d, lado, gen):
             if not n:
                 return f"sin {lado} reforzad{gen}"
@@ -12719,8 +12803,8 @@ def datos_componente(clave: str, a: dict, precio: float) -> str:
                 + _n(a.get("soporte"), a.get("dist_soporte"), "soporte", "o")
                 + (f" · posición entre ambos = (precio − soporte) / (resistencia − soporte) = {_num_es(_pr, 0)}%"
                    if _pr is not None else "")
-                + ". Nivel reforzado = pivot clásico semanal, trimestral o anual que coincide con una media móvil "
-                  "(SMA/EMA 20, 50 o 200).")
+                + ". Nivel reforzado = pivot clásico mensual, trimestral o anual que coincide con la SMA50 o la "
+                  "SMA200 (tolerancia: 0,3% del precio).")
     if clave == "fibo":
         _rt = a.get("retroceso_max_pct")
         return (f"Swing de las últimas {a.get('n_sesiones', '')} sesiones: mínimo {_eur(a.get('swing_min'))} "
@@ -12738,7 +12822,7 @@ def datos_componente(clave: str, a: dict, precio: float) -> str:
         _rep = (f" · últimas 10 sesiones: volumen en días alcistas {_num_es((a.get('vol_alc') or 0) / _tot * 100, 0)}% / "
                 f"bajistas {_num_es((a.get('vol_baj') or 0) / _tot * 100, 0)}%" if _tot else "")
         return (f"{(a.get('ventana_txt') or 'media de 5 sesiones frente a la de 20').capitalize()}: "
-                f"{_fmt_numero(a.get('vol_5d', 0))} / {_fmt_numero(a.get('vol_20d', 0))} = "
+                f"{_vol_es(a.get('vol_5d', 0))} / {_vol_es(a.get('vol_20d', 0))} = "
                 f"{_num_es(a.get('vol_rel', 0), 0)}%{_rep}"
                 + (" · reparto en distribución o divergencia OBV bajista fuerte: la nota se limita a 5/10"
                    if _tope_volumen_actua(a) else "") + ".")
@@ -12790,6 +12874,8 @@ def que_cambiaria_componente(clave: str, a: dict, precio: float) -> str:
                 partes.append(f"que la pendiente de 5 sesiones {_v} → {_p(_esc_sma200(alt, encima, giro=(pend, alt) in (('positiva', 'negativa'), ('negativa', 'positiva'))))}")
         return " · ".join(partes)
     if clave == "resist":
+        if esc == "sin_niveles":
+            return "que un pivot mensual, trimestral o anual llegue a coincidir con la SMA50 o la SMA200"
         r, s = a.get("resistencia"), a.get("soporte")
         partes = []
         if r:
@@ -12873,6 +12959,8 @@ def html_ficha_componente(clave: str, a: dict, si: dict, precio: float, criterio
     _como = como_leerlo_componente(clave, esc, criterios)
     if clave == "vol":
         _rep = reparto_volumen_txt(a)
+        if _rep and esc == "volumen_normal":   # doc. 25 V-1: sin contradicción con la frase de reparto
+            _como = "El volumen total está en línea con lo habitual."
         _como = (_como + " " + _rep).strip() if _rep else _como
     _info = (a or {}).get("nota_informativa") or ""
     return (
@@ -13489,10 +13577,12 @@ def _pp_wizard_cuerpo(st):
         # PE-11 — ficha de cada componente
         for key in ("ath", "sma200", "resist", "fibo", "rsi", "vol"):
             si_item = _si.get(key) or {}
-            _tit = titulo_componente(key, _diag.get(key))
+            _tit = titulo_ficha(key, _diag.get(key))
             if not si_item.get("disponible"):
                 with st.expander(f"{_tit} — sin datos (no cuenta en la nota global)"):
-                    st.caption("No hay historial suficiente para calcular este componente.")
+                    st.caption(f"Falta el dato: {len(hist)} sesiones disponibles en el histórico diario"
+                               + (" (se necesitan 200 para la SMA200)." if len(hist) < 200 else
+                                  "; no se pudieron calcular los pivots o el histórico necesario."))
                 continue
             _esc_t = titulo_escenario(key, si_item.get("escenario"))
             with st.expander(f"{_tit} — {_esc_t} ({si_item['puntos']:.0f}/10)"):
@@ -19507,6 +19597,7 @@ de debilidad a corto plazo.
                 "zona_alta_rango":         ("Zona alta — resistencia próxima",  3),
                 "en_resistencia":          ("Presionando resistencia",          2),
                 "sin_soporte":             ("Sin soporte bajo el precio",       2),
+                "sin_niveles":             ("Sin niveles reforzados cerca",     5),
                 # Fibonacci
                 "extension_161":           ("Extensión 161.8% — impulso fuerte", 9),
                 "extension_127":           ("Extensión 127.2%",                 8),
@@ -20862,9 +20953,10 @@ más difícil de ignorar.
             _dc1, _dc2 = st.columns(2)
 
             with _dc1:
-                st.markdown("##### 🏔️ Componente 1 — Máximos Históricos (ATH)")
+                st.markdown("##### 🏔️ Componente 1 — " + titulo_ficha("ath", locals().get("analisis_ath")))   # doc. 25 §3
                 st.markdown("""
-El **ATH** (*All-Time High*) es el precio más alto que ha alcanzado un activo en toda su historia.
+El **ATH** (*All-Time High*) es el precio más alto de la serie disponible de Yahoo (ajustada por
+operaciones de capital: los precios antiguos pueden no coincidir con los que cotizaron entonces).
 Su distancia al precio actual es uno de los indicadores más potentes de análisis técnico.
 
 **¿Por qué es tan relevante el ATH?**
@@ -21173,6 +21265,7 @@ indicador técnico puede anticipar: noticias, cambios macro, liquidez, comportam
                 "en_resistencia":   ("#fef2f2", "#dc2626", "🧱", "EN RESISTENCIA ESTRUCTURAL"),
                 "zona_alta_rango":  ("#fef2f2", "#dc2626", "📛", "ZONA ALTA DEL RANGO"),
                 "sin_soporte":      ("#fef2f2", "#dc2626", "⚠️", "SIN SOPORTE TÉCNICO"),
+                "sin_niveles":      ("#f8fafc", "#64748b", "➖", "SIN NIVELES REFORZADOS CERCA"),
                 "en_soporte":       ("#f0fdf4", "#16a34a", "🛡️", "EN SOPORTE ESTRUCTURAL"),
                 "zona_baja_rango":  ("#f0fdf4", "#16a34a", "🎯", "ZONA BAJA DEL RANGO"),
                 "sin_resistencia":  ("#f0fdf4", "#16a34a", "🚀", "SIN RESISTENCIA SOBRE EL PRECIO"),
