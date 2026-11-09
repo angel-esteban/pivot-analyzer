@@ -1693,7 +1693,8 @@
     "relacion": {
       "coherente": "La estructura de fondo y el impulso reciente apuntan en la misma dirección.",
       "matiza": "La estructura y el impulso reciente no coinciden del todo; el Paso 4 muestra los niveles donde se resolvería.",
-      "contradice": "El impulso reciente va en contra de la estructura de fondo. El método lo interpreta como un movimiento de corto plazo que todavía no cambia la estructura."
+      "contradice": "El impulso reciente va en contra de la estructura de fondo. El método lo interpreta como un movimiento de corto plazo que todavía no cambia la estructura.",
+      "coherente_sin_direccion": "Ni la estructura de fondo ni el impulso reciente marcan una dirección clara; coinciden en la falta de sesgo."
     },
     "_previo_pe_v9": {
       "nota_fija": "Los colores resumen el momento según el método; no indican qué hacer con una posición."
@@ -1730,6 +1731,21 @@
       "mixta": "La estructura del Paso 2 es mixta; el momento no tiene el respaldo de una tendencia de fondo clara.",
       "sin_direccion": "El momento no tiene una dirección clara; la estructura del Paso 2 es {etiqueta} ({nota})."
     },
-    "aviso_senal": "Describe un escenario técnico; no es una señal automática ni sustituye a la gestión del riesgo."
+    "aviso_senal": "Describe un escenario técnico; no es una señal automática ni sustituye a la gestión del riesgo.",
+    "sesion_cerrada": {
+      "Europe": "18:00",
+      "America": "16:30",
+      "porque": "La sesión del día se da por cerrada después de la subasta de cierre (17:30–17:35 en el Mercado Continuo; 16:00 en Nueva York) y con margen para que Yahoo publique el dato definitivo, que llega con unos 15–20 minutos de retraso. Hora local de cada mercado. Fines de semana y festivos no son sesión."
+    },
+    "cotizacion_actual": {
+      "titulo": "Cotización actual (retraso ~15 min)",
+      "corte_atr_amplio": 1.0,
+      "porque_corte": "Un desplazamiento igual o mayor que la oscilación media diaria (1 ATR14) es un movimiento amplio para ese valor; por debajo, queda dentro de lo habitual.",
+      "sin_cruces": "Ningún nivel del método se ha cruzado hoy: la lectura del último cierre se mantiene por ahora.",
+      "invalidacion_tocada": "La invalidación de la lectura ({condicion}) se ha tocado hoy; se confirmará o no con el cierre.",
+      "nota_fija": "Los indicadores se calculan con sesiones cerradas. Este apartado indica qué niveles del método se han cruzado hoy; el cambio solo se confirma con el cierre.",
+      "mercado_cerrado": "Mercado cerrado: los cálculos usan el último cierre ({fecha}).",
+      "encabezado": "Cálculos con la sesión cerrada del {fecha} · cierre {cierre}"
+    }
   }
 }
