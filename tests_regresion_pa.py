@@ -2382,6 +2382,7 @@ def test_doc29_cotizacion_actual():
     import copy
     import pandas as pd
     P = _APP
+    P.setdefault("PANDAS_TA", False)
     h = _hist_dias()
     c0 = float(h["Close"].iloc[-1])
     vol = {"volumen": 1.0, "media_10d": 1.0, "ratio_10d": 100.0, "sesion_alcista": True}
@@ -2393,14 +2394,24 @@ def test_doc29_cotizacion_actual():
           "macd": {"p_cruce": c0 - 1.2}, "vol": {"media_10d": 1e6}}
     le = P["lectura_escenario"]("verde", c0, c0 - 0.3, d3["sar"], {"score_total": 7.3})
     ab = pd.Timestamp("2026-11-09 11:10", tz="Europe/Madrid")
-    # T-S3: precio por debajo del PP de la próxima sesión
-    hv = _con_vela_hoy(h, hi=c0 + 0.1, lo=c0 - 0.35, c=c0 - 0.33)
+    # T-S3 (doc. 31 C-1): con un precio al otro lado del PP de la próxima sesión, el factor cambiaría; el oficial no
+    pvh = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Diario",))["Diario"]
+    ch = h["Close"]; mh_, sh_, _x = P["calcular_macd"](ch); bsh, _b, bih, _p = P["calcular_bollinger"](ch)
+    semh = P["evaluar_semaforo"](c0, pvh, P["calcular_rsi"](ch), mh_, sh_, bsh, bih, P["analisis_volumen"](h), P["calcular_sar"](h)[1])
+    d3h = P["datos_paso3"](h, pvh, c0)
+    pps = d3h["pp"]["PP_sig"]
+    p_t = pps - 0.3 if semh["factores"]["pp"]["escenario"] == "encima" else pps + 0.3
+    hv = _con_vela_hoy(h, hi=max(c0, p_t) + 0.05, lo=min(c0, p_t) - 0.05, c=p_t)
     hc, _ = P["hist_cerrado"](hv, ahora=ab)
-    sem_antes = copy.deepcopy(sem)
-    ca = P["cotizacion_actual"](hv, hc, sem, d3, le, None, ahora=ab)
-    _check(ca["abierto"] and any(x["clave"] == "pp" and "pasaría a en o por debajo del PP (0)" in x["texto"] for x in ca["cruces"])
-           and sem == sem_antes, f"T-S3: cruce del PP sin cambiar el semáforo {ca['cruces']}")
-    _check(any("se ha tocado hoy" in t and "pivot diario" in t for t in ca["invalidacion"]), "T-S3: invalidación del pivot tocada")
+    sem_antes = copy.deepcopy(semh)
+    ca = P["cotizacion_actual"](hv, hc, semh, d3h, {}, None, ahora=ab)
+    _check(ca["abierto"] and any(x["clave"] == "pp" and "con un cierre al precio actual" in x["texto"] for x in ca["cruces"])
+           and semh == sem_antes and ca["linea_sim"].startswith("Provisional: si la sesión cerrara al precio actual, el semáforo quedaría en")
+           and "el semáforo oficial sigue siendo el del cierre del 06/11/2026" in ca["linea_sim"] and "volumen" in ca["linea_sim"],
+           f"T-S3 / T-C1: {ca['cruces']} {ca['linea_sim']}")
+    hv3 = _con_vela_hoy(h, hi=c0 + 0.1, lo=c0 - 0.35, c=c0 - 0.33)
+    ca3 = P["cotizacion_actual"](hv3, P["hist_cerrado"](hv3, ahora=ab)[0], sem, d3, le, None, ahora=ab)
+    _check(any("se ha tocado hoy" in t and "pivot diario" in t for t in ca3["invalidacion"]), "T-S3: invalidación del pivot tocada")
     # T-S4: mínimo por debajo del SAR de la próxima sesión
     hv4 = _con_vela_hoy(h, hi=c0 + 0.1, lo=c0 - 0.5, c=c0 + 0.05)
     ca4 = P["cotizacion_actual"](hv4, P["hist_cerrado"](hv4, ahora=ab)[0], sem, d3, le, None, ahora=ab)
@@ -2423,9 +2434,9 @@ def test_doc29_cotizacion_actual():
     _check("Cotización actual (retraso ~15 min)" in h6 and "volumen medio diario de las 10 últimas sesiones" in h6
            and "tiempo real" not in h6 and "Los indicadores se calculan con sesiones cerradas" in h6, "Doc. 29 §1b: contenido del apartado")
     # Sin cruces
-    hv7 = _con_vela_hoy(h, hi=c0 + 0.05, lo=c0 - 0.05, c=c0)
-    ca7 = P["cotizacion_actual"](hv7, P["hist_cerrado"](hv7, ahora=ab)[0], sem, d3, le, None, ahora=ab)
-    _check(not ca7["cruces"] and ca7["sin_cruces"].startswith("Ningún nivel del método se ha cruzado hoy"), "Doc. 29 §1b: sin cruces")
+    h7 = P["html_cotizacion_actual"]({**ca6, "cruces": [], "sin_cruces": P["params_semaforo"]()["cotizacion_actual"]["sin_cruces"]})
+    _check("Factores que cambiarían si la sesión cerrara al precio actual" in h7
+           and "Ningún factor cambiaría si la sesión cerrara al precio actual" in h7 and "apertura" in h7, "Doc. 31 C-1/C-2: sin cambios y apertura")
 
 
 def test_doc29_que_cambiaria_y_matriz():
@@ -2446,24 +2457,33 @@ def test_doc29_que_cambiaria_y_matriz():
         if pr:
             c3 = pd.concat([c, pd.Series([pr], index=[c.index[-1] + pd.Timedelta(days=3)])])
             _check(abs(P["calcular_rsi"](c3) - T) < 0.05, f"Doc. 29 §2: RSI P* para {T} (RSI hoy {rsi})")
-    # T-QC1 — NTGY 09/11: el más cercano es %B o SAR, no el MACD
+    # Doc. 31 §1 — simulación del semáforo completo: el límite separa colores de verdad
+    pv = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Diario",))["Diario"]
+    m_, s_, _x = P["calcular_macd"](c); bs_, _b, bi_, _p = P["calcular_bollinger"](c)
+    c0 = float(c.iloc[-1])
+    semh = P["evaluar_semaforo"](c0, pv, rsi, m_, s_, bs_, bi_, P["analisis_volumen"](h), P["calcular_sar"](h)[1])
+    d3h = P["datos_paso3"](h, pv, c0)
+    sim = P["simulacion_cierres"](h, semh, d3h)
+    cz = sim["cercano"]
+    if cz:
+        e = 0.0005 * c0
+        dentro = cz["limite"] - e if cz["lado"] == "debajo" else cz["limite"] + e
+        fuera = cz["limite"] + e if cz["lado"] == "debajo" else cz["limite"] - e
+        _ok_fuera = abs(fuera - c0) > abs(cz["limite"] - c0) or P["semaforo_con_cierre"](h, fuera)["color"] == semh["color"]
+        _check(P["semaforo_con_cierre"](h, dentro)["color"] != semh["color"] and cz["cambian"], f"Doc. 31 §1: límite {cz}")
+    tx = P["texto_simulacion"](sim)
+    _check("Con un cierre igual al último" in tx and "el volumen de la sesión se supone igual al último" in tx, f"Doc. 31 §1: texto {tx}")
+    _check(abs(sim["igual"]["pct"] - P["semaforo_con_cierre"](h, c0)["pct"]) < 1e-9, "Doc. 31 §1: cierre igual al último")
     vol = {"volumen": 1.0, "media_10d": 1.0, "ratio_10d": 52.0, "sesion_alcista": False}
     sem = P["evaluar_semaforo"](29.71, {"_H": 29.9, "_L": 29.3, "_C": 29.33}, 45.1, -0.08, 0.03, 30.94, 29.03, vol, "BAJISTA")
     d3 = {"precio": 29.71, "pp": {"PP_sig": 29.80}, "sar": {"sar_siguiente": 30.17, "tendencia": "BAJISTA"},
           "bb": {"sup": 30.94, "med": 29.985, "inf": 29.03}, "macd": {"p_cruce": 31.43},
           "rsi": {"p": {"rsi_sobrecompra": 33.0, "rsi_alcista": 30.6, "rsi_bajista": 29.6, "rsi_sobreventa": 28.2}}, "vol": {"media_10d": 2e6}}
-    cc = P["cambio_de_color"](sem, d3)
-    _check(cc["plan"] and cc["plan"]["cercano"]["clave"] in ("bb", "sar", "pp") and cc["plan"]["cercano"]["clave"] != "macd",
-           f"T-QC1: {cc['texto']}")
-    # T-QC2 — ITX/REP en verde sin factores en contra: nunca un cambio que suba la puntuación
     vol2 = {"volumen": 1.0, "media_10d": 1.0, "ratio_10d": 100.0, "sesion_alcista": True}
     sv = P["evaluar_semaforo"](60.5, {"_H": 60.0, "_L": 59.0, "_C": 59.5}, 62.0, 1.2, 0.9, 61.0, 57.0, vol2, "ALCISTA")
     d3v = {"precio": 60.5, "pp": {"PP_sig": 60.2}, "sar": {"sar_siguiente": 57.0, "tendencia": "ALCISTA"},
            "bb": {"sup": 61.0, "med": 59.0, "inf": 57.0}, "macd": {"p_cruce": 57.5},
            "rsi": {"p": {"rsi_sobrecompra": 63.0, "rsi_alcista": 59.8, "rsi_bajista": 58.0, "rsi_sobreventa": 55.0}}, "vol": {"media_10d": 2e6}}
-    ccv = P["cambio_de_color"](sv, d3v)
-    _check(sv["color"] == "verde" and ccv["plan"]["cercano"]["delta"] < 0 and ccv["texto"].startswith("Margen sobre el corte:")
-           and "al menos 2 factores" in ccv["texto"] and "(1)" not in ccv["texto"].split("El más cercano:")[1], f"T-QC2: {ccv['texto']}")
     # Ficha: MACD y RSI en precio de cierre de la próxima sesión
     _check("en la próxima sesión lo cruzaría al alza (1)" in P["que_cambiaria_factor"]("macd", sem["factores"]["macd"], d3)
            and "en la próxima sesión lo llevaría a" in P["que_cambiaria_factor"]("rsi", sem["factores"]["rsi"], d3), "Doc. 29 §2: ficha en precio")
@@ -2479,6 +2499,54 @@ def test_doc29_que_cambiaria_y_matriz():
            and im({"hist": 0.3, "hist_prev": 0.2}) == "el impulso alcista acelera", "Doc. 29 M-1")
     # M-2 — nota fija solo bajo el semáforo
     _check(P["params_semaforo"]()["nota_fija"] not in P["html_calculo_semaforo"](sv), "Doc. 29 M-2: sin nota fija en el cálculo")
+
+
+def test_doc31_en_vivo():
+    """Doc. 31 — T-QC3, T-QC4, T-QC5 y T-C1 con los datos reales hasta el cierre del 06/11/2026, y §5 (precios
+    nominales sin ajustar por dividendos). Solo con PA_LIVE=1."""
+    import os
+    if not os.environ.get("PA_LIVE"):
+        print("ℹ️  T-QC3/4/5, T-C1 y T-DIV en vivo no ejecutados (activa con: set PA_LIVE=1)")
+        return
+    import pandas as pd, yfinance as yf
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    def _datos(tk):
+        h = yf.Ticker(tk).history(period="1y", auto_adjust=False)
+        h = h[h.index.date <= pd.Timestamp("2026-11-06").date()]
+        c = h["Close"]; p = float(c.iloc[-1])
+        pv = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Diario",))["Diario"]
+        m, s, _x = P["calcular_macd"](c); bs, _b, bi, _p = P["calcular_bollinger"](c)
+        sem = P["evaluar_semaforo"](p, pv, P["calcular_rsi"](c), m, s, bs, bi, P["analisis_volumen"](h), P["calcular_sar"](h)[1])
+        return h, sem, P["simulacion_cierres"](h, sem, P["datos_paso3"](h, pv, p))
+    h, sem, sim = _datos("ITX.MC")
+    cz = sim["cercano"]
+    _check(sem["color"] == "verde" and cz["lado"] == "debajo" and 56.4 < cz["limite"] < 56.8 and cz["color"] == "amarillo"
+           and abs(cz["pct"] - 50) < 0.1 and abs(sim["igual"]["pct"] - 87.5) < 0.1, f"T-QC3: ITX {cz} {sim['igual']}")
+    h, sem, sim = _datos("NTGY.MC")
+    cz = sim["cercano"]
+    _check(cz["lado"] == "encima" and 30.1 < cz["limite"] < 30.3 and cz["color"] == "amarillo" and abs(cz["pct"] - 50) < 0.1
+           and set(cz["cambian"]) >= {"pp", "bb"}, f"T-QC4: NTGY {cz}")
+    h, sem, sim = _datos("SAN.MC")
+    _check(sem["color"] == "rojo" and sim["igual"]["color"] == "amarillo" and abs(sim["igual"]["pct"] - 41.67) < 0.1, f"T-QC5: SAN {sim['igual']}")
+    x = P["semaforo_con_cierre"](h, 10.90)
+    _check(x["color"] == "amarillo" and abs(x["pct"] - 58.33) < 0.1 and sem["color"] == "rojo", f"T-C1: SAN 10,90 → {x['pct']}")
+    # §5 — cierres nominales sin ajustar por dividendos (ITX, 19/02/2020: 32,08 € publicado)
+    hi = yf.Ticker("ITX.MC").history(start="2020-02-18", end="2020-02-21", auto_adjust=False)
+    _f = hi[hi.index.date == pd.Timestamp("2020-02-19").date()]
+    _check(len(_f) and abs(float(_f["Close"].iloc[0]) - 32.08) < 0.02 and float(_f["Adj Close"].iloc[0]) < float(_f["Close"].iloc[0]) - 1,
+           f"T-DIV: ITX 19/02/2020 Close nominal {_f[['Close', 'Adj Close']].to_dict('records') if len(_f) else None}")
+
+
+def test_doc31_series_sin_ajustar():
+    """Doc. 31 §5 — Las series de precios de los valores (Pasos 1 a 4, informe, screening) se descargan con
+    auto_adjust=False y la app usa siempre «Close», nunca «Adj Close»."""
+    import re as _r
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("Adj Close" not in src, "Doc. 31 §5: la app no usa «Adj Close»")
+    for fn in ("def obtener_datos(", "def _hist_pivots_cache(", "def obtener_hist_maximo("):
+        i = src.index(fn); j = src.index("\ndef ", i + 5)
+        _check("auto_adjust=False" in src[i:j], f"Doc. 31 §5: {fn} sin auto_adjust=False")
 
 
 def _dependencias_ok() -> bool:

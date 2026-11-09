@@ -1741,11 +1741,15 @@
       "titulo": "Cotización actual (retraso ~15 min)",
       "corte_atr_amplio": 1.0,
       "porque_corte": "Un desplazamiento igual o mayor que la oscilación media diaria (1 ATR14) es un movimiento amplio para ese valor; por debajo, queda dentro de lo habitual.",
-      "sin_cruces": "Ningún nivel del método se ha cruzado hoy: la lectura del último cierre se mantiene por ahora.",
+      "sin_cruces": "Ningún factor cambiaría si la sesión cerrara al precio actual: la lectura del último cierre se mantiene por ahora.",
       "invalidacion_tocada": "La invalidación de la lectura ({condicion}) se ha tocado hoy; se confirmará o no con el cierre.",
       "nota_fija": "Los indicadores se calculan con sesiones cerradas. Este apartado indica qué niveles del método se han cruzado hoy; el cambio solo se confirma con el cierre.",
       "mercado_cerrado": "Mercado cerrado: los cálculos usan el último cierre ({fecha}).",
-      "encabezado": "Cálculos con la sesión cerrada del {fecha} · cierre {cierre}"
+      "encabezado": "Cálculos con la sesión cerrada del {fecha} · cierre {cierre}",
+      "_previo_pe_v11": {
+        "sin_cruces": "Ningún nivel del método se ha cruzado hoy: la lectura del último cierre se mantiene por ahora."
+      },
+      "titulo_lista": "Factores que cambiarían si la sesión cerrara al precio actual"
     }
   }
 }
