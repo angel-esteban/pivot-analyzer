@@ -13721,6 +13721,28 @@ def semaforo_con_cierre(hist, precio_cierre: float, criterios=None) -> dict:
 _SEM_COLOR_TXT = {"verde": "verde", "amarillo": "amarillo", "rojo": "rojo", "gris": "gris"}
 
 
+def _cambios_factores(sem0: dict, sem1: dict):
+    """Doc. 32 Q-4 — (factores que cambian de puntos, factores que solo cambian de tramo)."""
+    pts, tramo = [], []
+    for k in SEM_FACTORES:
+        f0, f1 = sem0["factores"][k], sem1["factores"][k]
+        if f0.get("escenario") == f1.get("escenario"):
+            continue
+        (pts if f0.get("puntos") != f1.get("puntos") else tramo).append(k)
+    return pts, tramo
+
+
+def _lista_y(items: list) -> str:
+    """Doc. 32 Q-2 — «a», «a y b», «a, b y c»."""
+    items = [x for x in items if x]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " y " + items[-1]
+
+
+_SEM_ART = {"pp": "el pivot diario", "rsi": "el RSI", "macd": "el MACD", "bb": "el %B", "vol": "el volumen", "sar": "el SAR"}
+
+
 def simulacion_cierres(hist, sem: dict, d3: dict, criterios=None, ventana: float = 0.30) -> dict:
     """Doc. 31 §1 — Cierre más cercano (hacia arriba o hacia abajo) en el que cambia el COLOR del semáforo,
     evaluando el semáforo completo. Los puntos de corte candidatos son los niveles que ya calcula el motor
@@ -13758,34 +13780,58 @@ def simulacion_cierres(hist, sem: dict, d3: dict, criterios=None, ventana: float
         dentro = lo_ if ea else hi_                   # precio en el lado que cambia el color
         limite = hi_ if ea else lo_
         sm = ev(dentro)
-        cambian = [k for k in SEM_FACTORES if sm["factores"][k].get("escenario") != sem["factores"][k].get("escenario")]
+        cambian, tramo = _cambios_factores(sem, sm)
         limites.append({"limite": limite, "lado": "debajo" if ea else "encima", "dist_pct": (limite - c0) / c0 * 100,
-                        "pct": sm["pct"], "color": sm["color"], "cambian": cambian})
+                        "pct": sm["pct"], "color": sm["color"], "cambian": cambian, "solo_tramo": tramo})
     cercano = min(limites, key=lambda x: abs(x["dist_pct"])) if limites else None
-    return {"igual": {"precio": c0, "pct": igual["pct"], "color": igual["color"]}, "cercano": cercano,
-            "ventana": ventana}
+    _ci, _ti = _cambios_factores(sem, igual)
+    return {"igual": {"precio": c0, "pct": igual["pct"], "color": igual["color"], "cambian": _ci, "solo_tramo": _ti},
+            "cercano": cercano, "ventana": ventana, "color_oficial": color0,
+            "pp_sig": ((d3 or {}).get("pp") or {}).get("PP_sig")}
 
 
 def texto_simulacion(sim: "dict | None", criterios=None) -> str:
-    """Doc. 31 §1 — Textos de «Qué cambiaría esta lectura» con la simulación del semáforo completo."""
+    """Doc. 31 §1 y doc. 32 Q-1/Q-2/Q-4 — Textos de «Qué cambiaría esta lectura» con la simulación del semáforo
+    completo. Si un cierre igual al último ya cambia el color, se dice primero, con el motivo."""
     if not sim:
         return ""
     cz = sim.get("cercano")
+    ig = sim["igual"]
+    col0 = sim.get("color_oficial")
+    _ct = lambda c: _SEM_COLOR_TXT.get(c, c)
+    _sup = " Cálculo con los datos de hoy; el volumen de la sesión se supone igual al último."
+
+    def _tramo_txt(ks):
+        return (f" Además, {_lista_y([_SEM_ART[k] for k in ks])} "
+                f"{'cambia' if len(ks) == 1 else 'cambian'} de tramo sin cambiar de puntos.") if ks else ""
+
+    if col0 and ig["color"] != col0:
+        motivos = []
+        for k in ig.get("cambian") or []:
+            if k == "pp" and sim.get("pp_sig"):
+                motivos.append(f"el PP de la próxima sesión ({_eur(sim['pp_sig'])}) queda por "
+                               f"{'debajo' if ig['precio'] > sim['pp_sig'] else 'encima'}")
+            else:
+                motivos.append(f"cambiaría {_SEM_ART[k]}")
+        t = (f"Con un cierre igual al último ({_eur(ig['precio'])}), el semáforo ya pasaría al {_num_es(ig['pct'], 1)}% "
+             f"({_ct(ig['color'])})" + (f", porque {_lista_y(motivos)}" if motivos else "") + ".")
+        if cz:
+            t += (f" Para seguir en {_ct(col0)} haría falta un cierre en {_eur(cz['limite'])} o por "
+                  f"{'encima' if cz['lado'] == 'debajo' else 'debajo'}.")
+        return t + _tramo_txt(ig.get("solo_tramo") or []) + _sup
     if cz:
-        _nom = ", ".join({"pp": "el pivot diario", "rsi": "el RSI", "macd": "el MACD", "bb": "el %B",
-                          "vol": "el volumen", "sar": "el SAR"}[k] for k in cz["cambian"]) or "ningún factor"
+        _nom = _lista_y([_SEM_ART[k] for k in cz["cambian"]]) or "ningún factor"
         t1 = (f"Un cierre por {'debajo' if cz['lado'] == 'debajo' else 'encima'} de {_eur(cz['limite'])} "
               f"({_pct_signo_es(cz['dist_pct'], 1)}) llevaría el semáforo al {_num_es(cz['pct'], 1)}% "
-              f"({_SEM_COLOR_TXT.get(cz['color'], cz['color'])}); {'cambiaría' if len(cz['cambian']) == 1 else 'cambiarían'} {_nom}.")
+              f"({_ct(cz['color'])}); {'cambiaría' if len(cz['cambian']) == 1 else 'cambiarían'} {_nom}.")
         if "sar" in cz["cambian"]:
             t1 += (f" (el SAR gira antes si el {'mínimo' if cz['lado'] == 'debajo' else 'máximo'} de la sesión lo toca)")
+        t1 += _tramo_txt(cz.get("solo_tramo") or [])
     else:
         _v = _num_es(sim.get("ventana", 0.3) * 100, 0)
         t1 = f"Ningún cierre entre el −{_v}% y el +{_v}% del último cambiaría el color del semáforo."
-    ig = sim["igual"]
-    t2 = (f" Con un cierre igual al último ({_eur(ig['precio'])}), el semáforo quedaría en {_num_es(ig['pct'], 1)}% "
-          f"({_SEM_COLOR_TXT.get(ig['color'], ig['color'])}).")
-    return t1 + t2 + " Cálculo con los datos de hoy; el volumen de la sesión se supone igual al último."
+    t2 = f" Con un cierre igual al último ({_eur(ig['precio'])}), el semáforo quedaría en {_num_es(ig['pct'], 1)}% ({_ct(ig['color'])})."
+    return t1 + t2 + _sup
 
 
 def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: "dict | None", criterios=None) -> dict:
@@ -13948,8 +13994,13 @@ def cotizacion_actual(hist_vivo, hist_c, sem: dict, d3: dict, le: "dict | None",
             continue
         cr = [t for t in transiciones_factor(k_f, f0, d3) if t["nuevo"] == f1["escenario"] and t.get("nivel")]
         _niv = (f" (nivel con los datos del último cierre: {_eur(cr[0]['nivel'])})" if cr else "")
+        if f1.get("puntos") == f0.get("puntos"):
+            _cmb = (f"pasaría de {_min1(f0['etiqueta'])} a {_min1(f1['etiqueta'])} (sin cambio de puntos, "
+                    f"{_pts_es(f1['puntos'])})")
+        else:
+            _cmb = f"pasaría a {_min1(f1['etiqueta'])} ({_pts_es(f1['puntos'])})"
         cruces.append({"clave": k_f, "texto": (f"{_SEM_NOMBRE_QC[k_f]}: con un cierre al precio actual ({_eur(precio)}) "
-                                               f"pasaría a {_min1(f1['etiqueta'])} ({_pts_es(f1['puntos'])}){_niv}.")})
+                                               f"{_cmb}{_niv}.")})
     fs = sem["factores"]["sar"]
     for t in transiciones_factor("sar", fs, d3):
         if (t["tipo"] == "minimo" and lo <= t["nivel"]) or (t["tipo"] == "maximo" and hi >= t["nivel"]):

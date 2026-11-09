@@ -2432,7 +2432,7 @@ def test_doc29_cotizacion_actual():
            and ca6b["movimiento"]["clase"] == "normal", "T-S6: mayor desplazamiento y corte de criteria.json")
     h6 = P["html_cotizacion_actual"](ca6)
     _check("Cotización actual (retraso ~15 min)" in h6 and "volumen medio diario de las 10 últimas sesiones" in h6
-           and "tiempo real" not in h6 and "Los indicadores se calculan con sesiones cerradas" in h6, "Doc. 29 §1b: contenido del apartado")
+           and "tiempo real" not in h6 and "indica qué factores cambiarían si la sesión cerrara al precio actual" in h6, "Doc. 29 §1b / doc. 32 Q-3: contenido del apartado")
     # Sin cruces
     h7 = P["html_cotizacion_actual"]({**ca6, "cruces": [], "sin_cruces": P["params_semaforo"]()["cotizacion_actual"]["sin_cruces"]})
     _check("Factores que cambiarían si la sesión cerrara al precio actual" in h7
@@ -2521,7 +2521,7 @@ def test_doc31_en_vivo():
         return h, sem, P["simulacion_cierres"](h, sem, P["datos_paso3"](h, pv, p))
     h, sem, sim = _datos("ITX.MC")
     cz = sim["cercano"]
-    _check(sem["color"] == "verde" and cz["lado"] == "debajo" and 56.4 < cz["limite"] < 56.8 and cz["color"] == "amarillo"
+    _check(sem["color"] == "verde" and cz["lado"] == "debajo" and abs(cz["limite"] - 56.69) <= 0.02 and cz["color"] == "amarillo"
            and abs(cz["pct"] - 50) < 0.1 and abs(sim["igual"]["pct"] - 87.5) < 0.1, f"T-QC3: ITX {cz} {sim['igual']}")
     h, sem, sim = _datos("NTGY.MC")
     cz = sim["cercano"]
@@ -2547,6 +2547,31 @@ def test_doc31_series_sin_ajustar():
     for fn in ("def obtener_datos(", "def _hist_pivots_cache(", "def obtener_hist_maximo("):
         i = src.index(fn); j = src.index("\ndef ", i + 5)
         _check("auto_adjust=False" in src[i:j], f"Doc. 31 §5: {fn} sin auto_adjust=False")
+
+
+def test_doc32_mejoras_textos():
+    """Doc. 32 — Q-1 (cierre igual al último que ya cambia el color), Q-2 (listas con «y»), Q-4 (cambio de tramo
+    sin cambio de puntos)."""
+    P = _APP
+    _check(P["_lista_y"](["el RSI", "el %B"]) == "el RSI y el %B" and P["_lista_y"](["el PP", "el MACD", "el %B"]) == "el PP, el MACD y el %B",
+           "Q-2: listas con «y»")
+    sim_san = {"igual": {"precio": 10.696, "pct": 41.6667, "color": "amarillo", "cambian": ["pp"], "solo_tramo": []},
+               "cercano": {"limite": 10.67, "lado": "encima", "dist_pct": -0.24, "pct": 41.6667, "color": "amarillo",
+                           "cambian": ["pp"], "solo_tramo": []}, "ventana": 0.3, "color_oficial": "rojo", "pp_sig": 10.6667}
+    t = P["texto_simulacion"](sim_san)
+    _check(t.startswith("Con un cierre igual al último (10,70 €), el semáforo ya pasaría al 41,7% (amarillo), porque el PP de la "
+                        "próxima sesión (10,67 €) queda por debajo.") and "Para seguir en rojo haría falta un cierre en 10,67 € o por debajo." in t
+           and "por encima de 10,67 € (−" not in t, f"Q-1: {t}")
+    sim_itx = {"igual": {"precio": 59.04, "pct": 87.5, "color": "verde", "cambian": ["pp"], "solo_tramo": []},
+               "cercano": {"limite": 56.69, "lado": "debajo", "dist_pct": -3.98, "pct": 50.0, "color": "amarillo",
+                           "cambian": ["rsi", "bb"], "solo_tramo": ["vol"]}, "ventana": 0.3, "color_oficial": "verde", "pp_sig": 58.63}
+    t2 = P["texto_simulacion"](sim_itx)
+    _check("cambiarían el RSI y el %B." in t2 and "Además, el volumen cambia de tramo sin cambiar de puntos." in t2, f"Q-2/Q-4: {t2}")
+    import pandas as pd
+    s0 = P["evaluar_semaforo"](29.54, {"_H": 30.1, "_L": 29.4, "_C": 29.7}, 45.1, -0.08, 0.03, 30.94, 29.67, None, "BAJISTA")
+    s1 = P["evaluar_semaforo"](29.64, {"_H": 30.1, "_L": 29.4, "_C": 29.7}, 45.1, -0.08, 0.03, 30.94, 29.20, None, "BAJISTA")
+    _check(P["_cambios_factores"](s0, s1) == ([], ["bb"]) and s0["factores"]["bb"]["escenario"] == "baja"
+           and s1["factores"]["bb"]["escenario"] == "mitad_baja", "Q-4: cambio de tramo sin cambio de puntos")
 
 
 def _dependencias_ok() -> bool:
