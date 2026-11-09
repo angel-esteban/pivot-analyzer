@@ -912,6 +912,44 @@
         "sector_knowledge.json"
       ],
       "_origen": "Spec PE v1 (PE-04)"
+    },
+    "posición larga": {
+      "nombre_completo": "Posición larga (compradora)",
+      "definicion": "Posición que gana si el precio sube: se ha comprado el valor o un instrumento que replica su subida. «Favorable para posiciones largas» describe un escenario técnico alcista.",
+      "ejemplo": "Un semáforo verde se considera, en análisis técnico, un escenario favorable para posiciones largas.",
+      "donde_aparece": [
+        "app.py (Paso 3, Semáforo Global)"
+      ],
+      "en_linea": "posición compradora: gana si el precio sube",
+      "variantes": [
+        "posiciones largas",
+        "posición larga"
+      ]
+    },
+    "posición corta": {
+      "nombre_completo": "Posición corta (vendedora)",
+      "definicion": "Posición que gana si el precio baja: se vende un valor prestado o se usa un instrumento que replica su caída. Tiene riesgos propios, como el coste del préstamo.",
+      "ejemplo": "Un semáforo amarillo se considera sin sesgo: ni favorable ni desfavorable para posiciones largas o cortas.",
+      "donde_aparece": [
+        "app.py (Paso 3, Semáforo Global)"
+      ],
+      "en_linea": "posición vendedora: gana si el precio baja",
+      "variantes": [
+        "posiciones cortas",
+        "posición corta"
+      ]
+    },
+    "invalidación": {
+      "nombre_completo": "Invalidación de una lectura técnica",
+      "definicion": "Hecho o nivel de precio que, si se produce, deja sin validez la lectura técnica: el escenario descrito ya no se sostiene. Enseñar qué invalida una lectura es tan importante como la lectura.",
+      "ejemplo": "Con SAR alcista en 56,38 €, la lectura alcista se invalidaría si el mínimo de una sesión baja de ese nivel.",
+      "donde_aparece": [
+        "app.py (Paso 3, Semáforo Global)"
+      ],
+      "en_linea": "hecho que dejaría sin validez la lectura",
+      "variantes": [
+        "invalidación"
+      ]
     }
   },
   "abreviaturas": {
@@ -985,5 +1023,6 @@
     "DMA": "Digital Markets Act — Ley de Mercados Digitales (UE)",
     "DSA": "Digital Services Act — Ley de Servicios Digitales (UE)",
     "NAIRU": "Non-Accelerating Inflation Rate of Unemployment — tasa de paro no inflacionaria"
-  }
+  },
+  "_previo_pe_v9": []
 }

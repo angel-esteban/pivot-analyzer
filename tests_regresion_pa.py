@@ -848,7 +848,7 @@ def _rsi_en_secciones(rsi):
 def test_pa3_05_coherencia():
     import ast
     # T-PA3-05a / b — una sola etiqueta de RSI en todas las secciones
-    for rsi, esperado in ((57.67, "Alcista"), (50, "Neutro"), (72, "Sobrecompra"), (28, "Sobreventa")):
+    for rsi, esperado in ((57.67, "Alcista"), (50, "Neutro"), (72, "Alcista en sobrecompra"), (28, "Bajista en sobreventa")):   # doc. 28 b
         et, sem, con, esc = _rsi_en_secciones(rsi)
         _check(et == esperado and esperado in sem and esperado in con,
                f"T-PA3-05a/b: RSI {rsi} → {esperado} (etiqueta {et!r}, semáforo {sem!r}, consenso {con!r})")
@@ -1974,7 +1974,7 @@ def test_doc26_ticker_pivot_mensual_y_lecciones():
     # Ticker a continuación del nombre de cada paso (tarjetas del asistente y títulos)
     _check("_tk_tit = f' &#183; <span style=\"white-space:nowrap\">{_tk_e}</span>'" in src
            and "+ _wnm + _tk_tit +" in src and src.count('.replace("@@TK@@", _tk_tit)') == 2
-           and "Sem&#225;foro Global{_tk_tit}:" in src and "Niveles concretos{_tk_tit}:" in src,
+           and "Paso 3 — Momento{_tk_tit}:" in src and "Niveles concretos{_tk_tit}:" in src,
            "Ticker junto al nombre del paso")
     # G-1
     _check(P["TIMEFRAMES"] == ["Diario", "Semanal", "Trimestral", "Anual"]
@@ -2095,6 +2095,227 @@ def test_doc27_incidencia_serie():
         cur.execute("SELECT to_regclass('incidencia_serie')"); _check(cur.fetchone()[0] is None, "T-D27 vivo: reversión")
     finally:
         cn.rollback(); cur = cn.cursor(); cur.execute(f"DROP SCHEMA IF EXISTS {esq} CASCADE"); cn.commit(); cn.close()
+
+
+def test_pe_v4_sar_parabolico():
+    """Spec PE v4 (PE-16/PE-21) — SAR parabólico de Wilder 0,02/0,2, igual que TA-Lib (valores de referencia
+    calculados con TA-Lib 0.6, TA_SAR, sobre esta misma serie)."""
+    import numpy as np, pandas as pd
+    P = _APP
+    k = np.arange(80)
+    c = 50 + 4 * np.sin(k / 7.0) + k * 0.05
+    h = np.round(c + 0.6 + 0.3 * np.cos(k / 3.0), 4); l = np.round(c - 0.6 - 0.2 * np.sin(k / 5.0), 4)
+    sar, tr, _sig = P["psar_wilder"](h, l)
+    ref = [51.0851, 50.9224, 50.8046, 49.141, 49.172928]
+    _check(np.allclose(sar[-5:], ref, atol=1e-6) and tr[-5:].tolist() == [-1, -1, -1, 1, 1]
+           and [i for i in range(2, 80) if tr[i] != tr[i - 1]] == [14, 34, 57, 78], f"PE v4: SAR = TA-Lib {sar[-5:]}")
+    hist = pd.DataFrame({"Open": c, "High": h, "Low": l, "Close": c, "Volume": 1e6}, index=pd.bdate_range("2026-01-01", periods=80))
+    d = P["calcular_sar_detalle"](hist)
+    _check(d["tendencia"] == "ALCISTA" and d["fecha_giro"] == hist.index[78].strftime("%d/%m/%Y") and d["sesiones_desde_giro"] == 1
+           and P["calcular_sar"](hist) == (round(ref[-1], 4), "ALCISTA"), f"PE v4: detalle del SAR {d}")
+    # Caída sostenida → bajista (el «SAR» anterior, mínimo de 5 sesiones, daba alcista con cualquier rebote)
+    b = 100 - k * 0.5 + np.where(k == 79, 1.2, 0)
+    hb = pd.DataFrame({"Open": b, "High": b + 0.3, "Low": b - 0.3, "Close": b, "Volume": 1e6}, index=pd.bdate_range("2026-01-01", periods=80))
+    _check(P["calcular_sar"](hb)[1] == "BAJISTA", "PE v4: SAR bajista en caída con rebote de un día")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check('hist["Low"].rolling(5).min()' not in src, "PE v4: retirado el «SAR» de mínimo de 5 sesiones")
+
+
+def _hist_p3(n=120, sube=True, seed=3):
+    import numpy as np, pandas as pd
+    rng = np.random.default_rng(seed)
+    c = 30 + np.cumsum(rng.normal(0.05 if sube else -0.05, 0.3, n))
+    idx = pd.bdate_range("2026-05-01", periods=n)
+    return pd.DataFrame({"Open": c, "High": c + 0.4, "Low": c - 0.4, "Close": c,
+                         "Volume": rng.integers(800_000, 1_200_000, n).astype(float)}, index=idx)
+
+
+def test_pe_v4_paso3_reglas_doc28():
+    """Doc. 28 — Reglas nuevas: T-a (volumen alto en sesión bajista), T-b/c (extremos), T-h (corte sin redondear),
+    T-PE-17b/c (cortes de la configuración, factor no disponible), mínimo de 4 factores, Bollinger poblacional."""
+    import copy
+    import numpy as np, pandas as pd
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    ev = P["evaluar_semaforo"]
+    pv = {"_H": 31.0, "_L": 29.0, "_C": 30.0}                    # PP = 30
+    vol = lambda r, alc: {"volumen": 1.0, "media_10d": 1.0, "ratio_10d": r, "sesion_alcista": alc}
+    # T-a — volumen
+    _check(ev(30.5, pv, 60, 1, 0, 32, 28, vol(130, False), "ALCISTA")["factores"]["vol"]["puntos"] == 0
+           and ev(30.5, pv, 60, 1, 0, 32, 28, vol(130, True), "ALCISTA")["factores"]["vol"]["puntos"] == 1
+           and ev(30.5, pv, 60, 1, 0, 32, 28, vol(100, False), "ALCISTA")["factores"]["vol"]["puntos"] == 0.5
+           and ev(30.5, pv, 60, 1, 0, 32, 28, vol(50, False), "ALCISTA")["factores"]["vol"]["puntos"] == 0.5,
+           "T-a: volumen alto bajista 0 · alto alcista 1 · normal 0,5 · bajo 0,5")
+    # T-b/c — extremos del RSI y de %B con la misma etiqueta en semáforo, consenso y convergencia
+    f = ev(30.5, pv, 72, 1, 0, 32, 28, vol(100, True), "ALCISTA")["factores"]
+    _, señ, _ = P["calcular_convergencia_tecnica"]({}, {}, 30.5, 72, 1, 0, 0.1, "ALCISTA", 85)
+    con_rsi = next(l for nm, l, *_ in señ if nm == "RSI 14"); dir_rsi = next(dd for nm, _l, dd, *_ in señ if nm == "RSI 14")
+    con_bb = next(l for nm, l, *_ in señ if nm == "Bollinger %B"); dir_bb = next(dd for nm, _l, dd, *_ in señ if nm == "Bollinger %B")
+    _check(f["rsi"]["puntos"] == 0.75 and f["rsi"]["etiqueta"] == "Alcista en sobrecompra" and "Alcista en sobrecompra" in con_rsi
+           and dir_rsi == "alcista" and P["etiqueta_rsi"](72) == "Alcista en sobrecompra", f"T-b: RSI 72 {f['rsi']} {con_rsi} {dir_rsi}")
+    f2 = ev(30.5, pv, 25, 1, 0, 32, 28, vol(100, True), "ALCISTA")["factores"]
+    _check(f2["rsi"]["puntos"] == 0 and f2["rsi"]["etiqueta"] == "Bajista en sobreventa"
+           and P["clasificar_rsi"](25)[1] == "bajista", "T-b: RSI 25 → 0, bajista en sobreventa")
+    fb = ev(31.8, pv, 60, 1, 0, 32, 28, vol(100, True), "ALCISTA")["factores"]["bb"]      # %B 95
+    _check(fb["puntos"] == 0.75 and fb["etiqueta"] == "Parte alta del canal" and "Parte alta del canal" in con_bb and dir_bb == "alcista"
+           and ev(28.2, pv, 60, 1, 0, 32, 28, vol(100, True), "ALCISTA")["factores"]["bb"]["puntos"] == 0, "T-c: extremos de %B")
+    # T-PE-16e — %B con un decimal
+    _check(fb["valor_txt"] == "95,0%", f"T-PE-16e: %B con un decimal ({fb['valor_txt']})")
+    # T-h — REP 4/6 = 66,7 % → verde con el corte sin redondear; 65 exacto → verde; 64,9 → amarillo
+    r = ev(29.90, {"_H": 30.5, "_L": 29.11, "_C": 30.21}, 52.62, 0.2135, 0.1, 31, 28, vol(115, True), "ALCISTA")
+    _check(abs(r["pct"] - 66.6667) < 1e-3 and r["color"] == "verde" and P["_pct_entero"](r["pct"]) == 67, f"T-h: REP {r['pct']} {r['color']}")
+    crit = copy.deepcopy(P["_cargar_criteria"]())
+    crit["semaforo_paso3"]["cortes"]["verde"] = 66.7
+    r2 = ev(29.90, {"_H": 30.5, "_L": 29.11, "_C": 30.21}, 52.62, 0.2135, 0.1, 31, 28, vol(115, True), "ALCISTA", criterios=crit)
+    _check(r2["color"] == "amarillo" and "≥ 67%" in P["html_calculo_semaforo"](r2, crit), "T-PE-17b: el corte de la configuración cambia el tramo")
+    # T-PE-17c y mínimo de 4 factores
+    r3 = ev(30.5, pv, 60, 1, 0, 32, 28, None, "ALCISTA")
+    h3 = P["html_calculo_semaforo"](r3)
+    _check(r3["n_disponibles"] == 5 and "/ 5 =" in h3 and "sin volumen fiable en la sesión" in h3 and "sobre los 5 restantes" in h3,
+           "T-PE-17c: factor no disponible baja el denominador y se explica")
+    r4 = ev(30.5, None, None, 1, 0, 32, 28, None, "ALCISTA")
+    _check(r4["color"] == "gris" and "Datos insuficientes para el semáforo (3 de 6 factores)" in P["html_calculo_semaforo"](r4)
+           and "Datos insuficientes" in P["conclusion_paso3"](r4, {}, None)["texto"], "Doc. 28 e): menos de 4 factores → gris")
+    # T-PE-17a — el cálculo visible reproduce el porcentaje
+    _check("4 / 6 = 66,7% → 67%" in P["html_calculo_semaforo"](r), "T-PE-17a: cálculo visible")
+    # Doc. 28 g) — Bollinger con desviación poblacional
+    serie = pd.Series(np.r_[np.linspace(10, 12, 19), 12.5])
+    sup, med, inf, _pb = P["calcular_bollinger"](serie)
+    _check(abs((sup - med) - 2 * float(serie.std(ddof=0))) < 1e-3, "Doc. 28 g): Bollinger con desviación poblacional")
+    # Volumen con dirección de la sesión
+    h = _hist_p3()
+    v = P["analisis_volumen"](h)
+    _check(v["sesion_alcista"] == (h["Close"].iloc[-1] > h["Close"].iloc[-2]) and v["var_pct"] is not None, "Doc. 28 a): dirección de la sesión")
+
+
+def test_pe_v4_paso3_fichas_y_conclusion():
+    """PE-16, PE-18, PE-19, PE-20 y PE-21 — fichas, tres niveles, conclusión, coherencia con el informe."""
+    import re as _r
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    h = _hist_p3()
+    c = h["Close"]; precio = float(c.iloc[-1])
+    rp = P["calcular_todos_pivots"](h, "Clásico")
+    rsi = P["calcular_rsi"](c); m, ms, mh = P["calcular_macd"](c); bs, bm, bi, pb = P["calcular_bollinger"](c)
+    vol = P["analisis_volumen"](h); sar_v, sar_t = P["calcular_sar"](h)
+    sem = P["evaluar_semaforo"](precio, rp["Diario"], rsi, m, ms, bs, bi, vol, sar_t)
+    d3 = P["datos_paso3"](h, rp["Diario"], precio)
+    # T-PE-20a — Paso 3 = informe (misma función); T-PE-20c — con Camarilla el PP sigue siendo el clásico
+    col, pct, fac = P["calcular_semaforo"](precio, rp["Diario"], rsi, m, ms, bs, bi, vol, sar_t)
+    _check(col == sem["color"] and pct == sem["pct"] and len(fac) == sem["n_disponibles"], "T-PE-20a: Paso 3 = informe")
+    cam = P["calcular_todos_pivots"](h, "Camarilla")
+    _check(P["evaluar_semaforo"](precio, cam["Diario"], rsi, m, ms, bs, bi, vol, sar_t)["pp"] == sem["pp"], "T-PE-20c: PP clásico con Camarilla")
+    # T-PE-16d — mismo RSI que el Paso 2
+    _check(d3["rsi"]["valor"] == rsi and abs(P["analizar_rsi"](h, precio, "X")["rsi_val"] - rsi) < 0.01, "T-PE-16d: RSI del Paso 3 = Paso 2")
+    # T-PE-16a/b, T-PE-18a — fichas
+    crit = P["_cargar_criteria"]()
+    for k in P["SEM_FACTORES"]:
+        f = sem["factores"][k]
+        tit = P["titulo_factor"](k, f)
+        _check(not _r.search(r"\b[a-z]+_[a-z_]+\b", tit) and "/1)" in tit, f"T-PE-16a: título sin códigos ({tit})")
+        fi = P["html_ficha_factor"](k, f, d3, crit)
+        for frag in ("Qué es:", "Datos usados:", "Parámetros y por qué:", "◀", "Cómo leerlo:", "Qué cambiaría esta puntuación:",
+                     "Más detalle: fórmula y limitaciones"):
+            _check(frag in fi, f"T-PE-16b/18a: ficha {k} sin «{frag}»")
+        qc = P["que_cambiaria_factor"](k, f, d3)
+        _check(qc.startswith(P["SEM_TITULOS"][k].split(" (")[0].split(" 14")[0]) or qc.startswith(("RSI", "MACD", "SAR", "Bollinger", "Volumen")),
+               f"E-1: «qué cambiaría» empieza por el indicador ({qc})")
+        _check(any(w in crit["semaforo_paso3"]["mas_detalle"][k] for w in ("puede", "no tiene", "retraso", "distorsionan", "gira")),
+               f"T-PE-18a: el nivel avanzado de {k} incluye una limitación")
+    _check("No disponible" not in P["datos_factor_txt"]("pp", sem["factores"]["pp"], d3) and "PP = (máx. + mín. + cierre) / 3" in
+           P["datos_factor_txt"]("pp", sem["factores"]["pp"], d3), "T-PE-16b: datos del PP con fórmula")
+    fv = P["datos_factor_txt"]("vol", sem["factores"]["vol"], d3)
+    _check("Sesión completa del" in fv and "sesión" in fv, "T-PE-16c: el volumen indica la sesión usada")
+    vc = dict(vol); vc["sesion_en_curso_descartada"] = True
+    _check("La sesión en curso no se usa" in P["datos_factor_txt"]("vol", sem["factores"]["vol"], {**d3, "vol": vc}),
+           "T-PE-16c: sesión en curso indicada")
+    _check("que el mínimo de una sesión baje de" in P["que_cambiaria_factor"]("sar", {"disponible": True, "escenario": "alcista"}, d3)
+           and "que el máximo de una sesión supere" in P["que_cambiaria_factor"]("sar", {"disponible": True, "escenario": "bajista"}, d3),
+           "Doc. 28 f): «qué cambiaría» del SAR con mínimo / máximo")
+    _check("acelera" in P["datos_factor_txt"]("macd", sem["factores"]["macd"], d3) or "frena" in P["datos_factor_txt"]("macd", sem["factores"]["macd"], d3),
+           "Doc. 28 d): histograma informativo del MACD")
+    # PE-19 — conclusión y matriz con el Paso 2
+    for tr2, sc in (("alcista", 7.3), ("mixta", 5.0), ("bajista", 2.0)):
+        for colr, rel in (("verde", {"alcista": "coherente", "mixta": "matiza", "bajista": "contradice"}[tr2]),
+                          ("amarillo", {"alcista": "matiza", "mixta": "coherente", "bajista": "matiza"}[tr2]),
+                          ("rojo", {"alcista": "contradice", "mixta": "matiza", "bajista": "coherente"}[tr2])):
+            s2 = dict(sem); s2["color"] = colr
+            _check(P["conclusion_paso3"](s2, d3, {"score_total": sc})["relacion"] == rel, f"PE-19: matriz {tr2} × {colr}")
+    cc = P["conclusion_paso3"](sem, d3, {"score_total": 7.3})
+    _check(cc["texto"].startswith("<b>Conclusión del Paso 3: momento") and "A favor:" in cc["texto"] and "En contra:" in cc["texto"]
+           and "Relación con la estructura (Paso 2):" in cc["texto"], f"PE-19: conclusión {cc['texto']}")
+    if cc.get("factor_qc"):
+        _qc = cc["texto"].split("Qué cambiaría esta lectura:</b> ")[1]
+        _check(_qc.startswith(("Precio frente", "RSI", "MACD", "Bollinger", "Volumen", "SAR")), "PE-19: qué cambiaría empieza por el indicador")
+    # Zonas que vigila el método: notas del Paso 2
+    z = P["zonas_vigila"]({"fibo": {"nota_informativa": "x", "retroceso_max_pct": 55.1}}, sem)
+    _check(z and z[0].startswith("Retroceso del 55,1% del swing anual (Paso 2)") and "En el Paso 3: MACD" in z[0], f"PE-19: zonas {z}")
+    # Redacción: sin indicaciones de operativa en textos del semáforo (informe y Paso 3)
+    p3 = crit["semaforo_paso3"]
+    textos = " ".join([json_dump(p3), P["_interpretacion_semaforo"]("verde", 71, P["tuplas_semaforo"](sem)), cc["texto"]]).lower()
+    # Doc. 28 v2: se admiten las lecturas de escenario («favorable para posiciones largas», «invalidación»); no se
+    # admiten imperativos dirigidos al usuario (T-L2)
+    _malos = [t for t in tuple(TERMINOS_PA3) + ("probabilidad", "trampa") if t in textos] + _hay_compra_venta(textos)
+    _malos += _r.findall(r"\b(?:compra|vende|entra|compre|venda|vendan|compren)\b", textos)
+    _check(not _malos, f"PE-13/doc. 28 v2 (T-L2): términos no admitidos {_malos}")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("trampa frecuente para principiantes" not in src and "Aunque la estructura sea buena" not in src,
+           "Doc. 28: textos fijos S-6 y S-7 retirados")
+
+
+def json_dump(o):
+    import json
+    return json.dumps(o, ensure_ascii=False)
+
+
+def test_doc28_v2_lecturas_escenario():
+    """Doc. 28 v2 — T-L1: lectura, invalidación con los valores del día y combinación con el Paso 2 por color;
+    T-L2: sin imperativos dirigidos al usuario."""
+    import re as _r
+    P = _APP
+    sar_up = {"sar_siguiente": 56.3813, "tendencia": "ALCISTA"}
+    sar_dn = {"sar_siguiente": 30.2776, "tendencia": "BAJISTA"}
+    le = P["lectura_escenario"]
+    # ITX: verde, estructura alcista 7,3; precio bajo el PP → solo la cláusula del SAR
+    a = le("verde", 59.04, 60.0533, sar_up, {"score_total": 7.3})
+    _check(a["lectura"].startswith("Lectura del método: los indicadores de corto plazo están alineados al alza")
+           and "favorable para posiciones largas (compradoras)" in a["lectura"]
+           and a["invalidacion"] == "La lectura se invalidaría si el mínimo de una sesión baja del SAR (56,38 €)."
+           and a["combinacion"].startswith("El momento y la estructura apuntan en el mismo sentido"), f"T-L1 ITX: {a}")
+    # Verde con precio sobre el PP → dos cláusulas
+    a2 = le("verde", 61.0, 60.0533, sar_up, {"score_total": 7.3})
+    _check("o si el cierre queda bajo el pivot diario (60,05 €)" in a2["invalidacion"], f"T-L1: verde con PP {a2['invalidacion']}")
+    # REP: verde, estructura mixta 6,1
+    r = le("verde", 29.90, 29.94, {"sar_siguiente": 28.8344, "tendencia": "ALCISTA"}, {"score_total": 6.1})
+    _check(r["combinacion"].startswith("La estructura del Paso 2 es mixta") and "28,83 €" in r["invalidacion"], f"T-L1 REP: {r}")
+    # NTGY: rojo, SAR bajista y precio bajo el PP → dos cláusulas; estructura mixta
+    n = le("rojo", 29.54, 29.7267, sar_dn, {"score_total": 5.8})
+    _check("desfavorable para posiciones largas" in n["lectura"]
+           and n["invalidacion"] == ("La lectura se invalidaría si el máximo de una sesión supera el SAR (30,28 €) o si el "
+                                     "cierre queda sobre el pivot diario (29,73 €).")
+           and n["combinacion"].startswith("La estructura del Paso 2 es mixta"), f"T-L1 NTGY: {n}")
+    # SAN: rojo con SAR alcista → solo la cláusula del pivot
+    s_ = le("rojo", 10.696, 10.8413, {"sar_siguiente": 10.1184, "tendencia": "ALCISTA"}, {"score_total": 3.7})
+    _check("SAR" not in s_["invalidacion"] and "pivot diario (10,84 €)" in s_["invalidacion"], f"T-L1 SAN: {s_['invalidacion']}")
+    # Amarillo: cortes leídos de criteria.json; sentido contrario
+    y = le("amarillo", 10.0, 10.0, sar_up, {"score_total": 7.3})
+    _check(y["invalidacion"] == "La lectura cambiaría si el semáforo llega al 65% o baja del 40%."
+           and "sin sesgo" in y["lectura"], f"T-L1 amarillo: {y}")
+    d = le("verde", 10.0, 9.0, sar_up, {"score_total": 2.0})
+    _check(d["combinacion"].startswith("El momento va en sentido contrario a la estructura del Paso 2 (2,0/10, estructura bajista)"),
+           f"T-L1 sentido contrario: {d['combinacion']}")
+    _check(a["aviso"] == "Describe un escenario técnico; no es una señal automática ni sustituye a la gestión del riesgo."
+           and a["nota_fija"].startswith("Las lecturas describen el escenario técnico según el método"), "Doc. 28 v2: aviso y nota fija")
+    # Informe: el Semáforo Global incluye la lectura
+    t = P["_interpretacion_semaforo"]("rojo", 16.7, [("SAR", "x", 0)], precio=29.54, pp=29.7267, sar_det=sar_dn, pt_paso2={"score_total": 5.8})
+    _check("**Lectura del método:**" in t and "**Invalidación:**" in t and "no es una señal automática" in t, "T-L1: informe con lectura")
+    # Glosario
+    g = P["GLOSARIO"]["terminos"] if "GLOSARIO" in P else __import__("json").load(open(_A._RUTA_APP.parent / "glosario.json", encoding="utf-8"))["terminos"]
+    _check(all(k in g for k in ("posición larga", "posición corta", "invalidación")), "Doc. 28 v2: glosario")
+    # T-L2
+    textos = " ".join(str(v) for v in (a, a2, r, n, s_, y, d)).lower() + " " + t.lower()
+    _malos = _r.findall(r"\b(?:compra|vende|entra|compre|venda|vendan|compren)\b", textos)
+    _check(not _malos, f"T-L2: imperativos dirigidos al usuario {_malos}")
 
 
 def _dependencias_ok() -> bool:

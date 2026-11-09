@@ -644,10 +644,10 @@ TOOLTIPS = {
     "Volumen hoy":       "Número de acciones o participaciones negociadas en la sesión actual. Un volumen alto indica mayor interés del mercado.",
     "Moneda":            "Divisa en la que cotiza el activo en su mercado de origen.",
     "Beta":              "Sensibilidad del activo respecto al mercado de referencia. Beta > 1: más volátil que el índice. Beta < 1: menos volátil. Beta < 0: correlación inversa con el mercado.",
-    "RSI 14":            "Relative Strength Index (14 sesiones): mide si el activo está sobrecomprado (>70) o sobrevendido (<30). Entre 30-70 es zona neutra.",
+    "RSI 14":            "Relative Strength Index (14 sesiones, Wilder): fuerza de las subidas frente a las bajadas recientes, de 0 a 100. Bandas del método: ≤ 30 bajista en sobreventa · ≤ 45 bajista · 45–55 neutro · ≥ 55 alcista · ≥ 70 alcista en sobrecompra.",
     "MACD":              "Moving Average Convergence Divergence: diferencia entre dos medias móviles. Si supera su señal, la tendencia es alcista; si está por debajo, bajista.",
     "SAR":               "Parabolic Stop And Reverse: señal de reversión de tendencia. 'Alcista' = precio por encima del SAR. 'Bajista' = precio por debajo.",
-    "Bollinger %B":      "Posición del precio dentro de las Bandas de Bollinger. 0% = banda inferior (sobrevendido). 50% = zona central. 100% = banda superior (sobrecomprado).",
+    "Bollinger %B":      "Posición del precio dentro de las Bandas de Bollinger (20, 2). 0% = banda inferior, 50% = media de 20 sesiones, 100% = banda superior. Por encima del 80%, parte alta del canal; por debajo del 20%, parte baja.",
     "SMA 20":            "Media Móvil Simple de 20 sesiones (~1 mes). Filtra el ruido a corto plazo y muestra la tendencia reciente.",
     "SMA 50":            "Media Móvil Simple de 50 sesiones (~2,5 meses). Indicador de tendencia de medio plazo ampliamente seguido por analistas.",
     "Ratio vs 10d":      "Volumen de hoy comparado con la media de las últimas 10 sesiones. Por encima del 100% indica actividad superior a la media reciente.",
@@ -6193,10 +6193,12 @@ def clasificar_rsi(rsi):
     _u = umbrales.actuales()
     # PA3-05: bandas del DFR — sobreventa ≤ 30, bajista ≤ 45, neutro 45–55, alcista ≥ 55,
     # sobrecompra ≥ 70 (límites inclusivos).
+    # Doc. 28 b): la sobrecompra es impulso al alza y la sobreventa, a la baja; la lectura de posible
+    # giro es una nota informativa que no puntúa (misma dirección en semáforo, consenso y convergencia).
     if rsi >= _u["rsi_sobrecompra"]:
-        return ("sobrecomprado", "bajista")
+        return ("sobrecomprado", "alcista")
     if rsi <= _u["rsi_sobreventa"]:
-        return ("sobrevendido", "alcista")
+        return ("sobrevendido", "bajista")
     if rsi >= _u["rsi_alcista"]:
         return ("alcista", "alcista")
     if rsi <= _u["rsi_bajista"]:
@@ -6204,7 +6206,7 @@ def clasificar_rsi(rsi):
     return ("neutro", "neutro")
 
 
-ETIQUETA_RSI = {"sobrecomprado": "Sobrecompra", "sobrevendido": "Sobreventa",
+ETIQUETA_RSI = {"sobrecomprado": "Alcista en sobrecompra", "sobrevendido": "Bajista en sobreventa",   # doc. 28 b
                 "alcista": "Alcista", "bajista": "Bajista", "neutro": "Neutro"}
 
 
@@ -6221,10 +6223,10 @@ def clasificar_bollinger_pctB(pct_b):
     if pct_b is None:
         return (None, None)
     _u = umbrales.actuales()
-    if pct_b > _u["bb_alto"]:
-        return ("sobrecomprado", "bajista")
+    if pct_b > _u["bb_alto"]:          # doc. 28 c): parte alta del canal = impulso al alza
+        return ("sobrecomprado", "alcista")
     if pct_b < _u["bb_bajo"]:
-        return ("sobrevendido", "alcista")
+        return ("sobrevendido", "bajista")
     if pct_b >= _u["bb_medio"]:
         return ("mitad_alta", "alcista")
     return ("mitad_baja", "bajista")
@@ -6285,7 +6287,7 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
     # RSI  (R-1: clasificador único)
     if rsi_val is not None:
         _rsi_cat, _rsi_dir = clasificar_rsi(rsi_val)
-        _RSI_LBL = {"sobrecomprado": "🔴 Sobrecompra", "sobrevendido": "🟢 Sobreventa",
+        _RSI_LBL = {"sobrecomprado": "🔵 Alcista en sobrecompra", "sobrevendido": "🟠 Bajista en sobreventa",   # doc. 28 b
                     "alcista": "🔵 Alcista", "bajista": "🟠 Bajista",
                     "neutro": "⚪ Neutro"}   # PA3-05: etiqueta única
         señales.append(("RSI 14", _RSI_LBL[_rsi_cat], _rsi_dir, rsi_val))
@@ -6311,7 +6313,7 @@ def calcular_convergencia_tecnica(resultados_pivots, medias, precio,
     # Bollinger %B  (R-1: clasificador único)
     if pct_b is not None:
         _bb_cat, _bb_dir = clasificar_bollinger_pctB(pct_b)
-        _BB_LBL = {"sobrecomprado": "🔴 Sobrecomprado", "sobrevendido": "🟢 Sobrevendido",
+        _BB_LBL = {"sobrecomprado": "🔵 Parte alta del canal", "sobrevendido": "🟠 Parte baja del canal",   # doc. 28 c
                    "mitad_alta": "🔵 Mitad alta", "mitad_baja": "🟠 Mitad baja"}
         señales.append(("Bollinger %B", f"{_BB_LBL[_bb_cat]} ({pct_b:.0f}%)", _bb_dir, pct_b))
 
@@ -6415,7 +6417,7 @@ def calcular_bollinger(serie: pd.Series, periodo: int = 20, std_dev: float = 2.0
             pass
     # Fallback manual
     med = serie.rolling(periodo).mean()
-    std = serie.rolling(periodo).std()
+    std = serie.rolling(periodo).std(ddof=0)   # doc. 28 g): poblacional, como John Bollinger
     sup = med + std_dev * std
     inf_b = med - std_dev * std
     ultimo = serie.iloc[-1]
@@ -6435,30 +6437,77 @@ def calcular_sma_ema(serie: pd.Series, periodos=(20, 50, 200)):
     return resultado
 
 
+def psar_wilder(high, low, af_ini: float = 0.02, af_max: float = 0.2):
+    """Spec PE v4 (PE-16/PE-21) — SAR parabólico de Wilder (0,02 / 0,2), mismo algoritmo que TA-Lib (TA_SAR).
+    Devuelve (sar, tendencia, sar_siguiente): sar[i] es el SAR vigente en la sesión i; tendencia[i] = +1/−1
+    tras la sesión i; sar_siguiente es el SAR de la próxima sesión. Antes la app usaba, sin pandas_ta
+    (que no está en requirements.txt), el mínimo de 5 sesiones como «SAR», casi siempre alcista."""
+    h = np.asarray(high, dtype=float); l = np.asarray(low, dtype=float); n = len(h)
+    sar_out = np.full(n, np.nan); tr = np.zeros(n, dtype=int)
+    if n < 2:
+        return sar_out, tr, float("nan")
+    _dp, _dm = h[1] - h[0], l[0] - l[1]
+    largo = not (_dm > 0 and _dp < _dm)
+    af = af_ini
+    ep, sar = (h[1], l[0]) if largo else (l[1], h[0])
+    new_l, new_h = l[1], h[1]
+    for i in range(1, n):
+        prev_l, prev_h = new_l, new_h
+        new_l, new_h = l[i], h[i]
+        if largo:
+            if new_l <= sar:                       # giro a bajista
+                largo = False
+                sar = max(ep, prev_h, new_h)
+                sar_out[i] = sar
+                af, ep = af_ini, new_l
+                sar = max(sar + af * (ep - sar), prev_h, new_h)
+            else:
+                sar_out[i] = sar
+                if new_h > ep:
+                    ep, af = new_h, min(af + af_ini, af_max)
+                sar = min(sar + af * (ep - sar), prev_l, new_l)
+        else:
+            if new_h >= sar:                       # giro a alcista
+                largo = True
+                sar = min(ep, prev_l, new_l)
+                sar_out[i] = sar
+                af, ep = af_ini, new_h
+                sar = min(sar + af * (ep - sar), prev_l, new_l)
+            else:
+                sar_out[i] = sar
+                if new_l < ep:
+                    ep, af = new_l, min(af + af_ini, af_max)
+                sar = max(sar + af * (ep - sar), prev_h, new_h)
+        tr[i] = 1 if largo else -1
+    return sar_out, tr, float(sar)
+
+
+def calcular_sar_detalle(hist: pd.DataFrame) -> "dict | None":
+    """Spec PE v4 — Datos del SAR para la ficha del Paso 3: valor, tendencia, SAR de la próxima sesión,
+    fecha del último giro y distancia al precio."""
+    if hist is None or len(hist) < 3:
+        return None
+    sar, tr, sar_sig = psar_wilder(hist["High"].values, hist["Low"].values)
+    _giros = [i for i in range(2, len(tr)) if tr[i] != tr[i - 1]]
+    _p = float(hist["Close"].iloc[-1])
+    try:
+        _fg = hist.index[_giros[-1]].strftime("%d/%m/%Y") if _giros else ""
+        _fs = hist.index[-1].strftime("%d/%m/%Y")
+    except Exception:
+        _fg, _fs = "", ""
+    return {"sar": round(float(sar[-1]), 4), "tendencia": "ALCISTA" if tr[-1] == 1 else "BAJISTA",
+            "sar_siguiente": round(sar_sig, 4), "fecha_giro": _fg, "fecha_sesion": _fs,
+            "sesiones_desde_giro": (len(tr) - 1 - _giros[-1]) if _giros else None,
+            "dist_pct": round((_p - float(sar[-1])) / _p * 100, 2) if _p else None}
+
+
 def calcular_sar(hist: pd.DataFrame):
-    """Parabolic SAR — retorna (valor_sar, tendencia)."""
-    if PANDAS_TA:
-        try:
-            sar_df = ta.psar(hist["High"], hist["Low"], hist["Close"])
-            if sar_df is not None and not sar_df.empty:
-                cols = sar_df.columns.tolist()
-                # pandas_ta devuelve PSARl (long) y PSARs (short)
-                long_col = [c for c in cols if "PSARl" in c or "long" in c.lower()]
-                short_col = [c for c in cols if "PSARs" in c or "short" in c.lower()]
-                if long_col and short_col:
-                    sar_long = sar_df[long_col[0]].iloc[-1]
-                    sar_short = sar_df[short_col[0]].iloc[-1]
-                    if not np.isnan(sar_long):
-                        return round(float(sar_long), 4), "ALCISTA"
-                    elif not np.isnan(sar_short):
-                        return round(float(sar_short), 4), "BAJISTA"
-        except Exception:
-            pass
-    # Fallback simplificado
-    sar_v = float(hist["Low"].rolling(5).min().iloc[-1])
-    precio = float(hist["Close"].iloc[-1])
-    tendencia = "ALCISTA" if precio > sar_v else "BAJISTA"
-    return round(sar_v, 4), tendencia
+    """Parabolic SAR (Wilder 0,02 / 0,2) — retorna (valor_sar, tendencia). Spec PE v4: siempre el mismo
+    algoritmo (psar_wilder), esté o no instalado pandas_ta."""
+    d = calcular_sar_detalle(hist)
+    if d is None:
+        return None, None
+    return d["sar"], d["tendencia"]
 
 
 # =============================================================================
@@ -6504,6 +6553,12 @@ def analisis_volumen(hist: pd.DataFrame):
     except Exception:
         _ses_fecha = ""
     vol_hoy = float(_h["Volume"].iloc[-1])
+    # Doc. 28 a): sesión alcista = cierre por encima del cierre anterior (igual → no alcista)
+    try:
+        _c_ses, _c_ant = float(_h["Close"].iloc[-1]), float(_h["Close"].iloc[-2])
+        _var_ses = (_c_ses - _c_ant) / _c_ant * 100 if _c_ant else None
+    except Exception:
+        _c_ses = _c_ant = _var_ses = None
     vol_10d = float(_h["Volume"].tail(11).iloc[:-1].mean()) if len(_h) > 10 else vol_hoy
     # tail(64).iloc[:-1] = 63 sesiones anteriores a la sesión medida — consistente con vol_10d
     vol_3m = float(_h["Volume"].tail(64).iloc[:-1].mean()) if len(_h) > 20 else vol_hoy
@@ -6537,6 +6592,8 @@ def analisis_volumen(hist: pd.DataFrame):
         "clasificacion_3m": cls_3m,
         "icono_3m": icono_3m,
         "sesion_fecha": _ses_fecha,                  # PA3-05: ventana de cada cifra
+        "sesion_cierre": _c_ses, "cierre_anterior": _c_ant, "var_pct": _var_ses,
+        "sesion_alcista": bool(_c_ses is not None and _c_ant is not None and _c_ses > _c_ant),
         "sesion_en_curso_descartada": bool(_en_curso and len(hist) > 2),
         "ventana_txt": (f"sesión completa del {_ses_fecha}" if _ses_fecha else "última sesión completa"),
     }
@@ -6546,169 +6603,51 @@ def analisis_volumen(hist: pd.DataFrame):
 # SEMÁFORO GLOBAL
 # =============================================================================
 
-def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list) -> str:
-    """
-    Genera texto interpretativo en lenguaje natural para el semáforo global.
-    Detecta condiciones de veto (RSI extremo, SAR contradictorio, volumen seco).
-    """
-    n_pos = sum(1 for _, _, s in factores_sem if s >= 0.75)
-    n_tot = len(factores_sem)
-
-    # Bloque principal según color y score
-    base = f"**{n_pos} de {n_tot} factores técnicos positivos.**"
-    if color_sem == "verde":
-        if pct_sem >= 85:
-            interp = (f"{base} Momentum alcista sólido a corto plazo: la mayoría de "
-                      "indicadores apuntan en la misma dirección. Contexto técnico favorable "
-                      "para posiciones largas en las próximas sesiones.")
-        elif pct_sem >= 65:
-            interp = (f"{base} Sesgo alcista predominante, aunque no todos los factores "
-                      "confirman. Los factores en amarillo o rojo son los que restan "
-                      "confirmación a la lectura.")
-        else:
-            interp = (f"{base} Verde ajustado: más factores positivos que negativos, "
-                      "pero por poco margen. Interpretar con cautela.")
-    elif color_sem == "amarillo":
-        interp = (f"{base} Señales mixtas — sin dirección técnica clara. "
-                  "Los indicadores se contradicen entre sí: el método no identifica "
-                  "una dirección hasta que la mayoría se alinee.")
-    else:  # rojo
-        if pct_sem <= 20:
-            interp = (f"{base} Presión vendedora dominante: casi todos los indicadores "
-                      "técnicos están en negativo. El método no identifica condiciones "
-                      "alcistas en este entorno.")
-        else:
-            interp = (f"{base} Predominio bajista a corto plazo. Más factores en negativo "
-                      "que en positivo. El soporte más cercano es la referencia de invalidación.")
-
-    # Detección de condiciones de veto
-    avisos = []
-    for fac, desc, score in factores_sem:
-        if fac == "RSI":
-            if "Sobrecompra" in desc:
-                avisos.append(
-                    "⚠️ **RSI sobrecomprado:** el valor ha subido mucho en muy poco tiempo. "
-                    "Aunque el semáforo sea verde, con RSI en sobrecompra aumenta el riesgo "
-                    "de retroceso a corto plazo; el método lo trata como factor de cautela.")
-            elif "Sobreventa" in desc:
-                avisos.append(
-                    "⚠️ **RSI sobrevendido:** posible rebote técnico cercano, pero no "
-                    "garantizado. Un RSI bajo puede seguir bajando si el contexto macro o "
-                    "fundamental es negativo. Señal de alerta, no de entrada automática.")
-        if fac == "Parabolic SAR" and "bajista" in desc.lower() and color_sem == "verde":
-            avisos.append(
-                "⚠️ **SAR bajista con semáforo verde:** la tendencia estructural del SAR "
-                "contradice el momentum puntual. Indica que los otros factores son "
-                "positivos en el muy corto plazo, pero la tendencia de fondo no acompaña. "
-                "Mayor riesgo de que la señal verde sea un rebote dentro de una caída.")
-        if fac == "Volumen" and score == 0:
-            avisos.append(
-                "⚠️ **Volumen bajo:** el movimiento de precio no tiene respaldo de "
-                "actividad compradora/vendedora real. Los movimientos sin volumen son "
-                "menos fiables — pueden revertirse fácilmente en la siguiente sesión.")
-
-    resultado = interp
-    if avisos:
-        resultado += "\n\n" + "\n\n".join(avisos)
-    resultado += "\n\n*Horizonte de este semáforo: próximas **1–5 sesiones**. No refleja la tendencia de medio ni largo plazo.*"
+def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list, precio=None, pp=None,
+                             sar_det=None, pt_paso2=None) -> str:
+    """Doc. 28 (aviso) y PE-17 — Texto del Semáforo Global del informe: rótulo descriptivo, cálculo,
+    notas informativas de los extremos (no puntúan) y nota fija. Sin indicaciones sobre una posición."""
+    p = params_semaforo()
+    rot = p.get("rotulos") or {}
+    n = len(factores_sem)
+    pts = sum(s_ for _, _, s_ in factores_sem)
+    if color_sem == "gris":
+        cab = f"**{rot.get('gris', '').format(n=n)}**"
+    else:
+        cab = (f"**{rot.get(color_sem, '')}** Puntos obtenidos / factores disponibles = {_pts_es(pts)} / {n} = "
+               f"{_pct_entero(pct_sem)}%.")
+    ni = p.get("notas_informativas") or {}
+    notas = []
+    for fac, desc, _s in factores_sem:
+        _d = desc.lower()
+        if fac == "RSI" and "sobrecompra" in _d:
+            notas.append(f"ℹ️ RSI en sobrecompra: {ni.get('rsi_sobrecompra', '')} No puntúa.")
+        elif fac == "RSI" and "sobreventa" in _d:
+            notas.append(f"ℹ️ RSI en sobreventa: {ni.get('rsi_sobreventa', '')} No puntúa.")
+        elif fac == "Bollinger %B" and "parte alta" in _d:
+            notas.append(f"ℹ️ %B en la parte alta del canal: {ni.get('bb_alta', '')} No puntúa.")
+        elif fac == "Bollinger %B" and "parte baja" in _d:
+            notas.append(f"ℹ️ %B en la parte baja del canal: {ni.get('bb_baja', '')} No puntúa.")
+    resultado = cab
+    _le = lectura_escenario(color_sem, precio, pp, sar_det, pt_paso2) if color_sem != "gris" else {}
+    if _le:   # doc. 28 v2: lectura del método, invalidación y combinación con el Paso 2
+        resultado += (f"\n\n**Lectura del método:** {_lectura_sin_prefijo(_le['lectura'])} "
+                      f"**Invalidación:** {_le['invalidacion']}"
+                      + (f" {_le['combinacion']}" if _le.get("combinacion") else "") + f"\n\n*{_le['aviso']}*")
+    if notas:
+        resultado += "\n\n" + "\n\n".join(notas)
+    resultado += f"\n\n*{p.get('nota_fija', '')} Horizonte del semáforo: de unos días a pocas semanas.*"
     return resultado
 
 
 def calcular_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal,
                       bb_sup, bb_inf, vol_data, sar_tendencia):
-    """
-    6 factores: precio vs PP, RSI, MACD, Bollinger %B, volumen, SAR.
-    Retorna (color, puntuacion, factores_detalle).
-    """
-    factores = []
-    puntos = 0
-
-    # 1. Precio vs Pivot Point diario — PA3-04 (D-3): SIEMPRE el PP CLÁSICO diario
-    # (H+L+C)/3 de la sesión anterior, sea cual sea el sistema de pivots elegido (Camarilla
-    # no tiene PP y el semáforo se quedaba en 5 factores).
-    pp = None
-    if pivots_diario:
-        if all(k in pivots_diario for k in ("_H", "_L", "_C")):
-            pp = (float(pivots_diario["_H"]) + float(pivots_diario["_L"]) + float(pivots_diario["_C"])) / 3
-        elif "PP" in pivots_diario:
-            pp = pivots_diario["PP"]
-    if pp is not None:
-        if precio > pp:
-            factores.append(("Precio vs PP", f"✅ Por encima del PP clásico diario ({pp:.4f})", 1))
-            puntos += 1
-        else:
-            factores.append(("Precio vs PP", f"❌ Por debajo del PP clásico diario ({pp:.4f})", 0))
-
-    # 2. RSI  (R-1: misma clasificación que el Consenso; banda neutra 45-55)
-    if rsi_val is not None:
-        _rsi_cat, _ = clasificar_rsi(rsi_val)
-        _RSI_SEM = {
-            "sobrecomprado": ("⚠️ Sobrecompra", 0),
-            "sobrevendido":  ("⚠️ Sobreventa", 0.5),
-            "alcista":       ("✅ Alcista", 1),
-            "neutro":        ("⚪ Neutro", 0.5),
-            "bajista":       ("❌ Bajista", 0),
-        }
-        _et_rsi, _pt_rsi = _RSI_SEM[_rsi_cat]
-        factores.append(("RSI", f"{_et_rsi} ({rsi_val})", _pt_rsi))
-        puntos += _pt_rsi
-
-    # 3. MACD vs Señal
-    if macd_val is not None and macd_señal is not None:
-        if macd_val > macd_señal:
-            factores.append(("MACD", f"✅ MACD > Señal ({macd_val:.4f})", 1))
-            puntos += 1
-        else:
-            factores.append(("MACD", f"❌ MACD < Señal ({macd_val:.4f})", 0))
-
-    # 4. Bollinger %B  (R-1: misma dirección que el Consenso)
-    if bb_sup is not None and bb_inf is not None and bb_sup != bb_inf:
-        pct_b = (precio - bb_inf) / (bb_sup - bb_inf) * 100
-        _bb_cat, _ = clasificar_bollinger_pctB(pct_b)
-        _BB_SEM = {
-            "mitad_alta":    ("✅ Mitad alta", 1),
-            "mitad_baja":    ("❌ Mitad baja", 0),
-            "sobrevendido":  ("⚠️ Cerca de banda inferior", 0.5),
-            "sobrecomprado": ("⚠️ Cerca de banda superior", 0.5),
-        }
-        _et_bb, _pt_bb = _BB_SEM[_bb_cat]
-        factores.append(("Bollinger %B", f"{_et_bb} ({pct_b:.0f}%)", _pt_bb))
-        puntos += _pt_bb
-
-    # 5. Volumen
-    if vol_data:
-        ratio = vol_data["ratio_10d"]
-        if ratio >= 120:
-            factores.append(("Volumen", f"✅ Por encima de media ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 1))
-            puntos += 1
-        elif ratio >= 80:
-            factores.append(("Volumen", f"✅ Volumen normal ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 0.75))
-            puntos += 0.75
-        else:
-            factores.append(("Volumen", f"❌ Volumen bajo ({ratio:.0f}%, {vol_data.get('ventana_txt', 'última sesión completa')} vs media 10)", 0))
-
-    # 6. Parabolic SAR
-    if sar_tendencia:
-        if sar_tendencia == "ALCISTA":
-            factores.append(("Parabolic SAR", "✅ Tendencia alcista", 1))
-            puntos += 1
-        else:
-            factores.append(("Parabolic SAR", "❌ Tendencia bajista", 0))
-
-    max_puntos = len(factores)
-    if max_puntos == 0:
-        return "gris", 0, []
-
-    pct = puntos / max_puntos * 100
-
-    if pct >= 65:
-        color = "verde"
-    elif pct >= 40:
-        color = "amarillo"
-    else:
-        color = "rojo"
-
-    return color, round(pct, 0), factores
+    """Semáforo de momento: 6 factores (precio frente al PP clásico diario, RSI, MACD, Bollinger %B,
+    volumen y SAR). Retorna (color, porcentaje sin redondear, factores). Spec PE v4 / doc. 28: es la
+    misma función que usa el Paso 3 (evaluar_semaforo); con menos de 4 factores, color «gris»."""
+    sem = evaluar_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal, bb_sup, bb_inf, vol_data,
+                           sar_tendencia)
+    return sem["color"], sem["pct"], tuplas_semaforo(sem)
 
 
 # =============================================================================
@@ -7064,9 +7003,9 @@ def detectar_tipo_activo(info: dict) -> str:
 # =============================================================================
 
 def _sem_interp_html(color_sem: str, pct_sem: float,
-                     factores_sem: list, sem_color: str) -> str:
+                     factores_sem: list, sem_color: str, **lectura) -> str:
     """HTML para la interpretación contextual del semáforo en el informe."""
-    interp = _interpretacion_semaforo(color_sem, pct_sem, factores_sem)
+    interp = _interpretacion_semaforo(color_sem, pct_sem, factores_sem, **lectura)
     # Convert markdown bold (**text**) to <b>text</b>
     import re as _re
     interp_html = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", interp)
@@ -8277,7 +8216,9 @@ tr:nth-child(even) td { background:#f8fafc; }
         + _fund_html_h
         + _capa_op_html
         + _sem_card_html
-        + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color)
+        + _sem_interp_html(semaforo, pct_semaforo, factores_semaforo, sem_color, precio=precio,
+                           pp=_pp_de_pivots((resultados_pivots or {}).get("Diario")),
+                           sar_det=(calcular_sar_detalle(hist) if hist is not None else None), pt_paso2=puntuacion_tec)
         + f"</div>\n"
         + (_diag_section or "")
     )
@@ -13154,6 +13095,583 @@ def conclusion_paso2(pt: dict, analisis: dict, precio: float, c_valor: "dict | N
     return {"tramo": tr, "relacion": rel, "apoyan": apoyan, "restan": restan, "texto": texto, "por_que": por_que}
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Spec PE v4 — «¿Por dónde empiezo?» · Paso 3 (Momento) · decisiones del documento 28
+# Una sola función de semáforo (evaluar_semaforo) para el Paso 3 y el Semáforo Global del informe.
+# ═════════════════════════════════════════════════════════════════════════════
+SEM_FACTORES = ("pp", "rsi", "macd", "bb", "vol", "sar")
+SEM_TITULOS = {"pp": "Precio frente al pivot diario", "rsi": "RSI 14", "macd": "MACD (12, 26, 9)",
+               "bb": "Bollinger %B (20, 2)", "vol": "Volumen", "sar": "SAR parabólico"}
+SEM_NOMBRE_LEGADO = {"pp": "Precio vs PP", "rsi": "RSI", "macd": "MACD", "bb": "Bollinger %B",
+                     "vol": "Volumen", "sar": "Parabolic SAR"}
+SEM_VOL_ALTO = 120.0   # doc. 28 a): % de la media de 10 sesiones
+SEM_VOL_BAJO = 80.0
+
+
+def params_semaforo(criterios=None) -> dict:
+    """PE-17 — Cortes, mínimo de factores y textos del semáforo (criteria.json → semaforo_paso3)."""
+    c = criterios if criterios is not None else _cargar_criteria()
+    p = dict((c or {}).get("semaforo_paso3") or {})
+    p.setdefault("cortes", {"verde": 65.0, "amarillo": 40.0})
+    p.setdefault("min_factores", 4)
+    return p
+
+
+def _pts_es(p) -> str:
+    """1 → «1» · 0,75 → «0,75» · 0,5 → «0,5»."""
+    if p is None:
+        return "—"
+    p = float(p)
+    return str(int(p)) if p == int(p) else f"{p:g}".replace(".", ",")
+
+
+def _pct_entero(p) -> int:
+    """Porcentaje para mostrar: entero, hacia arriba en el 5 (doc. 22). El corte usa el valor sin redondear."""
+    from decimal import Decimal, ROUND_HALF_UP
+    return int(Decimal(repr(round(float(p), 9))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def tabla_factor(clave: str) -> list:
+    """Doc. 28 — Regla de puntuación de cada factor: (escenario, etiqueta, condición, puntos)."""
+    u = umbrales.actuales()
+    n = lambda x: _num_es(x, 0)
+    if clave == "pp":
+        return [("encima", "Por encima del PP", "último cierre > PP", 1.0),
+                ("debajo", "En o por debajo del PP", "último cierre ≤ PP", 0.0)]
+    if clave == "rsi":
+        return [("sobrecompra", "Alcista en sobrecompra", f"RSI ≥ {n(u['rsi_sobrecompra'])}", 0.75),
+                ("alcista", "Alcista", f"{n(u['rsi_alcista'])} ≤ RSI < {n(u['rsi_sobrecompra'])}", 1.0),
+                ("neutro", "Neutro", f"{n(u['rsi_bajista'])} < RSI < {n(u['rsi_alcista'])}", 0.5),
+                ("bajista", "Bajista", f"{n(u['rsi_sobreventa'])} < RSI ≤ {n(u['rsi_bajista'])}", 0.0),
+                ("sobreventa", "Bajista en sobreventa", f"RSI ≤ {n(u['rsi_sobreventa'])}", 0.0)]
+    if clave == "macd":
+        return [("encima", "Por encima de su señal", "MACD > señal", 1.0),
+                ("debajo", "En o por debajo de su señal", "MACD ≤ señal", 0.0)]
+    if clave == "bb":
+        return [("alta", "Parte alta del canal", f"%B > {n(u['bb_alto'])}%", 0.75),
+                ("mitad_alta", "Mitad alta", f"{n(u['bb_medio'])}% ≤ %B ≤ {n(u['bb_alto'])}%", 1.0),
+                ("mitad_baja", "Mitad baja", f"{n(u['bb_bajo'])}% ≤ %B < {n(u['bb_medio'])}%", 0.0),
+                ("baja", "Parte baja del canal", f"%B < {n(u['bb_bajo'])}%", 0.0)]
+    if clave == "vol":
+        return [("alto_alcista", "Volumen alto en sesión alcista",
+                 f"≥ {n(SEM_VOL_ALTO)}% de la media de 10 y cierre por encima del anterior", 1.0),
+                ("alto_bajista", "Volumen alto en sesión bajista",
+                 f"≥ {n(SEM_VOL_ALTO)}% y cierre igual o por debajo del anterior", 0.0),
+                ("normal", "Volumen normal", f"entre {n(SEM_VOL_BAJO)}% y {n(SEM_VOL_ALTO)}%", 0.5),
+                ("bajo", "Volumen bajo: no apunta en ninguna dirección", f"< {n(SEM_VOL_BAJO)}%", 0.5)]
+    if clave == "sar":
+        return [("alcista", "Tendencia alcista", "SAR por debajo del precio", 1.0),
+                ("bajista", "Tendencia bajista", "SAR por encima del precio", 0.0)]
+    return []
+
+
+_SEM_RSI_ESC = {"sobrecomprado": "sobrecompra", "alcista": "alcista", "neutro": "neutro",
+                "bajista": "bajista", "sobrevendido": "sobreventa"}
+_SEM_BB_ESC = {"sobrecomprado": "alta", "mitad_alta": "mitad_alta", "mitad_baja": "mitad_baja",
+               "sobrevendido": "baja"}
+
+
+def _num_ok(x) -> bool:
+    try:
+        return x is not None and not np.isnan(float(x))
+    except (TypeError, ValueError):
+        return False
+
+
+def evaluar_semaforo(precio, pivots_diario, rsi_val, macd_val, macd_señal, bb_sup, bb_inf, vol_data,
+                     sar_tendencia, criterios=None) -> dict:
+    """PE-17/PE-20 y doc. 28 — Semáforo de momento: seis factores, puntos / factores disponibles, cortes y
+    mínimo de factores de criteria.json. El corte se compara con el porcentaje sin redondear."""
+    fs = {}
+
+    def _pon(k, esc, valor_txt="", motivo=""):
+        if esc is None:
+            fs[k] = {"clave": k, "disponible": False, "motivo": motivo, "puntos": None, "escenario": None,
+                     "etiqueta": "", "valor_txt": ""}
+            return
+        fila = next(r for r in tabla_factor(k) if r[0] == esc)
+        fs[k] = {"clave": k, "disponible": True, "escenario": esc, "etiqueta": fila[1], "puntos": fila[3],
+                 "valor_txt": valor_txt, "motivo": ""}
+
+    # 1. Precio frente al PP clásico diario (PA3-04: siempre (H+L+C)/3, sea cual sea el sistema)
+    pp = None
+    if pivots_diario:
+        if all(k in pivots_diario for k in ("_H", "_L", "_C")):
+            pp = (float(pivots_diario["_H"]) + float(pivots_diario["_L"]) + float(pivots_diario["_C"])) / 3
+        elif "PP" in pivots_diario:
+            pp = float(pivots_diario["PP"])
+    if pp is not None and _num_ok(precio):
+        _pon("pp", "encima" if precio > pp else "debajo", f"{_num_es(precio, 2)} frente a PP {_num_es(pp, 2)}")
+    else:
+        _pon("pp", None, motivo="sin pivot diario (falta la sesión anterior)")
+    # 2. RSI
+    if _num_ok(rsi_val):
+        _pon("rsi", _SEM_RSI_ESC[clasificar_rsi(float(rsi_val))[0]], _num_es(rsi_val, 1))
+    else:
+        _pon("rsi", None, motivo="historial insuficiente para el RSI (14 sesiones)")
+    # 3. MACD frente a su señal (binario; el histograma solo informa, doc. 28 d)
+    if _num_ok(macd_val) and _num_ok(macd_señal):
+        _pon("macd", "encima" if macd_val > macd_señal else "debajo",
+             f"MACD {_num_es(macd_val, 4)} · señal {_num_es(macd_señal, 4)}")
+    else:
+        _pon("macd", None, motivo="historial insuficiente para el MACD (35 sesiones)")
+    # 4. Bollinger %B
+    if _num_ok(bb_sup) and _num_ok(bb_inf) and bb_sup != bb_inf and _num_ok(precio):
+        pct_b = (precio - bb_inf) / (bb_sup - bb_inf) * 100
+        _pon("bb", _SEM_BB_ESC[clasificar_bollinger_pctB(pct_b)[0]], f"{_num_es(pct_b, 1)}%")
+        fs["bb"]["pct_b"] = pct_b
+    else:
+        _pon("bb", None, motivo="historial insuficiente para las bandas (20 sesiones)")
+    # 5. Volumen con la dirección de la sesión (doc. 28 a)
+    if (vol_data and vol_data.get("ratio_10d") is not None
+            and vol_data.get("volumen", 1) and vol_data.get("media_10d", 1)):   # volumen 0 (índices) → no disponible
+        r = float(vol_data["ratio_10d"])
+        if r >= SEM_VOL_ALTO:
+            esc_v = "alto_alcista" if vol_data.get("sesion_alcista") else "alto_bajista"
+        elif r >= SEM_VOL_BAJO:
+            esc_v = "normal"
+        else:
+            esc_v = "bajo"
+        _pon("vol", esc_v, f"{_num_es(r, 0)}% de la media de 10")
+    else:
+        _pon("vol", None, motivo="sin volumen fiable en la sesión")
+    # 6. SAR parabólico
+    if sar_tendencia in ("ALCISTA", "BAJISTA"):
+        _pon("sar", "alcista" if sar_tendencia == "ALCISTA" else "bajista")
+    else:
+        _pon("sar", None, motivo="historial insuficiente para el SAR")
+
+    p = params_semaforo(criterios)
+    disp = [fs[k] for k in SEM_FACTORES if fs[k]["disponible"]]
+    n = len(disp)
+    puntos = sum(f["puntos"] for f in disp)
+    pct = puntos / n * 100 if n else 0.0
+    if n < int(p["min_factores"]):
+        color = "gris"
+    elif pct >= float(p["cortes"]["verde"]):
+        color = "verde"
+    elif pct >= float(p["cortes"]["amarillo"]):
+        color = "amarillo"
+    else:
+        color = "rojo"
+    return {"factores": fs, "n_disponibles": n, "puntos": puntos, "pct": pct, "color": color,
+            "suficiente": n >= int(p["min_factores"]), "pp": pp}
+
+
+def tuplas_semaforo(sem: dict) -> list:
+    """Formato de la lista de factores que usan el informe y la pantalla de Análisis Técnico."""
+    out = []
+    for k in SEM_FACTORES:
+        f = sem["factores"][k]
+        if not f["disponible"]:
+            continue
+        _ic = "✅" if f["puntos"] >= 0.75 else ("⚪" if f["puntos"] > 0 else "❌")
+        out.append((SEM_NOMBRE_LEGADO[k], f"{_ic} {f['etiqueta']}" + (f" ({f['valor_txt']})" if f["valor_txt"] else ""),
+                    f["puntos"]))
+    return out
+
+
+def datos_paso3(hist, pivots_diario, precio) -> dict:
+    """PE-16 — Datos de las fichas del Paso 3: valores, fechas y sesión anterior de cada indicador."""
+    d = {"precio": precio}
+    try:
+        d["fecha_sesion"] = hist.index[-1].strftime("%d/%m/%Y")
+    except Exception:
+        d["fecha_sesion"] = ""
+    c = hist["Close"]
+    # PP: sesión anterior (la misma que usa datos_sesion para el pivot diario)
+    if pivots_diario and all(k in pivots_diario for k in ("_H", "_L", "_C")):
+        _ant = hist[hist.index.date < hist.index[-1].date()]
+        d["pp"] = {"H": float(pivots_diario["_H"]), "L": float(pivots_diario["_L"]), "C": float(pivots_diario["_C"]),
+                   "fecha": _ant.index[-1].strftime("%d/%m/%Y") if len(_ant) else ""}
+        d["pp"]["PP"] = (d["pp"]["H"] + d["pp"]["L"] + d["pp"]["C"]) / 3
+    # RSI de Wilder (mismo cálculo que calcular_rsi) y el de la sesión anterior
+    try:
+        _dl = c.diff()
+        _g = _dl.where(_dl > 0, 0.0).ewm(com=13, min_periods=14).mean()
+        _p = (-_dl.where(_dl < 0, 0.0)).ewm(com=13, min_periods=14).mean()
+        _rsi = 100 - 100 / (1 + _g / _p)
+        d["rsi"] = {"valor": calcular_rsi(c), "previo": round(float(_rsi.iloc[-2]), 2)}
+    except Exception:
+        pass
+    # MACD, señal, histograma, histograma anterior y último cruce
+    try:
+        _m = c.ewm(span=12, adjust=False).mean() - c.ewm(span=26, adjust=False).mean()
+        _s = _m.ewm(span=9, adjust=False).mean()
+        _hh = _m - _s
+        _sg = np.sign(_hh.values)
+        _cr = [i for i in range(1, len(_sg)) if _sg[i] != _sg[i - 1] and _sg[i] != 0]
+        d["macd"] = {"macd": round(float(_m.iloc[-1]), 4), "senal": round(float(_s.iloc[-1]), 4),
+                     "hist": round(float(_hh.iloc[-1]), 4), "hist_prev": round(float(_hh.iloc[-2]), 4),
+                     "fecha_cruce": hist.index[_cr[-1]].strftime("%d/%m/%Y") if _cr else "",
+                     "cruce_al_alza": bool(_sg[_cr[-1]] > 0) if _cr else None}
+    except Exception:
+        pass
+    # Bollinger (desviación poblacional, doc. 28 g)
+    try:
+        _sup, _med, _inf, _pb = calcular_bollinger(c)
+        d["bb"] = {"sup": _sup, "med": _med, "inf": _inf}
+    except Exception:
+        pass
+    d["vol"] = analisis_volumen(hist)
+    d["sar"] = calcular_sar_detalle(hist)
+    return d
+
+
+def _bb_precio(d3: dict, pct: float):
+    b = (d3 or {}).get("bb") or {}
+    if not b:
+        return None
+    return b["inf"] + pct / 100.0 * (b["sup"] - b["inf"])
+
+
+def datos_factor_txt(clave: str, f: dict, d3: dict) -> str:
+    """PE-16 — «Datos usados» con valores, fecha y fórmula."""
+    p = d3.get("precio")
+    fs = d3.get("fecha_sesion", "")
+    if not f.get("disponible"):
+        return f"No disponible: {f.get('motivo', '')}."
+    if clave == "pp":
+        q = d3.get("pp") or {}
+        return (f"Sesión anterior ({q.get('fecha', '')}): máximo {_eur(q.get('H'))}, mínimo {_eur(q.get('L'))}, cierre "
+                f"{_eur(q.get('C'))} → PP = (máx. + mín. + cierre) / 3 = {_eur(q.get('PP'))} · último cierre {_eur(p)} "
+                f"({fs}) · distancia = (precio − PP) / PP = {_pct_signo_es((p - q['PP']) / q['PP'] * 100, 2)}.")
+    if clave == "rsi":
+        r = d3.get("rsi") or {}
+        u = umbrales.actuales()
+        _dir = ("sube" if r.get("valor", 0) > r.get("previo", 0) else "baja" if r.get("valor", 0) < r.get("previo", 0) else "igual")
+        return (f"RSI 14 = {_num_es(r.get('valor'), 1)} el {fs} (sesión anterior: {_num_es(r.get('previo'), 1)}; {_dir}). "
+                f"Bandas del método: sobreventa ≤ {_num_es(u['rsi_sobreventa'], 0)} · bajista ≤ {_num_es(u['rsi_bajista'], 0)} · "
+                f"neutro entre {_num_es(u['rsi_bajista'], 0)} y {_num_es(u['rsi_alcista'], 0)} · alcista ≥ "
+                f"{_num_es(u['rsi_alcista'], 0)} · sobrecompra ≥ {_num_es(u['rsi_sobrecompra'], 0)}.")
+    if clave == "macd":
+        m = d3.get("macd") or {}
+        _acel = "acelera" if abs(m.get("hist", 0)) > abs(m.get("hist_prev", 0)) else "frena"
+        _cr = (f"último cruce el {m['fecha_cruce']} ({'al alza' if m.get('cruce_al_alza') else 'a la baja'})"
+               if m.get("fecha_cruce") else "sin cruce en el histórico descargado")
+        return (f"MACD = EMA12 − EMA26 = {_num_es(m.get('macd'), 4)} € · señal = EMA9 del MACD = {_num_es(m.get('senal'), 4)} € · "
+                f"histograma = MACD − señal = {_num_es(m.get('hist'), 4)} € (sesión anterior: {_num_es(m.get('hist_prev'), 4)} €; "
+                f"el impulso {_acel}, informativo, no puntúa) · {_cr} · sesión del {fs}.")
+    if clave == "bb":
+        b = d3.get("bb") or {}
+        return (f"Media de 20 sesiones {_eur(b.get('med'))} · banda superior {_eur(b.get('sup'))} · banda inferior "
+                f"{_eur(b.get('inf'))} (media ± 2 desviaciones típicas poblacionales) · %B = (precio − banda inferior) / "
+                f"(banda superior − banda inferior) = ({_num_es(p, 2)} − {_num_es(b.get('inf'), 2)}) / ({_num_es(b.get('sup'), 2)} − "
+                f"{_num_es(b.get('inf'), 2)}) = {_num_es(f.get('pct_b'), 1)}% · sesión del {fs}.")
+    if clave == "vol":
+        v = d3.get("vol") or {}
+        _dir = "alcista" if v.get("sesion_alcista") else "no alcista (cierre igual o inferior al anterior)"
+        _var = (f"cierre {_eur(v.get('sesion_cierre'))} frente a {_eur(v.get('cierre_anterior'))} "
+                f"({_pct_signo_es(v.get('var_pct'), 2)})" if v.get("var_pct") is not None else "")
+        _enc = (" La sesión en curso no se usa: su volumen todavía es parcial." if v.get("sesion_en_curso_descartada") else "")
+        return (f"Sesión completa del {v.get('sesion_fecha', '')}: {_vol_es(v.get('volumen'))} acciones frente a una media de "
+                f"las 10 sesiones anteriores de {_vol_es(v.get('media_10d'))} → {_num_es(v.get('ratio_10d'), 0)}% · sesión "
+                f"{_dir}: {_var}.{_enc}")
+    if clave == "sar":
+        s = d3.get("sar") or {}
+        _pos = "por debajo" if s.get("tendencia") == "ALCISTA" else "por encima"
+        _hace = (f" (hace {s['sesiones_desde_giro']} sesiones)" if s.get("sesiones_desde_giro") is not None else "")
+        return (f"SAR = {_eur(s.get('sar'))} el {s.get('fecha_sesion', '')}, {_pos} del precio ({_eur(p)}; distancia "
+                f"{_pct_signo_es(s.get('dist_pct', 0), 2)}) · último giro: {s.get('fecha_giro') or 'sin giro en el histórico'}"
+                f"{_hace} · SAR de la próxima sesión: {_eur(s.get('sar_siguiente'))}.")
+    return ""
+
+
+def que_cambiaria_factor(clave: str, f: dict, d3: dict) -> str:
+    """PE-16 y doc. 28 f) — Qué cambiaría la puntuación; empieza por el nombre del indicador (E-1)."""
+    if not f.get("disponible"):
+        return ""
+    esc = f.get("escenario")
+    t = SEM_TITULOS[clave]
+    u = umbrales.actuales()
+    n0 = lambda x: _num_es(x, 0)
+    if clave == "pp":
+        pp = (d3.get("pp") or {}).get("PP")
+        return (f"{t}: un cierre en o por debajo del PP ({_eur(pp)}) pasaría a 0" if esc == "encima" else
+                f"{t}: un cierre por encima del PP ({_eur(pp)}) pasaría a 1") + " (el PP se recalcula en cada sesión)"
+    if clave == "rsi":
+        s70, s55, s45, s30 = (u["rsi_sobrecompra"], u["rsi_alcista"], u["rsi_bajista"], u["rsi_sobreventa"])
+        return {
+            "sobrecompra": f"RSI: que baje de {n0(s70)} pasaría a alcista (1)",
+            "alcista": f"RSI: que llegue a {n0(s70)} pasaría a alcista en sobrecompra (0,75) · que baje de {n0(s55)}, a neutro (0,5)",
+            "neutro": f"RSI: que llegue a {n0(s55)} pasaría a alcista (1) · que baje a {n0(s45)} o menos, a bajista (0)",
+            "bajista": f"RSI: que supere {n0(s45)} pasaría a neutro (0,5)",
+            "sobreventa": f"RSI: que supere {n0(s45)} pasaría a neutro (0,5)",
+        }[esc]
+    if clave == "macd":
+        m = d3.get("macd") or {}
+        _dif = f"diferencia actual {'+' if m.get('hist', 0) >= 0 else '−'}{_num_es(abs(m.get('hist', 0)), 4)} €"
+        return (f"MACD: que cruce por debajo de su señal ({_dif}) pasaría a 0" if esc == "encima" else
+                f"MACD: que cruce por encima de su señal ({_dif}) pasaría a 1")
+    if clave == "bb":
+        p80, p50 = _bb_precio(d3, u["bb_alto"]), _bb_precio(d3, u["bb_medio"])
+        _nota = " (con las bandas de hoy; se mueven en cada sesión)"
+        return {
+            "alta": f"Bollinger %B: un cierre por debajo de {_eur(p80)} ({n0(u['bb_alto'])}%) pasaría a mitad alta (1) · por debajo de {_eur(p50)} ({n0(u['bb_medio'])}%), a mitad baja (0)",
+            "mitad_alta": f"Bollinger %B: un cierre por encima de {_eur(p80)} ({n0(u['bb_alto'])}%) pasaría a parte alta (0,75) · por debajo de {_eur(p50)} ({n0(u['bb_medio'])}%), a mitad baja (0)",
+            "mitad_baja": f"Bollinger %B: un cierre por encima de {_eur(p50)} ({n0(u['bb_medio'])}%) pasaría a mitad alta (1)",
+            "baja": f"Bollinger %B: un cierre por encima de {_eur(p50)} ({n0(u['bb_medio'])}%) pasaría a mitad alta (1)",
+        }[esc] + _nota
+    if clave == "vol":
+        v = d3.get("vol") or {}
+        _umb = _vol_es((v.get("media_10d") or 0) * SEM_VOL_ALTO / 100)
+        return {
+            "alto_alcista": f"Volumen: una sesión por debajo del {n0(SEM_VOL_ALTO)}% de su media de 10 ({_umb} acciones) pasaría a 0,5; con ese volumen y cierre igual o inferior al anterior, a 0",
+            "alto_bajista": f"Volumen: una sesión por encima del {n0(SEM_VOL_ALTO)}% de su media de 10 ({_umb} acciones) que cierre por encima de la anterior pasaría a 1",
+            "normal": f"Volumen: que una sesión supere el {n0(SEM_VOL_ALTO)}% de su media de 10 ({_umb} acciones) pasaría a 1 si cierra por encima de la anterior, o a 0 si no",
+            "bajo": f"Volumen: que una sesión supere el {n0(SEM_VOL_ALTO)}% de su media de 10 ({_umb} acciones) pasaría a 1 si cierra por encima de la anterior, o a 0 si no",
+        }[esc]
+    if clave == "sar":
+        s = (d3.get("sar") or {}).get("sar_siguiente")
+        return (f"SAR: que el mínimo de una sesión baje de {_eur(s)} giraría el indicador a bajista (0)" if esc == "alcista" else
+                f"SAR: que el máximo de una sesión supere {_eur(s)} giraría el indicador a alcista (1)")
+    return ""
+
+
+def nota_informativa_factor(clave: str, f: dict, criterios=None) -> str:
+    """Doc. 28 b/c — Lectura de posible giro en los extremos: informativa, no puntúa."""
+    ni = params_semaforo(criterios).get("notas_informativas") or {}
+    return {("rsi", "sobrecompra"): ni.get("rsi_sobrecompra", ""), ("rsi", "sobreventa"): ni.get("rsi_sobreventa", ""),
+            ("bb", "alta"): ni.get("bb_alta", ""), ("bb", "baja"): ni.get("bb_baja", "")}.get((clave, f.get("escenario")), "")
+
+
+def titulo_factor(clave: str, f: dict) -> str:
+    """T-PE-16a — «MACD (12, 26, 9) — Por encima de su señal (1/1)»; sin códigos internos."""
+    if not f.get("disponible"):
+        return f"{SEM_TITULOS[clave]} — no disponible (no cuenta en el porcentaje)"
+    return f"{SEM_TITULOS[clave]} — {f['etiqueta']} ({_pts_es(f['puntos'])}/1)"
+
+
+def html_ficha_factor(clave: str, f: dict, d3: dict, criterios=None) -> str:
+    """PE-16 + PE-18 + PE-21 — Ficha de un factor del semáforo en tres niveles."""
+    import html as _h
+    p = params_semaforo(criterios)
+    esc = f.get("escenario")
+    filas = ""
+    for e, tit, cond, pts in tabla_factor(clave):
+        _on = (e == esc)
+        _st = "background:#dbeafe;font-weight:700;color:#1e3a8a" if _on else "color:#334155"
+        filas += (f'<tr style="{_st}"><td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(tit)}{" ◀" if _on else ""}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(cond)}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0;text-align:center">{_pts_es(pts)}</td></tr>')
+    _como = ((p.get("como_leerlo") or {}).get(clave) or {}).get(esc, "") if esc else ""
+    _dif = (p.get("diferencias") or {}).get(clave, "")
+    _info = nota_informativa_factor(clave, f, criterios) if esc else ""
+    _qc = que_cambiaria_factor(clave, f, d3)
+    return (
+        f'<div style="font-size:.84rem;color:#334155"><b>Qué es:</b> {_h.escape((p.get("que_es") or {}).get(clave, ""))}</div>'
+        f'<div style="font-size:.82rem;color:#334155;margin:.3rem 0"><b>Datos usados:</b> {_h.escape(datos_factor_txt(clave, f, d3))}</div>'
+        f'<div style="font-size:.8rem;color:#475569;margin:.2rem 0"><b>Parámetros y por qué:</b> {_h.escape((p.get("parametros") or {}).get(clave, ""))}</div>'
+        f'<table style="border-collapse:collapse;font-size:.8rem;margin:.3rem 0"><thead><tr style="color:#64748b;text-align:left">'
+        f'<th style="padding:2px 8px">Tramo</th><th style="padding:2px 8px">Condición</th><th style="padding:2px 8px">Puntos</th>'
+        f'</tr></thead><tbody>{filas}</tbody></table>'
+        f'<div style="font-size:.74rem;color:#64748b;font-style:italic">Regla de puntuación del motor</div>'
+        + (f'<div style="font-size:.84rem;color:#334155;margin-top:.3rem"><b>Cómo leerlo:</b> {_h.escape(_como)}'
+           + (f' {_h.escape(_dif)}' if _dif else "") + '</div>' if _como else "")
+        + (f'<div style="font-size:.82rem;color:#475569;margin-top:.2rem;background:#f8fafc;padding:.3rem .5rem;border-radius:6px">'
+           f'ℹ️ <b>Nota informativa (no puntúa):</b> {_h.escape(_info)}</div>' if _info else "")
+        + (f'<div style="font-size:.84rem;color:#334155;margin-top:.2rem"><b>Qué cambiaría esta puntuación:</b> {_h.escape(_qc)}.</div>' if _qc else "")
+        + f'<details class="pp-mas" style="font-size:.8rem;color:#475569;margin-top:.3rem"><summary>Más detalle: fórmula y limitaciones</summary>'
+          f'{_h.escape((p.get("mas_detalle") or {}).get(clave, ""))}</details>'
+    )
+
+
+def html_calculo_semaforo(sem: dict, criterios=None) -> str:
+    """PE-17 — Tabla de suma, cálculo visible, cortes con el tramo resaltado y nota fija."""
+    import html as _h
+    p = params_semaforo(criterios)
+    rot = p.get("rotulos") or {}
+    filas = ""
+    for k in SEM_FACTORES:
+        f = sem["factores"][k]
+        _pt = _pts_es(f["puntos"]) if f["disponible"] else "—"
+        _ds = "sí" if f["disponible"] else f"no: {f['motivo']}"
+        filas += (f'<tr><td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(SEM_TITULOS[k])}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(f["etiqueta"] or "—")}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0;text-align:center">{_pt}</td>'
+                  f'<td style="padding:2px 8px;border-top:1px solid #e2e8f0">{_h.escape(_ds)}</td></tr>')
+    n, pts, pct = sem["n_disponibles"], sem["puntos"], sem["pct"]
+    _calc = (f"Puntos obtenidos / factores disponibles = {_pts_es(pts)} / {n} = {_num_es(pct, 1)}% → {_pct_entero(pct)}%"
+             if n else "Sin factores disponibles")
+    _red = ""
+    if n < 6:
+        _red = (f'<div style="font-size:.78rem;color:#7c2d12">{6 - n} factor(es) no disponible(s): el porcentaje se calcula '
+                f'sobre los {n} restantes.</div>')
+    c = p["cortes"]
+    cortes = (("verde", f"≥ {_num_es(c['verde'], 0)}%"), ("amarillo", f"entre {_num_es(c['amarillo'], 0)}% y {_num_es(c['verde'], 0)}%"),
+              ("rojo", f"< {_num_es(c['amarillo'], 0)}%"))
+    fc = ""
+    for k, rg in cortes:
+        _on = (k == sem["color"])
+        _st = "background:#dbeafe;font-weight:700;color:#1e3a8a" if _on else "color:#334155"
+        fc += (f'<tr style="{_st}"><td style="padding:2px 10px;border-top:1px solid #e2e8f0">{rg}</td>'
+               f'<td style="padding:2px 10px;border-top:1px solid #e2e8f0">{_h.escape(rot.get(k, ""))}{" ◀ actual" if _on else ""}</td></tr>')
+    _gris = (f'<div style="font-size:.82rem;color:#7c2d12;font-weight:700">{_h.escape(rot.get("gris", "").format(n=n))}</div>'
+             if sem["color"] == "gris" else "")
+    return (f'<table style="border-collapse:collapse;font-size:.8rem;margin:.3rem 0"><thead><tr style="color:#64748b;text-align:left">'
+            f'<th style="padding:2px 8px">Factor</th><th style="padding:2px 8px">Lectura</th><th style="padding:2px 8px">Puntos</th>'
+            f'<th style="padding:2px 8px">Disponible</th></tr></thead><tbody>{filas}</tbody></table>'
+            f'<div style="font-size:.8rem;color:#334155;font-family:monospace;margin:.2rem 0">{_h.escape(_calc)}</div>{_red}{_gris}'
+            f'<table style="border-collapse:collapse;font-size:.82rem;margin:.3rem 0"><tbody>{fc}</tbody></table>'
+            f'<div style="font-size:.74rem;color:#64748b;font-style:italic">Cortes del motor (parámetros del método). El corte se '
+            f'compara con el porcentaje sin redondear; el redondeo a entero es solo para mostrarlo. Mínimo: '
+            f'{int(p["min_factores"])} factores disponibles.</div>'
+            f'<div style="font-size:.78rem;color:#475569;font-style:italic;margin-top:.3rem">{_h.escape(p.get("nota_fija", ""))}</div>')
+
+
+_SEM_TRAMO = {"verde": "alcista", "amarillo": "mixto", "rojo": "bajista"}
+_SEM_MATRIZ = {("alcista", "verde"): "coherente", ("alcista", "amarillo"): "matiza", ("alcista", "rojo"): "contradice",
+               ("mixta", "verde"): "matiza", ("mixta", "amarillo"): "coherente", ("mixta", "rojo"): "matiza",
+               ("bajista", "verde"): "contradice", ("bajista", "amarillo"): "matiza", ("bajista", "rojo"): "coherente"}
+
+
+def _distancia_cambio(clave: str, f: dict, d3: dict) -> float:
+    """Cercanía al cambio de puntuación: % del precio para los factores con nivel de precio (PP, MACD,
+    %B, SAR); % de su umbral para el RSI. El volumen no tiene nivel de precio y va el último."""
+    p = d3.get("precio") or 0
+    u = umbrales.actuales()
+    try:
+        if clave == "pp":
+            return abs(p - d3["pp"]["PP"]) / p * 100
+        if clave == "macd":
+            return abs(d3["macd"]["hist"]) / p * 100
+        if clave == "bb":
+            _lim = u["bb_alto"] if f["escenario"] in ("alta",) else u["bb_medio"]
+            return abs(_bb_precio(d3, _lim) - p) / p * 100
+        if clave == "sar":
+            return abs(d3["sar"]["sar_siguiente"] - p) / p * 100
+        if clave == "rsi":
+            r = d3["rsi"]["valor"]
+            _lim = {"sobrecompra": u["rsi_sobrecompra"], "alcista": u["rsi_alcista"], "neutro": u["rsi_alcista"],
+                    "bajista": u["rsi_bajista"], "sobreventa": u["rsi_bajista"]}[f["escenario"]]
+            return abs(_lim - r) / _lim * 100
+    except Exception:
+        pass
+    return 1e9
+
+
+def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: "dict | None", criterios=None) -> dict:
+    """Doc. 28 (v2, decisión del propietario) — Lectura del método por color, su invalidación con los valores del
+    día, la frase de combinación con la estructura del Paso 2 y el aviso. Las cláusulas de invalidación solo se
+    incluyen si tienen sentido hoy: la del SAR, si el SAR está del lado del color (por debajo del precio en verde,
+    por encima en rojo); la del pivot, si el cierre está del lado del color."""
+    p = params_semaforo(criterios)
+    lec = (p.get("lecturas") or {}).get(color)
+    if not lec:
+        return {}
+    c = p["cortes"]
+    fmt = {"verde": _num_es(c["verde"], 0), "amarillo": _num_es(c["amarillo"], 0)}
+    cl = []
+    _sar = (sar_det or {}).get("sar_siguiente")
+    _tend = (sar_det or {}).get("tendencia")
+    if color == "verde":
+        if _sar is not None and _tend == "ALCISTA" and "sar" in lec["clausulas"]:
+            cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
+        if pp is not None and precio is not None and precio > pp and "pp" in lec["clausulas"]:
+            cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
+    elif color == "rojo":
+        if _sar is not None and _tend == "BAJISTA" and "sar" in lec["clausulas"]:
+            cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
+        if pp is not None and precio is not None and precio <= pp and "pp" in lec["clausulas"]:
+            cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
+    inval = (lec["plantilla"].format(clausulas=" o si ".join(cl)) if cl and lec.get("plantilla")
+             else lec.get("sin_clausulas", "").format(**fmt))
+    comb = ""
+    cb = p.get("combinacion") or {}
+    if pt_paso2 and pt_paso2.get("score_total") is not None:
+        sc = pt_paso2["score_total"]
+        tr2 = tramo_estructura(sc, criterios)
+        _et = {"alcista": "estructura alcista", "mixta": "estructura mixta", "bajista": "estructura bajista"}[tr2]
+        if color == "amarillo":
+            comb = cb.get("sin_direccion", "").format(etiqueta=tr2, nota=f"{_num_es(sc, 1)}/10")
+        elif tr2 == "mixta":
+            comb = cb.get("mixta", "")
+        elif (color, tr2) in (("verde", "alcista"), ("rojo", "bajista")):
+            comb = cb.get("mismo", "")
+        else:
+            comb = cb.get("distinto", "").format(nota=f"{_num_es(sc, 1)}/10", etiqueta=_et)
+    return {"lectura": lec["lectura"], "invalidacion": inval, "combinacion": comb,
+            "aviso": p.get("aviso_senal", ""), "nota_fija": p.get("nota_fija", "")}
+
+
+def _lectura_sin_prefijo(t: str) -> str:
+    t = (t or "").replace("Lectura del método: ", "")
+    return t[:1].upper() + t[1:]
+
+
+def html_lectura_escenario(le: dict) -> str:
+    import html as _h
+    if not le:
+        return ""
+    return ('<div class="pp-edu" style="background:#eff6ff;border-color:#2563eb;color:#1e3a8a">'
+            f'&#129517; <b>Lectura del método</b><br>{_h.escape(_lectura_sin_prefijo(le["lectura"]))}'
+            f'<br><b>Invalidación:</b> {_h.escape(le["invalidacion"])}'
+            + (f'<br><b>Con la estructura (Paso 2):</b> {_h.escape(le["combinacion"])}' if le.get("combinacion") else "")
+            + f'<div style="font-size:.76rem;font-style:italic;margin-top:.3rem">{_h.escape(le["aviso"])}</div></div>')
+
+
+def _pp_de_pivots(pivots_diario):
+    if pivots_diario and all(k in pivots_diario for k in ("_H", "_L", "_C")):
+        return (float(pivots_diario["_H"]) + float(pivots_diario["_L"]) + float(pivots_diario["_C"])) / 3
+    return None
+
+
+def conclusion_paso3(sem: dict, d3: dict, pt_paso2: "dict | None", criterios=None) -> dict:
+    """PE-19 — Conclusión del Paso 3, qué cambiaría y relación con la estructura del Paso 2."""
+    p = params_semaforo(criterios)
+    fs = sem["factores"]
+    disp = [k for k in SEM_FACTORES if fs[k]["disponible"]]
+    if sem["color"] == "gris":
+        texto = (f"<b>Conclusión del Paso 3: {p['rotulos'].get('gris', '').format(n=sem['n_disponibles'])}</b> "
+                 f"Con menos de {int(p['min_factores'])} factores el método no resume el momento.")
+        return {"tramo": None, "relacion": None, "texto": texto, "por_que": ""}
+    tramo = _SEM_TRAMO[sem["color"]]
+    afavor = [k for k in disp if fs[k]["puntos"] == 1]
+    contra = [k for k in disp if fs[k]["puntos"] == 0]
+    parcial = [k for k in disp if 0 < fs[k]["puntos"] < 1]
+    _nm = lambda ks: ", ".join(SEM_TITULOS[k] for k in ks) or "ningún factor"
+    base = contra or parcial or afavor
+    k_qc = min(base, key=lambda k: (_distancia_cambio(k, fs[k], d3), SEM_FACTORES.index(k))) if base else None
+    qc = que_cambiaria_factor(k_qc, fs[k_qc], d3).split(" · ")[0] if k_qc else ""
+    rel, rel_txt = None, ""
+    if pt_paso2 and pt_paso2.get("score_total") is not None:
+        sc = pt_paso2["score_total"]
+        tr2 = tramo_estructura(sc, criterios)
+        rel = _SEM_MATRIZ[(tr2, sem["color"])]
+        rel_txt = (f" <b>Relación con la estructura (Paso 2):</b> {rel} (estructura {tr2} {_num_es(sc, 1)}/10). "
+                   f"{(p.get('relacion') or {}).get(rel, '')}")
+    texto = (f"<b>Conclusión del Paso 3: momento {tramo} ({_pct_entero(sem['pct'])}%).</b> A favor: {_nm(afavor)}. "
+             f"En contra: {_nm(contra)}." + (f" Parciales: {_nm(parcial)}." if parcial else "")
+             + (f" <b>Qué cambiaría esta lectura:</b> {qc}." if qc else "") + rel_txt)
+    c = p["cortes"]
+    por_que = (f"Regla del método: ≥ {_num_es(c['verde'], 0)}% momento alcista; ≥ {_num_es(c['amarillo'], 0)}% mixto; por debajo, "
+               f"bajista. A favor = 1 punto; en contra = 0. «Qué cambiaría» = el factor en contra más cerca de cambiar (en % "
+               f"del precio; el RSI, en % de su umbral). Relación con el Paso 2 según la matriz estructura × momento.")
+    return {"tramo": tramo, "relacion": rel, "afavor": afavor, "contra": contra, "parcial": parcial, "factor_qc": k_qc,
+            "texto": texto, "por_que": por_que}
+
+
+def zonas_vigila(diag: "dict | None", sem: dict, criterios=None) -> list:
+    """PE-19 y doc. 28 — «Zonas que vigila el método»: notas del Paso 2 (Fibonacci 50–78,6 %, RSI en
+    sobreventa) y extremos del RSI y de %B del Paso 3. No puntúan."""
+    fs = sem["factores"]
+    _est = (f" En el Paso 3: MACD {fs['macd']['etiqueta'].lower() or 'no disponible'}, SAR "
+            f"{fs['sar']['etiqueta'].lower() or 'no disponible'}.")
+    out = []
+    fib = (diag or {}).get("fibo") or {}
+    if fib.get("nota_informativa"):
+        out.append(f"Retroceso del {_num_es(fib.get('retroceso_max_pct', 0), 1)}% del swing anual (Paso 2): zona que el "
+                   f"análisis técnico vigila como posible rebote." + _est)
+    for k in ("rsi", "bb"):
+        _n = nota_informativa_factor(k, fs[k], criterios) if fs[k]["disponible"] else ""
+        if _n:
+            out.append(f"{SEM_TITULOS[k]} {fs[k]['valor_txt']} ({fs[k]['etiqueta'].lower()}): {_n}" + _est)
+    rsi2 = (diag or {}).get("rsi") or {}
+    if rsi2.get("nota_informativa") and not (fs["rsi"]["disponible"] and fs["rsi"]["escenario"] == "sobreventa"):
+        out.append(f"RSI en sobreventa en el Paso 2: {rsi2['nota_informativa']}" + _est)
+    return out
+
+
 def sector_con_subtipo(sector_info: dict, industria=None) -> dict:
     """Validación 21 §2 — Si el sector tiene 'subtipos_ciclo' (Financial Services, Communication
     Services), usa el comportamiento y el efecto del ciclo del subtipo según la industry de Yahoo
@@ -13296,7 +13814,7 @@ def html_exportacion_paso(partes: list, ticker: str, paso: int, nombre_paso: str
     return ("<!doctype html><html lang='es'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<title>Paso {paso} · {_h.escape(ticker)}</title><style>{_PP_CSS_EXPORT}</style></head><body>"
-            + _cab + "".join(partes) + _pie + "</body></html>")
+            + _cab + "".join(partes).replace('<details class="pp-mas"', '<details open class="pp-mas"') + _pie + "</body></html>")
 
 
 _PP_NOMBRES_PASO = {1: "Contexto Macro", 2: "Estructura", 3: "Momento", 4: "Niveles"}
@@ -13440,6 +13958,9 @@ def _pp_wizard_cuerpo(st):
                     _bb_sup, _bb_inf, _vol_sem, _sar_tend
                 )
                 _confs = detectar_confluencias(_rpivots, tolerancia=_tol_conv, precio=_precio)
+                # Spec PE v4 — fichas del Paso 3 (misma función de semáforo que el informe)
+                _sem3 = evaluar_semaforo(_precio, _pd_d, _rsi, _macd, _macd_s, _bb_sup, _bb_inf, _vol_sem, _sar_tend)
+                _d3 = datos_paso3(hist, _pd_d, _precio)
                 st.session_state["_pp_data"] = {
                     "ticker": _ticker, "nombre": _nombre, "precio": _precio,
                     "info": info, "hist": hist,
@@ -13449,6 +13970,7 @@ def _pp_wizard_cuerpo(st):
                     "medias": _medias, "vol_data": _vol_sem,
                     "puntuacion_tec": _pt, "diag": _diag,
                     "color_sem": _c_sem, "pct_sem": _p_sem, "factores_sem": _f_sem,
+                    "sem3": _sem3, "d3": _d3,
                     "pivots_diario": _pd_d, "pivots_mensual": _pm_cl, "confluencias": _confs,
                 }
             except Exception as _e:
@@ -13637,6 +14159,7 @@ def _pp_wizard_cuerpo(st):
 
         # PE-10 — Conclusión general del Paso 1 + nota fija
         _c_gen = conclusion_general(_c_valor, _c_sector)
+        st.session_state["_pp_c_gen"] = (_ticker, _c_gen)   # PE-19: se recuerda en el Paso 3
         if _c_gen:
             st.markdown(html_conclusion(_c_gen, "general")
                         + f'<div style="font-size:.76rem;color:#64748b;font-style:italic;margin:-.2rem 0 .6rem">'
@@ -13704,51 +14227,59 @@ def _pp_wizard_cuerpo(st):
 
     # ── PASO 3: SEMÁFORO ─────────────────────────────────────────────────────
     elif _step == 3:
-        _csem = d["color_sem"]
-        _psem = d["pct_sem"]
-        _fsem = d["factores_sem"]
-        _SCC  = {"verde": "#16a34a", "amarillo": "#f59e0b", "rojo": "#dc2626"}
-        _SCE  = {"verde": "&#128994;", "amarillo": "&#128993;", "rojo": "&#128308;"}
-        _SCL  = {"verde": "MOMENTO FAVORABLE", "amarillo": "SIN SESGO CLARO", "rojo": "MOMENTO DESFAVORABLE"}
+        # Spec PE v4 — Paso 3 (Momento): fichas, cálculo visible, zonas que vigila el método y conclusión
+        _sem3 = d.get("sem3")
+        _d3 = d.get("d3") or {}
+        _ps3 = params_semaforo()
+        _csem = _sem3["color"]
+        _SCC = {"verde": "#16a34a", "amarillo": "#f59e0b", "rojo": "#dc2626", "gris": "#64748b"}
+        _SCE = {"verde": "&#128994;", "amarillo": "&#128993;", "rojo": "&#128308;", "gris": "&#9898;"}
         _sc = _SCC.get(_csem, "#94a3b8")
-        _se = _SCE.get(_csem, "&#9898;")
-        _sl = _SCL.get(_csem, "INDEFINIDO")
-
+        _rot3 = (_ps3.get("rotulos") or {}).get(_csem, "").format(n=_sem3["n_disponibles"])
         st.markdown(f"""
         <div class="pp-card">
-          <div class="pp-title">&#128678; Paso 3 — Sem&#225;foro Global{_tk_tit}: &#191;qu&#233; dice el momento actual?</div>
-          <div class="pp-edu">&#128218; <b>&#191;Qu&#233; es el sem&#225;foro?</b><br>
-          Mide el <b>momento actual</b>: si RSI, MACD, Bollinger, SAR y Volumen est&#225;n alineados
-          a favor o en contra. Buena estructura (Paso 2) con sem&#225;foro rojo = <b>lectura sin confirmar</b>.
-          Sem&#225;foro verde con estructura d&#233;bil = trampa frecuente para principiantes.</div>
+          <div class="pp-title">&#128678; Paso 3 — Momento{_tk_tit}: &#191;qu&#233; dice el impulso de corto plazo?</div>
+          <div class="pp-edu">&#128218; {_ps3.get("intro", "")}</div>
         </div>""", unsafe_allow_html=True)
-
         st.markdown(f"""
         <div style="text-align:center;padding:1rem 0">
-          <div style="font-size:3rem">{_se}</div>
-          <div style="font-size:1.5rem;font-weight:800;color:{_sc}">{_sl}</div>
-          <div style="font-size:1rem;color:#64748b">{_psem:.0f}% de factores positivos</div>
+          <div style="font-size:3rem">{_SCE.get(_csem, "&#9898;")}</div>
+          <div style="font-size:1.1rem;font-weight:800;color:{_sc}">{_rot3}</div>
+          <div style="font-size:1rem;color:#64748b">{_pct_entero(_sem3["pct"])}% ({_pts_es(_sem3["puntos"])} de {_sem3["n_disponibles"]} puntos posibles)</div>
+          <div style="font-size:.76rem;color:#64748b;font-style:italic;margin-top:.3rem">{_ps3.get("nota_fija", "")}</div>
         </div>""", unsafe_allow_html=True)
 
-        st.markdown("**Factores analizados:**")
-        for _fn, _fd, _fv in _fsem:
-            _fc = "#16a34a" if _fv >= 1 else ("#f59e0b" if _fv >= 0.5 else "#dc2626")
-            st.markdown(
-                f"""<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
-                <span style="min-width:160px;font-size:.78rem;font-weight:700;color:#64748b">{_fn}</span>
-                <span class="pp-badge" style="background:{_fc}22;color:{_fc};border:1px solid {_fc}44">{_fd}</span>
-                </div>""",
-                unsafe_allow_html=True)
+        if _csem != "gris":   # doc. 28 v2 — lectura del método, invalidación y combinación con el Paso 2
+            st.markdown(html_lectura_escenario(lectura_escenario(_csem, precio, _sem3.get("pp"), _d3.get("sar"),
+                                                                 d.get("puntuacion_tec"))), unsafe_allow_html=True)
+        st.markdown("**Factores del semáforo** (despliega cada uno para ver sus datos y su regla):")
+        for _k3 in SEM_FACTORES:
+            _f3 = _sem3["factores"][_k3]
+            with st.expander(titulo_factor(_k3, _f3)):
+                st.markdown(html_ficha_factor(_k3, _f3, _d3), unsafe_allow_html=True)
 
-        _IMAP = {
-            "verde":    "Los indicadores de corto plazo acompa&#241;an. Combinado con buena estructura es el escenario t&#233;cnico m&#225;s propicio.",
-            "amarillo": "El mercado est&#225; indeciso en este valor. El m&#233;todo no identifica direcci&#243;n.",
-            "rojo":     "Los indicadores de corto plazo est&#225;n en contra. Aunque la estructura sea buena, la lectura no est&#225; confirmada por el momento.",
-        }
-        st.markdown(f"""
-        <div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534;margin-top:.8rem">
-        &#128161; <b>&#191;Qu&#233; significa esto para ti?</b><br>{_IMAP.get(_csem, "Analiza con precauci&#243;n.")}
-        </div>""", unsafe_allow_html=True)
+        st.markdown(
+            '<div class="pp-edu" style="background:#f0fdf4;border-color:#16a34a;color:#166534">'
+            '&#128290; <b>C&#243;mo se calcula el sem&#225;foro</b>' + html_calculo_semaforo(_sem3) + '</div>',
+            unsafe_allow_html=True)
+
+        _zonas3 = zonas_vigila(d.get("diag"), _sem3)
+        if _zonas3:
+            st.markdown('<div class="pp-edu" style="background:#f8fafc;border-color:#64748b;color:#334155">'
+                        '&#128269; <b>Zonas que vigila el m&#233;todo</b> (informativas, no punt&#250;an)<ul style="margin:.3rem 0 0 1rem">'
+                        + "".join(f"<li>{_z}</li>" for _z in _zonas3) + "</ul></div>", unsafe_allow_html=True)
+
+        _c3 = conclusion_paso3(_sem3, _d3, d.get("puntuacion_tec"))
+        _cg = st.session_state.get("_pp_c_gen")
+        if _cg and _cg[0] == _ticker and _cg[1]:
+            import re as _re3
+            _cg_txt = _cg[1].get("clave") or _re3.sub(r"<[^>]+>", "", _cg[1].get("texto", "")).split(".")[0]
+            _p1 = f" <b>Contexto (Paso 1):</b> {_cg_txt}."
+        else:
+            _p1 = " <b>Contexto (Paso 1):</b> se muestra después de ver el Paso 1 de este valor."
+        st.markdown(html_conclusion({**_c3, "texto": _c3["texto"] + _p1}, "general")
+                    + f'<div style="font-size:.76rem;color:#64748b;font-style:italic;margin:-.2rem 0 .6rem">'
+                    + f'{_ps3.get("nota_fija", "")}</div>', unsafe_allow_html=True)
 
     # ── PASO 4: NIVELES ──────────────────────────────────────────────────────
     elif _step == 4:
@@ -19672,7 +20203,9 @@ de debilidad a corto plazo.
         )
 
         # ── Interpretación contextual del semáforo ────────────────────────
-        _interp_txt = _interpretacion_semaforo(color_sem, pct_sem, factores_sem)
+        _interp_txt = _interpretacion_semaforo(color_sem, pct_sem, factores_sem, precio=precio,
+                                               pp=_pp_de_pivots(pivots_diario), sar_det=calcular_sar_detalle(hist),
+                                               pt_paso2=puntuacion_tec)
         st.markdown(
             f'<div style="border-left:4px solid {_sem_color_hex};background:{_sem_bg_hex};'
             f'border-radius:0 8px 8px 0;padding:10px 14px;margin-top:4px">',
