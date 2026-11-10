@@ -2008,32 +2008,69 @@ def obtener_datos(ticker: str):
 # DATOS MACRO — ECB API (sin clave) + yfinance
 # =============================================================================
 
+class _FalloDescargaMacro(Exception):
+    """Fallo de una descarga macro. Se lanza dentro de la función cacheada para que st.cache_data NO guarde el fallo."""
+
+
 @st.cache_data(ttl=3600)
-def obtener_historico_ecb(flow: str, series_key: str, n_obs: int = 72) -> "pd.Series | None":
-    """Serie histórica mensual desde ECB SDMX API."""
+def _ecb_descarga(flow: str, series_key: str, n_obs: int) -> "pd.Series":
+    """Descarga cacheada de una serie del BCE. Solo se cachea si sale bien: ante cualquier fallo lanza una excepción,
+    que st.cache_data no guarda (incidencia del 10/11/2026: un fallo puntual quedaba guardado una hora como «sin dato»)."""
     url = f"https://data-api.ecb.europa.eu/service/data/{flow}/{series_key}"
     try:
         r = requests.get(url, params={"lastNObservations": n_obs, "format": "jsondata"}, timeout=15)
-        if r.status_code != 200:
-            return None
+    except Exception as e:
+        raise _FalloDescargaMacro(f"red: {type(e).__name__}")
+    if r.status_code != 200:
+        raise _FalloDescargaMacro(f"HTTP {r.status_code}")
+    try:
         data = r.json()
         ds = data["dataSets"][0]
         obs = (list(ds["series"].values())[0]["observations"]
                if "series" in ds else ds["observations"])
-        # Índice temporal desde structure
         time_vals = data["structure"]["dimensions"]["observation"][0]["values"]
-        result = {}
-        for k, v in obs.items():
-            idx = int(k)
-            if idx < len(time_vals) and v[0] is not None:
-                result[time_vals[idx]["id"]] = float(v[0])
-        if not result:
-            return None
-        s = pd.Series(result)
-        s.index = pd.to_datetime(s.index)
-        return s.sort_index()
-    except Exception:
-        return None
+    except Exception as e:
+        raise _FalloDescargaMacro(f"respuesta no válida: {type(e).__name__}")
+    result = {}
+    for k, v in obs.items():
+        idx = int(k)
+        if idx < len(time_vals) and v[0] is not None:
+            result[time_vals[idx]["id"]] = float(v[0])
+    if not result:
+        raise _FalloDescargaMacro("serie vacía")
+    s = pd.Series(result)
+    s.index = pd.to_datetime(s.index)
+    return s.sort_index()
+
+
+_ECB_ULTIMO_BUENO: dict = {}   # (flow, serie, n_obs) → última serie descargada bien (vive con el proceso)
+_ECB_ULTIMO_FALLO: dict = {}   # (flow, serie, n_obs) → motivo del último fallo, para diagnóstico
+
+
+def obtener_historico_ecb(flow: str, series_key: str, n_obs: int = 72, _reintentos: int = 3,
+                          _espera: float = 0.8) -> "pd.Series | None":
+    """Serie histórica desde la API SDMX del BCE. Hasta 3 intentos con espera creciente; los fallos no se cachean.
+    Si todos fallan, devuelve la última serie buena de esa misma consulta descargada por este proceso (sus fechas
+    se muestran igual, y la antigüedad del dato la controla _resumen_serie); si no hay ninguna, None («sin dato»)."""
+    import time as _t_ecb
+    clave = (flow, series_key, int(n_obs))
+    motivo = ""
+    for n in range(max(1, _reintentos)):
+        try:
+            s = _ecb_descarga(flow, series_key, int(n_obs))
+            _ECB_ULTIMO_BUENO[clave] = s
+            _ECB_ULTIMO_FALLO.pop(clave, None)
+            return s
+        except _FalloDescargaMacro as e:
+            motivo = str(e)
+        except Exception as e:                          # noqa: BLE001
+            motivo = f"{type(e).__name__}"
+        if n < _reintentos - 1:
+            _t_ecb.sleep(_espera * (n + 1))
+    _ECB_ULTIMO_FALLO[clave] = motivo
+    print(f"[PA macro] BCE {flow}/{series_key}: fallo tras {_reintentos} intentos ({motivo})"
+          + ("; se usa la última serie buena" if clave in _ECB_ULTIMO_BUENO else ""), flush=True)
+    return _ECB_ULTIMO_BUENO.get(clave)
 
 
 @st.cache_data(ttl=3600)

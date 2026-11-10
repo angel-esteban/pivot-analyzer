@@ -2839,6 +2839,42 @@ def test_doc35_en_vivo():
 
 
 
+def test_macro_ecb_sin_cachear_fallos():
+    """Incidencia 10/11/2026 — En producción, un fallo puntual de la API del BCE quedaba cacheado una hora como
+    «sin dato» (tipo oficial; tras reiniciar, curva y paro) y cambiaba la conclusión del Paso 1. Ahora: reintentos,
+    los fallos no se cachean y, si todo falla, se usa la última serie buena del proceso."""
+    import pandas as pd
+    P = _APP
+    orig = P["_ecb_descarga"]
+    llamadas = []
+    serie = pd.Series([2.0, 2.5], index=pd.to_datetime(["2026-03-11", "2026-09-16"]))
+    def _falla_luego_bien(flow, key, n):
+        llamadas.append(key)
+        if len(llamadas) < 3:
+            raise P["_FalloDescargaMacro"]("HTTP 429")
+        return serie
+    try:
+        P["_ECB_ULTIMO_BUENO"].clear(); P["_ECB_ULTIMO_FALLO"].clear()
+        P["_ecb_descarga"] = _falla_luego_bien
+        s = P["obtener_historico_ecb"]("FM", "X.TEST", 40, _espera=0)
+        _check(s is serie and len(llamadas) == 3, f"BCE: reintenta y acaba descargando ({len(llamadas)} llamadas)")
+        P["_ecb_descarga"] = lambda *a: (_ for _ in ()).throw(P["_FalloDescargaMacro"]("HTTP 503"))
+        s2 = P["obtener_historico_ecb"]("FM", "X.TEST", 40, _espera=0)
+        _check(s2 is serie and P["_ECB_ULTIMO_FALLO"][("FM", "X.TEST", 40)] == "HTTP 503",
+               "BCE: si todo falla, última serie buena y motivo registrado")
+        _check(P["obtener_historico_ecb"]("FM", "OTRA", 40, _espera=0) is None, "BCE: sin serie buena previa → sin dato")
+    finally:
+        P["_ecb_descarga"] = orig
+        P["_ECB_ULTIMO_BUENO"].clear(); P["_ECB_ULTIMO_FALLO"].clear()
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _i = src.index("def _ecb_descarga(")
+    _cuerpo = src[_i:src.index("_ECB_ULTIMO_BUENO: dict", _i)]
+    _check("return None" not in _cuerpo and "raise _FalloDescargaMacro" in _cuerpo
+           and src[src.rindex("\n", 0, _i - 1) - 30:_i].strip().endswith("@st.cache_data(ttl=3600)")
+           and "@st.cache_data(ttl=3600)\ndef obtener_historico_ecb(" not in src,
+           "BCE: la función cacheada nunca devuelve None (los fallos no se guardan) y el envoltorio no se cachea")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
