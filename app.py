@@ -1953,6 +1953,18 @@ def pantalla_login():
 
 @st.cache_data(ttl=900)  # 15 minutos de caché
 @st.cache_data(ttl=900)
+def sin_barras_incompletas(hist):
+    """Barras diarias sin cierre (Close NaN) se descartan. Caso real: el 10/11/2026 a las 8:41 Yahoo devolvía la
+    barra del 09/11 con Close = NaN y un volumen parcial; sin este filtro la app mostraba «cierre nan €» y notas
+    erróneas. Se usa la última sesión con cierre publicado."""
+    try:
+        if hist is None or hist.empty or "Close" not in hist:
+            return hist
+        return hist[hist["Close"].notna()]
+    except Exception:
+        return hist
+
+
 def obtener_datos(ticker: str):
     """Descarga datos OHLCV y metadatos del ticker. Reintentos ante fallos transitorios."""
     import time as _time
@@ -1960,7 +1972,7 @@ def obtener_datos(ticker: str):
         try:
             t    = yf.Ticker(ticker)
             # PA3-02: OHLC sin ajustar por dividendos (splits sí ajustados por Yahoo).
-            hist = t.history(period="1y", auto_adjust=False)
+            hist = sin_barras_incompletas(t.history(period="1y", auto_adjust=False))
             if hist is None or hist.empty:
                 if _intento < 2:
                     _time.sleep(1.5)
@@ -2096,7 +2108,7 @@ def obtener_hist_pivots(ticker: str, hist_respaldo=None) -> "pd.DataFrame | None
 
 @st.cache_data(ttl=900)
 def _hist_pivots_cache(ticker: str):
-    _h = yf.Ticker(ticker).history(period="2y", auto_adjust=False)
+    _h = sin_barras_incompletas(yf.Ticker(ticker).history(period="2y", auto_adjust=False))
     return None if (_h is None or _h.empty) else _h
 
 
@@ -2113,7 +2125,7 @@ def obtener_hist_maximo(ticker: str, _v: int = 4) -> "pd.DataFrame | None":
         # Doc. 25 §3 (Pólaris): toda la serie disponible de Yahoo para el máximo histórico. Yahoo la
         # ajusta por operaciones de capital (splits y ampliaciones): los precios antiguos pueden no
         # coincidir con los nominales de la época (se avisa en la ficha y en el texto del componente).
-        hist = t.history(period="max", auto_adjust=False)   # PA3-02: sin ajustar por dividendos
+        hist = sin_barras_incompletas(t.history(period="max", auto_adjust=False))   # PA3-02: sin ajustar por dividendos
         if hist.empty or len(hist) < 50:
             return None
         return hist
@@ -14065,6 +14077,46 @@ def html_cotizacion_actual(ca: dict) -> str:
             + f'<div style="font-size:.76rem;font-style:italic;margin-top:.3rem">{_h.escape(ca["nota_fija"])}</div></div>')
 
 
+def conclusion_paso1(ticker: str, hist, info: dict, nombre: str) -> "dict | None":
+    """Doc. 34 §1 — Conclusión general del Paso 1 calculada con las mismas funciones que el Paso 1 (valor × sector,
+    fase del ciclo y tipos de la región), con el histórico de la sesión cerrada. La usan el Paso 1 y la línea de
+    contexto del Paso 3, de modo que el resultado no depende del orden de navegación."""
+    info = info or {}
+    _lp = datos_largo_plazo(hist, info)
+    _c_valor = conclusion_valor(_lp, nombre, simbolo_moneda(info, ticker))
+    _sk = SECTOR_KNOWLEDGE.get("sectores", {})
+    _sec = info.get("sector", "") or TICKER_SECTOR_FALLBACK.get(ticker.upper(), "")
+    _si = _sk.get(_sec)
+    if not _si:
+        _si = next((v for v in _sk.values() if _sec in (v.get("yfinance_keys") or [])), None)
+    _c_sector = None
+    if _si:
+        _ind = info.get("industry") or TICKER_INDUSTRIA_FALLBACK.get(ticker.upper())
+        _si = sector_con_subtipo(_si, _ind)
+        _sens = sensibilidad_tipos_didactica(_si, _ind)
+        _reg = region_macro(ticker, info)
+        _res, _dir = {}, None
+        if _reg:
+            try:
+                _if = indicadores_fase_ciclo(_reg)
+                _res = evaluar_fase_ciclo(_if)
+                _dir = direccion_tipo_oficial(_if.get("tipo_oficial"))
+            except Exception:
+                _res, _dir = {}, None
+        _c_sector = conclusion_sector(_si, _res, _dir, _sens, _si.get("nombre_es", _sec), "Fed" if _reg == "eeuu" else "BCE")
+    return conclusion_general(_c_valor, _c_sector)
+
+
+def texto_contexto_paso1(c_gen: "dict | None") -> str:
+    """Doc. 34 §1 — Línea de contexto del Paso 1 para el Paso 3: la conclusión general (o la del valor si no hay
+    ficha sectorial). Sin dato del valor (menos de 200 sesiones), lo dice."""
+    import re as _re_c
+    if not c_gen:
+        return "sin conclusión del Paso 1: el valor no tiene historial suficiente para la media de 200 sesiones"
+    return c_gen.get("clave") or _re_c.sub(r"<[^>]+>", "", c_gen.get("texto", "")).split(".")[0].replace(
+        "Conclusión del Paso 1: ", "")
+
+
 def zonas_vigila(diag: "dict | None", sem: dict, criterios=None) -> list:
     """PE-19 y doc. 28 — «Zonas que vigila el método»: notas del Paso 2 (Fibonacci 50–78,6 %, RSI en
     sobreventa) y extremos del RSI y de %B del Paso 3. No puntúan."""
@@ -14593,8 +14645,8 @@ def _pp_wizard_cuerpo(st):
                         unsafe_allow_html=True)
 
         # PE-10 — Conclusión general del Paso 1 + nota fija
-        _c_gen = conclusion_general(_c_valor, _c_sector)
-        st.session_state["_pp_c_gen"] = (_ticker, _c_gen)   # PE-19: se recuerda en el Paso 3
+        _c_gen = conclusion_paso1(_ticker, hist, _info, nombre)   # doc. 34 §1: misma función que el Paso 3
+        st.session_state["_pp_c_gen"] = (_ticker, hist.index[-1], _c_gen)
         if _c_gen:
             st.markdown(html_conclusion(_c_gen, "general")
                         + f'<div style="font-size:.76rem;color:#64748b;font-style:italic;margin:-.2rem 0 .6rem">'
@@ -14711,12 +14763,13 @@ def _pp_wizard_cuerpo(st):
 
         _c3 = conclusion_paso3(_sem3, _d3, d.get("puntuacion_tec"))
         _cg = st.session_state.get("_pp_c_gen")
-        if _cg and _cg[0] == _ticker and _cg[1]:
-            import re as _re3
-            _cg_txt = _cg[1].get("clave") or _re3.sub(r"<[^>]+>", "", _cg[1].get("texto", "")).split(".")[0]
-            _p1 = f" <b>Contexto (Paso 1):</b> {_cg_txt}."
-        else:
-            _p1 = " <b>Contexto (Paso 1):</b> se muestra después de ver el Paso 1 de este valor."
+        if not (_cg and len(_cg) == 3 and _cg[0] == _ticker and _cg[1] == hist.index[-1]):
+            try:   # doc. 34 §1 — misma función y misma sesión cerrada que el Paso 1
+                _cg = (_ticker, hist.index[-1], conclusion_paso1(_ticker, hist, d.get("info"), nombre))
+                st.session_state["_pp_c_gen"] = _cg
+            except Exception:
+                _cg = (_ticker, hist.index[-1], None)
+        _p1 = f" <b>Contexto (Paso 1):</b> {texto_contexto_paso1(_cg[2])}."
         st.markdown(html_conclusion({**_c3, "texto": _c3["texto"] + _p1}, "general"), unsafe_allow_html=True)
 
     # ── PASO 4: NIVELES ──────────────────────────────────────────────────────

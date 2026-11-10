@@ -2574,6 +2574,40 @@ def test_doc32_mejoras_textos():
            and s1["factores"]["bb"]["escenario"] == "mitad_baja", "Q-4: cambio de tramo sin cambio de puntos")
 
 
+def test_doc34_contexto_paso1():
+    """Doc. 34 §1 — T-P1: la línea «Contexto (Paso 1)» del Paso 3 no depende de la navegación: se calcula con la
+    misma función que usa el Paso 1 (conclusion_paso1) y la misma sesión cerrada; nunca un texto de espera."""
+    P = _APP
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("se muestra después de ver el Paso 1" not in src, "T-P1: sin texto de espera")
+    _check(src.count("conclusion_paso1(_ticker, hist, _info, nombre)") == 1
+           and src.count("conclusion_paso1(_ticker, hist, d.get(\"info\"), nombre)") == 1, "T-P1: misma función en los Pasos 1 y 3")
+    orig = {k: P[k] for k in ("datos_largo_plazo", "region_macro")}
+    try:
+        P["datos_largo_plazo"] = lambda h, i: {"precio": 11.5, "sma200": 10.0, "dist_pct": 15.0, "pos_pct": 90.0,
+                                               "vol_pct": 18.0, "h52": 11.6, "l52": 9.0}
+        P["region_macro"] = lambda t, i: None
+        c = P["conclusion_paso1"]("X.MC", None, {"sector": "Utilities"}, "X")
+    finally:
+        P.update(orig)
+    _check(c and c.get("texto", "").startswith("<b>Conclusión del Paso 1:") and P["texto_contexto_paso1"](c)
+           and "Conclusión del Paso 1" not in P["texto_contexto_paso1"](c), f"T-P1: conclusión calculada {c}")
+    _check("historial suficiente" in P["texto_contexto_paso1"](None), "T-P1: sin dato del valor, lo dice")
+
+
+def test_barras_sin_cierre():
+    """10/11/2026 — Yahoo devolvió la barra del 09/11 con Close = NaN: se descarta y se usa la última sesión con cierre."""
+    import numpy as np, pandas as pd
+    P = _APP
+    h = _hist_dias()
+    hb = _con_vela_hoy(h, fecha="2026-11-09", c=float("nan"), v=51911.0)
+    hl = P["sin_barras_incompletas"](hb)
+    _check(len(hl) == len(h) and hl.index[-1] == h.index[-1] and not hl["Close"].isna().any(), "Barra sin cierre descartada")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check(src.count("sin_barras_incompletas(t.history(") == 2 and "sin_barras_incompletas(yf.Ticker(ticker).history(" in src,
+           "Filtro en obtener_datos, pivots y máximo histórico")
+
+
 def _dependencias_ok() -> bool:
     """Los tests de la Spec PA v2 ejecutan el motor real, que necesita pandas y numpy.
     Si faltan, se avisa con la instrucción exacta en vez de fallar con errores confusos."""
