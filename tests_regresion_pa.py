@@ -2050,7 +2050,7 @@ def test_doc27_incidencia_serie():
         def rollback(s): pass
     c = _Conn()
     _check(R.registrar_incidencia_serie(c, "col.mc", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 147.12}) is None
-           and "ON CONFLICT (ticker, tipo) DO UPDATE" in c.log[0][0] and c.log[0][1][0] == "COL.MC" and c.commits == 1,
+           and "ON CONFLICT (ticker, tipo) WHERE fecha_sesion IS NULL DO UPDATE" in c.log[0][0] and c.log[0][1][0] == "COL.MC" and c.commits == 1,
            "Doc. 27: activar = INSERT … ON CONFLICT")
     _check(R.registrar_incidencia_serie(c, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, False) is None
            and c.log[1][0].startswith("UPDATE incidencia_serie SET activa = false") and "primera_vez" not in c.log[0][0].split("DO UPDATE")[1],
@@ -2280,23 +2280,24 @@ def test_doc28_v2_lecturas_escenario():
     a = le("verde", 59.04, 60.0533, sar_up, {"score_total": 7.3})
     _check(a["lectura"].startswith("Lectura del método: los indicadores de corto plazo están alineados al alza")
            and "favorable para posiciones largas (compradoras)" in a["lectura"]
-           and a["invalidacion"] == "La lectura se invalidaría si el mínimo de una sesión baja del SAR (56,38 €)."
+           and a["invalidacion"] == "La lectura cambiaría si el semáforo baja del 65%."   # doc. 35 §4: sin simulación
+           and a["apoyo"] == "Perdería apoyo si el mínimo de una sesión baja del SAR (56,38 €)."
            and a["combinacion"].startswith("El momento y la estructura apuntan en el mismo sentido"), f"T-L1 ITX: {a}")
     # Verde con precio sobre el PP → dos cláusulas
     a2 = le("verde", 61.0, 60.0533, sar_up, {"score_total": 7.3})
-    _check("o si el cierre queda bajo el pivot diario (60,05 €)" in a2["invalidacion"], f"T-L1: verde con PP {a2['invalidacion']}")
+    _check("el cierre queda bajo el pivot diario (60,05 €) o el mínimo" in a2["apoyo"], f"T-L1: verde con PP {a2['apoyo']}")
     # REP: verde, estructura mixta 6,1
     r = le("verde", 29.90, 29.94, {"sar_siguiente": 28.8344, "tendencia": "ALCISTA"}, {"score_total": 6.1})
-    _check(r["combinacion"].startswith("La estructura del Paso 2 es mixta") and "28,83 €" in r["invalidacion"], f"T-L1 REP: {r}")
+    _check(r["combinacion"].startswith("La estructura del Paso 2 es mixta") and "28,83 €" in r["apoyo"], f"T-L1 REP: {r}")
     # NTGY: rojo, SAR bajista y precio bajo el PP → dos cláusulas; estructura mixta
     n = le("rojo", 29.54, 29.7267, sar_dn, {"score_total": 5.8})
     _check("desfavorable para posiciones largas" in n["lectura"]
-           and n["invalidacion"] == ("La lectura se invalidaría si el máximo de una sesión supera el SAR (30,28 €) o si el "
-                                     "cierre queda sobre el pivot diario (29,73 €).")
+           and n["apoyo"] == ("Perdería apoyo si el cierre queda sobre el pivot diario (29,73 €) o el máximo de una sesión "
+                              "supera el SAR (30,28 €).")
            and n["combinacion"].startswith("La estructura del Paso 2 es mixta"), f"T-L1 NTGY: {n}")
     # SAN: rojo con SAR alcista → solo la cláusula del pivot
     s_ = le("rojo", 10.696, 10.8413, {"sar_siguiente": 10.1184, "tendencia": "ALCISTA"}, {"score_total": 3.7})
-    _check("SAR" not in s_["invalidacion"] and "pivot diario (10,84 €)" in s_["invalidacion"], f"T-L1 SAN: {s_['invalidacion']}")
+    _check("SAR" not in s_["apoyo"] and "pivot diario (10,84 €)" in s_["apoyo"], f"T-L1 SAN: {s_['apoyo']}")
     # Amarillo: cortes leídos de criteria.json; sentido contrario
     y = le("amarillo", 10.0, 10.0, sar_up, {"score_total": 7.3})
     _check(y["invalidacion"] == "La lectura cambiaría si el semáforo llega al 65% o baja del 40%."
@@ -2411,12 +2412,13 @@ def test_doc29_cotizacion_actual():
            f"T-S3 / T-C1: {ca['cruces']} {ca['linea_sim']}")
     hv3 = _con_vela_hoy(h, hi=c0 + 0.1, lo=c0 - 0.35, c=c0 - 0.33)
     ca3 = P["cotizacion_actual"](hv3, P["hist_cerrado"](hv3, ahora=ab)[0], sem, d3, le, None, ahora=ab)
-    _check(any("se ha tocado hoy" in t and "pivot diario" in t for t in ca3["invalidacion"]), "T-S3: invalidación del pivot tocada")
+    _check(any("nivel de apoyo de la lectura" in t and "pivot diario" in t for t in ca3["invalidacion"]),
+           "T-S3: apoyo del pivot tocado (doc. 35 §4)")
     # T-S4: mínimo por debajo del SAR de la próxima sesión
     hv4 = _con_vela_hoy(h, hi=c0 + 0.1, lo=c0 - 0.5, c=c0 + 0.05)
     ca4 = P["cotizacion_actual"](hv4, P["hist_cerrado"](hv4, ahora=ab)[0], sem, d3, le, None, ahora=ab)
     _check(any("ha tocado el SAR" in x["texto"] and "giraría a bajista al cierre" in x["texto"] for x in ca4["cruces"])
-           and any("mínimo de una sesión baja del SAR" in t and "se ha tocado hoy" in t for t in ca4["invalidacion"]),
+           and any("mínimo de una sesión baja del SAR" in t and "Hoy se ha tocado un nivel de apoyo" in t for t in ca4["invalidacion"]),
            f"T-S4: giro del SAR e invalidación tocada {ca4['cruces']} {ca4['invalidacion']}")
     # T-S5: mercado cerrado → solo el aviso
     ca5 = P["cotizacion_actual"](h, h, sem, d3, le, None, ahora=pd.Timestamp("2026-11-09 20:00", tz="Europe/Madrid"))
@@ -2604,8 +2606,237 @@ def test_barras_sin_cierre():
     hl = P["sin_barras_incompletas"](hb)
     _check(len(hl) == len(h) and hl.index[-1] == h.index[-1] and not hl["Close"].isna().any(), "Barra sin cierre descartada")
     src = _A._RUTA_APP.read_text(encoding="utf-8")
-    _check(src.count("sin_barras_incompletas(t.history(") == 2 and "sin_barras_incompletas(yf.Ticker(ticker).history(" in src,
+    _check(src.count("sin_barras_incompletas(t.history(") == 1 and "hist = sin_barras_incompletas(_raw)" in src
+           and "sin_barras_incompletas(yf.Ticker(ticker).history(" in src,
            "Filtro en obtener_datos, pivots y máximo histórico")
+
+
+def test_doc35_nombre_empresa():
+    """Doc. 35 §1 — Con el nombre vacío en la respuesta de la fuente, la cabecera muestra el nombre guardado."""
+    P = _APP
+    P["_NOMBRES_VISTOS"].clear()
+    _check(P["nombre_empresa"]("ITX.MC", {"longName": "Industria de Diseño Textil, S.A."}) == "Industria de Diseño Textil, S.A.",
+           "Doc. 35 §1: nombre de la fuente")
+    _check(P["nombre_empresa"]("ITX.MC", {}) == "Industria de Diseño Textil, S.A.", "Doc. 35 §1: sin nombre → último guardado")
+    _check(P["nombre_empresa"]("ITX.MC", {"longName": "ITX.MC"}) == "Industria de Diseño Textil, S.A.",
+           "Doc. 35 §1: un nombre igual al ticker no cuenta como nombre")
+    P["_NOMBRES_VISTOS"].clear()
+    _check(P["nombre_empresa"]("ITX.MC", None) == "Inditex" and P["nombre_empresa"]("RED.MC", {}) == "Redeia Corporación, S.A.",
+           "Doc. 35 §1: sin guardado → tabla fija de los índices")
+    _check(P["nombre_empresa"]("ZZZZ", {}) == "ZZZZ", "Doc. 35 §1: sin ningún nombre → ticker")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check("_nombre  = nombre_empresa(_ticker, info)" in src, "Doc. 35 §1: el asistente usa nombre_empresa")
+    _check('@st.cache_data(ttl=900)\ndef obtener_datos(' in src and '\ndef sin_barras_incompletas(' in src
+           and 'cache_data(ttl=900)\ndef sin_barras_incompletas' not in src,
+           "Corrección: la caché vuelve a obtener_datos")
+
+
+def test_doc35_aviso_volumen_corte():
+    """Doc. 35 §2 — Con un ratio del 119,5% sale el aviso; con un 115%, no. Pasos 2 y 3."""
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    a = P["aviso_volumen_corte"]
+    t = a(119.5, (80.0, 120.0))
+    _check(t.startswith("El ratio está a menos de 1 punto del corte del 120%.") and "hasta la mañana siguiente" in t,
+           f"Doc. 35 §2: 119,5% → aviso ({t})")
+    _check(a(115, (80.0, 120.0)) == "" and a(120.99, (80.0, 120.0)) != "" and a(121.0, (80.0, 120.0)) == ""
+           and a(None, (80.0, 120.0)) == "", "Doc. 35 §2: 115% sin aviso; margen estricto de 1 punto")
+    _check("corte del 150%" in a(149.4, P["_CORTES_VOL_PASO2"]) and "corte del 50%" in a(50.6, P["_CORTES_VOL_PASO2"])
+           and a(100, P["_CORTES_VOL_PASO2"]) == "", "Doc. 35 §2: cortes del Paso 2 (50/80/150/200)")
+    # En la ficha del Paso 3
+    h = _hist_dias()
+    c = h["Close"]; p = float(c.iloc[-1])
+    pv = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Diario",))["Diario"]
+    d3 = P["datos_paso3"](h, pv, p)
+    f = {"disponible": True, "escenario": "normal", "puntos": 0.5, "etiqueta": "Volumen normal"}
+    d3v = dict(d3); d3v["vol"] = dict(d3["vol"], ratio_10d=119.5)
+    _check("menos de 1 punto del corte del 120%" in P["html_ficha_factor"]("vol", f, d3v), "Doc. 35 §2: aviso en la ficha del Paso 3")
+    d3v["vol"] = dict(d3["vol"], ratio_10d=115.0)
+    _check("menos de 1 punto" not in P["html_ficha_factor"]("vol", f, d3v), "Doc. 35 §2: sin aviso con 115% (Paso 3)")
+    # En la ficha del Paso 2
+    si = {"escenario": "volumen_normal"}
+    _check("corte del 80%" in P["html_ficha_componente"]("vol", {"vol_rel": 80.4, "escenario": "volumen_normal"}, si, p)
+           and "menos de 1 punto" not in P["html_ficha_componente"]("vol", {"vol_rel": 100.0, "escenario": "volumen_normal"}, si, p),
+           "Doc. 35 §2: aviso en la ficha del Paso 2")
+
+
+def test_doc35_barra_sin_cierre():
+    """Doc. 35 §3 — Con la barra del último día sin cierre, sale el aviso con las dos fechas y los cálculos usan la
+    sesión anterior. Registro: una fila por ticker y fecha; se cierra cuando la fuente publica la barra completa."""
+    import os
+    import pandas as pd
+    import repositorio as R
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    h = _hist_dias()
+    hb = _con_vela_hoy(h, fecha="2026-11-09", c=float("nan"), v=51911.0)
+    _check(P["barras_sin_cierre"](hb) == ["2026-11-09"] and P["barras_sin_cierre"](h) == [], "Doc. 35 §3: fechas descartadas")
+    hl = P["sin_barras_incompletas"](hb)
+    _check(hl.index[-1] == h.index[-1], "Doc. 35 §3: los cálculos usan la sesión anterior")
+    ahora = pd.Timestamp("2026-11-10 08:41", tz="Europe/Madrid")
+    bsc = P["barras_sin_cierre_cerradas"](["2026-11-09"], ahora)
+    _check(bsc == ["2026-11-09"], "Doc. 35 §3: la sesión del 09/11 ya debería estar cerrada a las 8:41 del 10/11")
+    _check(P["barras_sin_cierre_cerradas"](["2026-11-10"], pd.Timestamp("2026-11-10 12:00", tz="Europe/Madrid")) == [],
+           "Doc. 35 §3: una vela en curso sin cierre no es incidencia")
+    t = P["aviso_barra_sin_cierre"](bsc, hl.index[-1])
+    _check(t == ("La sesión del 09/11/2026 todavía no tiene cierre publicado en la fuente de datos; los cálculos usan la "
+                 "última sesión completa (06/11/2026). Se actualizará cuando la fuente lo publique."), f"Doc. 35 §3: aviso ({t})")
+    _check(P["aviso_barra_sin_cierre"]([], hl.index[-1]) == "", "Doc. 35 §3: sin barra descartada, sin aviso")
+    src = _A._RUTA_APP.read_text(encoding="utf-8")
+    _check('info["_barras_sin_cierre"] = _desc' in src and "aviso_barra_sin_cierre(d.get(\"barras_sin_cierre\")" in src,
+           "Doc. 35 §3: obtener_datos expone las fechas y el asistente muestra el aviso")
+    # Repositorio, conexión simulada
+    class _Cur:
+        def __init__(s, log): s.log = log
+        def execute(s, sql, params=None): s.log.append((sql, params))
+    class _Conn:
+        def __init__(s): s.log, s.commits = [], 0
+        def cursor(s): return _Cur(s.log)
+        def commit(s): s.commits += 1
+        def rollback(s): pass
+    c = _Conn()
+    _check(R.registrar_barra_sin_cierre(c, "itx.mc", "2026-11-09") is None
+           and "ON CONFLICT (ticker, tipo, fecha_sesion) WHERE fecha_sesion IS NOT NULL" in c.log[0][0]
+           and c.log[0][1][:3] == ["ITX.MC", "barra_sin_cierre", "2026-11-09"], "Doc. 35 §3: alta por ticker y fecha")
+    _check(R.resolver_barras_sin_cierre(c, "ITX.MC", ["2026-11-09"]) is None and "resuelta_en = now()" in c.log[1][0]
+           and "tipo = %s" in c.log[1][0], "Doc. 35 §3: cierre de la fila")
+    sql2 = (_A._RUTA_APP.parent / "migracion_incidencia_serie_v2.sql").read_text(encoding="utf-8")
+    _check("ADD COLUMN IF NOT EXISTS fecha_sesion" in sql2 and "CREATE UNIQUE INDEX IF NOT EXISTS" in sql2
+           and "DROP CONSTRAINT IF EXISTS uq_incidencia_serie" in sql2 and "-- DROP INDEX IF EXISTS" in sql2,
+           "Doc. 35 §3: migración aditiva, idempotente y con reversión")
+    dsn = os.environ.get("PA_PG_DSN")
+    if not dsn:
+        print("ℹ️  T-D35 en vivo no ejecutado (activa con: set PA_PG_DSN=<base de pruebas>)")
+        return
+    import psycopg2, uuid
+    sql1 = (_A._RUTA_APP.parent / "migracion_incidencia_serie.sql").read_text(encoding="utf-8")
+    down = "\n".join(l[3:] for l in sql2.split("-- ── DOWN")[1].splitlines() if l.startswith("-- ") and not l.startswith("-- Las")
+                     and not l.startswith("-- no admite"))
+    esq = "pa_test_" + uuid.uuid4().hex[:8]
+    cn = psycopg2.connect(dsn)
+    try:
+        cur = cn.cursor(); cur.execute(f"CREATE SCHEMA {esq}"); cur.execute(f"SET search_path TO {esq}"); cn.commit()
+        cur.execute(sql1); cn.commit()
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 147.12})   # sin v2
+        cur.execute("SELECT id, ticker, tipo, detalle::text, primera_vez, ultima_vez, activa FROM incidencia_serie")
+        col0 = cur.fetchall()
+        _check(R.registrar_barra_sin_cierre(cn, "ITX.MC", "2026-11-09") is not None, "T-D35 vivo: sin v2, aviso y sin excepción")
+        for _ in range(2):                                   # idempotente
+            cur.execute(sql2); cn.commit()
+        cur.execute("SELECT id, ticker, tipo, detalle::text, primera_vez, ultima_vez, activa FROM incidencia_serie")
+        _check(cur.fetchall() == col0, "T-D35 vivo: la fila de COL.MC no cambia con la migración")
+        for _ in range(3):                                   # tres consultas → una fila
+            _check(R.registrar_barra_sin_cierre(cn, "ITX.MC", "2026-11-09") is None, "T-D35 vivo: alta")
+        R.registrar_barra_sin_cierre(cn, "SAN.MC", "2026-11-09")
+        R.registrar_barra_sin_cierre(cn, "ITX.MC", "2026-11-10")
+        cur.execute("SELECT ticker, fecha_sesion::text, activa, resuelta_en FROM incidencia_serie "
+                    "WHERE tipo = 'barra_sin_cierre' ORDER BY ticker, fecha_sesion")
+        f1 = cur.fetchall()
+        _check([r[:3] for r in f1] == [("ITX.MC", "2026-11-09", True), ("ITX.MC", "2026-11-10", True), ("SAN.MC", "2026-11-09", True)],
+               f"T-D35 vivo: una fila por ticker y fecha {f1}")
+        R.resolver_barras_sin_cierre(cn, "ITX.MC", ["2026-11-06", "2026-11-09"])
+        cur.execute("SELECT ticker, fecha_sesion::text, activa, resuelta_en IS NOT NULL FROM incidencia_serie "
+                    "WHERE tipo = 'barra_sin_cierre' ORDER BY ticker, fecha_sesion")
+        f2 = cur.fetchall()
+        _check(f2 == [("ITX.MC", "2026-11-09", False, True), ("ITX.MC", "2026-11-10", True, False), ("SAN.MC", "2026-11-09", True, False)],
+               f"T-D35 vivo: la fila se cierra cuando llega la barra completa {f2}")
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 150.0})   # con v2
+        cur.execute("SELECT count(*), max(detalle->>'ratio') FROM incidencia_serie WHERE tipo = 'serie_no_ajustada_ath'")
+        _check(cur.fetchone() == (1, "150.0"), "T-D35 vivo: la guarda de COL.MC sigue con una sola fila tras la v2")
+        R.registrar_incidencia_serie(cn, "COL.MC", R.TIPO_SERIE_NO_AJUSTADA_ATH, True, {"ratio": 147.12})
+        cur.execute(down); cn.commit()                       # DOWN
+        cur.execute("SELECT id, ticker, tipo, detalle::text, primera_vez, activa FROM incidencia_serie")
+        _r = cur.fetchall()
+        cur.execute("SELECT count(*) FROM incidencia_serie_barras_archivo"); _arch = cur.fetchone()[0]
+        _check(len(_r) == 1 and _r[0][:4] == col0[0][:4] and _arch == 3, f"T-D35 vivo: reversión ({_r}, archivo {_arch})")
+        cur.execute(sql2); cn.commit()                       # se puede volver a aplicar
+        _check(R.registrar_barra_sin_cierre(cn, "ITX.MC", "2026-11-09") is None, "T-D35 vivo: reaplicable tras la reversión")
+    finally:
+        cn.rollback(); cur = cn.cursor(); cur.execute(f"DROP SCHEMA IF EXISTS {esq} CASCADE"); cn.commit(); cn.close()
+
+
+def _sim_falsa(color0, igual, cercano):
+    return {"igual": igual, "cercano": cercano, "ventana": 0.3, "color_oficial": color0, "pp_sig": None}
+
+
+def test_doc35_invalidacion():
+    """Doc. 35 §4 — T-L3, T-L4 y T-L5 (fuera de línea, con simulaciones construidas con las cifras del 09/11)."""
+    P = _APP
+    le = P["lectura_escenario"]
+    sar_up = {"sar_siguiente": 56.6368, "tendencia": "ALCISTA"}
+    sim_itx = _sim_falsa("verde", {"precio": 59.66, "pct": 87.5, "color": "verde", "cambian": [], "solo_tramo": []},
+                         {"limite": 56.98, "lado": "debajo", "dist_pct": -4.49, "pct": 50.0, "color": "amarillo",
+                          "cambian": ["pp", "rsi", "bb"], "solo_tramo": []})
+    x = le("verde", 59.66, 59.37, sar_up, None, sim=sim_itx)
+    _check(x["invalidacion"] == ("La lectura se invalidaría con un cierre por debajo de 56,98 € (−4,5%), que llevaría el "
+                                 "semáforo al 50,0% (amarillo).") and x["invalidacion"].count("56,98") == 1
+           and P["texto_simulacion"](sim_itx).startswith("Un cierre por debajo de 56,98 €"),
+           f"T-L3: ITX, mismo nivel que «Qué cambiaría esta lectura» ({x['invalidacion']})")
+    _check(x["apoyo"] == ("Perdería apoyo si el cierre queda bajo el pivot diario (59,37 €) o el mínimo de una sesión baja "
+                          "del SAR (56,64 €).") and "59,37" not in x["invalidacion"], f"T-L3: pivot y SAR como apoyo ({x['apoyo']})")
+    _check([c["clase"] for c in x["clausulas"]] == ["cambio", "apoyo", "apoyo"], "T-L3: cláusulas para la cotización actual")
+    sim_san = _sim_falsa("verde", {"precio": 11.07, "pct": 66.7, "color": "verde", "cambian": [], "solo_tramo": []},
+                         {"limite": 11.01, "lado": "debajo", "dist_pct": -0.5, "pct": 58.3, "color": "amarillo",
+                          "cambian": ["rsi"], "solo_tramo": []})
+    y = le("verde", 11.07, 10.92, {"sar_siguiente": 10.1571, "tendencia": "ALCISTA"}, None, sim=sim_san)
+    _check("11,01 €" in y["invalidacion"] and y["apoyo"] == "Perdería apoyo si el mínimo de una sesión baja del SAR (10,16 €)."
+           and "10,92" not in y["apoyo"] + y["invalidacion"], f"T-L4: SAN sin el pivot ({y})")
+    sim_ntgy = _sim_falsa("rojo", {"precio": 29.84, "pct": 33.3, "color": "rojo", "cambian": [], "solo_tramo": []},
+                          {"limite": 30.14, "lado": "encima", "dist_pct": 1.0, "pct": 50.0, "color": "amarillo",
+                           "cambian": ["bb"], "solo_tramo": []})
+    z = le("rojo", 29.84, 29.71, {"sar_siguiente": 30.1738, "tendencia": "BAJISTA"}, None, sim=sim_ntgy)
+    _check(z["invalidacion"].startswith("La lectura se invalidaría con un cierre por encima de 30,14 € (+1,0%)")
+           and z["apoyo"] == "Perdería apoyo si el máximo de una sesión supera el SAR (30,17 €).", f"Doc. 35 §4: NTGY ({z})")
+    sim_q1 = _sim_falsa("rojo", {"precio": 10.70, "pct": 41.67, "color": "amarillo", "cambian": ["pp"], "solo_tramo": []},
+                        {"limite": 10.67, "lado": "encima", "dist_pct": -0.3, "pct": 41.67, "color": "amarillo",
+                         "cambian": ["pp"], "solo_tramo": []})
+    w = le("rojo", 10.70, 10.67, {"sar_siguiente": 11.2, "tendencia": "BAJISTA"}, None, sim=sim_q1)
+    _check(w["invalidacion"] == ("Con un cierre igual al último (10,70 €), la lectura ya no se mantendría: el semáforo "
+                                 "pasaría al 41,7% (amarillo).") and P["texto_simulacion"](sim_q1).startswith(
+               "Con un cierre igual al último (10,70 €), el semáforo ya pasaría al 41,7% (amarillo)")
+           and "pivot" not in (w["apoyo"] or ""), f"T-L5: cierre igual al último, primero ({w})")
+    a = le("amarillo", 29.36, 29.7, {"sar_siguiente": 28.97, "tendencia": "ALCISTA"}, None, sim=None)
+    _check(a["invalidacion"] == "La lectura cambiaría si el semáforo llega al 65% o baja del 40%." and not a["apoyo"],
+           "Doc. 35 §4: el amarillo no cambia")
+    _check("se invalidaría si" not in le("verde", 59.66, 59.37, sar_up, None, sim=None)["invalidacion"],
+           "Doc. 35 §4: sin simulación no vuelve el texto del doc. 28")
+    h = P["html_lectura_escenario"](x)
+    _check("<b>Niveles de apoyo:</b> Perdería apoyo si" in h and "<b>Invalidación:</b> La lectura se invalidaría con un cierre" in h,
+           "Doc. 35 §4: HTML de la lectura")
+
+
+def test_doc35_en_vivo():
+    """Doc. 35 §4 — T-L3 y T-L4 con los datos reales hasta el cierre del 09/11/2026; T-L5 con el del 06/11 (SAN).
+    Solo con PA_LIVE=1."""
+    import os
+    if not os.environ.get("PA_LIVE"):
+        print("ℹ️  T-L3/4/5 en vivo no ejecutados (activa con: set PA_LIVE=1)")
+        return
+    import pandas as pd, yfinance as yf
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    def _le(tk, fin):
+        h = yf.Ticker(tk).history(period="1y", auto_adjust=False)
+        h = h[(h.index.date <= pd.Timestamp(fin).date()) & h["Close"].notna()]
+        c = h["Close"]; p = float(c.iloc[-1])
+        pv = P["calcular_todos_pivots"](h, "Clásico", timeframes=("Diario",))["Diario"]
+        m, s, _x = P["calcular_macd"](c); bs, _b, bi, _p = P["calcular_bollinger"](c)
+        sem = P["evaluar_semaforo"](p, pv, P["calcular_rsi"](c), m, s, bs, bi, P["analisis_volumen"](h), P["calcular_sar"](h)[1])
+        d3 = P["datos_paso3"](h, pv, p)
+        sim = P["simulacion_cierres"](h, sem, d3)
+        return sem, sim, P["lectura_escenario"](sem["color"], p, d3["pp"]["PP_sig"], d3["sar"], None, sim=sim)
+    sem, sim, x = _le("ITX.MC", "2026-11-09")
+    _check(sem["color"] == "verde" and abs(sim["cercano"]["limite"] - 56.98) <= 0.02 and "56,98 €" in x["invalidacion"]
+           and "pivot diario (59,37 €)" in x["apoyo"] and "SAR (56,64 €)" in x["apoyo"], f"T-L3 vivo: ITX {x}")
+    sem, sim, x = _le("SAN.MC", "2026-11-09")
+    _check("11,01 €" in x["invalidacion"] and "pivot" not in x["apoyo"] and "SAR (10,16 €)" in x["apoyo"], f"T-L4 vivo: SAN {x}")
+    sem, sim, x = _le("NTGY.MC", "2026-11-09")
+    _check("por encima de 30,14 €" in x["invalidacion"] and "SAR (30,17 €)" in x["apoyo"] and "pivot" not in x["apoyo"],
+           f"Doc. 35 §4 vivo: NTGY {x}")
+    sem, sim, x = _le("SAN.MC", "2026-11-06")
+    _check(sem["color"] == "rojo" and x["invalidacion"].startswith("Con un cierre igual al último (10,70 €), la lectura ya no se mantendría")
+           and "41,7% (amarillo)" in x["invalidacion"], f"T-L5 vivo: SAN 06/11 {x}")
+
 
 
 def _dependencias_ok() -> bool:

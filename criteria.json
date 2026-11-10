@@ -1707,7 +1707,13 @@
           "pp": "el cierre queda bajo el pivot diario ({pp})"
         },
         "plantilla": "La lectura se invalidaría si {clausulas}.",
-        "sin_clausulas": "La lectura cambiaría si el semáforo baja del {verde}%."
+        "sin_clausulas": "La lectura cambiaría si el semáforo baja del {verde}%.",
+        "_previo_pe_v13": {
+          "plantilla": "La lectura se invalidaría si {clausulas}."
+        },
+        "plantilla_cambio": "La lectura se invalidaría con un cierre por {lado} de {nivel} ({dist}), que llevaría el semáforo al {pct}% ({color}).",
+        "plantilla_igual": "Con un cierre igual al último ({cierre}), la lectura ya no se mantendría: el semáforo pasaría al {pct}% ({color}).",
+        "plantilla_apoyo": "Perdería apoyo si {clausulas}."
       },
       "amarillo": {
         "lectura": "Lectura del método: los indicadores no apuntan en una dirección clara. En análisis técnico, este escenario se considera sin sesgo: ni favorable ni desfavorable para posiciones largas o cortas.",
@@ -1722,7 +1728,13 @@
           "pp": "el cierre queda sobre el pivot diario ({pp})"
         },
         "plantilla": "La lectura se invalidaría si {clausulas}.",
-        "sin_clausulas": "La lectura cambiaría si el semáforo llega al {amarillo}% o más."
+        "sin_clausulas": "La lectura cambiaría si el semáforo llega al {amarillo}% o más.",
+        "_previo_pe_v13": {
+          "plantilla": "La lectura se invalidaría si {clausulas}."
+        },
+        "plantilla_cambio": "La lectura se invalidaría con un cierre por {lado} de {nivel} ({dist}), que llevaría el semáforo al {pct}% ({color}).",
+        "plantilla_igual": "Con un cierre igual al último ({cierre}), la lectura ya no se mantendría: el semáforo pasaría al {pct}% ({color}).",
+        "plantilla_apoyo": "Perdería apoyo si {clausulas}."
       }
     },
     "combinacion": {
@@ -1752,7 +1764,13 @@
       "titulo_lista": "Factores que cambiarían si la sesión cerrara al precio actual",
       "_previo_pe_v12": {
         "nota_fija": "Los indicadores se calculan con sesiones cerradas. Este apartado indica qué niveles del método se han cruzado hoy; el cambio solo se confirma con el cierre."
-      }
+      },
+      "apoyo_tocado": "Hoy se ha tocado un nivel de apoyo de la lectura ({condicion}); se confirmará o no con el cierre."
     }
+  },
+  "avisos_datos": {
+    "margen_corte_volumen": 1.0,
+    "volumen_junto_corte": "El ratio está a menos de 1 punto del corte del {x}%. La fuente puede revisar ligeramente el volumen de la última sesión hasta la mañana siguiente, y la puntuación podría cambiar.",
+    "barra_sin_cierre": "La sesión del {fecha_descartada} todavía no tiene cierre publicado en la fuente de datos; los cálculos usan la última sesión completa ({fecha_usada}). Se actualizará cuando la fuente lo publique."
   }
 }

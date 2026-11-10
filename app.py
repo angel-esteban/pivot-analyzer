@@ -1951,8 +1951,6 @@ def pantalla_login():
 # FUNCIONES DE DATOS — YFINANCE
 # =============================================================================
 
-@st.cache_data(ttl=900)  # 15 minutos de caché
-@st.cache_data(ttl=900)
 def sin_barras_incompletas(hist):
     """Barras diarias sin cierre (Close NaN) se descartan. Caso real: el 10/11/2026 a las 8:41 Yahoo devolvía la
     barra del 09/11 con Close = NaN y un volumen parcial; sin este filtro la app mostraba «cierre nan €» y notas
@@ -1965,23 +1963,40 @@ def sin_barras_incompletas(hist):
         return hist
 
 
+def barras_sin_cierre(hist) -> list:
+    """Doc. 35 §3 — Fechas (YYYY-MM-DD) de las barras diarias sin cierre que sin_barras_incompletas descarta."""
+    try:
+        if hist is None or hist.empty or "Close" not in hist:
+            return []
+        return [ts.strftime("%Y-%m-%d") for ts in hist.index[hist["Close"].isna()]]
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=900)  # 15 minutos de caché
+@st.cache_data(ttl=900)
 def obtener_datos(ticker: str):
-    """Descarga datos OHLCV y metadatos del ticker. Reintentos ante fallos transitorios."""
+    """Descarga datos OHLCV y metadatos del ticker. Reintentos ante fallos transitorios.
+    Doc. 35 §3: las fechas de las barras sin cierre descartadas van en info["_barras_sin_cierre"]."""
     import time as _time
     for _intento in range(3):
         try:
             t    = yf.Ticker(ticker)
             # PA3-02: OHLC sin ajustar por dividendos (splits sí ajustados por Yahoo).
-            hist = sin_barras_incompletas(t.history(period="1y", auto_adjust=False))
+            _raw = t.history(period="1y", auto_adjust=False)
+            _desc = barras_sin_cierre(_raw)
+            hist = sin_barras_incompletas(_raw)
             if hist is None or hist.empty:
                 if _intento < 2:
                     _time.sleep(1.5)
                     continue
                 return None, {}
             try:
-                info = t.info
+                info = dict(t.info or {})
             except Exception:
                 info = {}
+            if _desc:
+                info["_barras_sin_cierre"] = _desc
             return hist, info
         except Exception:
             if _intento < 2:
@@ -6616,8 +6631,24 @@ def analisis_volumen(hist: pd.DataFrame):
 # SEMÁFORO GLOBAL
 # =============================================================================
 
+def simulacion_desde_hist(hist):
+    """Doc. 35 §4 — Semáforo, datos del Paso 3 y simulación de cierres a partir de un histórico, con las mismas
+    funciones que el asistente. Lo usa el informe para que su invalidación sea la misma que la del Paso 3."""
+    try:
+        c = hist["Close"]
+        p0 = float(c.iloc[-1])
+        pv = calcular_todos_pivots(hist, "Clásico", timeframes=("Diario",)).get("Diario")
+        m_, s_, _h_ = calcular_macd(c)
+        bs, _bm, bi, _pb = calcular_bollinger(c)
+        sem = evaluar_semaforo(p0, pv, calcular_rsi(c), m_, s_, bs, bi, analisis_volumen(hist), calcular_sar(hist)[1])
+        d3 = datos_paso3(hist, pv, p0)
+        return simulacion_cierres(hist, sem, d3)
+    except Exception:
+        return None
+
+
 def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list, precio=None, pp=None,
-                             sar_det=None, pt_paso2=None) -> str:
+                             sar_det=None, pt_paso2=None, sim=None) -> str:
     """Doc. 28 (aviso) y PE-17 — Texto del Semáforo Global del informe: rótulo descriptivo, cálculo,
     notas informativas de los extremos (no puntúan) y nota fija. Sin indicaciones sobre una posición."""
     p = params_semaforo()
@@ -6642,10 +6673,11 @@ def _interpretacion_semaforo(color_sem: str, pct_sem: float, factores_sem: list,
         elif fac == "Bollinger %B" and "parte baja" in _d:
             notas.append(f"ℹ️ %B en la parte baja del canal: {ni.get('bb_baja', '')} No puntúa.")
     resultado = cab
-    _le = lectura_escenario(color_sem, precio, pp, sar_det, pt_paso2) if color_sem != "gris" else {}
+    _le = lectura_escenario(color_sem, precio, pp, sar_det, pt_paso2, sim=sim) if color_sem != "gris" else {}
     if _le:   # doc. 28 v2: lectura del método, invalidación y combinación con el Paso 2
         resultado += (f"\n\n**Lectura del método:** {_lectura_sin_prefijo(_le['lectura'])} "
                       f"**Invalidación:** {_le['invalidacion']}"
+                      + (f" **Niveles de apoyo:** {_le['apoyo']}" if _le.get("apoyo") else "")
                       + (f" {_le['combinacion']}" if _le.get("combinacion") else "") + f"\n\n*{_le['aviso']}*")
     if notas:
         resultado += "\n\n" + "\n\n".join(notas)
@@ -6884,6 +6916,31 @@ def completar_ficha_desde_neon(ticker: str, info: dict, conn=None) -> dict:
     info["_neon_fecha_estructural"] = (_fresc.get("estructural") or {}).get("actualizado_en")
     info["_neon_fecha_fundamental"] = (_fresc.get("fundamental") or {}).get("actualizado_en")
     return info
+
+
+_NOMBRES_VISTOS: dict = {}   # doc. 35 §1 — último nombre recibido de la fuente por ticker (vive con el proceso)
+
+
+def _tabla_nombres_fija() -> dict:
+    """Ticker → nombre, de las listas fijas de índices españoles de la app (IBEX 35, Medium y Small Cap)."""
+    t = {}
+    for _dic in (globals().get("IBEX_SMALL_CAP"), globals().get("IBEX_MEDIUM_CAP"), globals().get("IBEX_35")):
+        for _nom, _tk in (_dic or {}).items():
+            t[str(_tk).upper()] = _nom
+    t["RED.MC"] = "Redeia Corporación, S.A."
+    return t
+
+
+def nombre_empresa(ticker: str, info: "dict | None") -> str:
+    """Doc. 35 §1 — Nombre para la cabecera. Orden: nombre de la fuente (o de Neon, ya completado por
+    completar_ficha_desde_neon) → último nombre recibido de la fuente para ese ticker → tabla fija de los índices
+    → el ticker. Caso real: ITX salía «ITX.MC (ITX.MC)» porque Yahoo no devolvió el nombre en esa consulta."""
+    tk = (ticker or "").upper().strip()
+    n = (info or {}).get("longName") or (info or {}).get("shortName")
+    if n and str(n).strip() and str(n).strip().upper() != tk:
+        _NOMBRES_VISTOS[tk] = str(n).strip()
+        return str(n).strip()
+    return _NOMBRES_VISTOS.get(tk) or _tabla_nombres_fija().get(tk) or tk
 
 
 def bloque_fundamentales(info: dict, tipo: str = "accion", div_ttm: float = None):
@@ -12988,6 +13045,35 @@ def que_es_componente(clave: str, criterios=None) -> str:
     return (c.get("que_es") or {}).get(clave, "")
 
 
+_CORTES_VOL_PASO2 = (50.0, 80.0, 150.0, 200.0)
+
+
+def aviso_volumen_corte(ratio, cortes, criterios=None) -> str:
+    """Doc. 35 §2 — Si el ratio de volumen está a menos de 1 punto de un corte, la revisión del volumen de la última
+    sesión que hace la fuente (±0,6% observado) podría cambiar la puntuación: se avisa. Texto en criteria.json."""
+    try:
+        r = float(ratio)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        c = (criterios if criterios is not None else _cargar_criteria()).get("avisos_datos") or {}
+    except Exception:
+        c = {}
+    margen = float(c.get("margen_corte_volumen", 1.0))
+    plantilla = c.get("volumen_junto_corte") or ""
+    cerca = [x for x in cortes if abs(r - float(x)) < margen]
+    if not cerca or not plantilla:
+        return ""
+    x = min(cerca, key=lambda v: abs(r - v))
+    return plantilla.format(x=_num_es(x, 0))
+
+
+def html_aviso_volumen(txt: str) -> str:
+    import html as _h
+    return (f'<div style="font-size:.8rem;color:#7c2d12;margin-top:.2rem;background:#fff7ed;padding:.3rem .5rem;'
+            f'border-radius:6px">&#9888;&#65039; {_h.escape(txt)}</div>') if txt else ""
+
+
 def html_ficha_componente(clave: str, a: dict, si: dict, precio: float, criterios=None) -> str:
     """PE-11 — Ficha: qué es, datos usados, regla del motor con el tramo resaltado, cómo leerlo,
     nota informativa (no puntúa) y qué cambiaría esta nota."""
@@ -13013,6 +13099,8 @@ def html_ficha_componente(clave: str, a: dict, si: dict, precio: float, criterio
     return (
         f'<div style="font-size:.84rem;color:#334155"><b>Qué es:</b> {_h.escape(que_es_componente(clave, criterios))}</div>'
         f'<div style="font-size:.82rem;color:#334155;margin:.3rem 0"><b>Datos usados:</b> {_h.escape(datos_componente(clave, a, precio))}</div>'
+        + (html_aviso_volumen(aviso_volumen_corte((a or {}).get("vol_rel"), _CORTES_VOL_PASO2, criterios))
+           if clave == "vol" else "") +
         f'<table style="border-collapse:collapse;font-size:.8rem;margin:.3rem 0"><thead><tr style="color:#64748b;text-align:left">'
         f'<th style="padding:2px 8px">Tramo</th><th style="padding:2px 8px">Condición</th><th style="padding:2px 8px">Nota</th>'
         f'</tr></thead><tbody>{filas}</tbody></table>{_tope}'
@@ -13311,6 +13399,59 @@ def sesion_dia_cerrada(ts_ultima, ahora=None, criterios=None) -> bool:
         return (_now.hour, _now.minute) >= (hh, mm)
     except Exception:
         return True
+
+
+def barras_sin_cierre_cerradas(fechas: list, ahora=None, criterios=None) -> list:
+    """Doc. 35 §3 — De las barras sin cierre descartadas, las de sesiones que ya deberían estar cerradas. Una barra
+    de la sesión en curso sin cierre no es una incidencia: se descarta igual, como cualquier vela en curso."""
+    import pandas as _pd_b
+    out = []
+    for f in fechas or []:
+        try:
+            if sesion_dia_cerrada(_pd_b.Timestamp(f).tz_localize("Europe/Madrid"), ahora, criterios):
+                out.append(f)
+        except Exception:
+            continue
+    return out
+
+
+def aviso_barra_sin_cierre(fechas: list, fecha_usada, criterios=None) -> str:
+    """Doc. 35 §3 — Texto bajo el encabezado cuando se descarta una barra sin cierre."""
+    import pandas as _pd_b
+    if not fechas:
+        return ""
+    try:
+        c = (criterios if criterios is not None else _cargar_criteria()).get("avisos_datos") or {}
+    except Exception:
+        c = {}
+    pl = c.get("barra_sin_cierre") or ""
+    _f = lambda x: _pd_b.Timestamp(x).strftime("%d/%m/%Y")
+    _desc = _lista_y([_f(x) for x in sorted(fechas)])
+    return pl.format(fecha_descartada=_desc, fecha_usada=_f(fecha_usada)) if pl else ""
+
+
+def registrar_barras_sin_cierre(ticker: str, fechas: list, hist) -> "str | None":
+    """Doc. 35 §3 — Registra en incidencia_serie (tipo barra_sin_cierre) una fila por ticker y fecha, y cierra las
+    filas abiertas de ese ticker cuya fecha ya tiene cierre publicado en el histórico. Nunca bloquea la app."""
+    try:
+        import repositorio as _repo_b
+        _cn = get_db_connection()
+    except Exception as e:
+        return f"sin conexión a la base de datos: {e}"
+    try:
+        err = None
+        for f in fechas or []:
+            err = _repo_b.registrar_barra_sin_cierre(_cn, ticker, f) or err
+        _ok = [ts.strftime("%Y-%m-%d") for ts in hist.index[-15:]] if hist is not None else []
+        err = _repo_b.resolver_barras_sin_cierre(_cn, ticker, _ok) or err
+        return err
+    except Exception as e:
+        return str(e)
+    finally:
+        try:
+            release_db_connection(_cn)
+        except Exception:
+            pass
 
 
 def hist_cerrado(hist, ahora=None, criterios=None):
@@ -13642,6 +13783,9 @@ def html_ficha_factor(clave: str, f: dict, d3: dict, criterios=None) -> str:
     return (
         f'<div style="font-size:.84rem;color:#334155"><b>Qué es:</b> {_h.escape((p.get("que_es") or {}).get(clave, ""))}</div>'
         f'<div style="font-size:.82rem;color:#334155;margin:.3rem 0"><b>Datos usados:</b> {_h.escape(datos_factor_txt(clave, f, d3))}</div>'
+        + (html_aviso_volumen(aviso_volumen_corte(((d3 or {}).get("vol") or {}).get("ratio_10d"),
+                                                  (SEM_VOL_BAJO, SEM_VOL_ALTO), criterios))
+           if clave == "vol" and f.get("disponible") else "") +
         f'<div style="font-size:.8rem;color:#475569;margin:.2rem 0"><b>Parámetros y por qué:</b> {_h.escape((p.get("parametros") or {}).get(clave, ""))}</div>'
         f'<table style="border-collapse:collapse;font-size:.8rem;margin:.3rem 0"><thead><tr style="color:#64748b;text-align:left">'
         f'<th style="padding:2px 8px">Tramo</th><th style="padding:2px 8px">Condición</th><th style="padding:2px 8px">Puntos</th>'
@@ -13846,10 +13990,14 @@ def texto_simulacion(sim: "dict | None", criterios=None) -> str:
     return t1 + t2 + _sup
 
 
-def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: "dict | None", criterios=None) -> dict:
-    """Doc. 28 (v2) — Lectura del método por color, su invalidación con los valores del día, la frase de combinación
-    con la estructura del Paso 2 y el aviso. Doc. 29: «pp» es el PP de la sesión siguiente al último cierre y
-    «precio», ese cierre. Las cláusulas solo se incluyen si están del lado del color (F28 §1, aprobado)."""
+def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: "dict | None", criterios=None,
+                      sim: "dict | None" = None) -> dict:
+    """Doc. 28 (v2) y doc. 35 §4 — Lectura del método por color, su invalidación, la frase de combinación con la
+    estructura del Paso 2 y el aviso. «pp» es el PP de la sesión siguiente al último cierre y «precio», ese cierre.
+    Doc. 35 §4 (sustituye a la invalidación del doc. 28): en verde y rojo, la invalidación es el cierre más cercano
+    que cambia el color según la simulación del semáforo completo («sim», la misma que «Qué cambiaría esta lectura»).
+    El SAR y el pivot pasan a niveles de apoyo («Perdería apoyo si…»): el SAR siempre que esté del lado del color;
+    el pivot solo si queda entre el último cierre y el nivel de cambio de color. El amarillo no cambia."""
     p = params_semaforo(criterios)
     lec = (p.get("lecturas") or {}).get(color)
     if not lec:
@@ -13859,22 +14007,46 @@ def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: 
     cl, det = [], []
     _sar = (sar_det or {}).get("sar_siguiente")
     _tend = (sar_det or {}).get("tendencia")
-    if color == "verde":
-        if _sar is not None and _tend == "ALCISTA" and "sar" in lec["clausulas"]:
-            cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
-            det.append({"tipo": "minimo", "nivel": _sar, "lado": "debajo", "texto": cl[-1]})
-        if pp is not None and precio is not None and precio > pp and "pp" in lec["clausulas"]:
-            cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
-            det.append({"tipo": "cierre", "nivel": pp, "lado": "debajo", "texto": cl[-1]})
-    elif color == "rojo":
-        if _sar is not None and _tend == "BAJISTA" and "sar" in lec["clausulas"]:
-            cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
-            det.append({"tipo": "maximo", "nivel": _sar, "lado": "encima", "texto": cl[-1]})
-        if pp is not None and precio is not None and precio <= pp and "pp" in lec["clausulas"]:
-            cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
-            det.append({"tipo": "cierre", "nivel": pp, "lado": "encima", "texto": cl[-1]})
-    inval = (lec["plantilla"].format(clausulas=" o si ".join(cl)) if cl and lec.get("plantilla")
-             else lec.get("sin_clausulas", "").format(**fmt))
+    inval, apoyo = "", ""
+    if color in ("verde", "rojo"):
+        _ct = lambda k: _SEM_COLOR_TXT.get(k, k)
+        ig = (sim or {}).get("igual") or {}
+        cz = (sim or {}).get("cercano")
+        igual_cambia = bool(ig) and ig.get("color") not in (None, color)
+        if igual_cambia and lec.get("plantilla_igual"):
+            inval = lec["plantilla_igual"].format(cierre=_eur(ig["precio"]), pct=_num_es(ig["pct"], 1),
+                                                  color=_ct(ig["color"]))
+        elif cz and lec.get("plantilla_cambio"):
+            _lado = "debajo" if cz["lado"] == "debajo" else "encima"
+            inval = lec["plantilla_cambio"].format(lado=_lado, nivel=_eur(cz["limite"]),
+                                                   dist=_pct_signo_es(cz["dist_pct"], 1),
+                                                   pct=_num_es(cz["pct"], 1), color=_ct(cz["color"]))
+            det.append({"tipo": "cierre", "nivel": cz["limite"], "lado": cz["lado"], "clase": "cambio",
+                        "texto": f"un cierre por {_lado} de {_eur(cz['limite'])}"})
+        else:
+            inval = lec.get("sin_clausulas", "").format(**fmt)
+        # Niveles de apoyo: pivot (entre el cierre y el nivel de cambio) y SAR (del lado del color)
+        _lim = None if igual_cambia else (cz or {}).get("limite")
+        if color == "verde":
+            if (pp is not None and precio is not None and not igual_cambia and precio > pp
+                    and (_lim is None or _lim < pp) and "pp" in lec["clausulas"]):
+                cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
+                det.append({"tipo": "cierre", "nivel": pp, "lado": "debajo", "clase": "apoyo", "texto": cl[-1]})
+            if _sar is not None and _tend == "ALCISTA" and "sar" in lec["clausulas"]:
+                cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
+                det.append({"tipo": "minimo", "nivel": _sar, "lado": "debajo", "clase": "apoyo", "texto": cl[-1]})
+        else:
+            if (pp is not None and precio is not None and not igual_cambia and precio <= pp
+                    and (_lim is None or _lim > pp) and "pp" in lec["clausulas"]):
+                cl.append(lec["clausulas"]["pp"].format(pp=_eur(pp)))
+                det.append({"tipo": "cierre", "nivel": pp, "lado": "encima", "clase": "apoyo", "texto": cl[-1]})
+            if _sar is not None and _tend == "BAJISTA" and "sar" in lec["clausulas"]:
+                cl.append(lec["clausulas"]["sar"].format(sar=_eur(_sar)))
+                det.append({"tipo": "maximo", "nivel": _sar, "lado": "encima", "clase": "apoyo", "texto": cl[-1]})
+        if cl and lec.get("plantilla_apoyo"):
+            apoyo = lec["plantilla_apoyo"].format(clausulas=" o ".join(cl))
+    else:
+        inval = lec.get("sin_clausulas", "").format(**fmt)
     comb = ""
     cb = p.get("combinacion") or {}
     if pt_paso2 and pt_paso2.get("score_total") is not None:
@@ -13889,7 +14061,7 @@ def lectura_escenario(color: str, precio, pp, sar_det: "dict | None", pt_paso2: 
             comb = cb.get("mismo", "")
         else:
             comb = cb.get("distinto", "").format(nota=f"{_num_es(sc, 1)}/10", etiqueta=_et)
-    return {"lectura": lec["lectura"], "invalidacion": inval, "combinacion": comb, "clausulas": det,
+    return {"lectura": lec["lectura"], "invalidacion": inval, "apoyo": apoyo, "combinacion": comb, "clausulas": det,
             "aviso": p.get("aviso_senal", ""), "nota_fija": p.get("nota_fija", "")}
 
 
@@ -13905,6 +14077,7 @@ def html_lectura_escenario(le: dict) -> str:
     return ('<div class="pp-edu" style="background:#eff6ff;border-color:#2563eb;color:#1e3a8a">'
             f'&#129517; <b>Lectura del método</b><br>{_h.escape(_lectura_sin_prefijo(le["lectura"]))}'
             f'<br><b>Invalidación:</b> {_h.escape(le["invalidacion"])}'
+            + (f'<br><b>Niveles de apoyo:</b> {_h.escape(le["apoyo"])}' if le.get("apoyo") else "")
             + (f'<br><b>Con la estructura (Paso 2):</b> {_h.escape(le["combinacion"])}' if le.get("combinacion") else "")
             + f'<div style="font-size:.76rem;font-style:italic;margin-top:.3rem">{_h.escape(le["aviso"])}</div></div>')
 
@@ -14023,7 +14196,8 @@ def cotizacion_actual(hist_vivo, hist_c, sem: dict, d3: dict, le: "dict | None",
     for cl in (le or {}).get("clausulas") or []:
         v = lo if cl["tipo"] == "minimo" else hi if cl["tipo"] == "maximo" else precio
         if (cl["lado"] == "debajo" and v < cl["nivel"]) or (cl["lado"] == "encima" and v > cl["nivel"]):
-            inval.append(q.get("invalidacion_tocada", "").format(condicion=cl["texto"]))
+            _clave_t = "apoyo_tocado" if cl.get("clase") == "apoyo" else "invalidacion_tocada"   # doc. 35 §4
+            inval.append((q.get(_clave_t) or q.get("invalidacion_tocada", "")).format(condicion=cl["texto"]))
     try:
         _m10 = float(hist_c["Volume"].tail(10).mean())
     except Exception:
@@ -14394,7 +14568,7 @@ def _pp_wizard_cuerpo(st):
                     return
                 info = completar_ficha_desde_neon(_ticker, info)   # validación 21, C-1 (nombre de Neon)
                 _precio  = precio_actual(hist)
-                _nombre  = info.get("longName") or info.get("shortName") or _ticker
+                _nombre  = nombre_empresa(_ticker, info)   # doc. 35 §1
                 _cierre  = hist["Close"]
                 _rsi     = calcular_rsi(_cierre)
                 _macd, _macd_s, _macd_h = calcular_macd(_cierre)
@@ -14439,8 +14613,15 @@ def _pp_wizard_cuerpo(st):
                     _d3["sim"] = simulacion_cierres(hist_c, _sem3, _d3)
                 except Exception:
                     _d3["sim"] = None
+                # Doc. 35 §3 — barras sin cierre descartadas de sesiones que ya deberían estar cerradas
+                _bsc = barras_sin_cierre_cerradas(info.get("_barras_sin_cierre") or [])
+                _reg_bsc = st.session_state.setdefault("_pp_bsc_reg", {})
+                _clave_bsc = (_ticker, tuple(_bsc), hist.index[-1].strftime("%Y-%m-%d"))
+                if _reg_bsc.get(_ticker) != _clave_bsc:   # una escritura por cambio, no una por consulta
+                    if registrar_barras_sin_cierre(_ticker, _bsc, hist) is None:
+                        _reg_bsc[_ticker] = _clave_bsc
                 st.session_state["_pp_data"] = {
-                    "ticker": _ticker, "nombre": _nombre, "precio": _precio_c,
+                    "ticker": _ticker, "nombre": _nombre, "precio": _precio_c, "barras_sin_cierre": _bsc,
                     "info": info, "hist": hist_c, "t": _time_pp.time(),
                     "hist_vivo": hist, "precio_vivo": _precio, "en_curso": _en_curso,
                     "rsi_val": _rsi, "macd_val": _macd, "macd_señal": _macd_s,
@@ -14470,6 +14651,10 @@ def _pp_wizard_cuerpo(st):
                     .format(fecha=hist.index[-1].strftime("%d/%m/%Y"), cierre=_eur(precio)))
             st.markdown(f'<div style="font-size:.8rem;color:#475569;margin:-.2rem 0 .4rem">&#128197; {_enc}</div>',
                         unsafe_allow_html=True)
+            _av_bsc = aviso_barra_sin_cierre(d.get("barras_sin_cierre"), hist.index[-1])   # doc. 35 §3
+            if _av_bsc:
+                st.markdown(f'<div style="font-size:.8rem;color:#7c2d12;background:#fff7ed;padding:.3rem .6rem;'
+                            f'border-radius:6px;margin:0 0 .5rem">&#9888;&#65039; {_av_bsc}</div>', unsafe_allow_html=True)
         except Exception:
             pass
 
@@ -14737,7 +14922,8 @@ def _pp_wizard_cuerpo(st):
         </div>""", unsafe_allow_html=True)
 
         if _csem != "gris":   # doc. 28 v2 — lectura del método, invalidación y combinación con el Paso 2
-            _le3 = lectura_escenario(_csem, precio, (_d3.get("pp") or {}).get("PP_sig"), _d3.get("sar"), d.get("puntuacion_tec"))
+            _le3 = lectura_escenario(_csem, precio, (_d3.get("pp") or {}).get("PP_sig"), _d3.get("sar"), d.get("puntuacion_tec"),
+                                     sim=_d3.get("sim"))   # doc. 35 §4
             st.markdown(html_lectura_escenario(_le3), unsafe_allow_html=True)
         else:
             _le3 = {}
@@ -20697,7 +20883,7 @@ de debilidad a corto plazo.
         # ── Interpretación contextual del semáforo ────────────────────────
         _interp_txt = _interpretacion_semaforo(color_sem, pct_sem, factores_sem, precio=precio,
                                                pp=pp_sesion_siguiente(hist), sar_det=calcular_sar_detalle(hist),
-                                               pt_paso2=puntuacion_tec)
+                                               pt_paso2=puntuacion_tec, sim=simulacion_desde_hist(hist))
         st.markdown(
             f'<div style="border-left:4px solid {_sem_color_hex};background:{_sem_bg_hex};'
             f'border-radius:0 8px 8px 0;padding:10px 14px;margin-top:4px">',

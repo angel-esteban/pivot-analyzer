@@ -335,12 +335,19 @@ def registrar_incidencia_serie(conn, ticker: str, tipo: str, activa: bool,
     try:
         cur = conn.cursor()
         if activa:
-            cur.execute(
-                "INSERT INTO incidencia_serie (ticker, tipo, detalle, activa) "
-                "VALUES (%s, %s, %s::jsonb, true) "
-                "ON CONFLICT (ticker, tipo) DO UPDATE SET detalle = EXCLUDED.detalle, "
-                "ultima_vez = now(), activa = true",
-                [tk, tipo, json.dumps(detalle or {}, ensure_ascii=False, default=str)])
+            _sql = ("INSERT INTO incidencia_serie (ticker, tipo, detalle, activa) "
+                    "VALUES (%s, %s, %s::jsonb, true) "
+                    "ON CONFLICT (ticker, tipo){pred} DO UPDATE SET detalle = EXCLUDED.detalle, "
+                    "ultima_vez = now(), activa = true")
+            _args = [tk, tipo, json.dumps(detalle or {}, ensure_ascii=False, default=str)]
+            try:   # doc. 35 §3: con la migración v2, la unicidad (ticker, tipo) es parcial (fecha_sesion IS NULL)
+                cur.execute(_sql.format(pred=" WHERE fecha_sesion IS NULL"), _args)
+            except Exception as e_v2:        # noqa: BLE001  — sin la migración v2: cláusula original
+                if "fecha_sesion" not in str(e_v2):
+                    raise
+                conn.rollback()
+                cur = conn.cursor()
+                cur.execute(_sql.format(pred=""), _args)
         else:
             cur.execute(
                 "UPDATE incidencia_serie SET activa = false, ultima_vez = now() "
@@ -355,6 +362,61 @@ def registrar_incidencia_serie(conn, ticker: str, tipo: str, activa: bool,
         if "incidencia_serie" in str(e) and "does not exist" in str(e):
             return "la tabla incidencia_serie no existe: ejecuta migracion_incidencia_serie.sql en Neon"
         return f"error al registrar la incidencia de serie: {e}"
+    return None
+
+
+TIPO_BARRA_SIN_CIERRE = "barra_sin_cierre"
+
+
+def registrar_barra_sin_cierre(conn, ticker: str, fecha_sesion: str) -> str | None:
+    """Doc. 35 §3 — Una fila por ticker y fecha de sesión (no una por consulta). Si ya existe, solo actualiza
+    ultima_vez; si estaba cerrada y la barra vuelve a llegar sin cierre, se reabre (resuelta_en = NULL).
+    Requiere migracion_incidencia_serie_v2.sql (columnas fecha_sesion y resuelta_en)."""
+    tk = (ticker or "").upper().strip()
+    if not tk or not fecha_sesion:
+        return "ticker y fecha_sesion son obligatorios"
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO incidencia_serie (ticker, tipo, fecha_sesion, detalle, activa) "
+            "VALUES (%s, %s, %s::date, %s::jsonb, true) "
+            "ON CONFLICT (ticker, tipo, fecha_sesion) WHERE fecha_sesion IS NOT NULL "
+            "DO UPDATE SET ultima_vez = now(), activa = true, resuelta_en = NULL",
+            [tk, TIPO_BARRA_SIN_CIERRE, fecha_sesion,
+             json.dumps({"fuente": "yahoo", "detalle": "barra diaria con Close vacío"}, ensure_ascii=False)])
+        conn.commit()
+    except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if "fecha_sesion" in str(e) or "no unique or exclusion constraint" in str(e):
+            return "falta la migración: ejecuta migracion_incidencia_serie_v2.sql en Neon"
+        return f"error al registrar la barra sin cierre: {e}"
+    return None
+
+
+def resolver_barras_sin_cierre(conn, ticker: str, fechas_con_cierre: list[str]) -> str | None:
+    """Doc. 35 §3 — Cierra (activa = false, resuelta_en = now()) las filas abiertas del ticker cuya fecha ya tiene
+    cierre publicado. No toca filas de otros tipos."""
+    tk = (ticker or "").upper().strip()
+    if not tk or not fechas_con_cierre:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE incidencia_serie SET activa = false, resuelta_en = now(), ultima_vez = now() "
+            "WHERE ticker = %s AND tipo = %s AND activa AND fecha_sesion = ANY(%s::date[])",
+            [tk, TIPO_BARRA_SIN_CIERRE, list(fechas_con_cierre)])
+        conn.commit()
+    except Exception as e:                   # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if "fecha_sesion" in str(e) or "resuelta_en" in str(e):
+            return None                      # migración aún no aplicada: nada que resolver
+        return f"error al resolver barras sin cierre: {e}"
     return None
 
 
