@@ -436,3 +436,41 @@ def leer_incidencias_serie(conn, solo_activas: bool = True) -> list[dict]:
         except Exception:
             pass
         return []
+
+
+# ── Series macro guardadas (aprobado por el propietario el 10/11/2026) ──
+def guardar_serie_macro(conn, clave: str, fuente: str, datos: dict) -> None:
+    """Guarda (alta o sustitución) la última serie macro descargada bien. datos = {"YYYY-MM-DD": valor}.
+    Requiere migracion_serie_macro_guardada.sql. Lanza excepción si falla (la app la captura)."""
+    if not clave or not datos:
+        return None
+    _f = sorted(datos)
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO serie_macro_guardada (clave, fuente, datos, n_puntos, ultima_fecha, descargada_en) "
+            "VALUES (%s, %s, %s::jsonb, %s, %s::date, now()) "
+            "ON CONFLICT (clave) DO UPDATE SET fuente = EXCLUDED.fuente, datos = EXCLUDED.datos, "
+            "n_puntos = EXCLUDED.n_puntos, ultima_fecha = EXCLUDED.ultima_fecha, descargada_en = now()",
+            [clave, fuente, json.dumps(datos), len(datos), _f[-1]])
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return None
+
+
+def leer_serie_macro(conn, clave: str) -> dict | None:
+    """Última serie guardada de esa clave: {"datos", "fuente", "descargada_en"} o None."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT datos, fuente, descargada_en FROM serie_macro_guardada WHERE clave = %s", [clave])
+        r = cur.fetchone()
+    except Exception:
+        conn.rollback()
+        raise
+    if not r:
+        return None
+    datos = r[0] if isinstance(r[0], dict) else json.loads(r[0])
+    return {"datos": datos, "fuente": r[1], "descargada_en": r[2]}
+

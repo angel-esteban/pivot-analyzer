@@ -2043,22 +2043,20 @@ def _ecb_descarga(flow: str, series_key: str, n_obs: int) -> "pd.Series":
     return s.sort_index()
 
 
-_ECB_ULTIMO_BUENO: dict = {}   # (flow, serie, n_obs) → última serie descargada bien (vive con el proceso)
 _ECB_ULTIMO_FALLO: dict = {}   # (flow, serie, n_obs) → motivo del último fallo, para diagnóstico
 
 
 def obtener_historico_ecb(flow: str, series_key: str, n_obs: int = 72, _reintentos: int = 3,
                           _espera: float = 0.8) -> "pd.Series | None":
     """Serie histórica desde la API SDMX del BCE. Hasta 3 intentos con espera creciente; los fallos no se cachean.
-    Si todos fallan, devuelve la última serie buena de esa misma consulta descargada por este proceso (sus fechas
-    se muestran igual, y la antigüedad del dato la controla _resumen_serie); si no hay ninguna, None («sin dato»)."""
+    Si todos fallan devuelve None. El respaldo con datos guardados (memoria y Neon), siempre indicado al usuario,
+    lo aplica serie_macro() donde se usa para la fase del ciclo."""
     import time as _t_ecb
     clave = (flow, series_key, int(n_obs))
     motivo = ""
     for n in range(max(1, _reintentos)):
         try:
             s = _ecb_descarga(flow, series_key, int(n_obs))
-            _ECB_ULTIMO_BUENO[clave] = s
             _ECB_ULTIMO_FALLO.pop(clave, None)
             return s
         except _FalloDescargaMacro as e:
@@ -2068,9 +2066,8 @@ def obtener_historico_ecb(flow: str, series_key: str, n_obs: int = 72, _reintent
         if n < _reintentos - 1:
             _t_ecb.sleep(_espera * (n + 1))
     _ECB_ULTIMO_FALLO[clave] = motivo
-    print(f"[PA macro] BCE {flow}/{series_key}: fallo tras {_reintentos} intentos ({motivo})"
-          + ("; se usa la última serie buena" if clave in _ECB_ULTIMO_BUENO else ""), flush=True)
-    return _ECB_ULTIMO_BUENO.get(clave)
+    print(f"[PA macro] BCE {flow}/{series_key}: fallo tras {_reintentos} intentos ({motivo})", flush=True)
+    return None
 
 
 @st.cache_data(ttl=3600)
@@ -12379,8 +12376,118 @@ def _serie_curva_tesoro_eeuu(n_anios: int = 3) -> "pd.Series | None":
     return _s[~_s.index.duplicated()]
 
 
+# ── Datos macro guardados (aprobado por el propietario el 10/11/2026) ──
+_MACRO_MEM: dict = {}        # clave → (serie, momento de la descarga buena, Europe/Madrid)
+_MACRO_ESCRITO: dict = {}    # clave → (firma de la serie, momento de la última escritura en Neon)
+_MACRO_NEON_KO = {"hasta": None}   # si Neon falla, no se reintenta durante 10 minutos
+_MACRO_REESCRITURA_H = 6
+import threading as _threading_macro
+_macro_tls = _threading_macro.local()
+
+
+def _macro_registro() -> dict:
+    """Series servidas desde datos guardados en el cálculo en curso (por hilo): clave → momento de la descarga."""
+    if not hasattr(_macro_tls, "reg"):
+        _macro_tls.reg = {}
+    return _macro_tls.reg
+
+
+def _macro_neon(op: str, *args):
+    """Llama a repositorio.<op>(conn, *args) sin bloquear la app: cualquier fallo devuelve None y pausa Neon 10 min."""
+    import pandas as _pd_mn
+    _ahora = _pd_mn.Timestamp.now(tz="Europe/Madrid")
+    if _MACRO_NEON_KO["hasta"] is not None and _ahora < _MACRO_NEON_KO["hasta"]:
+        return None
+    try:
+        import repositorio as _repo_m
+        _cn = get_db_connection()
+    except Exception:
+        _MACRO_NEON_KO["hasta"] = _ahora + _pd_mn.Timedelta(minutes=10)
+        return None
+    try:
+        return getattr(_repo_m, op)(_cn, *args)
+    except Exception as e:                                  # noqa: BLE001
+        print(f"[PA macro] Neon {op}: {type(e).__name__}", flush=True)
+        _MACRO_NEON_KO["hasta"] = _ahora + _pd_mn.Timedelta(minutes=10)
+        return None
+    finally:
+        try:
+            release_db_connection(_cn)
+        except Exception:
+            pass
+
+
+def _macro_firma(serie) -> tuple:
+    return (len(serie), str(serie.index[-1]), round(float(serie.iloc[-1]), 8))
+
+
+def serie_macro(clave: str, fuente: str, fn, *args, intentos: int = 2):
+    """Serie macro con respaldo. Si la descarga sale bien, se guarda en memoria y en Neon (tabla serie_macro_guardada;
+    se reescribe solo si cambia o cada 6 h). Si falla, se usa la última serie buena en memoria o, si no hay, la
+    guardada en Neon, y se anota en el registro del cálculo para indicarlo al usuario. Sin ninguna, None."""
+    import pandas as _pd_m
+    s = None
+    for _n in range(max(1, intentos)):
+        try:
+            s = fn(*args)
+        except Exception:
+            s = None
+        if s is not None and len(s):
+            break
+    ahora = _pd_m.Timestamp.now(tz="Europe/Madrid")
+    if s is not None and len(s):
+        _MACRO_MEM[clave] = (s, ahora)
+        _firma = _macro_firma(s)
+        _prev = _MACRO_ESCRITO.get(clave)
+        if (_prev is None or _prev[0] != _firma
+                or (ahora - _prev[1]) > _pd_m.Timedelta(hours=_MACRO_REESCRITURA_H)):
+            _datos = {_pd_m.Timestamp(k).strftime("%Y-%m-%d"): float(v) for k, v in s.dropna().items()}
+            if _macro_neon("guardar_serie_macro", clave, fuente, _datos) is None:
+                _MACRO_ESCRITO[clave] = (_firma, ahora)
+        return s
+    if clave in _MACRO_MEM:
+        _s, _ts = _MACRO_MEM[clave]
+        _macro_registro()[clave] = _ts
+        print(f"[PA macro] {clave}: la fuente no respondió; se usa la serie guardada en memoria ({_ts})", flush=True)
+        return _s
+    fila = _macro_neon("leer_serie_macro", clave)
+    if fila and fila.get("datos"):
+        _s = _pd_m.Series({_pd_m.Timestamp(k): float(v) for k, v in fila["datos"].items()}).sort_index()
+        _ts = _pd_m.Timestamp(fila["descargada_en"])
+        _ts = (_ts.tz_localize("UTC") if _ts.tz is None else _ts).tz_convert("Europe/Madrid")
+        _MACRO_MEM[clave] = (_s, _ts)
+        _macro_registro()[clave] = _ts
+        print(f"[PA macro] {clave}: la fuente no respondió; se usa la serie guardada en Neon ({_ts})", flush=True)
+        return _s
+    return None
+
+
+class _FaseCicloDegradada(Exception):
+    """Resultado con algún indicador sin dato o con datos guardados: se devuelve, pero no se cachea."""
+    def __init__(self, resultado):
+        super().__init__("fase del ciclo con datos incompletos o guardados")
+        self.resultado = resultado
+
+
 @st.cache_data(ttl=6 * 3600)
+def _indicadores_fase_ciclo_cache(region: str) -> dict:
+    """Solo se cachea (6 h) un resultado completo y con datos recién descargados. Incidencia del 10/11/2026: antes se
+    cacheaba también un resultado con indicadores «sin dato», que quedaba fijo hasta 6 horas."""
+    r = _indicadores_fase_ciclo_calc(region)
+    if any(isinstance(v, dict) and ((v.get("sin_datos") and not str(v.get("fuente", "")).startswith("no disponible"))
+                                    or v.get("guardado_en") is not None) for v in r.values()):
+        raise _FaseCicloDegradada(r)
+    return r
+
+
 def indicadores_fase_ciclo(region: str) -> dict:
+    try:
+        return _indicadores_fase_ciclo_cache(region)
+    except _FaseCicloDegradada as e:
+        return e.resultado
+
+
+def _indicadores_fase_ciclo_calc(region: str) -> dict:
     """PE-05 — Indicadores para la fase del ciclo. Zona euro: PIB (Eurostat), inflación IPCA y
     subyacente (Eurostat, ECOICOP v2), tipo de depósito (BCE), curva 10a−2a AAA (BCE), paro
     (Eurostat vía BCE). EE. UU.: Fed funds (BIS), IPC y subyacente (BLS), curva 10a−2a
@@ -12390,15 +12497,24 @@ def indicadores_fase_ciclo(region: str) -> dict:
     ma = p.get("max_antiguedad_meses", {})
     _desde = (pd.Timestamp.now() - pd.DateOffset(months=em + vm + 6))
     out = {}
+    _reg_m = _macro_registro()
+    _reg_m.clear()
 
-    def _add(clave, nombre, serie, frec, fuente, unidad="%"):
+    def _guardado(claves):
+        _ts = [_reg_m[k] for k in claves if k in _reg_m]
+        return min(_ts) if _ts else None
+
+    def _add(clave, nombre, serie, frec, fuente, unidad="%", claves=()):
         r = _resumen_serie(serie, vm, em, frec, ma)
+        _g = _guardado(claves)
         if r is None:
             out[clave] = {"nombre": nombre, "valor": None, "previo": None, "fecha": "—",
                           "fuente": fuente, "unidad": unidad, "desactualizado": False,
                           "sin_datos": True}
         else:
             out[clave] = {"nombre": nombre, "fuente": fuente, "unidad": unidad, **r}
+            if _g is not None:
+                out[clave]["guardado_en"] = _g
 
     def _sub(serie, frec="mensual"):
         r = _resumen_serie(serie, vm, em, frec, ma)
@@ -12407,44 +12523,69 @@ def indicadores_fase_ciclo(region: str) -> dict:
 
     if region == "zona_euro":
         _add("pib", "Crecimiento del PIB real (interanual)",
-             _serie_eurostat("namq_10_gdp", {"geo": "EA", "unit": "CLV_PCH_SM", "na_item": "B1GQ",
-                                             "s_adj": "SCA"}, f"{_desde.year}-Q1"),
-             "trimestral", "Eurostat")
+             serie_macro("eurostat:namq_10_gdp:EA", "Eurostat", _serie_eurostat, "namq_10_gdp",
+                         {"geo": "EA", "unit": "CLV_PCH_SM", "na_item": "B1GQ", "s_adj": "SCA"}, f"{_desde.year}-Q1"),
+             "trimestral", "Eurostat", claves=("eurostat:namq_10_gdp:EA",))
         _add("inflacion", "Inflación IPCA (interanual)",
-             _serie_eurostat("prc_hicp_minr", {"geo": "EA", "unit": "RCH_A", "coicop18": "TOTAL"},
-                             _desde.strftime("%Y-%m")),
-             "mensual", "Eurostat")
-        _sub(_serie_eurostat("prc_hicp_minr", {"geo": "EA", "unit": "RCH_A", "coicop18": "TOT_X_NRG_FOOD"},
-                             _desde.strftime("%Y-%m")))
-        _dfr = obtener_historico_ecb("FM", "B.U2.EUR.4F.KR.DFR.LEV", 40)
+             serie_macro("eurostat:prc_hicp_minr:EA:TOTAL", "Eurostat", _serie_eurostat, "prc_hicp_minr",
+                         {"geo": "EA", "unit": "RCH_A", "coicop18": "TOTAL"}, _desde.strftime("%Y-%m")),
+             "mensual", "Eurostat", claves=("eurostat:prc_hicp_minr:EA:TOTAL",))
+        _sub(serie_macro("eurostat:prc_hicp_minr:EA:TOT_X_NRG_FOOD", "Eurostat", _serie_eurostat, "prc_hicp_minr",
+                         {"geo": "EA", "unit": "RCH_A", "coicop18": "TOT_X_NRG_FOOD"}, _desde.strftime("%Y-%m")))
+        _dfr = serie_macro("ecb:FM/B.U2.EUR.4F.KR.DFR.LEV", "BCE", obtener_historico_ecb,
+                           "FM", "B.U2.EUR.4F.KR.DFR.LEV", 40, intentos=1)
         _dfr_raw = _dfr
         if _dfr is not None and len(_dfr):
             # Serie de cambios de tipo → valor vigente a fin de cada mes
             _idx = pd.date_range(_dfr.index.min(), pd.Timestamp.now(), freq="MS")
             _dfr = _dfr.reindex(_dfr.index.union(_idx)).sort_index().ffill().reindex(_idx)
-        _add("tipo_oficial", "Tipo oficial BCE (facilidad de depósito)", _dfr, "mensual", "BCE")
+        _add("tipo_oficial", "Tipo oficial BCE (facilidad de depósito)", _dfr, "mensual", "BCE",
+             claves=("ecb:FM/B.U2.EUR.4F.KR.DFR.LEV",))
         if _dfr_raw is not None and len(_dfr_raw) and out.get("tipo_oficial", {}).get("valor") is not None:
             out["tipo_oficial"]["fecha"] = f"vigente desde {_dfr_raw.index[-1].strftime('%d/%m/%Y')}"
-        _y10 = obtener_historico_ecb("YC", "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y", 800)
-        _y2 = obtener_historico_ecb("YC", "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y", 800)
+        _y10 = serie_macro("ecb:YC/SR_10Y", "BCE", obtener_historico_ecb,
+                           "YC", "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y", 800, intentos=1)
+        _y2 = serie_macro("ecb:YC/SR_2Y", "BCE", obtener_historico_ecb,
+                          "YC", "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y", 800, intentos=1)
         _cur = (_y10 - _y2).dropna() if _y10 is not None and _y2 is not None else None
         _add("curva", "Pendiente de la curva (10 años − 2 años, AAA zona euro)", _cur, "diaria",
-             "BCE", "p.p.")
-        _add("paro", "Tasa de paro", obtener_historico_ecb("LFSI", "M.I9.S.UNEHRT.TOTAL0.15_74.T", 40),
-             "mensual", "Eurostat (vía BCE)")
+             "BCE", "p.p.", claves=("ecb:YC/SR_10Y", "ecb:YC/SR_2Y"))
+        _add("paro", "Tasa de paro", serie_macro("ecb:LFSI/UNEHRT", "BCE", obtener_historico_ecb,
+                                                 "LFSI", "M.I9.S.UNEHRT.TOTAL0.15_74.T", 40, intentos=1),
+             "mensual", "Eurostat (vía BCE)", claves=("ecb:LFSI/UNEHRT",))
     elif region == "eeuu":
         _add("pib", "Crecimiento del PIB real (interanual)", None, "trimestral",
              "no disponible: requiere clave de API (FRED o BEA)")
-        _add("inflacion", "Inflación IPC (interanual)", obtener_historico_ipc_eeuu(3), "mensual", "BLS")
-        _core = _serie_bls("CUUR0000SA0L1E", 4)
+        _add("inflacion", "Inflación IPC (interanual)",
+             serie_macro("bls:ipc_eeuu", "BLS", obtener_historico_ipc_eeuu, 3), "mensual", "BLS",
+             claves=("bls:ipc_eeuu",))
+        _core = serie_macro("bls:CUUR0000SA0L1E", "BLS", _serie_bls, "CUUR0000SA0L1E", 4)
         if _core is not None and len(_core) > 12:
             _sub((_core.pct_change(12) * 100).dropna())
-        _add("tipo_oficial", "Tipo oficial Fed (fed funds)", obtener_historico_bis(40), "mensual",
-             "BIS (Fed)")
-        _add("curva", "Pendiente de la curva (10 años − 2 años)", _serie_curva_tesoro_eeuu(3), "diaria",
-             "Departamento del Tesoro de EE. UU.", "p.p.")
-        _add("paro", "Tasa de paro", _serie_bls("LNS14000000"), "mensual", "BLS")
+        _add("tipo_oficial", "Tipo oficial Fed (fed funds)",
+             serie_macro("bis:fed_funds", "BIS", obtener_historico_bis, 40), "mensual", "BIS (Fed)",
+             claves=("bis:fed_funds",))
+        _add("curva", "Pendiente de la curva (10 años − 2 años)",
+             serie_macro("tesoro:curva_10_2", "Tesoro EE. UU.", _serie_curva_tesoro_eeuu, 3), "diaria",
+             "Departamento del Tesoro de EE. UU.", "p.p.", claves=("tesoro:curva_10_2",))
+        _add("paro", "Tasa de paro", serie_macro("bls:LNS14000000", "BLS", _serie_bls, "LNS14000000"),
+             "mensual", "BLS", claves=("bls:LNS14000000",))
     return out
+
+
+def _avisos_macro(criterios=None) -> dict:
+    try:
+        return (criterios if criterios is not None else _cargar_criteria()).get("avisos_datos") or {}
+    except Exception:
+        return {}
+
+
+def hay_datos_macro_guardados(res_o_ind: dict) -> bool:
+    """True si algún indicador de la fase del ciclo usa datos guardados (la fuente no respondió)."""
+    filas = (res_o_ind or {}).get("filas")
+    if filas is None:
+        filas = [v for v in (res_o_ind or {}).values() if isinstance(v, dict)]
+    return any(r.get("guardado_en") is not None for r in filas)
 
 
 def html_fase_ciclo(res: dict, region: str, params=None) -> str:
@@ -12463,8 +12604,12 @@ def html_fase_ciclo(res: dict, region: str, params=None) -> str:
         if r.get("clave") == "inflacion" and (r.get("subyacente") or {}).get("valor") is not None:
             _subtxt = f" · subyacente {_num_es(r['subyacente']['valor'], 1)}%"
             _nota_sub = nota_subyacente(r, p)
+        _g_txt = ""
+        if r.get("guardado_en") is not None:   # dato guardado: la fuente no respondió
+            _g_txt = (' · <i style="color:#9a3412">' + _h.escape((_avisos_macro().get("macro_guardado_valor") or "")
+                      .format(fecha=r["guardado_en"].strftime("%d/%m/%Y %H:%M"))) + '</i>')
         filas += (f'<tr><td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_h.escape(r.get("nombre", ""))}</td>'
-                  f'<td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_fmt_valor_ind(r)}{_prev}{_subtxt}</td>'
+                  f'<td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_fmt_valor_ind(r)}{_prev}{_subtxt}{_g_txt}</td>'
                   f'<td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_h.escape(str(r.get("fecha", "—")))}</td>'
                   f'<td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_h.escape(str(r.get("fuente", "")))}</td>'
                   f'<td style="padding:3px 8px;border-top:1px solid #e2e8f0">{_h.escape(r.get("lectura", ""))}</td>'
@@ -12483,6 +12628,8 @@ def html_fase_ciclo(res: dict, region: str, params=None) -> str:
         f'<th style="padding:2px 8px">Fuente</th><th style="padding:2px 8px">Lectura (últimos {p.get("ventana_meses", 6)} meses)</th>'
         f'<th style="padding:2px 8px">Voto</th></tr></thead><tbody>{filas}</tbody></table>'
         + (f'<div style="font-size:.8rem;color:#713f12;margin:.1rem 0 .3rem">ℹ️ {_h.escape(_nota_sub[0].upper() + _nota_sub[1:])}.</div>' if _nota_sub else "")
+        + (f'<div style="font-size:.8rem;color:#9a3412;background:#fff7ed;padding:.3rem .5rem;border-radius:6px;margin:.2rem 0">'
+           f'⚠️ {_h.escape(_avisos_macro().get("macro_guardado_nota", ""))}</div>' if hay_datos_macro_guardados(res) else "")
         + f'<div style="font-size:.78rem;color:#475569">Votos por fase: {_votos}. Regla: cada indicador reparte un voto '
         f'entre las fases con las que coincide; gana la fase con más votos; empate o diferencia de un voto o menos → transición; '
         f'con menos de {p.get("min_indicadores", 4)} de 5 indicadores no se asigna fase.</div>'
@@ -14307,15 +14454,26 @@ def conclusion_paso1(ticker: str, hist, info: dict, nombre: str) -> "dict | None
         _sens = sensibilidad_tipos_didactica(_si, _ind)
         _reg = region_macro(ticker, info)
         _res, _dir = {}, None
+        _guardados = False
         if _reg:
             try:
                 _if = indicadores_fase_ciclo(_reg)
+                _guardados = hay_datos_macro_guardados(_if)
                 _res = evaluar_fase_ciclo(_if)
                 _dir = direccion_tipo_oficial(_if.get("tipo_oficial"))
             except Exception:
                 _res, _dir = {}, None
         _c_sector = conclusion_sector(_si, _res, _dir, _sens, _si.get("nombre_es", _sec), "Fed" if _reg == "eeuu" else "BCE")
-    return conclusion_general(_c_valor, _c_sector)
+        if _guardados:
+            _c_sector = dict(_c_sector, datos_guardados=True)
+    _cg = conclusion_general(_c_valor, _c_sector)
+    if _cg and (_c_sector or {}).get("datos_guardados"):   # datos macro guardados: se indica en la conclusión
+        _m = _avisos_macro().get("macro_guardado_conclusion", "")
+        _cg = dict(_cg, datos_guardados=True)
+        if _m and "texto" in _cg:
+            _cg["texto"] = (_cg["texto"].replace(".</b>", f" {_m}.</b>", 1) if ".</b>" in _cg["texto"]
+                            else _cg["texto"].replace("</b>", f" {_m}</b>", 1))
+    return _cg
 
 
 def texto_contexto_paso1(c_gen: "dict | None") -> str:
@@ -14324,6 +14482,10 @@ def texto_contexto_paso1(c_gen: "dict | None") -> str:
     import re as _re_c
     if not c_gen:
         return "sin conclusión del Paso 1: el valor no tiene historial suficiente para la media de 200 sesiones"
+    if c_gen.get("datos_guardados"):
+        _base = c_gen.get("clave") or _re_c.sub(r"<[^>]+>", "", c_gen.get("texto", "")).split(".")[0].replace(
+            "Conclusión del Paso 1: ", "").replace(" " + _avisos_macro().get("macro_guardado_conclusion", "~"), "")
+        return f"{_base} {_avisos_macro().get('macro_guardado_conclusion', '')}".strip()
     return c_gen.get("clave") or _re_c.sub(r"<[^>]+>", "", c_gen.get("texto", "")).split(".")[0].replace(
         "Conclusión del Paso 1: ", "")
 

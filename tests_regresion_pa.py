@@ -2840,9 +2840,8 @@ def test_doc35_en_vivo():
 
 
 def test_macro_ecb_sin_cachear_fallos():
-    """Incidencia 10/11/2026 — En producción, un fallo puntual de la API del BCE quedaba cacheado una hora como
-    «sin dato» (tipo oficial; tras reiniciar, curva y paro) y cambiaba la conclusión del Paso 1. Ahora: reintentos,
-    los fallos no se cachean y, si todo falla, se usa la última serie buena del proceso."""
+    """Incidencia 10/11/2026 — Fallos puntuales de la API del BCE quedaban cacheados como «sin dato». Ahora:
+    reintentos y los fallos no se cachean; sin respaldo oculto (el respaldo indicado lo hace serie_macro)."""
     import pandas as pd
     P = _APP
     orig = P["_ecb_descarga"]
@@ -2854,25 +2853,147 @@ def test_macro_ecb_sin_cachear_fallos():
             raise P["_FalloDescargaMacro"]("HTTP 429")
         return serie
     try:
-        P["_ECB_ULTIMO_BUENO"].clear(); P["_ECB_ULTIMO_FALLO"].clear()
+        P["_ECB_ULTIMO_FALLO"].clear()
         P["_ecb_descarga"] = _falla_luego_bien
         s = P["obtener_historico_ecb"]("FM", "X.TEST", 40, _espera=0)
         _check(s is serie and len(llamadas) == 3, f"BCE: reintenta y acaba descargando ({len(llamadas)} llamadas)")
         P["_ecb_descarga"] = lambda *a: (_ for _ in ()).throw(P["_FalloDescargaMacro"]("HTTP 503"))
-        s2 = P["obtener_historico_ecb"]("FM", "X.TEST", 40, _espera=0)
-        _check(s2 is serie and P["_ECB_ULTIMO_FALLO"][("FM", "X.TEST", 40)] == "HTTP 503",
-               "BCE: si todo falla, última serie buena y motivo registrado")
-        _check(P["obtener_historico_ecb"]("FM", "OTRA", 40, _espera=0) is None, "BCE: sin serie buena previa → sin dato")
+        _check(P["obtener_historico_ecb"]("FM", "X.TEST", 40, _espera=0) is None
+               and P["_ECB_ULTIMO_FALLO"][("FM", "X.TEST", 40)] == "HTTP 503",
+               "BCE: si todo falla, None (sin respaldo oculto) y motivo registrado")
     finally:
         P["_ecb_descarga"] = orig
-        P["_ECB_ULTIMO_BUENO"].clear(); P["_ECB_ULTIMO_FALLO"].clear()
+        P["_ECB_ULTIMO_FALLO"].clear()
     src = _A._RUTA_APP.read_text(encoding="utf-8")
     _i = src.index("def _ecb_descarga(")
-    _cuerpo = src[_i:src.index("_ECB_ULTIMO_BUENO: dict", _i)]
+    _cuerpo = src[_i:src.index("_ECB_ULTIMO_FALLO: dict", _i)]
     _check("return None" not in _cuerpo and "raise _FalloDescargaMacro" in _cuerpo
            and src[src.rindex("\n", 0, _i - 1) - 30:_i].strip().endswith("@st.cache_data(ttl=3600)")
-           and "@st.cache_data(ttl=3600)\ndef obtener_historico_ecb(" not in src,
-           "BCE: la función cacheada nunca devuelve None (los fallos no se guardan) y el envoltorio no se cachea")
+           and "@st.cache_data(ttl=3600)\ndef obtener_historico_ecb(" not in src
+           and "@st.cache_data(ttl=6 * 3600)\ndef _indicadores_fase_ciclo_cache(" in src
+           and "@st.cache_data(ttl=6 * 3600)\ndef indicadores_fase_ciclo(" not in src,
+           "Macro: solo se cachean descargas buenas y fases completas")
+
+
+def _macro_series_falsas():
+    import pandas as pd
+    m = pd.date_range("2024-01-01", "2026-10-01", freq="MS")
+    d = pd.bdate_range("2024-06-01", "2026-11-09")
+    q = pd.date_range("2023-01-01", "2026-07-01", freq="QS")
+    return {
+        "pib": pd.Series(1.0, index=q), "infl": pd.Series(3.0, index=m), "core": pd.Series(2.5, index=m),
+        "dfr": pd.Series([2.0, 2.5], index=pd.to_datetime(["2026-03-11", "2026-09-16"])),
+        "y10": pd.Series(3.2, index=d), "y2": pd.Series(2.9, index=d), "paro": pd.Series(6.6, index=m[:-1]),
+    }
+
+
+def test_macro_datos_guardados():
+    """Aprobado por el propietario el 10/11/2026 — Si una fuente macro no responde, se usa la última serie buena
+    (memoria o Neon) y SE INDICA: en la fila del indicador, bajo la tabla de la fase, en la conclusión del Paso 1 y
+    en la línea de contexto del Paso 3. Las fases con datos guardados o incompletos no se cachean."""
+    import pandas as pd
+    P = _APP
+    P.setdefault("PANDAS_TA", False)
+    F = _macro_series_falsas()
+    neon = {}
+    escrituras = []
+    def _neon(op, *args):
+        if op == "guardar_serie_macro":
+            escrituras.append(args[0]); neon[args[0]] = {"datos": args[2], "fuente": args[1],
+                                                        "descargada_en": pd.Timestamp("2026-11-10 18:22", tz="UTC")}
+            return None
+        return neon.get(args[0])
+    caido = set()
+    def _euro(ds, params, desde):
+        k = "pib" if ds == "namq_10_gdp" else ("core" if params.get("coicop18") == "TOT_X_NRG_FOOD" else "infl")
+        return None if k in caido else F[k]
+    def _ecb(flow, key, n, **kw):
+        k = {"FM": "dfr", "LFSI": "paro"}.get(flow) or ("y10" if key.endswith("10Y") else "y2")
+        return None if k in caido else F[k]
+    orig = {k: P[k] for k in ("_macro_neon", "_serie_eurostat", "obtener_historico_ecb")}
+    try:
+        P["_MACRO_MEM"].clear(); P["_MACRO_ESCRITO"].clear()
+        P["_macro_neon"] = _neon; P["_serie_eurostat"] = _euro; P["obtener_historico_ecb"] = _ecb
+        r0 = P["_indicadores_fase_ciclo_calc"]("zona_euro")
+        _check(not P["hay_datos_macro_guardados"](r0) and len(escrituras) == 7 and "ecb:FM/B.U2.EUR.4F.KR.DFR.LEV" in neon,
+               f"Macro: descarga buena → se guarda en Neon ({len(escrituras)} series)")
+        P["_indicadores_fase_ciclo_calc"]("zona_euro")
+        _check(len(escrituras) == 7, "Macro: sin cambios, no se reescribe en Neon")
+        # Falla el BCE (tipo oficial): memoria
+        caido.update({"dfr"})
+        r1 = P["_indicadores_fase_ciclo_calc"]("zona_euro")
+        _check(r1["tipo_oficial"]["valor"] == 2.5 and r1["tipo_oficial"].get("guardado_en") is not None
+               and r1["curva"].get("guardado_en") is None, "Macro: fuente caída → memoria, marcado solo ese indicador")
+        # Proceso recién reiniciado (sin memoria) y fallan curva y paro: Neon
+        P["_MACRO_MEM"].clear(); caido.clear(); caido.update({"y10", "paro"})
+        r2 = P["_indicadores_fase_ciclo_calc"]("zona_euro")
+        _check(r2["curva"]["valor"] is not None and r2["curva"]["guardado_en"].strftime("%d/%m/%Y %H:%M") == "10/11/2026 19:22"
+               and r2["paro"].get("guardado_en") is not None and r2["tipo_oficial"].get("guardado_en") is None,
+               "Macro: sin memoria → Neon, con la fecha de la descarga guardada (hora de Madrid)")
+        res = P["evaluar_fase_ciclo"](r2)
+        h = P["html_fase_ciclo"](res, "zona_euro")
+        _check(h.count("dato guardado el 10/11/2026 19:22; la fuente no respondió") == 2
+               and "Uno o más indicadores usan datos guardados porque la fuente no respondió" in h,
+               "Macro: el Paso 1 indica el dato guardado en la fila y bajo la tabla")
+        # No se cachea un resultado degradado
+        try:
+            if hasattr(P["_indicadores_fase_ciclo_cache"], "clear"):
+                P["_indicadores_fase_ciclo_cache"].clear()
+            P["_indicadores_fase_ciclo_cache"]("zona_euro")
+            _deg = False
+        except P["_FaseCicloDegradada"]:
+            _deg = True
+        _check(_deg, "Macro: una fase con datos guardados no se cachea")
+        # Sin memoria ni Neon → sin dato (sin marca)
+        P["_MACRO_MEM"].clear(); neon.clear(); caido.clear(); caido.add("dfr")
+        r3 = P["_indicadores_fase_ciclo_calc"]("zona_euro")
+        _check(r3["tipo_oficial"].get("sin_datos") and r3["tipo_oficial"].get("guardado_en") is None,
+               "Macro: sin ningún respaldo → «sin dato»")
+        # Conclusión del Paso 1 y contexto del Paso 3
+        caido.clear(); P["_indicadores_fase_ciclo_calc"]("zona_euro"); caido.add("dfr")
+        orig_cache = P["_indicadores_fase_ciclo_cache"]
+        P["_indicadores_fase_ciclo_cache"] = lambda reg: (_ for _ in ()).throw(
+            P["_FaseCicloDegradada"](P["_indicadores_fase_ciclo_calc"](reg)))
+        try:
+            h_ = _hist_dias(n=300)
+            cg = P["conclusion_paso1"]("ITX.MC", h_, {"sector": "Consumer Cyclical", "industry": "Apparel Retail"}, "Inditex")
+        finally:
+            P["_indicadores_fase_ciclo_cache"] = orig_cache
+        _t = P["texto_contexto_paso1"](cg)
+        _check(cg.get("datos_guardados") and "(con datos macro guardados)" in cg["texto"]
+               and _t.endswith("(con datos macro guardados)") and _t.count("(con datos macro guardados)") == 1,
+               f"Macro: la conclusión del Paso 1 y el contexto del Paso 3 lo indican ({_t})")
+    finally:
+        P.update(orig)
+        P["_MACRO_MEM"].clear(); P["_MACRO_ESCRITO"].clear(); P["_macro_registro"]().clear()
+    sql = (_A._RUTA_APP.parent / "migracion_serie_macro_guardada.sql").read_text(encoding="utf-8")
+    _check("CREATE TABLE IF NOT EXISTS serie_macro_guardada" in sql and "-- DROP TABLE IF EXISTS serie_macro_guardada;" in sql,
+           "Macro: migración idempotente con reversión")
+    import os
+    dsn = os.environ.get("PA_PG_DSN")
+    if not dsn:
+        print("ℹ️  T-MACRO en vivo no ejecutado (activa con: set PA_PG_DSN=<base de pruebas>)")
+        return
+    import psycopg2, uuid
+    import repositorio as R
+    esq = "pa_test_" + uuid.uuid4().hex[:8]
+    cn = psycopg2.connect(dsn)
+    try:
+        cur = cn.cursor(); cur.execute(f"CREATE SCHEMA {esq}"); cur.execute(f"SET search_path TO {esq}"); cn.commit()
+        for _ in range(2):
+            cur.execute(sql); cn.commit()
+        _check(R.leer_serie_macro(cn, "ecb:x") is None, "T-MACRO vivo: sin fila → None")
+        R.guardar_serie_macro(cn, "ecb:x", "BCE", {"2026-03-11": 2.0, "2026-09-16": 2.5})
+        a = R.leer_serie_macro(cn, "ecb:x")
+        R.guardar_serie_macro(cn, "ecb:x", "BCE", {"2026-03-11": 2.0, "2026-09-16": 2.5, "2026-11-01": 2.75})
+        b = R.leer_serie_macro(cn, "ecb:x")
+        cur.execute("SELECT count(*), max(n_puntos), max(ultima_fecha)::text FROM serie_macro_guardada"); c = cur.fetchone()
+        _check(a["datos"]["2026-09-16"] == 2.5 and len(b["datos"]) == 3 and b["descargada_en"] >= a["descargada_en"]
+               and c == (1, 3, "2026-11-01"), f"T-MACRO vivo: guardar, sustituir y leer {c}")
+        cur.execute("DROP TABLE IF EXISTS serie_macro_guardada"); cn.commit()
+        cur.execute("SELECT to_regclass('serie_macro_guardada')"); _check(cur.fetchone()[0] is None, "T-MACRO vivo: reversión")
+    finally:
+        cn.rollback(); cur = cn.cursor(); cur.execute(f"DROP SCHEMA IF EXISTS {esq} CASCADE"); cn.commit(); cn.close()
 
 
 def _dependencias_ok() -> bool:

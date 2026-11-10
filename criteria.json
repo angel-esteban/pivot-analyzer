@@ -1771,6 +1771,9 @@
   "avisos_datos": {
     "margen_corte_volumen": 1.0,
     "volumen_junto_corte": "El ratio está a menos de 1 punto del corte del {x}%. La fuente puede revisar ligeramente el volumen de la última sesión hasta la mañana siguiente, y la puntuación podría cambiar.",
-    "barra_sin_cierre": "La sesión del {fecha_descartada} todavía no tiene cierre publicado en la fuente de datos; los cálculos usan la última sesión completa ({fecha_usada}). Se actualizará cuando la fuente lo publique."
+    "barra_sin_cierre": "La sesión del {fecha_descartada} todavía no tiene cierre publicado en la fuente de datos; los cálculos usan la última sesión completa ({fecha_usada}). Se actualizará cuando la fuente lo publique.",
+    "macro_guardado_valor": "dato guardado el {fecha}; la fuente no respondió",
+    "macro_guardado_nota": "Uno o más indicadores usan datos guardados porque la fuente no respondió. La lectura puede no recoger el último dato publicado.",
+    "macro_guardado_conclusion": "(con datos macro guardados)"
   }
 }
